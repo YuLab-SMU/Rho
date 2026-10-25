@@ -21,8 +21,15 @@ test('HTTP auth, origins, scope, project read has no Host, and two callers share
     await assert.rejects(fs.stat(path.join(project.root, '.rho/host.sock')), { code: 'ENOENT' });
     let response = await fetch(service.url + '/api/v2/project.list', { method: 'POST', headers: { authorization: 'Bearer ' + service.adminToken, 'content-type': 'application/json', origin: 'http://unrelated.invalid' }, body: '{}' });
     assert.equal(response.status, 403);
+    // A same-origin request that carries no credential is this machine's own person, not a refusal.
     response = await fetch(service.url + '/api/v2/project.list', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
+    assert.equal(response.status, 200);
+    // A credential that is present must still be valid: a stale or forged one never becomes the machine.
+    response = await fetch(service.url + '/api/v2/project.list', { method: 'POST', headers: { authorization: 'Bearer ' + 'b'.repeat(64), 'content-type': 'application/json' }, body: '{}' });
     assert.equal(response.status, 401);
+    // A browser request from another site is refused even on loopback.
+    response = await fetch(service.url + '/api/v2/project.list', { method: 'POST', headers: { 'content-type': 'application/json', 'sec-fetch-site': 'cross-site' }, body: '{}' });
+    assert.equal(response.status, 403);
     const descriptor = await service.agentConnection(project.id, 'external-a', path.join(root, 'agent.json'), ['protocol.describe', 'binding.activity', 'document.open', 'document.read', 'document.edit', 'action.lookup']);
     const agent = new RhoClient(descriptor);
     await assert.rejects(agent.call('project.open', { path: '..' }), e => e.error.kind === 'unauthorized');

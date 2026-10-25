@@ -48,7 +48,15 @@ npm install --prefix /absolute/install /absolute/rho-workspace-local-0.4.0.tgz
 
 Create the allowed projects directory first. Keep service state outside projects.
 Startup prints the loopback URL and private connection-file location, never the
-credential. `--port`, `--rscript`, `--core`, `--plugins` and `--limits` are explicit
+credential. Opening that URL in a browser on the same machine is the access: the
+service answers a same-origin request from loopback as the local person, with the
+reviewed browser scope, no link, no code and no expiry. `rho --pair` still mints a
+one-time link when a tab must be narrower — one folder below the service root — or
+must expire; that link is a credential and is only as good as its five-minute
+window and single use. A credential that is present must still be valid, so an old
+link never silently widens to local access; a same-origin request that carries no
+credential is the machine's own. Host and Origin are checked on every request, and
+a browser request marked as coming from another site is refused. `--port`, `--rscript`, `--core`, `--plugins` and `--limits` are explicit
 operator selections; `RHO_RSCRIPT`, `RHO_CORE_BINARY` and `RHO_PYTHON` select
 equivalent runtimes. A Core override is outside bundled digest verification.
 A source checkout has no `vendor/rho-core`: packaging supplies it, so source
@@ -147,7 +155,7 @@ const check = await rho.call('requirements.check', {
 | --- | --- |
 | `project.open/create/list`, `capability.list` | Scoped projects and versioned action/component catalog. Reads do not start a Host. |
 | `requirements.check/prepare` | Explicit unique package declarations: `{package,source:"cran"\|"bioconductor",minimumVersion?}`. Base-R probe, environment/timestamp and present/missing/unknown facts. Explicit preparation installs missing packages into the project library and rechecks. |
-| `action.submit/lookup/observe/retry/cancel/list/output` | Original durable caller intent, Core identity, delivery/native facts and bounded logs. Any principal of the project reads a run by `operationId` (lookup, observe, output, `artifact.check`); a missing, guessed or other project's ID gets one `not_found`. Only the submitter retries. The submitter cancels, and so may a browser tab whose pairing includes the project; `cancellation.requestedBy` names who asked. `repairOf` names the failed or unknown run a new submission repairs. While no Host answers, a read reports `execution: "unknown"` and leaves the stored facts unchanged. |
+| `action.submit/lookup/observe/retry/cancel/list/output` | Original durable caller intent, Core identity, delivery/native facts and bounded logs. Any principal of the project reads a run by `operationId` (lookup, observe, output, `artifact.check`); a missing, guessed or other project's ID gets one `not_found`. Only the submitter retries. The submitter cancels, and so may a browser tab whose access includes the project; `cancellation.requestedBy` names who asked. `repairOf` names the failed or unknown run a new submission repairs. While no Host answers, a read reports `execution: "unknown"` and leaves the stored facts unchanged. |
 | `document.open/read/edit/undo/save` | One shared UTF-8 buffer, UTF-16 offsets, conditional transactions, authors, undo, snapshots and disk conditions. |
 | `resource.register/list/read`, `artifact.check` | Declared existing or produced bytes, independent digests, provenance, partial availability and byte-inventory checks. |
 | `data.page/plot/compare`, `selection.set` | Explicit table types/null encodings, string entity keys/namespaces, numeric chart fields and two-input keyed joins. |

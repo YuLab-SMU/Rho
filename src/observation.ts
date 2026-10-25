@@ -30,8 +30,10 @@ export class ObservationClient<T extends { cursor: number }> {
     }
   }
 }
-export function httpObservation(url: string, token: string, projectId: string, maxBufferedEventBytes = observationLimits.maxBufferedEventBytes, fetcher: typeof fetch = fetch): ObservationTransport<any> {
-  const headers = { authorization: 'Bearer ' + token };
+export function httpObservation(url: string, token: string | undefined, projectId: string, maxBufferedEventBytes = observationLimits.maxBufferedEventBytes, fetcher: typeof fetch = fetch): ObservationTransport<any> {
+  // A tab opened on this machine is authorized by the same-origin request itself; only an
+  // explicitly narrowed link carries a credential.
+  const headers: Record<string, string> = token ? { authorization: 'Bearer ' + token } : {};
   return {
     async snapshot(signal) {
       const response = await fetcher(new URL('/api/v2/observation.snapshot', url), { method: 'POST', credentials: 'omit', headers: { ...headers, 'content-type': 'application/json' }, body: JSON.stringify({ projectId }), signal });

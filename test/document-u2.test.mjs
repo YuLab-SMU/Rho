@@ -54,7 +54,7 @@ test('typed Fetch document calls preserve original requests after lost HTTP repl
   assert.equal((await browser.call('document.read', { projectId: f.p.id, documentId: d.id })).revision, 3);
   // Browser writes use the same identity and disk conditions as the owner.
   for (const method of ['document.abandonSave', 'document.undo']) await assert.rejects(browser.call(method, undo), e => e.error.kind === 'unauthorized', method);
-  const principal = f.s.state.principals.find(p => p.kind === 'browser');
+  const principal = f.s.state.principals.find(p => p.kind === 'browser' && p.id !== 'browser:local');
   assert.equal(grant.principalId, principal.id);
   const guarded = await f.call('document.open', { path: 'guarded.md' });
   const guardedEdit = { projectId: f.p.id, documentId: guarded.id, expectedVersion: 1, undoGroup: 'guard', edits: [{ from: 0, to: 0, insert: 'guarded' }] };

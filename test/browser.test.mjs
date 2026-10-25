@@ -107,7 +107,7 @@ test('browser session resumes on service restart, revocation ends observation, a
     for (let n = 0; n < 50 && !restarted.subscribers.size; n++) await new Promise(r => setTimeout(r, 10));
     assert.equal(restarted.subscribers.size, 1);
     const admin = new RhoClient({ url: restarted.url, token: restarted.adminToken });
-    const principal = restarted.state.principals.find(p => p.kind === 'browser');
+    const principal = restarted.state.principals.find(p => p.kind === 'browser' && p.id !== 'browser:local');
     await admin.call('session.browser.revoke', { sessionId: principal.id });
     await assert.rejects(next, /credential/);
     await assert.rejects(c.call('project.list', {}), e => e.error.kind === 'unauthorized');
@@ -176,7 +176,9 @@ test('concurrent Agent grants and browser pairing persist the same principal lis
     ]));
     const persisted = JSON.parse(await fs.readFile(path.join(f.config.stateDir, 'principals.json'), 'utf8'));
     assert.deepEqual(persisted, f.service.state.principals);
-    assert.equal(persisted.filter(p => p.kind === 'browser').length, 8);
+    // Eight paired tabs, plus the identity this machine itself uses.
+    assert.equal(persisted.filter(p => p.kind === 'browser' && p.id !== 'browser:local').length, 8);
+    assert.ok(persisted.some(p => p.id === 'browser:local' && !p.expiresAt));
     assert.equal(persisted.filter(p => p.id.startsWith('agent:')).length, 8);
   } finally { await f.cleanup(); }
 });
@@ -193,7 +195,7 @@ test('revocation is rechecked after receiving a request body, before a scoped op
     const pending = client.call('project.open', { path: 'project' });
     const rejected = assert.rejects(pending, e => e.error.kind === 'unauthorized');
     await reading;
-    await f.operator.call('session.browser.revoke', { sessionId: f.service.state.principals.find(p => p.kind === 'browser').id });
+    await f.operator.call('session.browser.revoke', { sessionId: f.service.state.principals.find(p => p.kind === 'browser' && p.id !== 'browser:local').id });
     release(); await rejected;
     assert.deepEqual(await f.operator.call('project.list', {}), []);
   } finally { release(); await f.cleanup(); }
@@ -375,5 +377,65 @@ test("a browser sees what the project's own Agents did, and is told each time th
       assert.equal(next.value.activity.entries.at(-1).method, 'document.read');
       assert.equal(next.value.activity.entries.at(-1).documentId, d.id);
     } finally { abort.abort(); await observed.return(); }
+  } finally { await f.cleanup(); }
+});
+
+test('opening the service on this machine is the access: no link, no credential, no expiry', async () => {
+  const f = await fixture();
+  try {
+    const post = (method, body, headers = {}) => fetch(f.service.url + '/api/v2/' + method, {
+      method: 'POST', headers: { 'content-type': 'application/json', origin: f.service.url, ...headers }, body: JSON.stringify(body)
+    });
+    // A tab opened here carries no credential and is answered as the local person.
+    const listed = await post('project.list', {});
+    assert.equal(listed.status, 200);
+    const { value: projects } = await listed.json();
+    assert.ok(Array.isArray(projects));
+    // The local person is a browser principal: it may select a folder and read a project.
+    const created = await post('project.create', { name: 'local 中文' });
+    assert.equal(created.status, 200);
+    const { value: project } = await created.json();
+    assert.equal((await post('observation.snapshot', { projectId: project.id })).status, 200);
+    // Opening a plain url never mints a link, so no one-time code exists to leak.
+    assert.equal((await fetch(f.service.url + '/api/browser/pair', { method: 'POST', headers: { 'content-type': 'application/json', origin: f.service.url }, body: JSON.stringify({ code: 'x'.repeat(32) }) })).status, 401);
+    // A credential that is present must still be valid: no silent widening.
+    const wrong = await post('project.list', {}, { authorization: 'Bearer ' + 'a'.repeat(64) });
+    assert.equal(wrong.status, 401);
+    // A browser request that says it came from another site is refused.
+    const crossSite = await post('project.list', {}, { 'sec-fetch-site': 'cross-site' });
+    assert.equal(crossSite.status, 403);
+    // A foreign Origin is refused, and no Origin-dependent operation is reachable by another site.
+    const crossOrigin = await post('project.list', {}, { origin: 'https://example.invalid' });
+    assert.equal(crossOrigin.status, 403);
+  } finally { await f.cleanup(); }
+});
+
+test('a narrower link still narrows: the same request without it is the machine, with it is the grant', async () => {
+  const f = await fixture();
+  try {
+    await fs.mkdir(path.join(f.root, 'narrow'));
+    const grant = await f.operator.call('session.browser.pair', { path: 'narrow' });
+    const { value } = await (await f.pair(grant.code)).json();
+    const browser = new BrowserClient({ url: f.service.url, ...value });
+    const local = new BrowserClient({ url: f.service.url });
+    // The link is confined to its folder; the local tab is not.
+    assert.equal(value.root, await fs.realpath(path.join(f.root, 'narrow')));
+    assert.deepEqual(await local.call('project.list', {}), []);
+    await assert.rejects(browser.call('project.open', { path: '..' }), e => ['scope', 'not_found'].includes(e.error.kind));
+  } finally { await f.cleanup(); }
+});
+
+test('an expired link is refused, never treated as this machine', async () => {
+  // A one-millisecond session: the grant is real, then it is not.
+  const f = await fixture({ browser: { sessionTtlMs: 1 } });
+  try {
+    await fs.mkdir(path.join(f.root, 'narrow'));
+    const grant = await f.operator.call('session.browser.pair', { path: 'narrow' });
+    const { value } = await (await f.pair(grant.code)).json();
+    await new Promise(resolve => setTimeout(resolve, 40));
+    const expired = new BrowserClient({ url: f.service.url, ...value });
+    await assert.rejects(expired.call('project.list', {}), e => e.error.kind === 'unauthorized');
+    // The same request without the stale credential is still the machine, which still works.
+    assert.deepEqual(await new BrowserClient({ url: f.service.url }).call('project.list', {}), []);
   } finally { await f.cleanup(); }
 });

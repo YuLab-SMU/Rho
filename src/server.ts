@@ -15,7 +15,7 @@ import { Workspace, workspaceLimits } from './workspace.js';
 import { Interactions, interactionLimits } from './interactions.js';
 import { TaskMap, taskMapLimits } from './task-map.js';
 import { Capabilities } from './capabilities.js';
-import { BrowserAccess, browserLimits } from './browser-access.js';
+import { BrowserAccess, browserLimits, localBrowserId, localBrowserPrincipal } from './browser-access.js';
 import { NativeFolderPicker, nativeFolderLimits } from './native-folders.js';
 import { homedir } from 'node:os';
 import { serveWeb, webRoot, installedWebEntries } from './web-assets.js';
@@ -352,6 +352,10 @@ export class RhoService {
     this.adminToken = randomBytes(32).toString('hex');
     this.state.principals = this.state.principals.filter(p => p.id !== 'operator');
     await this.state.addPrincipal({ id: 'operator', tokenHash: digest(this.adminToken), methods: Object.keys(operations) });
+    // Opening this service in a browser on this machine is the local person: one principal,
+    // no credential, no expiry. It is registered once per start, replacing any earlier copy.
+    this.state.principals = this.state.principals.filter(p => p.id !== localBrowserId);
+    await this.state.addPrincipal(localBrowserPrincipal(await fs.realpath(this.config.root)));
     await new Promise<void>((resolve, reject) => { this.server.once('error', reject); this.server.listen(this.config.port ?? 0, '127.0.0.1', () => resolve()); });
     this.url = 'http://127.0.0.1:' + (this.server.address() as any).port;
     await atomicJson(path.join(this.state.directory, 'connection.json'), { url: this.url, token: this.adminToken, apiVersion: '2.0' });
@@ -385,10 +389,18 @@ export class RhoService {
   private authenticate(req: http.IncomingMessage, method: string) {
     requireThat(req.headers.host === new URL(this.url).host, 'origin', 'Host header does not match the local service.');
     if (req.headers.origin) requireThat(req.headers.origin === this.url, 'origin', 'Origin is not authorized for this service.');
-    const hash = digest((req.headers.authorization ?? '').replace(/^Bearer /, ''));
-    const principal = this.state.principals.find(p => timingSafeEqual(Buffer.from(p.tokenHash, 'hex'), Buffer.from(hash, 'hex')));
-    requireThat(principal, 'unauthorized', 'A valid local session credential is required.');
-    requireThat(!principal.expiresAt || Date.parse(principal.expiresAt) > Date.now(), 'unauthorized', 'Browser session expired. Ask your Agent to open Rho again.');
+    // Browsers label their own requests. A page from another site is refused here even when it
+    // reaches the loopback port; anything else reaching this port is already the same user.
+    const site = req.headers['sec-fetch-site'];
+    if (site && site !== 'same-origin' && site !== 'none') requireThat(false, 'origin', 'Cross-site requests are not authorized for this service.');
+    const bearer = (req.headers.authorization ?? '').replace(/^Bearer /, '');
+    // No credential means the person at this machine opened this service. A credential that is
+    // present must still be valid: an old or narrowed link never silently widens to local access.
+    const principal = bearer
+      ? this.state.principals.find(p => p.tokenHash.length === 64 && timingSafeEqual(Buffer.from(p.tokenHash, 'hex'), Buffer.from(digest(bearer), 'hex')))
+      : this.state.principals.find(p => p.id === localBrowserId);
+    requireThat(principal, 'unauthorized', bearer ? 'A valid local session credential is required.' : 'Open this service in a browser on this machine.');
+    requireThat(!principal.expiresAt || Date.parse(principal.expiresAt) > Date.now(), 'unauthorized', 'Browser session expired. Open this service in a browser on this machine, or ask your Agent for a new link.');
     requireThat(principal.methods.includes(method === 'events' ? 'observation.snapshot' : method), 'unauthorized', 'Session does not authorize this operation.');
     return principal;
   }

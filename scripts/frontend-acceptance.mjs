@@ -61,6 +61,19 @@ writeLines(jsonlite::toJSON(list(schemaVersion=1L,complete=TRUE,artifacts=items)
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, permissions: ['clipboard-read','clipboard-write'] });
   page = await context.newPage(); page.setDefaultTimeout(15000); report.browser = browser.version();
   const errors = []; page.on('pageerror', e => errors.push(e.message));
+  // Opening this url on this machine is the access: no gate, no code, nothing stored in the tab.
+  await page.goto(service.url);
+  await page.getByRole('heading', { name: 'Your projects' }).waitFor();
+  assert.equal(await page.getByText('Open Rho from your Agent').count(), 0);
+  assert.deepEqual(await page.evaluate(() => [Object.keys(sessionStorage), location.hash]), [[], '']);
+  passed('the service url opens the application directly, with no link and nothing stored');
+  // A link that cannot be used leaves the page working as this machine and says so.
+  const staleTab = await context.newPage();
+  await staleTab.goto(service.url + '/#pair=' + 'x'.repeat(32));
+  await staleTab.getByRole('heading', { name: 'Your projects' }).waitFor();
+  assert.match(await staleTab.locator('.notice-bar').innerText(), /could not be used/);
+  await staleTab.close();
+  passed('a link that cannot be used falls back to this machine instead of closing the page');
   const pairing = await admin.call('session.browser.pair', {});
   await page.goto(service.url + '/#pair=' + pairing.code);
   await page.getByRole('heading', { name: 'Your projects' }).waitFor();

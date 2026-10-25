@@ -66,7 +66,7 @@ test('authenticated HTTP and real stdio MCP share author undo, targeted revert a
     const connection = await BrowserClient.pair(service.url, pairing.code, (url, init) => fetch(url, { ...init, headers: { ...init.headers, origin: service.url } }));
     const browser = new BrowserClient(connection);
     await assert.rejects(browser.call('document.undoOwn', own), e => e.error.kind === 'conflict', 'an operator transaction cannot be replayed as the browser principal');
-    service.state.principals.find(p => p.kind === 'browser').methods.push('document.undo');
+    service.state.principals.find(p => p.kind === 'browser' && p.id !== 'browser:local').methods.push('document.undo');
     await assert.rejects(browser.call('document.undo', { ...own, changeId: 'wrong-keyboard' }), e => e.error.kind === 'unavailable');
     await call('workspace.export', { destination: 'export', format: 3 });
     const q = await c.call('project.create', { name: 'restored' });

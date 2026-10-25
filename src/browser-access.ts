@@ -32,6 +32,15 @@ export const browserMethods = ['protocol.describe', 'protocol.validate', 'projec
   // The files a run declared, registered so a person can open them, and checked against the
   // inventory the run wrote. Both read bytes and record facts; neither runs anything.
   'resource.list', 'artifact.check'];
+// The person at this machine. A tab this service served is authorized by the request itself:
+// same origin, loopback only, no link, no code and no expiry. `--pair` stays an explicit,
+// narrower grant for a shared or subfolder-scoped tab.
+export const localBrowserId = 'browser:local';
+export function localBrowserPrincipal(root: string): Principal {
+  // The empty token hash can never match a request digest, so no header impersonates this
+  // identity: it is chosen because the request carried no credential at all.
+  return { id: localBrowserId, kind: 'browser', tokenHash: '', projectRoot: root, methods: [...browserMethods] };
+}
 interface Pairing { hash: string; root: string; methods: string[]; expires: number; selectedProjects: string[] }
 export class BrowserAccess {
   limits: typeof browserLimits;
@@ -56,13 +65,14 @@ export class BrowserAccess {
     requireThat(typeof code === 'string' && /^[A-Za-z0-9_-]{32}$/.test(code), 'unauthorized', 'Pairing code is invalid, expired or already used.');
     const pairing = this.pairings.find(p => p.hash === digest(code) && p.expires > now);
     requireThat(pairing, 'unauthorized', 'Pairing code is invalid, expired or already used.');
-    const sessions = this.state.principals.filter(p => p.kind === 'browser' && Date.parse(p.expiresAt ?? '') > now);
+    const sessions = this.state.principals.filter(p => p.kind === 'browser' && p.id !== localBrowserId && Date.parse(p.expiresAt ?? '') > now);
     requireThat(sessions.length < this.limits.maxSessions, 'limit', 'Browser session limit reached; existing sessions are retained.', { limit: 'browser.maxSessions' });
     const token = randomBytes(32).toString('hex'), expiresAt = new Date(now + this.limits.sessionTtlMs).toISOString();
     const principal: Principal = { id: 'browser:' + randomBytes(16).toString('hex'), kind: 'browser', tokenHash: digest(token), projectRoot: pairing.root, selectedProjects: pairing.selectedProjects, methods: [...pairing.methods], expiresAt };
     // Consume synchronously before awaiting storage: two tabs cannot redeem once.
     this.pairings = this.pairings.filter(p => p !== pairing);
-    this.state.principals = this.state.principals.filter(p => p.kind !== 'browser' || Date.parse(p.expiresAt ?? '') > now);
+    // Pruning expired tabs never touches the machine's own identity, which has no expiry.
+    this.state.principals = this.state.principals.filter(p => p.id === localBrowserId || p.kind !== 'browser' || Date.parse(p.expiresAt ?? '') > now);
     await this.state.addPrincipal(principal);
     return { token, expiresAt, principalId: principal.id, methods: principal.methods, root: principal.projectRoot, rootLabel: await homeRelative(pairing.root) };
   }

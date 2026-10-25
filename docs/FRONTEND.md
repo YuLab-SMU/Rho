@@ -38,10 +38,20 @@ conditional save, execution identity, output and versions remain with their exis
 owners. Views of the same document do not acquire independent document buffers.
 Opening exact results uses both resource identity and version. Reconnect only reads.
 
-A request draft is scoped to the project and browser principal in tab session
-storage. It is local preparation, not a saved project document or Agent message.
-Disconnect clears that draft along with the tab's connection. The existing Documents
-editor owns acknowledged document recovery; a view change makes no new save claim.
+Opening the service URL on this machine is the access: the tab starts as the local
+person, so there is no link to redeem, no session credential in tab storage and no
+first screen asking for one. A deliberately narrower link (`rho --pair`, one folder
+or an expiring tab) still arrives as a one-time code in the fragment; the page
+redeems it, keeps that credential only in this tab's session storage, and says when
+the link could not be used. A tab that falls back to this machine keeps its open
+projects, unsaved edits and running work: leaving a link forgets a credential, it
+does not close a view or submit anything.
+
+A request draft is scoped to the project and to the principal using the tab in
+session storage. It is local preparation, not a saved project document or Agent
+message. Using this machine's access instead of a link forgets only that link's
+credential. The existing Documents editor owns acknowledged document recovery; a
+view change makes no new save claim.
 
 The palette and responsive dialogs use native dialog focus containment and Escape.
 Typography, color and layout are implemented in the three CSS files under `web/`.

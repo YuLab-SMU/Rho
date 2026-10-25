@@ -35,15 +35,15 @@ try {
   };
   const failing = [];
 
-  // A tab that was never paired says how to get a connected one. Measured in its own tab:
-  // adding the link's fragment to the same document would not load it again.
+  // A tab opened without any link is the application on this machine. Measured in its own tab:
+  // adding a link's fragment to the same document would not load it again.
   const unpaired = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   await unpaired.goto(new URL(ready.openUrl).origin + '/');
-  await unpaired.getByRole('heading', { name: 'Open Rho from your Agent', exact: true }).waitFor();
-  const results = await inspectResponsive(unpaired, { name: 'unpaired', evidence, restore: [1440, 900] });
-  const missing = results.flatMap(r => r.failures.map(f => `unpaired ${r.width}: ${f}`));
-  report.pages.push({ name: 'unpaired', failing: missing }); report.responsive.push(...results); failing.push(...missing);
-  process.stdout.write(`unpaired: ${missing.length ? missing.join('; ') : 'no page overflow or unnamed buttons at four widths'}\n`);
+  await unpaired.getByRole('heading', { name: 'Your projects', exact: true }).waitFor();
+  const results = await inspectResponsive(unpaired, { name: 'direct', evidence, restore: [1440, 900] });
+  const missing = results.flatMap(r => r.failures.map(f => `direct ${r.width}: ${f}`));
+  report.pages.push({ name: 'direct', failing: missing }); report.responsive.push(...results); failing.push(...missing);
+  process.stdout.write(`direct: ${missing.length ? missing.join('; ') : 'no page overflow or unnamed buttons at four widths'}\n`);
   await unpaired.close();
   await page.goto(ready.openUrl);
   await page.getByRole('heading', { name: 'Your projects', exact: true }).waitFor();
@@ -95,10 +95,11 @@ try {
   await session.waitFor();
   assert.match(await session.innerText(), /Can read, change and run code[\s\S]*Last active \d\d:\d\d/);
   failing.push(...await measure('context'));
-  await page.getByRole('button', { name: 'Disconnect this tab', exact: true }).click();
-  await page.getByRole('dialog', { name: 'Disconnect this tab?' }).getByRole('button', { name: 'Disconnect', exact: true }).click();
-  await page.getByRole('heading', { name: 'This tab is disconnected', exact: true }).waitFor();
-  failing.push(...await measure('disconnected'));
+  // This tab was opened on this machine, so it has no link to leave: the panel says where the
+  // access comes from instead of offering a disconnect it cannot perform.
+  assert.equal(await page.getByRole('button', { name: "Use this machine's access instead", exact: true }).count(), 0);
+  assert.match(await page.locator('#project-context').innerText(), /opened directly on this machine/);
+  failing.push(...await measure('direct-access'));
 
   assert.deepEqual(failing, [], 'inspectResponsive outside the workspace');
   assert.deepEqual(errors, []);

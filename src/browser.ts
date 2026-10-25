@@ -1,7 +1,9 @@
 import { ObservationClient, httpObservation, type observationLimits } from './observation.js';
 
 // This entry deliberately imports neither Node, the DOM nor optional owners.
-export interface BrowserConnection { url: string; token: string; expiresAt: string; methods: string[]; principalId?: string; root?: string; rootLabel?: string }
+// A tab opened on this machine needs no credential: the service authorizes the same-origin
+// request as the local person. `token` is present only for a deliberately narrowed link.
+export interface BrowserConnection { url: string; token?: string; expiresAt?: string; methods?: string[]; principalId?: string; root?: string; rootLabel?: string }
 export interface SourceFolder { id: string; root: string; name: string }
 export interface FolderSelection extends SourceFolder { selectionId: string }
 export type ProjectSummary = RhoOutput<'project.list'>[number];
@@ -100,7 +102,7 @@ export class BrowserClient {
     // Native browser fetch must not receive this client as its receiver.
     const fetcher = this.fetcher;
     const response = await fetcher(new URL('/api/v2/' + method, this.connection.url), {
-      method: 'POST', credentials: 'omit', headers: { authorization: 'Bearer ' + this.connection.token, 'content-type': 'application/json' },
+      method: 'POST', credentials: 'omit', headers: { ...(this.connection.token ? { authorization: 'Bearer ' + this.connection.token } : {}), 'content-type': 'application/json' },
       body: JSON.stringify(input), signal: signal ?? AbortSignal.timeout(30000),
     });
     const result = await response.json();

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserClient, type BrowserConnection, type ProjectSummary, type WorkspaceSnapshot } from '../src/browser.js';
 import { Home, located, projectName as name, trapTab } from './home.js';
@@ -16,11 +16,14 @@ const Workspace = lazy(() => import('./shell/workspace.js').then(module => ({ de
 const ProjectOverview = lazy(() => import('./overview.js').then(module => ({ default: module.ProjectOverview })));
 
 const sessionKey = 'rho.browser.session.v1', projectKey = 'rho.browser.project.v1';
-// The launcher opens this page with a one-time code in the fragment, which no request or Referer carries.
-// Remove it from the address bar before anything renders; App redeems it once.
+// Opening this page on this machine is the access: the service answers a same-origin request as
+// the local person, so there is no link, code or credential to carry. A narrower, expiring link
+// stays available for a shared or subfolder-scoped tab; only then does the fragment hold a code,
+// which no request or Referer carries.
 const linked = new URLSearchParams(location.hash.slice(1)), linkCode = linked.get('pair');
 if (linkCode !== null) history.replaceState(null, '', location.pathname + location.search);
 let linkRedeemed = false;
+const localConnection: BrowserConnection = { url: location.origin };
 function restoreSession(): BrowserConnection | null {
   try {
     const saved = JSON.parse(sessionStorage.getItem(sessionKey) ?? 'null');
@@ -36,19 +39,13 @@ function until(iso: string) {
   return (at.toDateString() === today ? 'Today' : at.toDateString() === next.toDateString() ? 'Tomorrow' : at.toLocaleDateString()) + ' at ' + clock(at);
 }
 type Phase = 'connecting' | 'live' | 'offline';
-type Away = 'fresh' | 'linking' | 'used' | 'failed' | 'ended' | 'disconnected';
-const awayCopy: Record<Away, [string, string]> = {
-  fresh: ['Open Rho from your Agent', 'Ask Claude Code or another Agent to open Rho. It opens a tab that is already connected, so there is nothing to type here.'],
-  linking: ['Connecting this tab', 'Using the link your Agent opened. Connecting only reads; it starts no work.'],
-  used: ['This link has already been used', 'Each link from your Agent connects one tab, once, within five minutes. Ask your Agent to open Rho again.'],
-  failed: ["This tab couldn't connect", 'Ask your Agent to open Rho again.'],
-  ended: ["This tab's access has ended", 'It expired or was removed by whoever runs Rho. Ask your Agent to open Rho again.'],
-  disconnected: ['This tab is disconnected', 'It no longer watches your projects. Ask your Agent to open Rho when you want to come back.'],
-};
 function App() {
-  const [connection, setConnection] = useState(() => linkCode === null ? restoreSession() : null);
-  const [client, setClient] = useState(() => connection ? new BrowserClient(connection) : null);
-  const [away, setAway] = useState<Away>(linkCode === null ? 'fresh' : 'linking'), [awayDetail, setAwayDetail] = useState('');
+  // The narrowed link this tab uses, if any. Without one the tab is simply the local person.
+  const [link, setLink] = useState<BrowserConnection | null>(() => linkCode === null ? restoreSession() : null);
+  const connection = link ?? localConnection;
+  const client = useMemo(() => new BrowserClient(connection), [link]);
+  // A link that could not be used is said once, without taking this machine's access away.
+  const [notice, setNotice] = useState(linkCode === null ? '' : 'Using the link in this tab. If it is not accepted, this page falls back to this machine.');
   const [screen, setScreen] = useState<'home' | 'project' | 'plugins'>('home');
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [project, setProject] = useState<ProjectSummary | null>(null);
@@ -74,14 +71,14 @@ function App() {
   const confirmDialog = useRef<HTMLDialogElement>(null), disconnectTrigger = useRef<HTMLButtonElement>(null), confirmReturn = useRef<HTMLElement | null>(null);
   const navigationTrigger = useRef<HTMLButtonElement>(null), contextTrigger = useRef<HTMLButtonElement>(null);
   const agentTrigger = useRef<HTMLButtonElement>(null);
-  const awayHeading = useRef<HTMLHeadingElement>(null);
+
   // Elements behind the open palette are inert, so a command that moves focus waits for it to close.
   const afterCommands = useRef<(() => void) | null>(null);
   const current = useRef(project); current.current = project;
   const [narrow, setNarrow] = useState(() => matchMedia('(max-width: 767px)').matches);
   function live() { setPhase('live'); setReadAt(new Date()); setOfflineAt(null); }
   function lost(e: unknown) {
-    if (accessEnded(e)) { end('ended'); return; }
+    if (accessEnded(e)) { useLocalAccess('That link is no longer valid. This tab uses this machine. Reconnecting only reads again.'); return; }
     setPhase('offline'); setOfflineAt(at => at ?? new Date()); setError(humanError(e));
   }
   function chooseProject(next: ProjectSummary, restoreLayout = false) {
@@ -100,8 +97,8 @@ function App() {
     BrowserClient.pair(location.origin, linkCode).then(next => {
       // No credential is written anywhere except this origin's tab session store.
       sessionStorage.setItem(sessionKey, JSON.stringify(next));
-      setConnection(next); setClient(new BrowserClient(next));
-    }).catch(e => { setAway(accessEnded(e) ? 'used' : 'failed'); setAwayDetail(accessEnded(e) ? '' : humanError(e)); });
+      setNotice(''); setLink(next);
+    }).catch(e => setNotice('That link could not be used. This tab uses this machine instead.' + (accessEnded(e) ? '' : ' ' + humanError(e))));
   }, []);
   useEffect(() => {
     if (!client) return;
@@ -163,7 +160,6 @@ function App() {
     if (commands) dialog.current?.showModal(); else if (dialog.current?.open) dialog.current.close();
   }, [commands]);
   useEffect(() => { if (confirming) confirmDialog.current?.showModal(); else if (confirmDialog.current?.open) confirmDialog.current.close(); }, [confirming]);
-  useEffect(() => { if (!connection && away !== 'fresh' && away !== 'linking') awayHeading.current?.focus(); }, [connection, away]);
   // The sheet leaves with the home page; once it is gone, focus moves to the project instead of the document body.
   useEffect(() => { if (mainFocus) { setMainFocus(false); document.getElementById('main')?.focus(); } }, [mainFocus]);
   function command(run: () => void) { setCommands(false); run(); }
@@ -186,21 +182,11 @@ function App() {
   function goHome() { setScreen('home'); setHomeFocus(true); }
   // A choice in the drawer closes it; focus returns to the navigation button unless the choice moves it.
   const pick = (run: () => void) => () => { run(); if (narrow) setNavigation(false); };
-  function end(reason: Away) {
-    sessionStorage.removeItem(sessionKey); sessionStorage.removeItem(projectKey); confirmReturn.current = null;
-    for (const key of Object.keys(sessionStorage)) if (['rho.layout.v1:', 'rho-expression/1:', 'rho-table-question/1:', 'rho.request.v1:'].some(prefix => key.startsWith(prefix))) sessionStorage.removeItem(key);
-    setConnection(null); setClient(null); setProject(null); setSnapshot(null); setProjects([]); setError(''); setReadAt(null); setOfflineAt(null);
-    setContext(false); setCommands(false); setConfirming(false); setScreen('home'); setAway(reason); setAwayDetail('');
-  }
-  if (!connection) {
-    const [title, body] = awayCopy[away];
-    return <div className="application"><main id="main" className="away"><section className="standalone" aria-live="polite">
-      <strong className="wordmark">Rho</strong>
-      <h1 ref={awayHeading} tabIndex={-1}>{title}</h1>
-      <p>{body}</p>
-      {awayDetail && <p className="away-detail">{awayDetail}</p>}
-      {away !== 'fresh' && away !== 'linking' && <p className="away-note">Your projects and any running work are unchanged.</p>}
-    </section></main></div>;
+  // Leaving a link keeps the page: the same person at the same machine keeps reading the same
+  // folders. Only the tab's credential is forgotten, and nothing is resubmitted.
+  function useLocalAccess(message = '') {
+    sessionStorage.removeItem(sessionKey); confirmReturn.current = null;
+    setLink(null); setNotice(message); setConfirming(false); setError(''); setReconnect(v => v + 1);
   }
   const composition = overview ? undefined : snapshot?.compositions.find(c => c.compositionId === compositionId) ?? snapshot?.compositions[0];
   const folder = { root: connection.root, label: connection.rootLabel ?? connection.root ?? '' };
@@ -233,10 +219,10 @@ function App() {
     // After navigation, so the default choice is never a change to the layout.
     ...(screen === 'project' && composition && layoutCommands ? [layoutCommands] : []),
     { label: 'Connection', commands: [{ id: 'read', label: phase === 'offline' ? 'Reconnect' : 'Refresh', icon: 'refresh', meta: 'Reads again · starts nothing', run: reread }] },
-    { label: 'This tab', commands: [{ id: 'disconnect', label: 'Disconnect this tab', icon: 'unlink', danger: true, run: () => askDisconnect(commandReturn()) }] },
+    ...(link ? [{ label: 'This tab', commands: [{ id: 'disconnect', label: "Use this machine's access", icon: 'unlink', danger: true, run: () => askDisconnect(commandReturn()) }] satisfies Command[] }] : []),
   ];
   // Session grants decide the access copy; older read-only sessions keep theirs.
-  const edits = connection.methods.includes('document.edit'), runs = connection.methods.includes('action.submit');
+  const edits = link ? !!link.methods?.includes('document.edit') : true, runs = link ? !!link.methods?.includes('action.submit') : true;
   const access = edits ? `Open and watch projects, edit open documents and pick table rows.${runs ? ' Run an action an Agent proposed and stop a run.' : ''} Save documents using the editor.` : 'Open, create and watch projects. No edits or runs.';
   const contextSections = <>
     <div ref={setContextSlot} className="context-slot" />
@@ -248,8 +234,10 @@ function App() {
     </section>
     <section className="context-section">
       <h3 className="caption">This tab</h3>
-      <dl><dt>Folder</dt><dd>{connection.root ? (connection.rootLabel ?? connection.root) + ' and below' : 'Set by whoever runs Rho'}</dd><dt>Can</dt><dd>{access}</dd><dt>Expires</dt><dd>{until(connection.expiresAt)}</dd></dl>
-      <button ref={disconnectTrigger} className="danger-link" onClick={() => askDisconnect(disconnectTrigger.current)}>Disconnect this tab</button>
+      <dl>{link && <><dt>Link</dt><dd>{link.root ? (link.rootLabel ?? link.root) + ' and below' : 'Set by whoever runs Rho'}</dd></>}<dt>Can</dt><dd>{access}</dd>{link?.expiresAt && <><dt>Expires</dt><dd>{until(link.expiresAt)}</dd></>}</dl>
+      {link
+        ? <button ref={disconnectTrigger} className="danger-link" onClick={() => askDisconnect(disconnectTrigger.current)}>Use this machine's access instead</button>
+        : <p className="context-note">This tab was opened directly on this machine, so nothing has to be sent to it. The folder is set by whoever runs Rho.</p>}
     </section>
     <section className="context-section">
       <h3 className="caption">Agents</h3>
@@ -272,7 +260,7 @@ function App() {
   </>;
   const agentContents = <>
     <div className="drawer-heading"><h2>Agent</h2><button className="icon-button" aria-label="Close Agent" onClick={() => { setAgentOpen(false); agentTrigger.current?.focus(); }}><Icon name="close" size={18} /></button></div>
-    {snapshot && <AgentRequest key={snapshot.project.id} snapshot={snapshot} principalId={connection.principalId ?? 'browser'} />}
+    {snapshot && <AgentRequest key={snapshot.project.id} snapshot={snapshot} principalId={connection.principalId ?? 'local'} />}
     <div ref={setAgentSlot} className="agent-slot" />
     {!composition && <section className="context-section"><h3>Sessions</h3><AgentAccess snapshot={snapshot} /></section>}
   </>;
@@ -294,9 +282,10 @@ function App() {
         </header>
         <div className="content-row">
           <main id="main" tabIndex={-1} className={composition && screen === 'project' ? 'main project-main workspace-main' : 'main'}>
+            {notice && <div className="offline-bar notice-bar" role="status"><Icon name="info" size={17} /><p>{notice}</p><button onClick={() => setNotice('')}>Dismiss</button></div>}
             {screen === 'project' && snapshot?.presentation?.pending && <div className="offline-bar" role="status"><p>New output is ready. Your current views are kept.</p><button onClick={() => showSection('files')}>Show files</button></div>}
             {(phase === 'offline' || reconnecting) && <div className="offline-bar" role="alert"><Icon name="offline" size={17} /><p>{reconnecting ? 'Reconnecting. ' : "Can't reach Rho. "}{seen}</p><button disabled={reconnecting} onClick={reread}>Reconnect</button></div>}
-            {screen === 'home' || !project ? <Home client={client!} projects={projects} folder={folder} focusRequest={homeFocus} onFocused={() => setHomeFocus(false)} onChoose={chooseProject} onOpened={opened} onAccessEnded={() => end('ended')} />
+            {screen === 'home' || !project ? <Home client={client!} projects={projects} folder={folder} focusRequest={homeFocus} onFocused={() => setHomeFocus(false)} onChoose={chooseProject} onOpened={opened} onAccessEnded={() => useLocalAccess('That access has ended. This tab uses this machine.')} />
               : !snapshot ? <Loading text="Opening project…" />
               : screen === 'plugins' ? <PluginCatalog catalog={snapshot.catalog} project={name(project)} pluginId={pluginId} onSelect={choosePlugin} back={pluginReturn ? { label: 'Back to project', run: () => { setPluginReturn(false); setPluginId(''); setScreen('project'); setMainFocus(true); } } : undefined} />
               : composition ? <>
@@ -316,7 +305,7 @@ function App() {
     {narrow && context && <Overlay className="context-sheet" label={feedbackContext ? 'Your question' : 'Context and access'} returnFocus={contextTrigger} onClose={() => setContext(false)}><div className="drawer-heading"><h2>{feedbackContext ? 'Your question' : 'Connection & access'}</h2><button className="done-button" onClick={() => setContext(false)}>Done</button></div>{contextSections}</Overlay>}
     <dialog ref={dialog} className="commands" aria-label="Commands" onCancel={() => setCommands(false)} onClose={e => { if (e.currentTarget.open) return; setCommands(false); const next = afterCommands.current; afterCommands.current = null; if (next) next(); else commandReturn()?.focus(); }} onClick={e => { if (e.target === e.currentTarget) setCommands(false); }}>{commands && <CommandPalette groups={groups} onRun={runCommand} />}</dialog>
     <dialog ref={confirmDialog} className="confirm" aria-labelledby="disconnect-title" aria-describedby="disconnect-body" onCancel={() => setConfirming(false)} onClose={() => { setConfirming(false); confirmReturn.current?.focus(); }}>
-      <h2 id="disconnect-title">Disconnect this tab?</h2><p id="disconnect-body">Your projects and running work stay available. Ask your Agent for a new link to reconnect.</p><div className="dialog-actions"><button onClick={() => setConfirming(false)}>Cancel</button><button className="danger" onClick={() => end('disconnected')}>Disconnect</button></div>
+      <h2 id="disconnect-title">Use this machine's access?</h2><p id="disconnect-body">This tab stops using its link and keeps working as this machine. Open projects, unsaved edits and running work are unchanged.</p><div className="dialog-actions"><button onClick={() => setConfirming(false)}>Cancel</button><button className="danger" onClick={() => useLocalAccess('This tab now uses this machine.')}>Use this machine</button></div>
     </dialog>
   </div>;
 }

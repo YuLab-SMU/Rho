@@ -80,10 +80,11 @@ try {
   context = await browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce' });
   page = await context.newPage(); page.setDefaultTimeout(15000);
   page.on('pageerror', error => errors.push(error.message));
+  // Opening this url on this machine is the access: no link, no code, no credential.
   await page.goto(url);
-  await page.getByRole('heading', { name: 'Open Rho from your Agent', exact: true }).waitFor();
-  assert.equal(await page.getByRole('textbox').count(), 0);
-  await inspect('unpaired');
+  await page.getByRole('heading', { name: 'Your projects', exact: true }).waitFor();
+  await inspect('direct');
+  assert.deepEqual(await page.evaluate(() => [Object.keys(sessionStorage), Object.keys(localStorage)]), [[], []]);
   await page.goto('about:blank'); await page.goto(ready.openUrl);
   await page.getByRole('heading', { name: 'Your projects', exact: true }).waitFor();
   await page.getByRole('status').filter({ hasText: 'Connected' }).waitFor();
@@ -91,7 +92,7 @@ try {
   assert.equal(await page.evaluate(() => localStorage.length), 0);
   const admin = await operator();
   assert.ok(!(await page.content()).includes(admin.connection.token));
-  assert.ok(!(await page.content()).includes(ready.pairingCode));
+  assert.ok(!(await page.content()).includes(admin.connection.token));
   const { stdout } = await run(process.execPath, [path.join(packageRoot, 'dist/cli.js'), '--pair', path.join(state, 'connection.json')]);
   const another = JSON.parse(stdout), second = await context.newPage(), third = await context.newPage();
   await second.goto(another.openUrl); await second.getByRole('heading', { name: 'Your projects' }).waitFor();

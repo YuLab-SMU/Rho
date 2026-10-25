@@ -68,13 +68,17 @@ export class State {
   }
   async addPrincipal(principal: Principal) { this.principals.push(principal); await this.persistPrincipals(); }
   async revokeBrowser(id: string) {
+    // This machine's own identity is not a session to revoke: the person can simply reopen the
+    // url. Refusing keeps one typo from locking the page out until the service restarts.
+    requireThat(id !== 'browser:local', 'scope', 'This machine is not a revocable session. Close the tab instead.');
     const previous = this.principals.find(p => p.id === id && p.kind === 'browser');
     this.principals = this.principals.filter(p => p !== previous);
     await this.persistPrincipals();
     return { sessionId: id, revoked: !!previous };
   }
   private liveBrowser(principal: Principal, method: string) {
-    requireThat(this.principals.includes(principal) && principal.kind === 'browser' && principal.methods.includes(method) && Date.parse(principal.expiresAt ?? '') > Date.now(), 'unauthorized', 'This tab no longer has access. No folder was added.');
+    // The local person's access does not expire; a linked tab's does.
+    requireThat(this.principals.includes(principal) && principal.kind === 'browser' && principal.methods.includes(method) && (!principal.expiresAt || Date.parse(principal.expiresAt) > Date.now()), 'unauthorized', 'This tab no longer has access. No folder was added.');
   }
   private async selectedSource(root: string): Promise<SourceFolder> {
     root = await fs.realpath(root);

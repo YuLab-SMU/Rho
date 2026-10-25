@@ -29,7 +29,7 @@ is unchanged. [Plugin authoring](PLUGIN-AUTHORING.md) contains the executable gu
 - An unsigned application tarball was installed outside the checkouts. Its
   production-only SDK generated, checked, built and previewed another author
   package with source refresh. The installed application also passed launch,
-  pairing, four-width entry checks and shutdown with no Host left behind.
+  four-width entry checks and shutdown with no Host left behind.
 - Browser, package and document evidence is recorded under `work/plugin-dx/`.
   The tarball uses explicit local source overrides; it is not a signed release.
 
@@ -52,6 +52,26 @@ The Agent request field uses an explicit clipboard handoff to the external Agent
 Its draft survives panel closure within this tab, scoped by principal/project.
 Copying never claims delivery. Documents, selections, run identity and conditional
 writes keep their actual owners. The frontend does not invent Notebook capabilities.
+
+## Direct browser access
+
+Opening the loopback url in a browser on this machine is now the access. A same-origin
+request that carries no credential is authorized as the local person with the reviewed
+browser scope, no link, no one-time code and no expiry; Host, Origin and a browser's own
+cross-site marking are still checked on every request. A credential that is present must
+still be valid, so a stale or forged one is refused rather than silently widening to
+local access, and the machine's own identity is not a revocable session.
+
+`rho --pair` still mints a one-time, five-minute link for a tab that must be narrower —
+one folder below the service root — or must expire. That path, its single-use redemption
+and its expiry are unchanged. The browser no longer starts on a gate asking for a link: a
+link that cannot be used leaves the page working as this machine and says so, and
+switching from a link to this machine forgets only the credential, keeping open projects,
+unsaved edits and running work.
+
+The tradeoff is explicit: any process running as this user can call the loopback API
+without a credential, which the readable operator connection file already allowed. This
+change was not verified against human usability, physical IME behaviour or distribution.
 
 ## Verification of this reconstruction
 
