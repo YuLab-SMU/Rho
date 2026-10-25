@@ -73,7 +73,7 @@
 .rho-map[data-form="full"] { flex: 0 0 auto; min-height: 0; border: 0; }
 .rho-map-head { display: flex; align-items: center; gap: 10px; min-height: 36px; padding: 4px 16px; flex-wrap: wrap; }
 .rho-map-name { font-size: 11px; color: var(--color-meta); font-weight: 500; }
-.rho-map-question { font-family: var(--font-display); font-size: 15px; line-height: 20px; color: var(--color-ink); overflow-wrap: anywhere; }
+.rho-map-question { font-family: var(--font-ui); font-size: 15px; line-height: 20px; color: var(--color-ink); overflow-wrap: anywhere; }
 .rho-map[data-form="full"] .rho-map-question { font-size: 20px; line-height: 28px; }
 .rho-map-body { padding: 0 16px 8px; min-height: 0; overflow: auto; }
 .rho-map[data-form="full"] .rho-map-body { flex: 0 1 auto; max-height: 34vh; overflow: auto; }

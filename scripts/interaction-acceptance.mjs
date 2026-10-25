@@ -7,9 +7,12 @@ import { chromium } from '@playwright/test';
 import { RhoService, RhoClient, native, packageRoot } from './support.mjs';
 import { connectMcp, callOperation, mcpToolNames } from './mcp-consumer.mjs';
 import { runClaude } from './claude-consumer.mjs';
+import { rulers, profiles, firstUnit } from './rulers.mjs';
 const root = await fs.mkdtemp('/tmp/rho-s7-'), evidence = path.resolve(process.env.RHO_INTERACTION_EVIDENCE ?? 'work/interaction-' + Date.now());
 await fs.mkdir(evidence, { recursive: true, mode: 0o700 });
-const report = { scenario: 'S7-table-feedback', passed: false, humanUsability: 'unverified', model: process.env.RHO_INTERACTION_MODEL === '1', checks: [], widths: [], counts: { nativeDispatches: 0 }, limits: ['Browser IME is driven through Chrome CDP, not a physical candidate-window usability test.', 'Unassigned layouts prepare a context; assigned tasks use the existing original-session feedback route.'] };
+// RHO_SHELL=next drives the new shell and enforces the rulers; the frozen workspace only records them.
+const shell = process.env.RHO_SHELL === 'next' ? 'next' : 'legacy', profile = shell === 'next' ? profiles.shell : profiles.legacy;
+const report = { scenario: 'S7-table-feedback', shell, rulers: [], passed: false, humanUsability: 'not an acceptance criterion', model: process.env.RHO_INTERACTION_MODEL === '1', checks: [], widths: [], counts: { nativeDispatches: 0 }, limits: ['Browser IME is driven through Chrome CDP, not a physical candidate-window usability test.', 'Unassigned layouts prepare a context; assigned tasks use the existing original-session feedback route.'] };
 report.assets = JSON.parse(await fs.readFile(path.join(packageRoot, 'dist/web/composition.json'), 'utf8'));
 let service, browser, page, mcp;
 const check = name => { report.checks.push(name); process.stdout.write(name + '\n'); };
@@ -56,7 +59,7 @@ try {
   page = await browser.newPage({ viewport: { width: 1440, height: 956 } });
   report.browser = browser.version(); const errors = []; page.on('pageerror', e => errors.push(e.message));
   const pairing = await operator.call('session.browser.pair', {});
-  await page.goto(service.url + '/#pair=' + pairing.code);
+  await page.goto(service.url + '/#pair=' + pairing.code + (shell === 'next' ? '&shell=next' : ''));
   await page.locator('.project-row').first().click();
   await page.locator('.project-nav').getByRole('button', { name: /^workspace/ }).click();
   await page.locator('.expression-attention').waitFor();
@@ -137,6 +140,9 @@ try {
   const final = await call('annotation.read', { annotationId: thread.annotationId });
   assert.deepEqual(final.anchor, thread.anchor); assert.equal(final.messages[0].draft.text, words); assert.equal(final.messages[1].replyTo, thread.messages[0].id); assert.ok(final.messages[1].author.startsWith('agent:'));
   assert.deepEqual(final.messages[1].resources, [output]); assert.equal((await call('task.map.read')).items.length, 0);
+  const visibleTable = view => width => firstUnit(width < 768 ? page.locator('.mobile-view') : view(), 'table');
+  const settle = view => async width => { const cell = visibleTable(view)(width); await cell.waitFor(); await poll(() => cell.evaluate(c => { const r = c.getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth + 1; }), Boolean, 'resized table columns'); };
+  await rulers(page, { name: 'return', profile, first: visibleTable(grid), settle: settle(grid), transientAllowed: true, digest: true, keys: false, enforce: shell === 'next', evidence, report });
   check((report.model ? 'real Agent' : 'deterministic MCP consumer') + ' fetches the question, runs real R, explicitly replies and links its exact new table without Task Map');
   await grid().getByRole('button', { name: /Open linked result/ }).click();
   await page.locator('[data-owner-view^="result:"] .ag-row[row-index="0"] [col-id="value"]').waitFor();
@@ -147,9 +153,13 @@ try {
   const faultInput = { ...input, script: { ...input.script, digest: savedForFault.diskDigest } };
   assert.equal((await execute('s7-failed', { ...faultInput, args: ['fail'] })).execution, 'failed');
   await page.locator('.expression-notice').filter({ hasText: 's7-failed' }).waitFor();
+  const result = () => page.locator('[data-owner-view^="result:"]');
+  await rulers(page, { name: 'interrupted', profile, first: visibleTable(result), settle: settle(result), transientAllowed: true, keys: false, enforce: shell === 'next', evidence, report });
   assert.equal((await execute('s7-recovery', faultInput)).execution, 'completed');
-  assert.ok(await page.locator('.expression-notice').filter({ hasText: 's7-failed' }).isVisible());
-  check('a real failed run stays visible after a successful recovery; selection does not migrate to the new version');
+  // docs/INTERACTION-MODEL.md: once a later run of the source completes, nobody waits on the failure.
+  await poll(() => page.locator('.expression-notice').filter({ hasText: 's7-failed' }).count(), n => n === 0, 'superseded failure leaves the interruption slot');
+  check('a real failed run stops interrupting once a later run of its script completes; selection does not migrate to the new version');
+  await rulers(page, { name: 'complete', profile, first: visibleTable(result), settle: settle(result), enforce: shell === 'next', evidence, report });
   for (const width of [1440,1024,768,390]) {
     await page.setViewportSize({ width, height: 956 });
     const visible = width < 768 ? page.locator('.mobile-view') : page.locator('[data-owner-view^="result:"]');
