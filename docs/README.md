@@ -3,10 +3,13 @@
 Start with [Status](STATUS.md) for the current implementation and verification.
 The previous frontend design documents and plans were withdrawn on 2026-10-25.
 [Frontend](FRONTEND.md) describes the rebuilt application and its actual capabilities.
+For new product work, follow [Interaction guidance](INTERACTION.md) and the
+[episode workflow](DEVELOPMENT.md#write-an-interaction-episode).
 
 | Document | Purpose |
 | --- | --- |
 | [Frontend](FRONTEND.md) | Project navigation, workspaces, Agent handoff and browser checks |
+| [Interaction guidance](INTERACTION.md) | Adaptive workspace, shared grammar, change rules, fact boundaries and experiments; source-informed design principles |
 | [Plugin authoring](PLUGIN-AUTHORING.md) | Create, preview, check and select an independent UI extension |
 | [Architecture](ARCHITECTURE.md) | Source ownership, state and lifecycle boundaries |
 | [Technology stack](TECHSTACK.md) | Libraries and runtimes used by the current implementation |

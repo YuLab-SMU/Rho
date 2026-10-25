@@ -5,6 +5,9 @@ plans, visual specifications, Paper references and appearance rulers have been
 removed from the working repository. Git retains their history; they do not govern
 this implementation. This document describes the current application, not another
 prescriptive design system.
+The selected next direction is in [Interaction guidance](INTERACTION.md) and the
+[validation roadmap](ROADMAP.md#interaction-system-validation). Those constraints
+and experiments do not imply that every proposed interaction is implemented here.
 
 ## Starting from the work
 

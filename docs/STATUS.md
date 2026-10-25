@@ -2,6 +2,24 @@
 
 Updated: 2026-10-25.
 
+## Current development direction
+
+The current discussion selects an adaptive research workspace: shared real objects,
+stable interaction rules, constrained view changes and continuous human/Agent work.
+[Interaction guidance](INTERACTION.md) defines eight interaction verbs, four levels
+of workspace effect and separate operation/workspace/review evidence. It applies
+Nielsen, Saarinen, Apple and SpaceX references as documented Rho design choices.
+[Development](DEVELOPMENT.md) now uses episode briefs; the
+[roadmap](ROADMAP.md#interaction-system-validation) prioritizes grammar, constrained
+views, a base-R collaboration loop, recovery, domain validation and user observation.
+
+This is a documentation change. It does not restore withdrawn frontend designs,
+implement a new proposal/decision API or accept new browser or model behavior.
+Existing results below retain their recorded scope. The six interaction experiments
+need evidence mapped to the selected episode/composition; human usability remains
+unverified. Documentation link and rendered-page checks are recorded locally under
+`work/interaction-guidance-20261025/` after review.
+
 ## UI extension authoring
 
 `rho-ui create`, `dev`, `check` and `build` provide a standalone author workflow.

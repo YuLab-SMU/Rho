@@ -6,6 +6,9 @@ Read [Status](docs/STATUS.md), [Architecture](docs/ARCHITECTURE.md),
 Rho contains a versioned local backend, client and headless acceptance scripts.
 Read [Headless backend](docs/HEADLESS.md) and its
 [acceptance record](docs/BACKEND-ACCEPTANCE.md). The current browser implementation is described in [Frontend](docs/FRONTEND.md).
+For product and interaction work, read [Interaction guidance](docs/INTERACTION.md)
+and [Development](docs/DEVELOPMENT.md). They turn the current adaptive-workspace
+direction into episode briefs, owner constraints and observable checks.
 
 ## Source ownership
 
@@ -49,6 +52,13 @@ consumer. Extend public boundaries for a concrete requirement.
 
 ## Work and verification
 
+Develop a complete interaction episode: real context, trigger, allowed change,
+invariants, failure/return and completion evidence. Reuse shared objects and the
+existing composition/owner contracts. Keep operation, workspace and review facts
+separate. Agent suggestions must preserve reading/input, protected views and exact
+versions; layout effects require their own applicable authority, without adding
+approval to already authorized scientific work.
+
 Inspect Git status before editing and preserve unrelated work and local user data.
 Routine Rho work stays on `main`. Use temporary worktrees for independent tasks
 when needed and clean up those you create. Select an observable flow and explicit
@@ -71,6 +81,10 @@ Work from the user's current task and the actual capabilities of the application
 Check usable flows in a real browser, including failure, input and recovery behavior.
 Do not infer product quality from a stylesheet checklist. Product text is English;
 user content retains its original Unicode.
+Use the current interaction experiments to select checks, and observe real users
+for usability claims. New guidance does not revive withdrawn designs or establish
+that proposed behavior is implemented. Reference principles guide judgment; copied
+visual styles and screenshot checklists do not establish product quality.
 
 Use disposable projects and owned Hosts for execution checks. Inspect existing
 work before starting another Host on the same project. Do not restart a user Host
