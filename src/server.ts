@@ -96,13 +96,20 @@ async function runFacts(project: Project, run: Operation) {
 export const runContextLimits = { errorExcerptBytes: 8192 };
 async function runContext(project: Project, requests: Requests, principal: Principal, operationId: string): Promise<RunContext> {
   const run = await requests.lookup(principal, operationId, true), facts = await runFacts(project, run);
-  const retained = Number(run.native?.stderr?.retained_bytes ?? 0);
-  let error: RunContext['error'] = null;
-  if (retained > 0) {
+  // The stored count can trail what Core has retained since it was recorded. When Core's reply
+  // reaches further, read the end again: the excerpt is the last bytes, where R writes its error.
+  // A finished run is asked once even when nothing was recorded yet.
+  const ended = !!run.native?.status?.Finished;
+  let retained = Number(run.native?.stderr?.retained_bytes ?? 0), error: RunContext['error'] = null;
+  for (let reads = 0; reads < 2 && (retained > 0 || (ended && reads === 0)); reads++) {
     const from = Math.max(0, retained - runContextLimits.errorExcerptBytes);
     const chunk = (await requests.output(principal, operationId, 'stderr', from, runContextLimits.errorExcerptBytes)).reply?.value;
+    if (!chunk) break;
+    const now = Number(chunk.info?.retained_bytes ?? retained);
     // A start inside a multi-byte character decodes as replacement characters; drop them.
-    if (chunk) error = { stream: 'stderr', text: from > 0 ? String(chunk.text).replace(/^\uFFFD+/, '') : String(chunk.text), from, retainedBytes: Number(chunk.info?.retained_bytes ?? retained), observedBytes: Number(chunk.info?.observed_bytes ?? retained), truncated: !!chunk.info?.truncated };
+    if (now > 0) error = { stream: 'stderr', text: from > 0 ? String(chunk.text).replace(/^\uFFFD+/, '') : String(chunk.text), from, retainedBytes: now, observedBytes: Number(chunk.info?.observed_bytes ?? now), truncated: !!chunk.info?.truncated };
+    if (now <= retained) break;
+    retained = now;
   }
   const script = run.request?.input?.script, stop = stopFacts(run);
   return {
