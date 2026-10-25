@@ -8031,7 +8031,7 @@ export interface SessionGrantInput {
   /**
    * @maxItems 64
    */
-  methods: (
+  methods?: (
     | 'action.cancel'
     | 'action.export'
     | 'action.list'

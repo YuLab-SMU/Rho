@@ -12,6 +12,8 @@ export class ObservationClient<T extends { cursor: number }> {
     while (!signal?.aborted) {
       try {
         let snapshot = await this.transport.snapshot(signal);
+        // The budget counts failures in a row: a tab open for days reconnects after each drop.
+        reconnects = 0;
         yield snapshot;
         for await (const event of this.transport.events(snapshot.cursor, signal)) {
           if (signal?.aborted) return;

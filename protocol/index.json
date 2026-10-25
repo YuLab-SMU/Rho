@@ -4,8 +4,8 @@
   "schemaVersion": 2,
   "shared": {
     "path": "operations/shared.json",
-    "bytes": 75222,
-    "sha256": "6d8afb5218bc7d7dedc08252262ba1a88c314242e7b03313b42cd43be6b4ccbb"
+    "bytes": 75246,
+    "sha256": "683c009a3abfab8df939ce1cf0fc3d5d099ae6b3bfbfc2d2b6e9c2135fb5c4bb"
   },
   "operations": {
     "action.cancel": {
@@ -431,8 +431,8 @@
     "session.grant": {
       "summary": "session.grant",
       "path": "operations/session.grant.json",
-      "bytes": 3837,
-      "sha256": "0b9c42488ec08249ca60f80848d6f834f444cd14c58c69596c3625aba2ace474"
+      "bytes": 3820,
+      "sha256": "d56542ed0ec4edafc80f3d326023964a28e16e75cc5cd747afa4ba7ad285a33b"
     },
     "skill.list": {
       "summary": "List the application and enabled provider Skills shipped in the selected package. Skills guide discovery but do not grant authorization.",

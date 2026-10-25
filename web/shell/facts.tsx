@@ -117,7 +117,8 @@ export function RunView({ snapshot, client, operationId, runs, readRuns, firstLi
       </p>}
       {['failed', 'unknown'].includes(run.execution) && allowed('context.create') && <Repair snapshot={snapshot} client={client} operationId={operationId} />}
       {run.declared.length > 0 && <ul className="shell-run-files" data-fact="observed">{run.declared.map(d => <li key={d.path}>{shortPath(d.path)} · {d.present ? 'on disk' : 'not on disk'}</li>)}</ul>}
-      <p data-fact="verified">{run.declared.length ? integrityWord(run.integrity) : 'no declared file'} · {domainWord(run)} · no run establishes a statistical result</p>
+      <p data-fact="verified">{run.declared.length ? integrityWord(run.integrity) : 'no declared file'} · {domainWord(run)} · no run establishes a statistical result
+        {!active && present > 0 && (outputs.length === 0 || run.completion === 'present' && run.integrity !== 'verified') && <CheckFiles client={client} projectId={projectId} operationId={operationId} inventory={run.completion === 'present'} readRuns={readRuns} />}</p>
       {outputs.length > 0 && <ul className="shell-run-outputs">{outputs.map(r => {
         const open = opener({ id: r.id, version: r.version });
         return <li key={r.id + r.version}>{open ? <button className="shell-link" data-rho-artifact={r.id + '@' + r.version} onClick={open}>{shortPath(r.path)}</button> : <span data-rho-artifact={r.id + '@' + r.version}>{shortPath(r.path)}</span>}<span> · this run's version</span></li>;
@@ -127,6 +128,20 @@ export function RunView({ snapshot, client, operationId, runs, readRuns, firstLi
       {allowed('action.output') && <Output client={client} projectId={projectId} operationId={operationId} runs={runs} active={active} />}
     </>}
   </section>;
+}
+
+// The files a run declared become openable once they are registered with their provenance.
+// With an inventory the run wrote, registering checks each file's bytes against it; without
+// one, the files are listed as found and stay unchecked.
+function CheckFiles({ client, projectId, operationId, inventory, readRuns }: { client: BrowserClient; projectId: string; operationId: string; inventory: boolean; readRuns: () => void }) {
+  const [busy, setBusy] = useState(false), [problem, setProblem] = useState('');
+  async function check() {
+    setBusy(true); setProblem('');
+    try { await client.call(inventory ? 'artifact.check' : 'resource.list', { projectId, operationId }, AbortSignal.timeout(60000)); readRuns(); }
+    catch (error: any) { setProblem((error?.error ?? error)?.message ?? 'The files could not be checked.'); }
+    finally { setBusy(false); }
+  }
+  return <>{' '}<button className="shell-quiet" disabled={busy} onClick={check}>{busy ? 'Checking…' : inventory ? 'Check its files' : 'List its files'}</button>{problem && <span role="alert"> · {problem}</span>}</>;
 }
 
 // Taking a run out of Rho: its script, outputs and their provenance as ordinary files in a new

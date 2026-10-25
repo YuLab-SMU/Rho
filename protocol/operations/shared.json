@@ -2484,7 +2484,8 @@
     "binding.native.changed",
     "feedback.changed",
     "task.map.changed",
-    "activity.changed"
+    "activity.changed",
+    "resource.changed"
   ],
   "compatibility": "Major API path changes for incompatible fields/semantics; additive optional fields allowed. Per-resource versions are independent.",
   "apiVersion": "2.0",

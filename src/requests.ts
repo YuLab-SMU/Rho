@@ -3,10 +3,13 @@ import path from 'node:path';
 import { atomicJson, canonical, digest, now, readJson, requireThat, stateDirectory } from '@rho-workspace/plugin-contracts';
 import type { ActionPlan } from '@rho-workspace/plugin-contracts';
 import { Ajv } from 'ajv';
+import { isNativeTime } from './native-time.js';
 import type { ProjectPlugins } from './plugins.js';
 import { CoreBridge, type CliResult } from './bridge.js';
 import type { Principal, Project } from './state.js';
 const ajv = new Ajv({ allErrors: true, strict: false });
+// The same timestamp check every published contract uses; an unknown format would be skipped silently.
+ajv.addFormat('date-time', { type: 'string', validate: isNativeTime });
 export interface Operation {
   operationId: string; principal: string; projectId: string; requestDigest: string; request: any; action: string; actionVersion: string; acceptedAt: string;
   core: { caller: string; requestId: string }; delivery: string; execution: string; native: any; integrity: any; domain: any; interpretation: any; plan: ActionPlan; lastCli?: CliResult; checks?: any; cancellation?: any; repairOf?: string;

@@ -1,6 +1,7 @@
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
 import { Ajv } from 'ajv';
+import { isNativeTime } from './native-time.js';
 import { atomicBytes, atomicJson, canonical, confined, digest, now, readJson, requireThat, stateDirectory, type Resource } from '@rho-workspace/plugin-contracts';
 import type { ProjectPlugins } from './plugins.js';
 import type { DocumentState } from '@rho-workspace/plugin-documents';
@@ -10,6 +11,8 @@ import { Capabilities } from './capabilities.js';
 import { Interactions, interactionLimits } from './interactions.js';
 import { Compositions, compositionLimits } from './composition.js';
 const ajv = new Ajv({ strict: false, allowUnionTypes: true });
+// The same timestamp check every published contract uses; an unknown format would be skipped silently.
+ajv.addFormat('date-time', { type: 'string', validate: isNativeTime });
 // Rho's own form for one action an Agent proposes (docs/WORKSPACE-PLAN.md decision 3). The
 // action must be registered at that version; the input is the Agent's proposal, which the
 // person may edit and which the owner checks when it is submitted.

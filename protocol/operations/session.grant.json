@@ -102,8 +102,7 @@
     },
     "required": [
       "projectId",
-      "externalSessionId",
-      "methods"
+      "externalSessionId"
     ]
   },
   "outputSchema": {

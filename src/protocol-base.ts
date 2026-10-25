@@ -19,7 +19,8 @@ export const operations: Record<string, any> = {
   'project.open': obj({ path: text }),
   'project.create': obj({ name: { type: 'string', pattern: '^[A-Za-z0-9_-]{1,80}$' } }),
   'project.list': obj({}),
-  'session.grant': obj({ ...project, externalSessionId: id, methods: { type: 'array', items: text, maxItems: 64 } }, ['projectId', 'externalSessionId', 'methods']),
+  // Without methods, the grant is every operation an Agent may hold that this project's selected owners provide.
+  'session.grant': obj({ ...project, externalSessionId: id, methods: { type: 'array', items: text, maxItems: 64 } }, ['projectId', 'externalSessionId']),
   'capability.list': obj(project),
   'action.lookup': obj(op),
   'action.observe': obj(op),

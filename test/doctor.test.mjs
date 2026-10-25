@@ -82,7 +82,7 @@ test('an intent names the methods a task needs and what this session lacks', asy
     assert.equal(report.intent.id, 'run-r');
     assert.ok(report.intent.methods.includes('action.submit'));
     assert.ok(!report.intent.missing.includes('action.submit'), 'a tab may submit from a proposed form');
-    assert.ok(report.intent.missing.includes('artifact.check'), 'a tab cannot verify artifacts, and is told so');
+    assert.ok(report.intent.missing.includes('resource.register'), 'a tab cannot declare what a file is, and is told so');
     // Without an intent the answer stays exactly as before.
     const plain = await tab.call('project.doctor', { projectId: f.p.id });
     assert.equal(plain.intent, null);

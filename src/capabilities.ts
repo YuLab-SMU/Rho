@@ -38,12 +38,20 @@ const applicationContent = [
   'registered references; bind those directly with composition.apply, including artifacts',
   'inside owner state. Do not manually register internal paths. A layout acknowledgement',
   'alone does not prove the browser displayed the result.',
-  'People and Agents share the document buffer and conditional save operation.'
+  'People and Agents share the document buffer and conditional save operation.',
+  'When the person should see or change a run\u2019s inputs before it starts, propose it',
+  'instead of submitting it: composition.apply a view with component "rho.action",',
+  'version "1", bindings {} and props {title, action, actionVersion, operationId, input}.',
+  'The input is the action\u2019s full input. The person submits it once under that',
+  'operationId; observe it with action.lookup and never submit that operationId yourself.',
+  'A person reaches you by pasting a request Rho copied for them. It names a context',
+  'or a run: read it with context.read or action.lookup before acting. They may stop a',
+  'run or export it as files; a stopped run is not resubmitted under its own operationId.'
 ].join('\n');
 const applicationSkill = {
-  id: 'rho.workspace', version: '1.4', content: applicationContent,
+  id: 'rho.workspace', version: '1.5', content: applicationContent,
   intent: 'Work in this project through versioned operations, in a safe order.',
-  requires: ['capability.list', 'observation.snapshot', 'action.submit', 'composition.apply'],
+  requires: ['capability.list', 'observation.snapshot', 'action.submit', 'composition.apply', 'context.read'],
   example: { method: 'observation.snapshot', input: { projectId: 'the-open-project' } },
   failureRecipes: [
     { kind: 'unauthorized', message: 'Session does not authorize this operation.', next: 'Ask project.doctor with an intent to see the methods that task needs, then use a session that has them.' },

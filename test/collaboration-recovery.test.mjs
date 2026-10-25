@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
+import http from 'node:http';
 import { createHash } from 'node:crypto';
 import { RhoService } from '../dist/server.js';
 import { CheckedClient as RhoClient } from './checked-client.mjs';
@@ -64,6 +65,32 @@ test('DOM-free observation reads snapshots before reconnect and after invalidati
   assert.equal((await stream.next()).value.value, 2);
   assert.equal((await stream.next()).value.value, 3);
   await stream.return();
+});
+
+test('the reconnect budget counts failures in a row, so a long-open tab survives every drop', async () => {
+  let snapshots = 0;
+  const transport = { snapshot: async () => ({ cursor: 0, value: ++snapshots }), events: async function* () { throw new Error('the stream dropped'); } };
+  const stream = new ObservationClient(transport, { maxReconnects: 1, reconnectDelayMs: 0 }).observe();
+  for (let i = 1; i <= 5; i++) assert.equal((await stream.next()).value.value, i);
+  await stream.return();
+});
+
+test('closing the service does not wait for a keep-alive connection whose reply was in flight', async () => {
+  const root = await fs.mkdtemp(path.join(tmpdir(), 'rho-close-'));
+  const s = await new RhoService({ root, stateDir: path.join(root, 'state'), coreBinary: '/missing', rscript: '/missing' }).start();
+  const agent = new http.Agent({ keepAlive: true });
+  const post = () => new Promise((resolve, reject) => {
+    const request = http.request(s.url + '/api/v2/project.list', { method: 'POST', agent, headers: { authorization: 'Bearer ' + s.adminToken, 'content-type': 'application/json' } }, response => { response.resume(); response.on('end', resolve); });
+    request.on('error', reject); request.end('{}');
+  });
+  try {
+    await post();
+    // Close begins while the service holds the second request: its reply still arrives.
+    let started = 0;
+    const closed = new Promise(resolve => s.server.once('request', () => { started = Date.now(); resolve(s.close()); }));
+    await post(); await closed;
+    assert.ok(Date.now() - started < 1000, `close took ${Date.now() - started} ms`);
+  } finally { agent.destroy(); await fs.rm(root, { recursive: true, force: true }); }
 });
 
 test('failed event publication interrupts observers without undoing acknowledged state', async () => {

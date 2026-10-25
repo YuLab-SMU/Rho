@@ -28,7 +28,10 @@ export const browserMethods = ['protocol.describe', 'protocol.validate', 'projec
   // A chart's points: the same rows data.page already reads, bounded and read-only.
   'data.plot',
   // A run's script, outputs and provenance written as ordinary files in a new project folder.
-  'action.export'];
+  'action.export',
+  // The files a run declared, registered so a person can open them, and checked against the
+  // inventory the run wrote. Both read bytes and record facts; neither runs anything.
+  'resource.list', 'artifact.check'];
 interface Pairing { hash: string; root: string; methods: string[]; expires: number; selectedProjects: string[] }
 export class BrowserAccess {
   limits: typeof browserLimits;

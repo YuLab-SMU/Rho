@@ -236,7 +236,7 @@ try {
   passed('after a sudden exit only stored text returns; the unsent change is marked unconfirmed, then applied once');
 
   // 7. The legacy shell is gone from everything that ships or tests it.
-  const left = (() => { try { return execFileSync('git', ['grep', '-n', 'dockview', '--', ':!docs'], { cwd: packageRoot, encoding: 'utf8' }); } catch (error) { if (error.status === 1) return ''; throw error; } })();
+  const left = (() => { try { return execFileSync('git', ['grep', '-n', 'dockview', '--', ':!docs', ':!scripts/continuity-acceptance.mjs'], { cwd: packageRoot, encoding: 'utf8' }); } catch (error) { if (error.status === 1) return ''; throw error; } })();
   assert.equal(left, '');
   passed('git grep dockview outside docs is empty');
 

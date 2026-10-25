@@ -39,6 +39,7 @@ export interface NativeAdapterRegistration {
 export const serviceLimits = { maxRequestBytes: 1024 * 1024, maxEventBytes: 65536, eventRetention: 256, maxSubscriptions: 8, maxQueue: 32, maxContexts: 128, maxBindings: 64, maxActivities: 256, maxContextBytes: 1024 * 1024, maxRetainedMetadataBytes: 32 * 1024 * 1024 };
 export interface ServiceConfig extends Partial<typeof serviceLimits>, Partial<typeof requestLimits>, PluginConfig { root: string; stateDir: string; coreBinary: string; rscript: string; port?: number; nativeFolders?: Partial<typeof nativeFolderLimits>; workspace?: Partial<typeof workspaceLimits>; interactions?: Partial<typeof interactionLimits>; taskMap?: Partial<typeof taskMapLimits>; browser?: Partial<typeof browserLimits>; webRoot?: string; agentNativeActivity?: Partial<typeof nativeActivityLimits>; presentationWitness?: Partial<typeof presentationWitnessLimits>; visibility?: Partial<typeof visibilityLimits>; agentDelivery?: Partial<typeof agentDeliveryLimits>; deliveryTransportTimeoutMs?: number }
 const ajv = new Ajv({ allErrors: true, strict: false, allowUnionTypes: true });
+// The same timestamp check every published contract uses; an unknown format would be skipped silently.
 ajv.addFormat('date-time', { type: 'string', validate: isNativeTime });
 
 // One run's output reports three different facts, and they are never merged:
@@ -779,8 +780,9 @@ export class RhoService {
     if (method === 'action.cancel') return publicOperation(await requests.cancel(principal, b.operationId));
     if (method === 'action.output') return requests.output(principal, b.operationId, b.stream, b.offset, b.maxBytes);
     if (method === 'action.list') return (await requests.list(principal)).map(publicOperation);
-    if (method === 'resource.list') return requests.artifacts(principal, b.operationId);
-    if (method === 'artifact.check') return requests.check(principal, b.operationId);
+    // Both register the run's declared outputs; a tab shows them once it reads the snapshot again.
+    if (method === 'resource.list') { const result = await requests.artifacts(principal, b.operationId); await this.emit(p, 'resource.changed', b.operationId); return result; }
+    if (method === 'artifact.check') { const result = await requests.check(principal, b.operationId); await this.emit(p, 'resource.changed', b.operationId); return result; }
     if (method === 'action.export') {
       const run = await requests.lookup(principal, b.operationId, true), files = owners.need('files');
       return exportRun(p, run, { destination: b.destination, unsaved: b.unsaved, documents: owners.documents, resources: await files.list(), maxFileBytes: files.limits.maxFileBytes,
@@ -788,7 +790,8 @@ export class RhoService {
     }
     if (method === 'resource.register') {
       requireThat(!b.declaration.path.split('/').some((part: string) => ['.rho', '.git'].includes(part)), 'scope', 'Register a project file outside internal state.');
-      return publicResource(await owners.need('files').register(b.declaration.path, { operationId: 'registration:' + digest(canonical(b.declaration)), registeredBy: principal.id }, 'available', {}, b.declaration, b.expectedDigest));
+      const registered = publicResource(await owners.need('files').register(b.declaration.path, { operationId: 'registration:' + digest(canonical(b.declaration)), registeredBy: principal.id }, 'available', {}, b.declaration, b.expectedDigest));
+      await this.emit(p, 'resource.changed', registered.id); return registered;
     }
     if (method === 'object.read') return owners.need('objects').read(b.resource);
     if (method === 'media.describe') return owners.need('media').describe(b.resource);
@@ -978,7 +981,11 @@ export class RhoService {
     this.closing = true;
     this.folderPicker.close();
     for (const s of this.subscribers) s.response.end();
-    await new Promise<void>(resolve => this.server.close(() => resolve()));
+    // A tab's keep-alive connection whose request was in flight would hold close() open until
+    // its keep-alive timeout, longer than the tab waits to reconnect; each closes once idle.
+    const closed = new Promise<void>(resolve => this.server.close(() => resolve()));
+    const idle = setInterval(() => this.server.closeIdleConnections(), 25);
+    await closed; clearInterval(idle);
     const shutdown = await this.bridge.close(); await this.state.close(); return shutdown;
   }
 }
