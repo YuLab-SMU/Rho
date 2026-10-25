@@ -39,6 +39,11 @@ function superseded(screen: Screen, run: RunObject) {
   return run.state === 'failed' && Object.values(screen.objects).some(o => o.kind === 'run' && o.source === run.source && o.run > run.run && o.state === 'completed');
 }
 const clock = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+// A time with its day when that is not today; a span names both days when it crosses one.
+const day = (iso: string) => new Date(iso).toLocaleDateString([], { month: 'short', day: 'numeric' });
+const sameDay = (a: string, b: string) => new Date(a).toDateString() === new Date(b).toDateString();
+const when = (iso: string) => (sameDay(iso, new Date().toISOString()) ? '' : day(iso) + ' ') + clock(iso);
+const span = (a: string, b: string) => sameDay(a, b) ? when(a) + ' – ' + clock(b) : `${day(a)} ${clock(a)} – ${day(b)} ${clock(b)}`;
 // Time along the bar, with long quiet stretches cut short: a pause of more than two minutes
 // takes the room of two minutes and is drawn as a break, so hours of quiet never crush the work.
 const longest = 120000;
@@ -100,9 +105,9 @@ export function Bar({ live, evidence, onEvidence, held, narrow, column }: { live
   const { screen, act } = live;
   if (!screen || !live.state) return <div className="shell-bar" data-rho-layer="persistent" role="status">Reading what the Agent did…</div>;
   const following = screen.attention === 'following', notes = screen.items.length;
-  const times = live.state.evidence.filter(f => f.at).map(f => f.at!).sort();
+  const times = live.state.evidence.filter(f => f.at).map(f => f.at!).sort((a, b) => Date.parse(a) - Date.parse(b));
   return <div className="shell-bar" data-rho-layer="persistent" data-attention={screen.attention}>
-    {!narrow && times.length > 0 && <span className="shell-span"><strong>{live.state.evidence.length} actions</strong> {clock(times[0])} – {clock(times.at(-1)!)}</span>}
+    {!narrow && times.length > 0 && <span className="shell-span"><strong>{live.state.evidence.length} actions</strong> {span(times[0], times.at(-1)!)}</span>}
     {!column && <AgentMarker live={live} />}
     <span className="shell-break" aria-hidden="true" />
     <Timeline live={live} narrow={narrow} />
@@ -129,7 +134,7 @@ export function AgentColumn({ live, principalId, evidence, onEvidence, focusObje
   if (!screen || !state) return null;
   const agents = Object.entries(state.trace.principals).filter(([, p]) => p.kind === 'agent');
   const who = agents.find(([, p]) => p.name)?.[1].name ?? 'The Agent';
-  const lastAgent = [...state.evidence].reverse().find(f => f.at && state.trace.principals[f.actor]?.kind === 'agent');
+  const lastAgent = state.evidence.filter(f => f.at && state.trace.principals[f.actor]?.kind === 'agent').sort((a, b) => Date.parse(a.at!) - Date.parse(b.at!)).at(-1);
   const running = Object.values(screen.objects).some(o => o.kind === 'run' && o.state === 'running');
   const questions = Object.values(screen.objects).filter((o): o is QuestionState => o.kind === 'question');
   // The item the person is looking at, or the one the Agent says it is working on, opens up.
@@ -137,7 +142,7 @@ export function AgentColumn({ live, principalId, evidence, onEvidence, focusObje
   return <aside className="agent-column" aria-label={who} data-scroll-region="" tabIndex={0}>
     <section className="agent-card">
       <header className="agent-card-head"><span className={'agent-dot' + (running ? ' running' : '')} aria-hidden="true" /><strong>{who}</strong>
-        <span className="agent-card-meta">{running ? 'running' : lastAgent ? 'last action ' + clock(lastAgent.at!) : 'no recorded action'}</span></header>
+        <span className="agent-card-meta">{running ? 'running' : lastAgent ? 'last action ' + when(lastAgent.at!) : 'no recorded action'}</span></header>
       <AgentMarker live={live} who={false} />
       {screen.items.length > 0 && <section className="agent-items" aria-label="The Agent's notes">
         <ol>{screen.items.map(i => {

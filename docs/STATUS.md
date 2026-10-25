@@ -136,7 +136,7 @@ marks on a timeline that cuts pauses over two minutes to a break. It also holds 
 switch, Step away, and evidence. From 768 to 1023 the project tree folds while a layout is
 open, and the Projects button reopens it. Table numbers are formatted in the plugin. On
 airquality the persistent bands are 32 + 40 px at 1440, 1024 and 768 (8%, 9.4% and 7%)
-and 32 + 61 px at 390 (11%). The figure scale is 0.74, 0.63 and 0.60, and 0.35 at 390,
+and 32 + 61 px at 390 (11%). The figure scale is 0.73, 0.62 and 0.60, and 0.35 at 390,
 where Actual size is offered. No width overflows. Unit 174/174, replay 27/27, plugins
 67/67, and the interaction, UI, pages, shell, U2, actions, objects, continuity, execution,
 person and plugin-UI acceptances pass. Several tests and styles changed with this:
