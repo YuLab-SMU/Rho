@@ -155,7 +155,8 @@ naming one exact object, the task map and `project.runs`. The workspace shell ad
 `action.submit` (a form the Agent proposed, sent once under its operationId),
 `action.output`, `action.cancel` (any run of a project this pairing includes,
 recorded with its requester), `composition.apply`/`composition.undo` (the person's
-layout commands) and `data.plot`. `src/browser-access.ts` holds the reviewed list.
+layout commands), `data.plot` and `action.export` (a run's script, outputs and
+provenance as files in a new project folder). `src/browser-access.ts` holds the reviewed list.
 Browser mutations require stable change identities and version conditions.
 `session.grant`, global undo, `action.retry`, requirement preparation, installation
 and archive writes remain excluded. Existing sessions retain their original narrower

@@ -56,14 +56,15 @@ HTTP tests exercise unauthorized origins and credentials.
 LAN/remote exposure needs separate scope and
 acceptance.
 
-Dockview supplies docking, tabs, splits and layout serialization for the initial
-single-window workspace. Layout state stores arrangement; editing buffers,
-scientific resources and execution facts retain their owners. Browser refresh and
-view closure release observation; they do not stop the local service or Host.
-Dockview core is MIT; some keyboard docking/navigation,
-layout-history and other features are Enterprise. The chosen experience must name
-its edition and licensing and provide accessible command-based layout controls.
-Source: [Dockview licensing/features](https://dockview.dev/docs/overview/licence/).
+The single-window workspace renders the owner's composition tree itself: split
+panes with their axes and weights, tab groups, and palette commands for split,
+move, close, divider and undo, each written back as one conditional
+`composition.apply` or `composition.undo` ([Collaboration](COLLABORATION.md)).
+There is no second layout model to keep in step; W6 removed the earlier docking
+library (docs/WORKSPACE-PLAN.md). Layout state stores arrangement; editing
+buffers, scientific resources and execution facts retain their owners. Browser
+refresh and view closure release observation; they do not stop the local service
+or Host.
 
 ## Later desktop client
 

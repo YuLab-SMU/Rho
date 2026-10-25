@@ -75,6 +75,25 @@ before the live session started was dropped; a closed view stayed held; the char
 letterboxed after a split. Unit 169/169, plugins 67/67, replay 27/27; S7, UI, pages,
 shell, U2, plugin UI and actions pass; initial gzip 91.3 KiB; total gzip 540 KiB, above
 the 525,061-byte gate W6 engages once the legacy shell is gone.
+**W6 done (2026-10-25):** the legacy dockview workspace, its frame, expression bar,
+agent-map entry, source bar and execution panel are deleted with the dockview packages;
+total gzip falls from 553,000 to 432,478 bytes under the 525,061-byte W0 gate, which now
+holds. The project page opens any run in the shell's own run view. `action.export` writes
+one run as ordinary files in a new folder: the code that ran, each declared output as the
+run left it, and `provenance.json`/`PROVENANCE.md` with digests and what was checked; a
+file the run did not write, or that no longer matches its inventory, is named and left
+out, and unsaved script text goes only when the caller says `include` or `leave`. The
+action form tells a lost reply from a refusal and "Send again" reuses the operationId; the
+editor marks a change Rho has not confirmed until the owner answers.
+`scripts/continuity-acceptance.mjs` passes all W6 exits on real Core and R: export with
+a partial run and the unsaved choice (CSV parses, PNG is 640×420, every SHA-256 matches);
+a lost submit reply, a disconnect and a refresh find one dispatch; a normal restart keeps
+the project, artifacts, unsaved draft, layout and repair context; after SIGKILL only the
+stored text returns and the in-flight change stays marked until it is applied once.
+Found and fixed: a run context could excerpt the first 8 KiB instead of the last under
+load; the project page never re-read its runs; execution and person-files acceptance had
+been broken since W3. Unit 168/168, plugins 67/67; every acceptance script passes except
+native-artifact, which needs a real model; initial gzip 89.9 KiB.
 
 Updated: 2026-10-24. S7 live expression and complete table-question feedback.
 `src/expression.ts` drives the replay and the real browser through `live-trace.ts` /

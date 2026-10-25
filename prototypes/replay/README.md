@@ -76,7 +76,7 @@ adapter made locally) says "not in Rho's records" in the dock.
   where they happen. Nothing here comes from a real person watching this run. A
   question asked in the replay records no context, so nothing can fetch it.
 - **The shell.** It is drawn with Rho's tokens but is not the WebUI: no service,
-  no dockview, no plugin entries. The rules in `src/expression.ts` are meant for the
+  no workspace shell, no plugin entries. The rules in `src/expression.ts` are meant for the
   real shell; this page only gives them something to drive.
 - **The Agent's attention.** Reads (`data.page`, `action.lookup`, `action.output`)
   count as attention. Today they reach the service but are not events the browser
