@@ -172,9 +172,14 @@ Each ruler was checked by planting its fault (`work/hifi-h2/rmutate.mjs`). Close
   into view and read as two lines: the 24-hour time and who, then what was done. They
   are newest first and grouped by day. Escape returns focus to the bar. Shell acceptance
   checks this at 1024 and 390.
+- S5 (failure → the Agent repairs it). A failed run's view now starts with the error
+  line taken from its retained stderr, then the one thing to do, "Ask the Agent to fix",
+  as the primary button. Once a repair completes, the failure, its error and its chip in
+  the run chain turn muted, Ask and Copy go away, and "Repaired by" links the repair.
+  A repair that is still running or that failed names its state. Action acceptance
+  checks the error line, the muted failure and the repaired-by wording.
 
 Open work:
-- S5 failure → repair;
 - S6 leave and return;
 - S7 overview as a task map (H3);
 - S8 the code-repair task;

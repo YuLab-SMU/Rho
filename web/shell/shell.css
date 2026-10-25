@@ -189,8 +189,14 @@
 .shell-run .shell-chip { border: 1px solid var(--color-hairline); border-radius: var(--radius-pill); background: var(--color-surface); font: 400 var(--font-size-sm)/var(--line-height-sm) var(--font-mono); }
 .shell-run .shell-chip[aria-current] { border-color: var(--color-ink); color: var(--color-ink); opacity: 1; }
 .shell-run .shell-chip.failed { color: var(--color-failed); }
+.shell-run .shell-chip.failed.superseded { color: var(--color-muted); }
 .shell-run-repair .failed, .shell-run-repair .unknown { color: var(--color-failed); }
 .shell-run-fix { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-4); margin: var(--space-4) 0; }
+.shell-run-fix button.primary, .shell-run-fix button.shell-run-copy { min-height: var(--height-button); padding: 0 var(--space-5); font-size: var(--font-size-md); font-weight: 600; }
+.shell-run-fix button.shell-run-copy { border: 1px solid var(--color-control-border); background: var(--color-surface); color: var(--color-ink); }
+.shell-run-fix button.shell-run-copy:hover { background: var(--color-hover); }
+/* A failure a later run repaired stays readable but stops leading (audit 7, R7). */
+.shell-state.failed.superseded, .shell-run-error.superseded { color: var(--color-muted); }
 .shell-run-export { display: flex; flex-direction: column; gap: var(--space-4); max-width: 480px; margin: var(--space-5) 0; }
 .shell-run-export p { margin: 0; }
 .shell-run-output { margin-top: var(--space-5); }

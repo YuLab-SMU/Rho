@@ -87,6 +87,23 @@ export function RunView({ snapshot, client, operationId, runs, readRuns, firstLi
   const present = run?.declared.filter(d => d.present).length ?? 0;
   const partial = !!run && run.execution !== 'completed' && present > 0 && present < run.declared.length;
   const repairs = runs?.filter(r => r.repairOf === operationId) ?? [];
+  // A failure a later run repaired is history: readable, but no longer in the failed colour.
+  const repaired = repairs.some(r => r.execution === 'completed');
+  // The live trace carries no output, so a failed run reads its own cause: the first "Error"
+  // line of its stderr, else the first line, verbatim.
+  const failed = !!run && ['failed', 'unknown'].includes(run.execution);
+  const [cause, setCause] = useState<string | null>(null);
+  useEffect(() => {
+    if (firstLine || !failed || !run?.hasStderr || !allowed('action.output')) return;
+    let current = true;
+    tail(client, projectId, operationId, 'stderr').then(t => {
+      if (!current) return;
+      const lines = t.text.split('\n').map(l => l.trim()).filter(Boolean);
+      setCause(lines.find(l => /^Error\b/.test(l)) ?? lines[0] ?? null);
+    }, () => {});
+    return () => { current = false; };
+  }, [client, projectId, operationId, failed, firstLine, run?.hasStderr]);
+  const error = firstLine ?? cause;
   // Core reports that a process ended only when asked; while this run can still change, ask.
   useEffect(() => { if (!active) return; const timer = setInterval(readRuns, 1500); return () => clearInterval(timer); }, [active, readRuns]);
   // A running process has a clock; the last time the same script ran to its end says roughly how long to expect.
@@ -130,25 +147,25 @@ export function RunView({ snapshot, client, operationId, runs, readRuns, firstLi
       </div>}
     </header>
     {!runs ? <p role="status">Reading the project's executions…</p> : !run ? <p role="status">This run is outside the latest 50 retained executions.</p> : <>
-      <p data-fact="observed" data-rho-execution={run.execution} className="shell-run-status"><span className={'shell-state ' + run.execution}>{executionWord(run.execution)}</span>{partial ? ` · partial output, ${present} of ${run.declared.length} files` : ''}{code} · submitted by {whoWords[run.author] ?? run.author} at {time(run.acceptedAt)}{run.hasStderr && !firstLine ? ' · stderr retained' : ''}</p>
+      <p data-fact="observed" data-rho-execution={run.execution} className="shell-run-status"><span className={'shell-state ' + run.execution + (repaired ? ' superseded' : '')}>{executionWord(run.execution)}</span>{partial ? ` · partial output, ${present} of ${run.declared.length} files` : ''}{code} · submitted by {whoWords[run.author] ?? run.author} at {time(run.acceptedAt)}{run.hasStderr && !error ? ' · stderr retained' : ''}</p>
       {run.execution === 'active' ? <p data-fact="observed" className="shell-run-clock" title={run.startedAt ? 'Since Core saw the process start at ' + time(run.startedAt) : 'Since Rho accepted it at ' + time(run.acceptedAt)}><span className="shell-run-elapsed">{minutes(now - Date.parse(run.startedAt ?? run.acceptedAt))}</span>{previous && <> · {previous.operationId} took {minutes(took(previous)!)}</>}</p>
-        : took(run) !== null && <p data-fact="observed" className="shell-run-clock">took {minutes(took(run)!)}</p>}
+        : took(run) !== null && <p data-fact="observed" className="shell-run-clock">{took(run)! < 1000 ? 'took less than a second' : 'took ' + minutes(took(run)!)}</p>}
       {stopped && <p data-fact="observed" data-rho-stop={stopped.state} role="status">{stopWords[stopped.state] ?? stopped.state}{stopped.exit ? ' · ' + stopped.exit : ''} · asked by {whoWords[stopped.by] ?? stopped.by} at {time(stopped.requestedAt)}</p>}
       {stopProblem && <p role="alert">{stopProblem}</p>}
-      {firstLine && <p data-fact="observed" className="shell-run-error">{firstLine}</p>}
+      {error && <p data-fact="observed" className={'shell-run-error' + (repaired ? ' superseded' : '')}>{error}</p>}
+      {failed && allowed('context.create') && <Repair snapshot={snapshot} client={client} operationId={operationId} repaired={repairs.length > 0} />}
       {(run.repairOf || repairs.length > 0) && <p className="shell-run-repair">
         {run.repairOf && <>Repairs <button className="shell-link" data-rho-repair-of={run.repairOf} onClick={() => onOpenRun(run.repairOf!)}>{run.repairOf}</button></>}
         {run.repairOf && repairs.length > 0 && ' · '}
-        {repairs.length > 0 && <>Repaired by {repairs.map((r, i) => <span key={r.operationId}>{i ? ', ' : ''}<button className={'shell-link ' + r.execution} data-rho-repaired-by={r.operationId} onClick={() => onOpenRun(r.operationId)}>{r.operationId}</button></span>)}</>}
+        {repairs.length > 0 && <>{repaired ? 'Repaired by' : 'Repair'} {repairs.map((r, i) => <span key={r.operationId}>{i ? ', ' : ''}<button className={'shell-link ' + r.execution} data-rho-repaired-by={r.operationId} onClick={() => onOpenRun(r.operationId)}>{r.operationId}</button>{r.execution !== 'completed' && <> <span className={'shell-state ' + r.execution}>{executionWord(r.execution)}</span></>}</span>)}</>}
       </p>}
-      {['failed', 'unknown'].includes(run.execution) && allowed('context.create') && <Repair snapshot={snapshot} client={client} operationId={operationId} />}
       {(run.declared.length > 0 || outputs.length > 0) && <ul className="shell-run-files" data-fact="observed" aria-label="Declared files">
         {run.declared.map(d => fileCard(shortPath(d.path), d.present ? size(d.bytes) : active ? 'not written yet' : 'not on disk', d.present ? 'present' : active ? 'shell-not-yet' : 'missing', outputs.find(r => shortPath(r.path) === shortPath(d.path))))}
         {outputs.filter(r => !declaredPaths.has(shortPath(r.path))).map(r => fileCard(shortPath(r.path), "this run's version", 'present', r))}
       </ul>}
       <p data-fact="verified" className="shell-run-checks">{run.declared.length ? integrityWord(run.integrity) : 'no declared file'} · {domainWord(run)} · no run establishes a statistical result
         {!active && present > 0 && (outputs.length === 0 || run.completion === 'present' && run.integrity !== 'verified') && <CheckFiles client={client} projectId={projectId} operationId={operationId} inventory={run.completion === 'present'} readRuns={readRuns} />}</p>
-      {showChain && chain.length > 1 && <p className="shell-run-chain">{chain.map(other => <button key={other.operationId} className={'shell-chip ' + other.execution} aria-current={other.operationId === operationId || undefined} disabled={other.operationId === operationId} onClick={() => onOpenRun(other.operationId)}>{other.operationId}</button>)}</p>}
+      {showChain && chain.length > 1 && <p className="shell-run-chain">{chain.map(other => <button key={other.operationId} className={'shell-chip ' + other.execution + (runs?.some(r => r.repairOf === other.operationId && r.execution === 'completed') ? ' superseded' : '')} aria-current={other.operationId === operationId || undefined} disabled={other.operationId === operationId} onClick={() => onOpenRun(other.operationId)}>{other.operationId}</button>)}</p>}
       {exporting && !active && allowed('action.export') && <ExportRun client={client} projectId={projectId} operationId={operationId} />}
       {output && allowed('action.output') && <Output client={client} projectId={projectId} operationId={operationId} runs={runs} active={active} region={outputRegion} />}
     </>}
@@ -249,7 +266,7 @@ function Output({ client, projectId, operationId, runs, active, region }: { clie
 
 // Asking the Agent to fix a failed run: Rho freezes the run's facts (its error text, script
 // and files) as a context, and the person pastes the Agent a request that names it.
-function Repair({ snapshot, client, operationId }: { snapshot: WorkspaceSnapshot; client: BrowserClient; operationId: string }) {
+function Repair({ snapshot, client, operationId, repaired }: { snapshot: WorkspaceSnapshot; client: BrowserClient; operationId: string; repaired: boolean }) {
   const prepared = (snapshot.contexts ?? []).filter(c => (c as { run?: string }).run === operationId).at(-1) as { contextId: string; delivery?: string; fetchedAt?: string } | undefined;
   const [asking, setAsking] = useState(false), [problem, setProblem] = useState(''), [copied, setCopied] = useState(false), [made, setMade] = useState<string | null>(null);
   const contextId = prepared?.contextId ?? made;
@@ -264,11 +281,13 @@ function Repair({ snapshot, client, operationId }: { snapshot: WorkspaceSnapshot
     setCopied(false);
     try { await navigator.clipboard.writeText(request); setCopied(true); } catch { setProblem('Could not copy. Select and copy the request text instead.'); }
   }
+  // Once a repair exists there is nothing to ask; what happened to the request is still said.
+  if (repaired && !contextId) return null;
   return <div className="shell-run-fix" data-rho-repair="">
-    {!contextId ? <button disabled={asking} onClick={ask}>{asking ? 'Preparing…' : 'Ask the Agent to fix'}</button> : <>
+    {!contextId ? <button className="primary" disabled={asking} onClick={ask}>{asking ? 'Preparing…' : 'Ask the Agent to fix'}</button> : <>
       <span role="status">{prepared?.delivery === 'tool-fetched' ? `Fetched by the Agent${prepared.fetchedAt ? ' at ' + time(prepared.fetchedAt) : ''}` : 'Prepared · the Agent has not fetched it yet'}</span>
       {/* The request names the context by its identity, which is the Agent's to read, not the person's. */}
-      <button className="shell-quiet" onClick={copy}>{copied ? 'Copied' : 'Copy request for the Agent'}</button>
+      {!repaired && <button className="shell-run-copy" onClick={copy}>{copied ? 'Copied' : 'Copy request for the Agent'}</button>}
     </>}
     {problem && <p role="alert">{problem}</p>}
   </div>;

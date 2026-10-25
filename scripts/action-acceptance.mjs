@@ -154,6 +154,9 @@ try {
   await until(() => lookup('w4-broken'), r => r.execution === 'failed', 'w4-broken failed');
   await page.locator('[data-rho-agent]').click();
   await runView('w4-broken').locator('[data-rho-execution="failed"]').waitFor();
+  // Loop S5: the cause is on the view, verbatim from stderr, and asking is the primary action.
+  await runView('w4-broken').locator('.shell-run-error').getByText('Error: Deliberate failure: column x missing', { exact: true }).waitFor();
+  assert.equal(await runView('w4-broken').getByRole('button', { name: 'Ask the Agent to fix', exact: true }).evaluate(b => b.classList.contains('primary')), true);
   await runView('w4-broken').getByRole('button', { name: 'Ask the Agent to fix', exact: true }).click();
   // The request goes to the Agent through the clipboard; the page never shows the context's identity.
   await runView('w4-broken').getByRole('button', { name: 'Copy request for the Agent', exact: true }).click();
@@ -172,6 +175,12 @@ try {
   const repair = await agent('action.submit', run('w4-fixed', 'broken.R', fixed, { repairOf: 'w4-broken' }));
   assert.equal(repair.repairOf, 'w4-broken');
   await until(() => lookup('w4-fixed'), r => r.execution === 'completed', 'w4-fixed completed');
+  // Repaired, the failure stops leading: no failed colour, nothing left to ask or copy.
+  await runView('w4-broken').locator('.shell-state.failed.superseded').waitFor();
+  // A completed repair needs no state word; one still running or failed would name its state.
+  assert.equal((await runView('w4-broken').locator('.shell-run-repair').textContent()).trim(), 'Repaired by w4-fixed');
+  assert.equal(await runView('w4-broken').getByRole('button', { name: /Ask the Agent to fix|Copy request for the Agent|Copied/ }).count(), 0);
+  await runView('w4-broken').getByText(/^Fetched by the Agent/).waitFor();
   await runView('w4-broken').locator('[data-rho-repaired-by="w4-fixed"]').click();
   await runView('w4-fixed').locator('[data-rho-repair-of="w4-broken"]').waitFor();
   passed('repair context holds the error text and script reference; the repair links the original', { contextId: contextId.slice(0, 12) + '…', errorBytes: facts.error.retainedBytes });
