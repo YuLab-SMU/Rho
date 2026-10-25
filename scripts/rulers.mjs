@@ -1,4 +1,5 @@
-// Structural rulers M1–M10 and behaviour-contract probes E1/E4 (docs/WORKSPACE-PLAN.md §2).
+// Structural rulers M1–M10 and behaviour-contract probes E1/E4 (docs/WORKSPACE-PLAN.md §2),
+// and the hi-fi rulers R3–R7 (docs/HIFI-PLAN.md).
 // They read the real page only; nothing here imports expression.ts, so an implementation
 // cannot generate its own expected answer. A profile maps the plan's terms onto a shell's DOM.
 import assert from 'node:assert/strict';
@@ -100,6 +101,47 @@ function inPage([{ p, methods, transientAllowed }, unit]) {
     return r >= 1.15 || edge ? [] : [`${label(e)} ${Math.round(r * 100) / 100}`];
   });
   out.m9 = { scrollWidth: document.documentElement.scrollWidth, innerWidth };
+  // R3: a run's id is said once per view, and once in the activity bar.
+  const runIds = new Set([...document.querySelectorAll('.shell-run-id, .shell-run h2'), ...document.querySelectorAll('.shell-mark[aria-label]')].map(e => (e.getAttribute('aria-label') ?? e.textContent).trim().split(/\s+/)[0]).filter(Boolean));
+  const said = root => {
+    const counts = {}, walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      const e = n.parentElement; if (!e || !visible(e) || hidden(e) || e.closest(p.content) || e.closest('[aria-hidden="true"]')) continue;
+      for (const t of n.textContent.match(/(?<![\w.-])[A-Za-z][\w.-]*-\d+(?![\w.-])/g) ?? []) if (runIds.has(t)) counts[t] = (counts[t] ?? 0) + 1;
+    }
+    return counts;
+  };
+  out.r3 = [...all('[data-owner-view]'), ...all('.shell-bar')].flatMap(root => Object.entries(said(root)).filter(([, n]) => n > 1).map(([id, n]) => `${id} ×${n} in ${root.dataset.ownerView ? 'view ' + root.dataset.ownerView : 'the bar'}`));
+  // R4: text set in the monospace token draws the platform's monospace, not Courier's glyphs.
+  const mono = getComputedStyle(document.documentElement).getPropertyValue('--font-mono').trim();
+  const families = new Set(all('*').filter(e => !hidden(e) && [...e.childNodes].some(n => n.nodeType === 3 && n.textContent.trim()) && /mono|menlo|consolas|courier/i.test(getComputedStyle(e).fontFamily)).map(e => getComputedStyle(e).fontFamily));
+  const glyphs = family => { const c = Object.assign(document.createElement('canvas'), { width: 240, height: 48 }).getContext('2d', { willReadFrequently: true }); c.font = `32px ${family}`; c.fillText('a0Mi{}-5', 4, 36); return c.getImageData(0, 0, 240, 48).data.join(''); };
+  const courier = [glyphs('Courier'), glyphs('"Courier New"')];
+  out.r4 = { token: mono, courier: [...families].filter(f => courier.includes(glyphs(f))) };
+  // R5: a number cell shows its source value to within 0.5%, exponent included.
+  const parse = text => {
+    const t = text.replace(/[\u2212\u2012\u2013]/g, '-').replace(/,/g, '').trim(), sup = { '\u2070': 0, '\u00b9': 1, '\u00b2': 2, '\u00b3': 3, '\u2074': 4, '\u2075': 5, '\u2076': 6, '\u2077': 7, '\u2078': 8, '\u2079': 9 };
+    const m = t.match(/^(-?[\d.]+)\s*[\u00d7x]\s*10([\u207b-]?)([\u2070\u00b9\u00b2\u00b3\u2074-\u2079]+|\d+)$/);
+    if (m) { const exp = Number([...m[3]].map(d => sup[d] ?? d).join('')); return Number(m[1]) * 10 ** (m[2] ? -exp : exp); }
+    return /^-?[\d.]+(e-?\d+)?%?$/i.test(t) ? Number(t.replace('%', '')) : NaN;
+  };
+  out.r5 = all('.ag-cell span[title]').flatMap(e => {
+    const source = Number(e.getAttribute('title')), shown = parse(e.textContent);
+    if (!Number.isFinite(source) || e.getAttribute('title').trim() === '') return [];
+    const error = source === 0 ? Math.abs(shown) : Math.abs(shown - source) / Math.abs(source);
+    return Number.isFinite(shown) && error <= 0.005 + 1e-12 ? [] : [`"${e.textContent.trim()}" for ${source}`];
+  });
+  // R6: a fitted figure fills its room to 95% on one axis, unless it reached the 2x cap.
+  out.r6 = all('figure[data-fit="fit"]').flatMap(f => {
+    const img = f.querySelector('img'); if (!img?.naturalWidth || !visible(img)) return [];
+    const s = getComputedStyle(f), w = f.clientWidth - parseFloat(s.paddingLeft) - parseFloat(s.paddingRight), h = f.clientHeight - parseFloat(s.paddingTop) - parseFloat(s.paddingBottom), r = img.getBoundingClientRect();
+    const fill = Math.max(r.width / w, r.height / h);
+    return fill >= 0.95 || r.width >= 2 * img.naturalWidth - 1 ? [] : [`${img.alt || 'figure'} ${Math.round(fill * 100)}%`];
+  });
+  // R7: a failure that a later run replaced never wears the failed colour.
+  const failed = rgba(getComputedStyle(document.documentElement).getPropertyValue('--color-failed').trim()).slice(0, 3).join();
+  const paints = (e, pseudo) => { const s = getComputedStyle(e, pseudo); return [s.color, s.backgroundColor, s.borderTopColor, s.borderLeftColor].some(c => { const v = rgba(c); return v[3] > 0 && v.slice(0, 3).join() === failed; }); };
+  out.r7 = all('.superseded, [data-rho-superseded]').filter(e => paints(e) || paints(e, '::before')).map(label);
   return out;
 }
 
@@ -240,6 +282,11 @@ export function failures(m, { digest = false } = {}) {
   if (m.m8.length) f.push(`M8 unnamed: ${m.m8.slice(0, 4).join(' | ')}${m.m8.length > 4 ? ` +${m.m8.length - 4}` : ''}`);
   if (m.m9.scrollWidth > m.m9.innerWidth) f.push(`M9 page ${m.m9.scrollWidth}px wide in ${m.m9.innerWidth}px`);
   if (m.keys?.unreached.length) f.push(`M10 not reachable by Tab: ${m.keys.unreached.slice(0, 6).join(', ')}${m.keys.unreached.length > 6 ? ` +${m.keys.unreached.length - 6}` : ''}`);
+  if (m.r3.length) f.push(`R3 run id repeated: ${m.r3.slice(0, 4).join(', ')}`);
+  if (m.r4.courier.length) f.push(`R4 monospace draws Courier: ${m.r4.courier.join(' | ')}`);
+  if (m.r5.length) f.push(`R5 number cells: ${m.r5.slice(0, 4).join(', ')}${m.r5.length > 4 ? ` +${m.r5.length - 4}` : ''}`);
+  if (m.r6.length) f.push(`R6 figure under 95%: ${m.r6.join(', ')}`);
+  if (m.r7.length) f.push(`R7 replaced failure in the failed colour: ${m.r7.slice(0, 4).join(', ')}`);
   return f;
 }
 
