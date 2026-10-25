@@ -1,13 +1,13 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { BrowserClient, CapabilityCatalog, ProjectSummary, ResourceSummary, WorkspaceSnapshot } from '../src/browser.js';
 import { attention, executionWord, integrityWord, producerOf, readRuns, results, shortPath } from '../src/execution-facts.js';
 import { term } from '../src/task-frame.js';
-import { ExecutionPanel } from './artifact.js';
 import { useRuns } from './executions.js';
 import { projectName, SourceFolders, when } from './home.js';
 import { Icon } from './icons.js';
 import { availability, resourceIcon, size, views, type Entry, type Section } from './project.js';
 import { renders } from './rendered.js';
+import { RunView } from './shell/facts.js';
 
 // The project page, loaded when a project opens rather than with the home page.
 // A document viewer exists only when this build renders a component that binds documents.
@@ -31,7 +31,7 @@ export function ProjectOverview({ project, location, snapshot, onLayout, client,
   const [doctor, setDoctor] = useState<Array<{ id: string; state: 'ok' | 'warn' | 'fail'; detail: string; remedy: string }> | null>(null);
   const [diagnosing, setDiagnosing] = useState(false);
   const { runs, problem: runsProblem, readAgain } = useRuns(client, project.id);
-  // A failed attempt is opened from here with the same panel an artifact uses.
+  // A run that needs attention opens from here in the same view the workspace gives it.
   const [inspecting, setInspecting] = useState<string | null>(null);
   async function diagnose() {
     setDiagnosing(true); setError('');
@@ -73,7 +73,8 @@ export function ProjectOverview({ project, location, snapshot, onLayout, client,
   }
   const artifacts = runs ? results(files, runs) : [];
   const checked = runs ? runs.some(run => run.domain === 'checked') : false;
-  const inspected = runs?.find(run => run.operationId === inspecting);
+  const runDialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => { const element = runDialog.current; if (inspecting && element && !element.open) element.showModal(); }, [inspecting]);
   return <section className="overview" aria-labelledby="overview-title">
     <header className="overview-header">
       <h1 id="overview-title">{projectName(project)}</h1>
@@ -211,6 +212,12 @@ export function ProjectOverview({ project, location, snapshot, onLayout, client,
         </> : <p className="field-hint"><button disabled={diagnosing} onClick={() => void diagnose()}>{diagnosing ? 'Checking…' : 'Check this project…'}</button> What Rho can and cannot do here, with the next action for anything wrong.</p>}
       </section>
     </details>
-    {inspected && <ExecutionPanel run={inspected} runs={runs ?? []} onClose={() => setInspecting(null)} onReadAgain={readAgain} />}
+    {/* Every way out goes through close(), so focus returns to the run that opened it. */}
+    {inspecting && <dialog ref={runDialog} className="run-dialog" aria-label={inspecting} onClose={() => setInspecting(null)}
+      onClick={event => { if (event.target === event.currentTarget) event.currentTarget.close(); }}>
+      <button className="icon-button run-dialog-close" aria-label="Close" onClick={() => runDialog.current?.close()}><Icon name="close" size={14} stroke={2} /></button>
+      <RunView key={inspecting} snapshot={snapshot} client={client} operationId={inspecting} runs={runs} readRuns={readAgain} onOpenRun={setInspecting}
+        opener={ref => { const place = places.get(ref.id); return place ? () => onLayout(place.compositionId, place.viewId) : null; }} />
+    </dialog>}
   </section>;
 }

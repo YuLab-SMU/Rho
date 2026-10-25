@@ -129,7 +129,7 @@ test('browser pairing/session budgets reject new work and retain existing grants
 test('browser SDK imports without Node/DOM or optional renderer packages', async () => {
   for (const file of ['browser.js', 'observation.js', 'task-frame.js']) {
     const source = await fs.readFile(new URL('../dist/' + file, import.meta.url), 'utf8');
-    assert.doesNotMatch(source, /from ['"](?:node:|react|dockview|@rho-workspace\/plugin)/);
+    assert.doesNotMatch(source, /from ['"](?:node:|react|@rho-workspace\/plugin)/);
     assert.doesNotMatch(source, /\b(?:window|document|sessionStorage|localStorage)\./);
   }
   assert.equal(typeof BrowserClient, 'function');

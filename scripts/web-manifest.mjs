@@ -20,7 +20,7 @@ const entries = JSON.parse(await fs.readFile(new URL('ui-entries.json', root), '
 const omitted = process.env.RHO_UI_OMIT?.split(',') ?? [];
 const chosen = entries.filter(e => e.package ? process.env.RHO_UI_PLUGINS === undefined || process.env.RHO_UI_PLUGINS.split(',').includes(e.plugin) : !omitted.includes(e.plugin));
 const optional = [...(chosen.some(e => e.plugin === 'documents') ? ['@codemirror/state', '@codemirror/view'] : []), ...(chosen.some(e => e.plugin === 'tables') ? ['ag-grid-community', 'ag-grid-react'] : [])];
-for (const name of [...optional, 'react', 'react-dom', 'scheduler', 'dockview', 'dockview-core', 'dockview-react', 'vite', 'typescript']) {
+for (const name of [...optional, 'react', 'react-dom', 'scheduler', 'vite', 'typescript']) {
   const manifest = JSON.parse(await fs.readFile(new URL('node_modules/' + name + '/package.json', root), 'utf8'));
   dependencies.push({ name, version: manifest.version, license: manifest.license });
 }

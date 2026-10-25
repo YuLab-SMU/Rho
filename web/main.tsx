@@ -12,21 +12,14 @@ import { shortcut } from './platform.js';
 import './theme.css';
 import './plugins.css';
 
-const LegacyWorkspace = lazy(() => import('./workspace.js').then(module => ({ default: module.Workspace })));
-const ShellWorkspace = lazy(() => import('./shell/workspace.js').then(module => ({ default: module.Workspace })));
+const Workspace = lazy(() => import('./shell/workspace.js').then(module => ({ default: module.Workspace })));
 const ProjectOverview = lazy(() => import('./overview.js').then(module => ({ default: module.ProjectOverview })));
 
 const sessionKey = 'rho.browser.session.v1', projectKey = 'rho.browser.project.v1';
 // The launcher opens this page with a one-time code in the fragment, which no request or Referer carries.
 // Remove it from the address bar before anything renders; App redeems it once.
 const linked = new URLSearchParams(location.hash.slice(1)), linkCode = linked.get('pair');
-// The composition shell is the workspace; the frozen dockview workspace stays reachable per
-// tab with #shell=legacy until W6 removes it (docs/WORKSPACE-PLAN.md).
-const shellKey = 'rho.shell.v1', shellChoice = linked.get('shell');
-if (shellChoice === 'legacy') sessionStorage.setItem(shellKey, shellChoice);
-else if (shellChoice !== null) sessionStorage.removeItem(shellKey);
-if (linkCode !== null || shellChoice !== null) history.replaceState(null, '', location.pathname + location.search);
-const Workspace = sessionStorage.getItem(shellKey) === 'legacy' ? LegacyWorkspace : ShellWorkspace;
+if (linkCode !== null) history.replaceState(null, '', location.pathname + location.search);
 let linkRedeemed = false;
 function restoreSession(): BrowserConnection | null {
   try {
@@ -194,7 +187,7 @@ function App() {
   // A choice in the drawer closes it; focus returns to the navigation button unless the choice moves it.
   const pick = (run: () => void) => () => { run(); setNavigation(false); };
   function end(reason: Away) {
-    sessionStorage.removeItem(sessionKey); sessionStorage.removeItem(projectKey); sessionStorage.removeItem(shellKey); confirmReturn.current = null;
+    sessionStorage.removeItem(sessionKey); sessionStorage.removeItem(projectKey); confirmReturn.current = null;
     for (const key of Object.keys(sessionStorage)) if (['rho.layout.v1:', 'rho-expression/1:', 'rho-table-question/1:'].some(prefix => key.startsWith(prefix))) sessionStorage.removeItem(key);
     setConnection(null); setClient(null); setProject(null); setSnapshot(null); setProjects([]); setError(''); setReadAt(null); setOfflineAt(null);
     setContext(false); setCommands(false); setConfirming(false); setScreen('home'); setAway(reason); setAwayDetail('');

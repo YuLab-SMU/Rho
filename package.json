@@ -110,8 +110,6 @@
     "@types/react-dom": "19.3.0",
     "ag-grid-community": "36.2.0",
     "ag-grid-react": "36.2.0",
-    "dockview": "8.6.0",
-    "dockview-react": "8.6.0",
     "json-schema-to-typescript": "^16.0.0",
     "react": "19.3.1",
     "react-dom": "19.3.1",

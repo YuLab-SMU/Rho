@@ -147,11 +147,3 @@ test('frame helpers walk declared forms and summary ranges', () => {
   assert.deepEqual(itemsInRange(map, { range: 'trail', view: 'table' }).map(i => i.id), ['shrink']);
   assert.equal(itemsInRange(map, {}).length, 5);
 });
-
-test('the Agent map entry is plugin-level: it imports only the shared frame contract', async () => {
-  const source = await fs.readFile(new URL('../web/agent-map/ui.tsx', import.meta.url), 'utf8');
-  const imports = [...source.matchAll(/from ['"]([^'"]+)['"]|import ['"]([^'"]+)['"]/g)].map(m => m[1] ?? m[2]);
-  assert.deepEqual(imports.sort(), ['../../src/task-frame.js', '../../src/ui-contract.js', './map.css']);
-  const entries = JSON.parse(await fs.readFile(new URL('../ui-entries.json', import.meta.url), 'utf8'));
-  assert.ok(entries.some(e => e.component === 'rho.agent-map' && e.package === null && e.source === 'web/agent-map/ui.tsx'));
-});

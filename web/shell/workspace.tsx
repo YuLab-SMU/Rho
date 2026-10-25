@@ -8,7 +8,7 @@ import { registry } from '../registry.js';
 import { useLive } from './live.js';
 import { OwnerView, availableEntry, title, viewIcon } from './owner.js';
 import { Bar, Digest, Evidence, Interruption, waiting } from './layer.js';
-import { RunView, SourceLine } from './facts.js';
+import { openRun, runFirstLine, RunView, SourceLine } from './facts.js';
 import { ActionForm } from './action-form.js';
 import { boundResource } from '../executions.js';
 import { Slot, Split, TabGroup, place, unplace, useTabOverflow, type TabRender } from './regions.js';
@@ -150,7 +150,10 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
   const body = (id: string): ReactNode => {
     const view = byId.get(id)!, isVisible = visible.includes(id);
     if (view.component === 'rho.action') return <ActionForm view={view} snapshot={snapshot} client={client} live={live} />;
-    if (view.component === 'rho.execution') return <RunView live={live} snapshot={snapshot} client={client} operationId={String(view.props.operationId ?? id)} onOpenRef={openRef} />;
+    if (view.component === 'rho.execution') {
+      const operationId = String(view.props.operationId ?? id);
+      return <RunView snapshot={snapshot} client={client} operationId={operationId} runs={live.runs} readRuns={live.readRuns} firstLine={runFirstLine(live, operationId)} opener={ref => () => openRef(ref)} onOpenRun={other => openRun(live, other)} />;
+    }
     const resource = boundResource(view, snapshot.resources);
     const annotations = snapshot.catalog.plugins.find(p => p.id === 'annotations');
     const Question = resource?.kind === 'table' && annotations?.projectEnabled && annotations.dependenciesSatisfied && annotations.state === 'available' ? registry.entries.find(e => e.component === 'rho.feedback')?.TableQuestion : undefined;

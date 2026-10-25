@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { BrowserClient, ResourceSummary, WorkspaceSnapshot } from '../src/browser.js';
 import { producerOf, type RunFacts } from '../src/execution-facts.js';
 
@@ -39,7 +39,9 @@ export function useRuns(client: BrowserClient, projectId: string | undefined, ob
     });
     return () => { live = false; };
   }, [client, projectId, nonce, observationCursor]);
-  return { runs, problem, readAgain: () => { if (projectId) forgetRuns(projectId); setNonce(value => value + 1); } };
+  // One function per project, so a view that polls with it keeps one timer across renders.
+  const readAgain = useCallback(() => { if (projectId) forgetRuns(projectId); setNonce(value => value + 1); }, [projectId]);
+  return { runs, problem, readAgain };
 }
 
 // The resource a view is bound to, when it is bound to exactly one.

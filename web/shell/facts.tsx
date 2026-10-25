@@ -2,6 +2,8 @@ import { useEffect, useId, useState, type ReactNode } from 'react';
 import type { BrowserClient, ResourceSummary, WorkspaceSnapshot } from '../../src/browser.js';
 import { executionWord, integrityWord, producerOf, sameSourceKey, shortPath, stopState, type RunFacts } from '../../src/execution-facts.js';
 import type { Live } from './live.js';
+// The run view also opens on the project page, which loads no other part of the shell.
+import './shell.css';
 
 type Ref = { id: string; version: string };
 const time = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -56,13 +58,22 @@ const stopWords: Record<string, string> = {
 };
 const whoWords: Record<string, string> = { Agent: 'the Agent', Person: 'a browser tab', Operator: 'Rho' };
 const allowedIn = (snapshot: WorkspaceSnapshot) => (method: string) => snapshot.catalog.operations.some(o => o.method === method && o.state === 'available' && o.authorized);
-const openRun = (live: Live, operationId: string) => { const o = runObject(live, operationId); if (o) live.act({ kind: 'open', target: o }); };
-
-// One execution as the owners recorded it, opened from its mark or from an artifact.
-export function RunView({ live, snapshot, client, operationId, onOpenRef }: { live: Live; snapshot: WorkspaceSnapshot; client: BrowserClient; operationId: string; onOpenRef: (ref: Ref) => void }) {
-  const runs = live.runs, run = runs?.find(r => r.operationId === operationId), allowed = allowedIn(snapshot), projectId = snapshot.project.id;
+export const openRun = (live: Live, operationId: string) => { const o = runObject(live, operationId); if (o) live.act({ kind: 'open', target: o }); };
+// The first line of a run's error, as the live session read it from the run's output.
+export function runFirstLine(live: Live, operationId: string) {
   const item = Object.values(live.screen?.objects ?? {}).find(o => o.kind === 'run' && live.state?.names[o.id] === operationId);
-  const firstLine = item?.kind === 'run' ? item.firstLine : null;
+  return item?.kind === 'run' ? item.firstLine : null;
+}
+
+// One execution as the owners recorded it. The shell opens it from its mark or from an
+// artifact, the project page from a run that needs attention; each passes the runs it read
+// and its own way to open a version or another run.
+export function RunView({ snapshot, client, operationId, runs, readRuns, firstLine = null, opener, onOpenRun }: {
+  snapshot: WorkspaceSnapshot; client: BrowserClient; operationId: string; runs: RunFacts[] | null; readRuns: () => void;
+  // How to open one version this run wrote, or null where it cannot be opened from here.
+  firstLine?: string | null; opener: (ref: Ref) => (() => void) | null; onOpenRun: (operationId: string) => void;
+}) {
+  const run = runs?.find(r => r.operationId === operationId), allowed = allowedIn(snapshot), projectId = snapshot.project.id;
   const outputs = snapshot.resources.filter(r => (r.provenance as { operationId?: string })?.operationId === operationId);
   const chain = run && runs ? sameSourceKey(runs, run.sourceKey) : [];
   // The owner records a script by the digest of its code; a reader needs which version of it ran.
@@ -73,7 +84,6 @@ export function RunView({ live, snapshot, client, operationId, onOpenRef }: { li
   const partial = !!run && run.execution !== 'completed' && present > 0 && present < run.declared.length;
   const repairs = runs?.filter(r => r.repairOf === operationId) ?? [];
   // Core reports that a process ended only when asked; while this run can still change, ask.
-  const { readRuns } = live;
   useEffect(() => { if (!active) return; const timer = setInterval(readRuns, 1500); return () => clearInterval(timer); }, [active, readRuns]);
   const [stopping, setStopping] = useState(false), [stopProblem, setStopProblem] = useState('');
   // Core's answer to the request itself, shown until the project's runs are read again.
@@ -101,15 +111,18 @@ export function RunView({ live, snapshot, client, operationId, onOpenRef }: { li
       {stopProblem && <p role="alert">{stopProblem}</p>}
       {firstLine && <p data-fact="observed" className="shell-run-error">{firstLine}</p>}
       {(run.repairOf || repairs.length > 0) && <p className="shell-run-repair">
-        {run.repairOf && <>Repairs <button className="shell-link" data-rho-repair-of={run.repairOf} onClick={() => openRun(live, run.repairOf!)}>{run.repairOf}</button></>}
+        {run.repairOf && <>Repairs <button className="shell-link" data-rho-repair-of={run.repairOf} onClick={() => onOpenRun(run.repairOf!)}>{run.repairOf}</button></>}
         {run.repairOf && repairs.length > 0 && ' · '}
-        {repairs.length > 0 && <>Repaired by {repairs.map((r, i) => <span key={r.operationId}>{i ? ', ' : ''}<button className={'shell-link ' + r.execution} data-rho-repaired-by={r.operationId} onClick={() => openRun(live, r.operationId)}>{r.operationId}</button></span>)}</>}
+        {repairs.length > 0 && <>Repaired by {repairs.map((r, i) => <span key={r.operationId}>{i ? ', ' : ''}<button className={'shell-link ' + r.execution} data-rho-repaired-by={r.operationId} onClick={() => onOpenRun(r.operationId)}>{r.operationId}</button></span>)}</>}
       </p>}
       {['failed', 'unknown'].includes(run.execution) && allowed('context.create') && <Repair snapshot={snapshot} client={client} operationId={operationId} />}
       {run.declared.length > 0 && <ul className="shell-run-files" data-fact="observed">{run.declared.map(d => <li key={d.path}>{shortPath(d.path)} · {d.present ? 'on disk' : 'not on disk'}</li>)}</ul>}
       <p data-fact="verified">{run.declared.length ? integrityWord(run.integrity) : 'no declared file'} · {domainWord(run)} · no run establishes a statistical result</p>
-      {outputs.length > 0 && <ul className="shell-run-outputs">{outputs.map(r => <li key={r.id + r.version}><button className="shell-link" data-rho-artifact={r.id + '@' + r.version} onClick={() => onOpenRef({ id: r.id, version: r.version })}>{shortPath(r.path)}</button><span> · this run's version</span></li>)}</ul>}
-      {chain.length > 1 && <p className="shell-run-chain">{chain.map(other => <button key={other.operationId} className={'shell-link ' + other.execution} aria-current={other.operationId === operationId || undefined} disabled={other.operationId === operationId} onClick={() => openRun(live, other.operationId)}>{other.operationId}</button>)}</p>}
+      {outputs.length > 0 && <ul className="shell-run-outputs">{outputs.map(r => {
+        const open = opener({ id: r.id, version: r.version });
+        return <li key={r.id + r.version}>{open ? <button className="shell-link" data-rho-artifact={r.id + '@' + r.version} onClick={open}>{shortPath(r.path)}</button> : <span data-rho-artifact={r.id + '@' + r.version}>{shortPath(r.path)}</span>}<span> · this run's version</span></li>;
+      })}</ul>}
+      {chain.length > 1 && <p className="shell-run-chain">{chain.map(other => <button key={other.operationId} className={'shell-link ' + other.execution} aria-current={other.operationId === operationId || undefined} disabled={other.operationId === operationId} onClick={() => onOpenRun(other.operationId)}>{other.operationId}</button>)}</p>}
       {allowed('action.output') && <Output client={client} projectId={projectId} operationId={operationId} runs={runs} active={active} />}
     </>}
   </section>;
