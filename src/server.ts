@@ -27,7 +27,7 @@ import { isRhoMethod } from './contract-runtime.js';
 import type { RhoMethod, RhoOutput } from './contract.generated.js';
 import { TaskRouting } from './task-routing.js';
 import { exitWords, stopState } from './execution-facts.js';
-import type { nativeActivityLimits, agentDeliveryLimits } from '@rho-workspace/plugin-agent';
+import type { nativeActivityLimits, agentDeliveryLimits, RunContext } from '@rho-workspace/plugin-agent';
 import { ownerContracts } from './contracts/owners.generated.js';
 export interface FeedbackTransport { accept(envelope: any): Promise<any>; lookup(envelope: any): Promise<any> }
 export interface NativeAdapterRegistration {
@@ -88,6 +88,29 @@ async function runFacts(project: Project, run: Operation) {
     hasStderr: Number(run.native?.stderr?.retained_bytes ?? 0) > 0,
     stop: stopFacts(run),
     repairOf: run.repairOf ?? null
+  };
+}
+// One run as a context gives it to the Agent (docs/WORKSPACE-PLAN.md W4): the recorded
+// facts and the end of the retained stderr, where R writes its error. `from` says where the
+// excerpt starts, so a cut is never mistaken for the whole stream.
+export const runContextLimits = { errorExcerptBytes: 8192 };
+async function runContext(project: Project, requests: Requests, principal: Principal, operationId: string): Promise<RunContext> {
+  const run = await requests.lookup(principal, operationId, true), facts = await runFacts(project, run);
+  const retained = Number(run.native?.stderr?.retained_bytes ?? 0);
+  let error: RunContext['error'] = null;
+  if (retained > 0) {
+    const from = Math.max(0, retained - runContextLimits.errorExcerptBytes);
+    const chunk = (await requests.output(principal, operationId, 'stderr', from, runContextLimits.errorExcerptBytes)).reply?.value;
+    // A start inside a multi-byte character decodes as replacement characters; drop them.
+    if (chunk) error = { stream: 'stderr', text: from > 0 ? String(chunk.text).replace(/^\uFFFD+/, '') : String(chunk.text), from, retainedBytes: Number(chunk.info?.retained_bytes ?? retained), observedBytes: Number(chunk.info?.observed_bytes ?? retained), truncated: !!chunk.info?.truncated };
+  }
+  const script = run.request?.input?.script, stop = stopFacts(run);
+  return {
+    operationId: run.operationId, action: run.action, actionVersion: run.actionVersion, execution: run.execution, acceptedAt: run.acceptedAt,
+    submittedBy: authorKind(run.principal), exit: exitWords(run.native?.status?.Finished?.exit), stop: stop ? { state: stop.state, by: stop.by } : null, repairOf: run.repairOf ?? null,
+    error,
+    script: script && typeof script.kind === 'string' ? { kind: script.kind, ...(typeof script.path === 'string' ? { path: script.path } : {}), ...(typeof script.digest === 'string' ? { digest: script.digest } : {}), ...(typeof script.documentId === 'string' ? { documentId: script.documentId, version: script.version } : {}) } : null,
+    args: Array.isArray(run.request?.input?.args) ? run.request.input.args.map(String) : [], declared: facts.declared, output: typeof run.plan?.output === 'string' ? run.plan.output : null
   };
 }
 const validators = Object.fromEntries(Object.entries(operations).map(([k, v]) => [k, ajv.compile<any>(v)]));
@@ -862,7 +885,10 @@ export class RhoService {
       }
       return delivery.status(b, principal.id, principal.id === 'operator');
     }
-    if (method === 'context.create') { const result = await owners.need('agent').createContext(b, principal.id); await this.emit(p, 'context.changed', result.contextId, principal.id); return result; }
+    if (method === 'context.create') {
+      const facts = b.run ? { run: await runContext(p, requests, principal, b.run.operationId) } : {};
+      const result = await owners.need('agent').createContext(b, principal.id, facts); await this.emit(p, 'context.changed', result.contextId, principal.id); return result;
+    }
     if (method === 'context.read') {
       if (await routing.feedbackInitialized()) {
         const targetId = await this.feedback(p, owners).contextTarget(b.contextId);

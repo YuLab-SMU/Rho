@@ -90,11 +90,35 @@ test('a repair is a new identity that names the failed run it repairs', { timeou
     const operator = new RhoClient({ url: service.url, token: service.adminToken });
     const p = await operator.call('project.create', { name: 'p' });
     const file = path.join(root, 'agent.json');
-    await service.agentConnection(p.id, 'agent', file, ['action.submit', 'action.lookup']);
+    await service.agentConnection(p.id, 'agent', file, ['action.submit', 'action.lookup', 'context.read']);
     const client = await RhoClient.fromFile(file), agent = (m, body = {}) => client.call(m, { projectId: p.id, ...body });
     await fs.writeFile(path.join(p.root, 'run.R'), fails);
-    await agent('action.submit', run('first', fails));
+    await agent('action.submit', run('first', fails, { input: { ...run('first', fails).input, args: ['--seed', '7'] } }));
     await poll(() => agent('action.lookup', { operationId: 'first' }), r => r.execution === 'failed', 'first failed');
+
+    // The person asks the Agent to fix it: the context carries the real error and the references.
+    const { code } = await operator.call('session.browser.pair', { path: 'p' });
+    const grant = (await (await fetch(service.url + '/api/browser/pair', { method: 'POST', headers: { 'content-type': 'application/json', origin: service.url }, body: JSON.stringify({ code }) })).json()).value;
+    const tab = new BrowserClient({ url: service.url, ...grant });
+    await assert.rejects(tab.call('context.create', { projectId: p.id, run: { operationId: 'never-ran' } }), e => e.error.kind === 'not_found');
+    const asked = await tab.call('context.create', { projectId: p.id, run: { operationId: 'first' } });
+    const context = (await agent('context.read', { contextId: asked.contextId })).run;
+    assert.equal(context.operationId, 'first'); assert.equal(context.execution, 'failed'); assert.equal(context.submittedBy, 'Agent');
+    assert.match(context.exit, /^code [1-9]/);
+    assert.match(context.error.text, /Deliberate failure/); assert.equal(context.error.from, 0); assert.equal(context.error.truncated, false);
+    assert.equal(context.error.retainedBytes, Buffer.byteLength(context.error.text));
+    assert.deepEqual(context.script, { kind: 'disk', path: 'run.R', digest: digest(fails) });
+    assert.deepEqual(context.args, ['--seed', '7']);
+    // A long stderr gives its end, where R writes the error, and says where the excerpt starts.
+    const noisy = 'for (i in 1:2000) message("progress line ", i)\nstop("Final failure")\n';
+    await fs.writeFile(path.join(p.root, 'noisy.R'), noisy);
+    const loud = run('noisy', noisy); loud.input.script.path = 'noisy.R';
+    await agent('action.submit', loud);
+    await poll(() => agent('action.lookup', { operationId: 'noisy' }), r => r.execution === 'failed', 'noisy failed');
+    const tail = (await agent('context.read', { contextId: (await tab.call('context.create', { projectId: p.id, run: { operationId: 'noisy' } })).contextId })).run.error;
+    assert.ok(tail.retainedBytes > 8192 && tail.from === tail.retainedBytes - 8192, JSON.stringify({ ...tail, text: undefined }));
+    assert.match(tail.text, /Final failure/); assert.doesNotMatch(tail.text, /progress line 1\n/);
+    assert.ok(Buffer.byteLength(tail.text) <= 8192);
     await assert.rejects(agent('action.submit', run('first-again', fails, { repairOf: 'missing' })), e => e.error.kind === 'not_found');
     await assert.rejects(agent('action.submit', run('first', fails, { repairOf: 'first' })), e => ['invalid', 'conflict'].includes(e.error.kind));
     const fixed = 'cat("fixed\\n")\n';

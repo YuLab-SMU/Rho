@@ -4178,6 +4178,9 @@ export interface ContextCreateInput {
     id: string;
     version: string;
   };
+  run?: {
+    operationId: string;
+  };
 }
 
 export interface ContextCreateOutput {

@@ -161,8 +161,8 @@
     "context.create": {
       "summary": "context.create",
       "path": "operations/context.create.json",
-      "bytes": 10157,
-      "sha256": "743191b129c6fef961a63a5bb6bfbe8cb16573ec8fad0f69f9b1fa694061fd45"
+      "bytes": 10457,
+      "sha256": "4874532baa7cec0ed4c07fdd5dfa7b985718479e012be928ee70a04d456008d2"
     },
     "context.read": {
       "summary": "Read an explicit versioned context package. Receipt establishes a tool fetch, not proactive delivery to a conversation.",

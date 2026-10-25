@@ -8129,6 +8129,19 @@ export const ownerContracts: OwnerContractSnapshot = {
                   "version"
                 ],
                 "type": "object"
+              },
+              "run": {
+                "additionalProperties": false,
+                "properties": {
+                  "operationId": {
+                    "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "operationId"
+                ],
+                "type": "object"
               }
             },
             "required": [],
@@ -16929,9 +16942,9 @@ export const ownerContracts: OwnerContractSnapshot = {
       "packageVersion": "0.4.4",
       "entry": "./operations",
       "entryPath": "Projects/Rho-plugins/plugins/agent/dist/operations.js",
-      "entrySha256": "4003a223274d9ba44680b600584f4a03ffc4480785b6df6392dfe66b85b4e134",
+      "entrySha256": "87c5fe4dcf114ed865cacb7aa00245e58c850ee644cd7760264051d30d190b1c",
       "exports": {
-        "operationContracts": "c92a66f7ad70342dc1a7d581ed2c3adc2974c194718c460006d83b66fd57a0d2"
+        "operationContracts": "46022b622799c28cd7b23c0257f68c29528be87ddf44dbc01ee884b3bed2b259"
       }
     },
     "agent-feedback": {
