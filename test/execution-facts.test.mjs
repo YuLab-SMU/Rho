@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   attention, distinctScripts, executionWord, integrityWord, producerOf, readRuns, results,
-  sameSourceKey, shortPath, stopState, exitWords
+  sameSourceKey, shortPath, stopState, exitWords, supersededBy
 } from '../dist/execution-facts.js';
 
 // These are Rho's reading of what was run and produced. They decide what the project
@@ -62,6 +62,18 @@ test('only a completed run is said to have written its files, counted as found',
   const counts = readRuns([run({ execution: 'unobserved' }), run({ execution: 'active' })]);
   assert.equal(counts.moving, 1, 'accepted but unobserved is not running');
   assert.equal(counts.unobserved, 1);
+});
+
+test('a failure the same script later completed steps back but stays listed', () => {
+  const runs = [
+    run({ operationId: 't-3', execution: 'failed', integrity: 'unchecked', acceptedAt: '2026-10-24T10:42:00.000Z' }),
+    run({ operationId: 't-5', acceptedAt: '2026-10-24T10:46:00.000Z' }),
+    run({ operationId: 'u-1', execution: 'failed', integrity: 'unchecked', sourceKey: 'k2', acceptedAt: '2026-10-24T10:47:00.000Z' })
+  ];
+  const wanted = attention(runs);
+  assert.deepEqual(wanted.map(item => [item.operationId, item.kind]), [['u-1', 'failed'], ['t-3', 'superseded']]);
+  assert.equal(supersededBy(runs[0], runs)?.operationId, 't-5');
+  assert.equal(supersededBy(runs[2], runs), undefined, 'another script never supersedes it');
 });
 
 test('an outcome with no observation is reported as unknown, never as done', () => {

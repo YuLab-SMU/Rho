@@ -94,7 +94,7 @@ export function ProjectOverview({ project, location, snapshot, onLayout, client,
       {watching.length > 0 && <ul className="overview-attention">
         {watching.map(item => <li key={item.kind + item.operationId}>
           <button className="overview-attention-row" onClick={() => setInspecting(item.operationId)}>
-            <span className={'state ' + item.kind}>{item.text}</span>
+            <span className={'state ' + item.kind} data-rho-superseded={item.kind === 'superseded' || undefined}>{item.text}</span>
             <Icon name="chevron" size={11} stroke={1.8} />
           </button>
         </li>)}

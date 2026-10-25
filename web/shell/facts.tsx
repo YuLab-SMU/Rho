@@ -117,7 +117,7 @@ export function RunView({ snapshot, client, operationId, runs, readRuns, firstLi
         {repairs.length > 0 && <>Repaired by {repairs.map((r, i) => <span key={r.operationId}>{i ? ', ' : ''}<button className={'shell-link ' + r.execution} data-rho-repaired-by={r.operationId} onClick={() => onOpenRun(r.operationId)}>{r.operationId}</button></span>)}</>}
       </p>}
       {['failed', 'unknown'].includes(run.execution) && allowed('context.create') && <Repair snapshot={snapshot} client={client} operationId={operationId} />}
-      {run.declared.length > 0 && <ul className="shell-run-files" data-fact="observed">{run.declared.map(d => <li key={d.path}>{shortPath(d.path)} · {d.present ? 'on disk' : 'not on disk'}</li>)}</ul>}
+      {run.declared.length > 0 && <ul className="shell-run-files" data-fact="observed">{run.declared.map(d => <li key={d.path} className={!d.present && active ? 'shell-not-yet' : undefined}>{shortPath(d.path)} · {d.present ? 'on disk' : active ? 'not written yet' : 'not on disk'}</li>)}</ul>}
       <p data-fact="verified">{run.declared.length ? integrityWord(run.integrity) : 'no declared file'} · {domainWord(run)} · no run establishes a statistical result
         {!active && present > 0 && (outputs.length === 0 || run.completion === 'present' && run.integrity !== 'verified') && <CheckFiles client={client} projectId={projectId} operationId={operationId} inventory={run.completion === 'present'} readRuns={readRuns} />}</p>
       {outputs.length > 0 && <ul className="shell-run-outputs">{outputs.map(r => {

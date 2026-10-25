@@ -85,12 +85,16 @@ export function readRuns(runs: RunFacts[]) {
 // What is worth the person's attention, in the order they would ask: a failed run
 // first, then artifacts nobody checked, then work that stopped without an answer.
 export function attention(runs: RunFacts[]) {
-  const items: Array<{ kind: 'failed' | 'unverified' | 'unknown'; text: string; operationId: string }> = [];
+  const items: Array<{ kind: 'failed' | 'superseded' | 'unverified' | 'unknown'; text: string; operationId: string }> = [];
+  const superseded: typeof items = [];
   for (const run of runs) {
     if (run.execution === 'unknown') { items.push({ kind: 'unknown', operationId: run.operationId, text: `${run.operationId} has no observed outcome` }); continue; }
     if (run.execution !== 'failed') continue;
     const present = run.declared.filter(file => file.present).length;
-    items.push({ kind: 'failed', operationId: run.operationId, text: run.declared.length ? `${run.operationId} failed; ${present} of ${run.declared.length} declared files are on disk and nothing verified them` : `${run.operationId} failed and wrote no declared file` });
+    const text = run.declared.length ? `${run.operationId} failed; ${present} of ${run.declared.length} declared files are on disk and nothing verified them` : `${run.operationId} failed and wrote no declared file`;
+    // A failure the same script completed after keeps its words but no longer leads.
+    if (supersededBy(run, runs)) superseded.push({ kind: 'superseded', operationId: run.operationId, text });
+    else items.push({ kind: 'failed', operationId: run.operationId, text });
   }
   // Only a run that completed wrote anything to name; a running, unobserved or unknown
   // run has not, and what it wrote is the files actually present, not the declared list.
@@ -99,7 +103,12 @@ export function attention(runs: RunFacts[]) {
     if (run.execution !== 'completed' || run.integrity === 'verified' || !present) continue;
     items.push({ kind: 'unverified', operationId: run.operationId, text: `${run.operationId} wrote ${present} declared file${present === 1 ? '' : 's'} that nothing verified` });
   }
-  return items;
+  return [...items, ...superseded];
+}
+// The later run of the same script that completed, when there is one: that failure is
+// no longer the current state of the work, though it stays one step away.
+export function supersededBy(run: RunFacts, runs: RunFacts[]) {
+  return run.execution === 'failed' ? sameSourceKey(runs, run.sourceKey).find(other => other.acceptedAt > run.acceptedAt && other.execution === 'completed') : undefined;
 }
 
 // The project page shows results, not a dump of every file every run wrote: one row

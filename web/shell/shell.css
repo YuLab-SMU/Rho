@@ -171,3 +171,4 @@
   .shell-follow { padding: 0 var(--space-4); }
   .shell-agent-words { display: none; }
 }
+.shell-run-files .shell-not-yet { color: var(--color-meta); list-style-type: circle; }
