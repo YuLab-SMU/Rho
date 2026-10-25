@@ -20,6 +20,8 @@ export function useLive(snapshot: WorkspaceSnapshot, composition: CompositionSum
   }, [client, snapshot.project.id, snapshot.cursor, mapAllowed]);
   const key = ['rho-expression/1', snapshot.project.id, composition.compositionId, principal].join(':');
   const state = useRef<LiveWorkspace | null>(null), touched = useRef(false);
+  // Who last changed the active view: the person here, or the owners' records (an Agent, a saved layout, the pace).
+  const movedBy = useRef<'person' | 'owners'>('owners');
   const [, render] = useState(0), [checkpointProblem, setCheckpointProblem] = useState('');
   const save = () => {
     if (!state.current || !sessionStorage.getItem('rho.browser.session.v1')) return;
@@ -37,18 +39,18 @@ export function useLive(snapshot: WorkspaceSnapshot, composition: CompositionSum
       else state.current = startLive(snapshot, runs, composition, map);
       if (touched.current) holdView(state.current, state.current.active);
       if (document.hidden) actLive(state.current, { kind: 'leave' });
-    } else advanceLive(state.current, snapshot, runs, composition, Date.now(), map);
+    } else { const before = state.current.active; advanceLive(state.current, snapshot, runs, composition, Date.now(), map); if (state.current.active !== before) movedBy.current = 'owners'; }
     save(); render(n => n + 1);
   }, [snapshot, composition, runs, map]);
   useEffect(() => {
     const visibility = () => { if (state.current) { actLive(state.current, { kind: document.hidden ? 'leave' : 'return' }); save(); render(n => n + 1); } };
     const away = () => { if (state.current) { actLive(state.current, { kind: 'leave' }); save(); } };
-    const interval = setInterval(() => { if (state.current?.expression.pending) { tickLive(state.current, Date.now()); save(); render(n => n + 1); } }, 1000);
+    const interval = setInterval(() => { if (state.current?.expression.pending) { const before = state.current.active; tickLive(state.current, Date.now()); if (state.current.active !== before) movedBy.current = 'owners'; save(); render(n => n + 1); } }, 1000);
     document.addEventListener('visibilitychange', visibility); window.addEventListener('pagehide', away);
     return () => { away(); clearInterval(interval); document.removeEventListener('visibilitychange', visibility); window.removeEventListener('pagehide', away); };
   }, [key]);
-  const act = (intent: PersonIntent) => { if (state.current) { if (intent.kind === 'unfollow') holdView(state.current, state.current.active); actLive(state.current, intent); save(); render(n => n + 1); } };
-  const hold = (id: string) => { touched.current = true; if (state.current) { holdView(state.current, id); save(); render(n => n + 1); } };
+  const act = (intent: PersonIntent) => { movedBy.current = 'person'; if (state.current) { if (intent.kind === 'unfollow') holdView(state.current, state.current.active); actLive(state.current, intent); save(); render(n => n + 1); } };
+  const hold = (id: string) => { touched.current = true; movedBy.current = 'person'; if (state.current) { holdView(state.current, id); save(); render(n => n + 1); } };
   // A linked result opens beside what the person has: an owner view of that exact version.
   const openResource = (ref: { id: string; version: string }) => {
     if (!state.current) return;
@@ -65,6 +67,6 @@ export function useLive(snapshot: WorkspaceSnapshot, composition: CompositionSum
     }
     hold(id);
   };
-  return { state: state.current, screen: state.current ? screenOf(state.current) : null, layout: state.current?.layout ?? composition, active: state.current?.active, runs, act, hold, openResource, problem: [problem, mapProblem, checkpointProblem, state.current?.limit].filter(Boolean).join(' · ') };
+  return { state: state.current, screen: state.current ? screenOf(state.current) : null, layout: state.current?.layout ?? composition, active: state.current?.active, movedBy: movedBy.current, runs, act, hold, openResource, problem: [problem, mapProblem, checkpointProblem, state.current?.limit].filter(Boolean).join(' · ') };
 }
 export type Live = ReturnType<typeof useLive>;

@@ -10,9 +10,9 @@ import { runClaude } from './claude-consumer.mjs';
 import { rulers, profiles, firstUnit, agentMarker, facts } from './rulers.mjs';
 const root = await fs.mkdtemp('/tmp/rho-s7-'), evidence = path.resolve(process.env.RHO_INTERACTION_EVIDENCE ?? 'work/interaction-' + Date.now());
 await fs.mkdir(evidence, { recursive: true, mode: 0o700 });
-// RHO_SHELL=next drives the new shell and enforces the rulers; the frozen workspace only records them.
-const shell = process.env.RHO_SHELL === 'next' ? 'next' : 'legacy', next = shell === 'next', enforce = next && process.env.RHO_RULERS_DIAGNOSE !== '1', profile = next ? profiles.shell : profiles.legacy;
-const report = { scenario: 'S7-table-feedback', shell, rulers: [], contracts: {}, passed: false, humanUsability: 'not an acceptance criterion', model: process.env.RHO_INTERACTION_MODEL === '1', checks: [], widths: [], counts: { nativeDispatches: 0 }, limits: ['Browser IME is driven through Chrome CDP, not a physical candidate-window usability test.', 'Unassigned layouts prepare a context; assigned tasks use the existing original-session feedback route.'] };
+// The rulers are hard assertions; RHO_RULERS_DIAGNOSE=1 records every state without stopping.
+const enforce = process.env.RHO_RULERS_DIAGNOSE !== '1', profile = profiles.shell;
+const report = { scenario: 'S7-table-feedback', rulers: [], contracts: {}, passed: false, humanUsability: 'not an acceptance criterion', model: process.env.RHO_INTERACTION_MODEL === '1', checks: [], widths: [], counts: { nativeDispatches: 0 }, limits: ['Browser IME is driven through Chrome CDP, not a physical candidate-window usability test.', 'Unassigned layouts prepare a context; assigned tasks use the existing original-session feedback route.'] };
 report.assets = JSON.parse(await fs.readFile(path.join(packageRoot, 'dist/web/composition.json'), 'utf8'));
 let service, browser, page, mcp;
 const check = name => { report.checks.push(name); process.stdout.write(name + '\n'); };
@@ -59,11 +59,11 @@ try {
   page = await browser.newPage({ viewport: { width: 1440, height: 956 } });
   report.browser = browser.version(); const errors = []; page.on('pageerror', e => errors.push(e.message));
   const pairing = await operator.call('session.browser.pair', {});
-  await page.goto(service.url + '/#pair=' + pairing.code + (next ? '&shell=next' : ''));
-  // The two shells name the same facts with their own elements.
-  const attention = () => page.locator(next ? '.shell-bar[data-attention]' : '.expression-attention');
-  const notice = text => page.locator(next ? '[data-rho-interruption]' : '.expression-notice').filter({ hasText: text });
-  const narrowView = () => page.locator(next ? '.shell-panel > .shell-view' : '.mobile-view');
+  await page.goto(service.url + '/#pair=' + pairing.code);
+  const attention = () => page.locator('.shell-bar[data-attention]');
+  const notice = text => page.locator('[data-rho-interruption]').filter({ hasText: text });
+  // Below 768 one view shows at a time.
+  const narrowView = () => page.locator('.shell-panel > .shell-view');
   await page.locator('.project-row').first().click();
   await page.locator('.project-nav').getByRole('button', { name: /^workspace/ }).click();
   await attention().waitFor();
@@ -72,8 +72,8 @@ try {
   await agent('data.page', { resource: ref, offset: 0, limit: 10 });
   check('Following moves the real active view from document to table, paced by the common reducer');
   const grid = () => page.locator('[data-owner-view="table"]');
-  // The new shell keeps a view's own controls (the question's actions among them) beside its tabs.
-  const asking = () => next ? page.locator('[data-owner-header="table"]') : grid();
+  // A view's own controls (the question's actions among them) sit beside its tabs.
+  const asking = () => page.locator('[data-owner-header="table"]');
   await grid().locator('.ag-row[row-index="0"] [col-id="value"]').waitFor();
   assert.equal(await grid().locator('.ag-row[row-index="0"] [col-id="value"]').textContent(), '2');
   await grid().locator('.ag-row[row-index="0"] input[type="checkbox"]').check();
@@ -148,7 +148,7 @@ try {
   assert.deepEqual(final.messages[1].resources, [output]); assert.equal((await call('task.map.read')).items.length, 0);
   const visibleTable = view => width => firstUnit(width < 768 ? narrowView() : view(), 'table');
   const settle = view => async width => { const cell = visibleTable(view)(width); await cell.waitFor(); await poll(() => cell.evaluate(c => { const r = c.getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth + 1; }), Boolean, 'resized table columns'); };
-  await rulers(page, { name: 'return', profile, first: visibleTable(grid), settle: settle(grid), transientAllowed: true, digest: true, keys: next, enforce, evidence, report });
+  await rulers(page, { name: 'return', profile, first: visibleTable(grid), settle: settle(grid), transientAllowed: true, digest: true, enforce, evidence, report });
   check((report.model ? 'real Agent' : 'deterministic MCP consumer') + ' fetches the question, runs real R, explicitly replies and links its exact new table without Task Map');
   await asking().getByRole('button', { name: /Open linked result/ }).click();
   await page.locator('[data-owner-view^="result:"] .ag-row[row-index="0"] [col-id="value"]').waitFor();
@@ -160,17 +160,15 @@ try {
   assert.equal((await execute('s7-failed', { ...faultInput, args: ['fail'] })).execution, 'failed');
   await notice('s7-failed').waitFor();
   const result = () => page.locator('[data-owner-view^="result:"]');
-  await rulers(page, { name: 'interrupted', profile, first: visibleTable(result), settle: settle(result), transientAllowed: true, keys: next, enforce, evidence, report });
+  await rulers(page, { name: 'interrupted', profile, first: visibleTable(result), settle: settle(result), transientAllowed: true, enforce, evidence, report });
   assert.equal((await execute('s7-recovery', faultInput)).execution, 'completed');
   // docs/INTERACTION-MODEL.md: once a later run of the source completes, nobody waits on the failure.
   await poll(() => notice('s7-failed').count(), n => n === 0, 'superseded failure leaves the interruption slot');
   check('a real failed run stops interrupting once a later run of its script completes; selection does not migrate to the new version');
-  if (next) {
-    // Done reading: the person keeps their own arrangement and puts the return summary away, one action each.
-    await page.locator('[data-rho-interruption]').getByRole('button', { name: 'Dismiss', exact: true }).click();
-    await page.getByRole('region', { name: 'Changes while away' }).getByRole('button', { name: 'Dismiss', exact: true }).click();
-    await poll(() => page.locator('[data-rho-layer="transient"]:visible').count(), n => n === 0, 'nothing left waiting for the person');
-  }
+  // Done reading: the person keeps their own arrangement and puts the return summary away, one action each.
+  await page.locator('[data-rho-interruption]').getByRole('button', { name: 'Dismiss', exact: true }).click();
+  await page.getByRole('region', { name: 'Changes while away' }).getByRole('button', { name: 'Dismiss', exact: true }).click();
+  await poll(() => page.locator('[data-rho-layer="transient"]:visible').count(), n => n === 0, 'nothing left waiting for the person');
   await rulers(page, { name: 'complete', profile, first: visibleTable(result), settle: settle(result), enforce, evidence, report });
   for (const width of [1440,1024,768,390]) {
     await page.setViewportSize({ width, height: 956 });
@@ -181,7 +179,7 @@ try {
     assert.equal(await visible.locator('.ag-row[row-index="0"] [col-id="value"]').textContent(), '4');
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
     // E1: the Agent's latest object and its state, by name, one action away at every width.
-    if (next) { const marker = await agentMarker(page, profile); assert.equal(marker.visible && marker.actionable, true, 'E1 marker at ' + width); assert.match(marker.text, /s7-recovery.*completed/, 'E1 names the object and its state at ' + width); (report.contracts.E1 ??= []).push({ width, text: marker.text }); }
+    const marker = await agentMarker(page, profile); assert.equal(marker.visible && marker.actionable, true, 'E1 marker at ' + width); assert.match(marker.text, /s7-recovery.*completed/, 'E1 names the object and its state at ' + width); (report.contracts.E1 ??= []).push({ width, text: marker.text });
     await page.screenshot({ path: path.join(evidence, 'complete-' + width + '.png') }); report.widths.push(width);
   }
   await page.setViewportSize({ width: 1440, height: 956 });
@@ -192,32 +190,30 @@ try {
   await page.reload(); await page.locator('[data-owner-view^="result:"] .ag-row[row-index="0"] [col-id="value"]').waitFor();
   assert.equal(report.counts.nativeDispatches, 4); assert.deepEqual(errors, []);
   check('four widths, evidence access and refresh retain views without redispatch or browser exceptions');
-  if (next) {
-    const resultView = page.locator('[data-owner-view^="result:"]'), runView = name => page.locator('.shell-run').filter({ has: page.getByRole('heading', { name, exact: true }) });
-    // E4: the Agent's words, observed facts and verification render apart; the Agent never wears the verified colour.
-    const kinds = await facts(page); report.contracts.E4 = kinds;
-    for (const kind of ['agent', 'observed', 'verified']) assert.ok(kinds.kinds.includes(kind), 'E4 renders ' + kind);
-    assert.equal(kinds.agentInVerified, false);
-    // E2: from the artifact to the run that produced this version, and back to that exact version.
-    await resultView.locator('[data-rho-producer]').click();
-    await runView('s7-answer').waitFor();
-    await runView('s7-answer').locator(`[data-rho-artifact="${output.id}@${output.version}"]`).click();
-    await resultView.locator('.ag-row[row-index="0"] [col-id="value"]').waitFor({ state: 'visible' });
-    assert.equal(await resultView.locator('.ag-row[row-index="0"] [col-id="value"]').textContent(), '4');
-    report.contracts.E2 = { producer: 's7-answer', artifact: output };
-    // E1: one action from the marker reaches the Agent's object.
-    await page.locator('[data-rho-agent]').click(); await runView('s7-recovery').waitFor();
-    // M3: the superseded failure is one click from the bar's run chain.
-    await page.getByRole('button', { name: 's7-failed failed', exact: true }).click();
-    await runView('s7-failed').waitFor();
-    assert.match(await runView('s7-failed').locator('[data-fact="observed"]').first().textContent(), /^failed · code version 2 of 2 · accepted .* · stderr retained$/);
-    await rulers(page, { name: 'run', profile, first: () => runView('s7-failed').locator('h2'), enforce, evidence, report });
-    // E5: all of the above on a project where the Agent declared nothing.
-    const declared = (await call('observation.snapshot')).activity.entries.filter(e => String(e.method).startsWith('task.map.'));
-    assert.equal(declared.length, 0); assert.equal((await call('task.map.read')).items.length, 0);
-    report.contracts.E5 = { taskMapCalls: 0, taskMapItems: 0 }; report.contracts.E3 = { annotationId: thread.annotationId, linked: output };
-    check('E1–E5: the Agent\'s object, artifact ↔ run ↔ exact version, linked reply and three kinds of statement, without any task map');
-  }
+  const resultView = page.locator('[data-owner-view^="result:"]'), runView = name => page.locator('.shell-run').filter({ has: page.getByRole('heading', { name, exact: true }) });
+  // E4: the Agent's words, observed facts and verification render apart; the Agent never wears the verified colour.
+  const kinds = await facts(page); report.contracts.E4 = kinds;
+  for (const kind of ['agent', 'observed', 'verified']) assert.ok(kinds.kinds.includes(kind), 'E4 renders ' + kind);
+  assert.equal(kinds.agentInVerified, false);
+  // E2: from the artifact to the run that produced this version, and back to that exact version.
+  await resultView.locator('[data-rho-producer]').click();
+  await runView('s7-answer').waitFor();
+  await runView('s7-answer').locator(`[data-rho-artifact="${output.id}@${output.version}"]`).click();
+  await resultView.locator('.ag-row[row-index="0"] [col-id="value"]').waitFor({ state: 'visible' });
+  assert.equal(await resultView.locator('.ag-row[row-index="0"] [col-id="value"]').textContent(), '4');
+  report.contracts.E2 = { producer: 's7-answer', artifact: output };
+  // E1: one action from the marker reaches the Agent's object.
+  await page.locator('[data-rho-agent]').click(); await runView('s7-recovery').waitFor();
+  // M3: the superseded failure is one click from the bar's run chain.
+  await page.getByRole('button', { name: 's7-failed failed', exact: true }).click();
+  await runView('s7-failed').waitFor();
+  assert.match(await runView('s7-failed').locator('[data-fact="observed"]').first().textContent(), /^failed · code version 2 of 2 · accepted .* · stderr retained$/);
+  await rulers(page, { name: 'run', profile, first: () => runView('s7-failed').locator('h2'), enforce, evidence, report });
+  // E5: all of the above on a project where the Agent declared nothing.
+  const declared = (await call('observation.snapshot')).activity.entries.filter(e => String(e.method).startsWith('task.map.'));
+  assert.equal(declared.length, 0); assert.equal((await call('task.map.read')).items.length, 0);
+  report.contracts.E5 = { taskMapCalls: 0, taskMapItems: 0 }; report.contracts.E3 = { annotationId: thread.annotationId, linked: output };
+  check('E1–E5: the Agent\'s object, artifact ↔ run ↔ exact version, linked reply and three kinds of statement, without any task map');
   await page.getByRole('button', { name: 'Context & access', exact: true }).click();
   await page.getByRole('button', { name: 'Disconnect this tab', exact: true }).click();
   await page.getByRole('dialog', { name: 'Disconnect this tab?' }).getByRole('button', { name: 'Disconnect', exact: true }).click();

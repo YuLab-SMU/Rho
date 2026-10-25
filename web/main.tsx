@@ -19,11 +19,13 @@ const sessionKey = 'rho.browser.session.v1', projectKey = 'rho.browser.project.v
 // The launcher opens this page with a one-time code in the fragment, which no request or Referer carries.
 // Remove it from the address bar before anything renders; App redeems it once.
 const linked = new URLSearchParams(location.hash.slice(1)), linkCode = linked.get('pair');
-// The workspace shell is chosen per tab (docs/WORKSPACE-PLAN.md): #shell=next or #shell=legacy.
+// The composition shell is the workspace; the frozen dockview workspace stays reachable per
+// tab with #shell=legacy until W6 removes it (docs/WORKSPACE-PLAN.md).
 const shellKey = 'rho.shell.v1', shellChoice = linked.get('shell');
-if (shellChoice === 'next' || shellChoice === 'legacy') sessionStorage.setItem(shellKey, shellChoice);
+if (shellChoice === 'legacy') sessionStorage.setItem(shellKey, shellChoice);
+else if (shellChoice !== null) sessionStorage.removeItem(shellKey);
 if (linkCode !== null || shellChoice !== null) history.replaceState(null, '', location.pathname + location.search);
-const Workspace = sessionStorage.getItem(shellKey) === 'next' ? ShellWorkspace : LegacyWorkspace;
+const Workspace = sessionStorage.getItem(shellKey) === 'legacy' ? LegacyWorkspace : ShellWorkspace;
 let linkRedeemed = false;
 function restoreSession(): BrowserConnection | null {
   try {
@@ -160,7 +162,13 @@ function App() {
   useEffect(() => { if (confirming) confirmDialog.current?.showModal(); else if (confirmDialog.current?.open) confirmDialog.current.close(); }, [confirming]);
   useEffect(() => { if (!connection && away !== 'fresh' && away !== 'linking') awayHeading.current?.focus(); }, [connection, away]);
   // The sheet leaves with the home page; once it is gone, focus moves to the project instead of the document body.
-  useEffect(() => { if (section && snapshot && screen === 'project') { document.getElementById('overview-' + section)?.focus(); setSection(null); } }, [section, snapshot, screen]);
+  // A section behind a disclosure opens before it takes focus; a closed one cannot.
+  useEffect(() => {
+    if (!section || !snapshot || screen !== 'project') return;
+    const target = document.getElementById('overview-' + section), disclosure = target?.closest('details');
+    if (disclosure) disclosure.open = true;
+    target?.focus(); setSection(null);
+  }, [section, snapshot, screen]);
   useEffect(() => { if (mainFocus) { setMainFocus(false); document.getElementById('main')?.focus(); } }, [mainFocus]);
   function command(run: () => void) { setCommands(false); run(); }
   function runCommand(next: Command) { command(next.run); }

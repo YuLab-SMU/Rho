@@ -175,7 +175,7 @@ try {
   assert.equal(await sheet.locator('.source-folders li').count(), 2);
   await widths('sheet-new', async () => assert.equal(await inSheet(), true));
   await sheet.getByRole('button', { name: 'Create project', exact: true }).click();
-  await page.getByText('No saved layout yet', { exact: true }).waitFor();
+  await page.getByRole('heading', { name: 'No question has been declared for this project yet.', exact: true }).waitFor();
   await focused(await page.locator('main').elementHandle());
   // Inside a project: the sidebar lists Layouts and Content; the overview lists what the project holds, without JSON.
   const sidebar = page.getByRole('complementary', { name: 'Project navigation', exact: true });
@@ -183,10 +183,10 @@ try {
   assert.equal(await sidebar.getByRole('button', { name: 'Overview', exact: true }).getAttribute('aria-current'), 'page');
   assert.equal(await sidebar.getByRole('group', { name: 'Layouts', exact: true }).textContent(), 'None saved yet');
   assert.equal(await sidebar.getByText('Retained operations').count(), 0);
-  // The overview states what it can do before it lists content: a person who sees
-  // nothing happen needs an answer in the product, not in a terminal.
-  assert.deepEqual(await page.locator('main h2').allTextContents(), ['Can this project do work?', 'Source folders', 'Documents 0', 'Files 0']);
+  // The overview leads with the declared question; content and setup wait behind disclosures.
+  assert.deepEqual(await page.locator('main h2').allTextContents(), ['No question has been declared for this project yet.', 'Documents', 'Files 0', 'Source folders', 'Can this project do work?']);
   // The product answers "nothing happened" itself, and the answer names a real folder.
+  await page.locator('main summary').filter({ hasText: "This project's setup" }).click();
   await page.getByRole('button', { name: 'Check this project…', exact: true }).click();
   await page.getByText(/Rho can write in /).first().waitFor();
   assert.equal(await page.getByRole('button', { name: 'Check this project…', exact: true }).count(), 0);
@@ -205,8 +205,8 @@ try {
   const table = await admin.call('resource.register', { projectId: p.id, expectedDigest: createHash('sha256').update(csv).digest('hex'), declaration: { path: 'trend.csv', kind: 'table', format: { encoding: 'csv', columns: [{ name: 'id', type: 'string', nullValues: [] }, { name: 'x', type: 'number', nullValues: [] }, { name: 'y', type: 'number', nullValues: [] }], key: { column: 'id', namespace: 'trend' } } } });
   let composition = await admin.call('composition.apply', { projectId: p.id, compositionId: 'workspace', expectedVersion: 0, changeId: 'initial', operations: [{ op: 'replace', rootId: 'root', nodes: [{ id: 'root', kind: 'group', children: ['notes'] }, { id: 'notes', kind: 'view', component: 'rho.scatter', version: '0.2.0', props: { title: 'Shared notes', x: 'x', y: 'y' }, bindings: { data: { id: table.id, version: table.version } } }] }] });
   // A layout saved elsewhere appears in the overview without moving the reader; choosing it opens it.
-  await page.locator('#overview-layouts').waitFor();
-  assert.deepEqual(await page.locator('main h2').allTextContents(), ['Can this project do work?', 'Source folders', 'Layouts 1', 'Documents 1', 'Files 1']);
+  await page.locator('#overview-layouts').waitFor({ state: 'attached' });
+  assert.deepEqual(await page.locator('main h2').allTextContents(), ['No question has been declared for this project yet.', 'Results', 'Documents', 'Files 1', 'Source folders', 'Layouts 1', 'Can this project do work?']);
   assert.equal(await sidebar.getByRole('button', { name: 'Overview', exact: true }).getAttribute('aria-current'), 'page');
   await sidebar.getByRole('button', { name: /^workspace/ }).click();
   await page.getByRole('heading', { name: "This view can't be shown here yet", exact: true }).waitFor();
@@ -216,7 +216,7 @@ try {
   assert.equal(await page.getByText(table.id, { exact: false }).isVisible(), false);
   assert.equal(await sidebar.getByRole('button', { name: /^workspace/ }).getAttribute('aria-current'), 'page');
   assert.equal(await sidebar.getByRole('button', { name: /^workspace/ }).locator('.nav-row-count').textContent(), '1 view');
-  await page.locator('.retained-tab').filter({ hasText: 'Shared notes' }).waitFor();
+  await page.locator('.shell-tabs [role=tab]').filter({ hasText: 'Shared notes' }).waitFor();
   await noJson();
   await widths('layout-unavailable', noJson);
   await page.getByText('View reference', { exact: true }).click();
@@ -266,7 +266,11 @@ try {
   await focused(commandTrigger);
   await page.getByRole('button', { name: 'Close context', exact: true }).click();
   report.checks.push('command-palette-filter-groups-footer-arrow-keys-state-verbs-runs-no-questions');
-  // Disconnecting asks first; Escape cancels and returns focus to what opened the confirmation.
+  // Disconnecting asks first; Escape cancels, returns focus to what opened the confirmation and
+  // forgets nothing: the credential and this tab's layout and return checkpoint stay.
+  const storedBefore = await page.evaluate(() => Object.keys(sessionStorage).sort());
+  assert.ok(['rho.browser.project.v1', 'rho.browser.session.v1'].every(key => storedBefore.includes(key)));
+  assert.deepEqual(storedBefore.filter(key => !/^(rho\.browser\.(project|session)\.v1|rho\.layout\.v1:|rho-expression\/1:)/.test(key)), []);
   await page.keyboard.press('Meta+k');
   await palette.getByRole('option', { name: 'Disconnect this tab', exact: true }).click();
   await page.getByRole('dialog', { name: 'Disconnect this tab?' }).waitFor();
@@ -274,7 +278,7 @@ try {
   await page.keyboard.press('Escape');
   await page.getByRole('dialog', { name: 'Disconnect this tab?' }).waitFor({ state: 'hidden' });
   await focused(commandTrigger);
-  assert.deepEqual(await page.evaluate(() => Object.keys(sessionStorage).sort()), ['rho.browser.project.v1', 'rho.browser.session.v1']);
+  assert.deepEqual(await page.evaluate(() => Object.keys(sessionStorage).sort()), storedBefore);
   for (const width of [1600, 1280, 1024, 768, 390]) {
     await page.setViewportSize({ width, height: 1000 });
     await page.waitForTimeout(100);
@@ -368,23 +372,25 @@ try {
     report.widths.push({ width, noDocumentOverflow: true, screenshot: 'workspace-' + width + '.png' });
   }
   await page.setViewportSize({ width: 1280, height: 900 });
-  await page.locator('.rho-dock .retained-tab').first().waitFor();
+  await page.locator('.shell-tabs [role=tab]').first().waitFor();
   const viewReference = page.locator('.view-reference summary');
   await viewReference.focus();
   composition = await admin.call('composition.apply', { projectId: p.id, compositionId: 'workspace', expectedVersion: composition.version, changeId: 'remote-second-view', operations: [{ op: 'insert', parentId: 'root', index: 1, node: { id: 'second', kind: 'view', component: 'rho.editor', version: '0.2.0', props: { title: 'Second view' }, bindings: { document: { documentId: d.id, version: edited.version } } } }] });
-  await page.locator('.retained-tab').filter({ hasText: 'Second view' }).waitFor();
+  await page.locator('.shell-tabs [role=tab]').filter({ hasText: 'Second view' }).waitFor();
   assert.equal(await sidebar.getByRole('button', { name: /^workspace/ }).locator('.nav-row-count').textContent(), '2 views');
   assert.equal(await viewReference.evaluate(element => element === document.activeElement), true);
   // The editor view now renders. An exact-version binding shows that version and cannot be edited.
-  await page.locator('.retained-tab').filter({ hasText: 'Second view' }).click();
+  await page.locator('.shell-tabs [role=tab]').filter({ hasText: 'Second view' }).click();
   await page.locator('.rho-doc .cm-content').filter({ hasText: 'Shared notes 中文 🧬' }).waitFor();
   assert.equal(await page.locator('.rho-doc .cm-content').getAttribute('contenteditable'), 'false');
   assert.match(await page.locator('.rho-doc-exact').textContent(), /^Showing version \d+\. This view is pinned/);
-  await page.locator('.retained-tab').filter({ hasText: 'Shared notes' }).click();
+  await page.locator('.shell-tabs [role=tab]').filter({ hasText: 'Shared notes' }).click();
   report.checks.push('editor-view-renders-exact-version-read-only');
   report.checks.push('stable-id-remote-view-update-preserves-command-focus');
   // Below 768 the views are tabs; arrows, Home and End move between them and show the view.
   await page.setViewportSize({ width: 390, height: 844 });
+  // The wide group's tab list has the same name; wait until the narrow surface has replaced it.
+  await page.locator('.shell-header-narrow').waitFor({ state: 'attached' });
   const viewTabs = page.getByRole('tablist', { name: 'Views', exact: true });
   await viewTabs.waitFor();
   assert.deepEqual(await viewTabs.getByRole('tab').allTextContents(), ['Shared notes', 'Second view']);
@@ -401,7 +407,7 @@ try {
   await page.keyboard.press('Home');
   assert.equal(await viewTabs.getByRole('tab', { selected: true }).textContent(), 'Shared notes');
   await page.setViewportSize({ width: 1280, height: 900 });
-  await page.locator('.rho-dock .retained-tab').nth(1).waitFor();
+  await page.locator('.shell-tabs [role=tab]').nth(1).waitFor();
   report.checks.push('narrow-view-tabs-arrow-home-end-no-select');
   await page.getByRole('status').filter({ hasText: 'Up to date' }).waitFor();
   assert.match(await page.locator('header').getByRole('status').textContent(), /^Up to date \d\d:\d\d$/);
@@ -413,7 +419,7 @@ try {
   const notice = page.getByRole('alert').and(page.locator('.offline-bar'));
   assert.match(await notice.locator('p').textContent(), /^Can't reach Rho\. You're seeing what was read at \d\d:\d\d\.$/);
   await page.getByRole('heading', { name: "This view can't be shown here yet", exact: true }).first().waitFor();
-  assert.equal(await page.locator('.rho-dock .retained-tab').count(), 2);
+  assert.equal(await page.locator('.shell-tabs [role=tab]').count(), 2);
   assert.equal(await sidebar.getByRole('button', { name: /^workspace/ }).locator('.nav-row-count').textContent(), '2 views');
   await page.keyboard.press('Meta+k');
   assert.equal(await palette.getByRole('option', { name: /^Reconnect/ }).count(), 1);
@@ -423,9 +429,9 @@ try {
   await widths('offline', async () => assert.equal(await notice.isVisible(), true));
   await page.setViewportSize({ width: 1440, height: 900 });
   // Coming back from the narrow select, the views return as tabs of one group in layout order.
-  await page.locator('.rho-dock .retained-tab').nth(1).waitFor();
-  assert.equal(await page.locator('.rho-dock .dv-groupview').count(), 1);
-  assert.deepEqual(await page.locator('.rho-dock .retained-tab').allTextContents(), ['Shared notes', 'Second view']);
+  await page.locator('.shell-tabs [role=tab]').nth(1).waitFor();
+  assert.equal(await page.locator('.shell-group').count(), 1);
+  assert.deepEqual(await page.locator('.shell-tabs [role=tab]').allTextContents(), ['Shared notes', 'Second view']);
   await page.getByRole('button', { name: 'Context & access', exact: true }).click();
   assert.match(await page.locator('.connection-line strong').textContent(), /^Offline since \d\d:\d\d$/);
   await page.screenshot({ path: path.join(directory, 'offline-context-1440.png'), fullPage: true });
@@ -570,8 +576,9 @@ try {
   assert.equal(await sheet.getByRole('button', { name: 'Create project', exact: true }).isDisabled(), true);
   await page.keyboard.press('Escape');
   await sheet.waitFor({ state: 'hidden' });
+  // A project chosen from Home opens on its own question, not on the layout last open.
   await row.click();
-  await page.getByRole('heading', { name: "This view can't be shown here yet", exact: true }).first().waitFor();
+  await page.getByRole('heading', { name: 'No question has been declared for this project yet.', exact: true }).waitFor();
   assert.equal((await (await operator()).call('project.list', {})).length, 1);
   // "Open another project…" returns home with focus on the most recent project.
   await page.keyboard.press('Meta+k');

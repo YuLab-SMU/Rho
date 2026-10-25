@@ -14,11 +14,6 @@ export const profiles = {
     persistent: '[data-rho-layer="persistent"]', transient: '[data-rho-layer="transient"]', interruption: '[data-rho-interruption]',
     digestItem: '[data-rho-digest] li', evidence: '[data-rho-evidence]', ownerBody: '[data-owner-body]', agent: '[data-rho-agent]', content,
   },
-  // The frozen workspace, measured for the W0 baseline only.
-  legacy: {
-    persistent: '.expression-bar, .artifact-source', transient: '.expression-notice, .expression-proposal, .expression-digest, .table-question',
-    interruption: '.expression-notice', digestItem: '.expression-digest li', evidence: '.expression-evidence', ownerBody: '.framed-view-body, .expression-run', agent: '.expression-marker', content,
-  },
 };
 // The first content unit of an owner view, by the kind of work it holds.
 export function firstUnit(view, kind) {

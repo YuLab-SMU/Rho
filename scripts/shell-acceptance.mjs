@@ -51,7 +51,7 @@ try {
   report.browser = browser.version();
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } }), errors = [];
   page.on('pageerror', e => errors.push(e.message));
-  await page.goto(ready.openUrl + '&shell=next');
+  await page.goto(ready.openUrl);
   await page.locator('.project-row').filter({ hasText: 'Shell 中文' }).click();
   const layoutNav = name => page.locator('.nav-row').filter({ hasText: name }).first();
   await layoutNav('workspace').click();
@@ -96,7 +96,14 @@ try {
   assert.equal(await focusInScript(), true);
   const history = (await call('document.history', { documentId: script.id })).entries ?? (await call('document.history', { documentId: script.id })).history ?? [];
   assert.ok(history.every(h => !String(h.author ?? '').startsWith('agent:')), 'only the person changed the script');
-  check('hard case: unsaved script keeps its element through an Agent layout and a re-layout, survives a layout switch, and own undo continues with focus in the editor');
+  // Collapsing to one view at a time and back moves the editor; the person's focus moves with it.
+  await scriptView.locator('.cm-editor').evaluate(e => { e.__rhoProbe = 'kept'; });
+  for (const [width, height, narrow] of [[390, 844, 'attached'], [1440, 900, 'detached']]) {
+    await page.setViewportSize({ width, height }); await page.locator('.shell-header-narrow').waitFor({ state: narrow });
+    await poll(focusInScript, Boolean, 'focus kept in the editor at ' + width, 30);
+    assert.equal(await kept(), true);
+  }
+  check('hard case: unsaved script keeps its element and focus through an Agent layout, a re-layout and a collapse to one view, survives a layout switch, and own undo continues');
 
   // Composition fidelity: the DOM reproduces the owner's tree.
   const samples = [
@@ -199,7 +206,7 @@ try {
   assert.deepEqual(errors, []);
   report.passed = true;
 } catch (error) {
-  report.failure = { message: error.message, stack: error.stack?.split('\n').slice(0, 4).join(' | ') }; process.exitCode = 1;
+  report.failure = { message: error.message, stack: error.stack?.split('\n').filter(l => l.includes('.mjs')).slice(0, 3).join(' | ') }; process.exitCode = 1;
 } finally {
   await browser?.close().catch(() => {});
   if (child && child.exitCode === null) { const exited = once(child, 'exit'); child.kill('SIGTERM'); await exited; }

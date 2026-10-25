@@ -67,7 +67,7 @@
 .plugin-copy-status { font-size: 12px; color: var(--color-muted); }
 .plugin-copy-status:empty { display: none; }
 .plugin-entry-section > h2, .plugin-information > h2 { display: flex; align-items: baseline; gap: 8px; padding-bottom: 12px; border-bottom: 1px solid var(--color-divider); font-size: 17px; line-height: 22px; }
-.plugin-count { color: var(--color-offline); font-size: 15px; line-height: 20px; font-weight: 400; }
+.plugin-count { color: var(--color-meta); font-size: 15px; line-height: 20px; font-weight: 400; }
 .plugin-entry-section li { display: flex; align-items: center; gap: 14px; padding-block: 14px; border-bottom: 1px solid #f3f4f5; }
 .plugin-entry-section li:last-child { border-bottom: 0; }
 .plugin-entry-symbol { display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 32px; height: 32px; border-radius: 8px; background: var(--color-tab-active); color: var(--color-muted); }

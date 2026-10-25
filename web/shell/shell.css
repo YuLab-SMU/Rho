@@ -47,7 +47,7 @@
 /* What Rho adds above the work. One persistent line; at most one interruption; the digest
    only on return; the evidence only on request. */
 .shell-bar { flex: none; display: flex; align-items: center; gap: 8px; min-height: var(--height-button); padding: 2px 10px; border-bottom: 1px solid var(--color-divider); background: var(--color-surface); font-size: 12px; white-space: nowrap; }
-.shell-bar button, .shell-interruption button, .shell-digest button, .shell-source button, .shell-run button { min-height: var(--height-button-small); padding: 0 9px; border-radius: var(--radius-button-small); font-size: 12px; font-weight: 500; white-space: nowrap; }
+.shell-bar button, .shell-interruption button, .shell-digest button, .shell-source button, .shell-run button { min-height: var(--height-button-small); padding: 0 9px; border-radius: var(--radius-button-small); font-size: 12px; font-weight: 400; white-space: nowrap; }
 .shell-bar button:focus-visible, .shell-interruption button:focus-visible, .shell-digest button:focus-visible, .shell-source button:focus-visible, .shell-run button:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 1px; }
 .shell-follow { gap: 7px; }
 .shell-follow[aria-pressed="true"] { color: var(--color-accent-strong); border-color: var(--color-accent); background: var(--color-accent-soft); }
@@ -73,7 +73,7 @@
 .shell-held { color: var(--color-muted); }
 .shell-quiet { border-color: transparent; background: transparent; color: var(--color-muted); }
 .shell-quiet:hover { background: var(--color-hover); color: var(--color-ink); }
-.shell-link { min-height: 0; padding: 0 2px; border: 0; background: none; color: var(--color-accent-strong); font-weight: 500; text-decoration: underline; text-underline-offset: 2px; text-decoration-color: var(--color-accent-soft); }
+.shell-link { min-height: 0; padding: 0 2px; border: 0; background: none; color: var(--color-accent-strong); font-weight: 400; text-decoration: underline; text-underline-offset: 2px; text-decoration-color: var(--color-accent-soft); }
 .shell-link:hover { background: none; text-decoration-color: currentColor; }
 .shell-interruption { flex: none; display: flex; align-items: center; gap: 10px; min-height: var(--height-button); padding: 2px 10px; border-bottom: 1px solid var(--color-divider); background: var(--color-amber-soft); font-size: 12px; }
 .shell-interruption-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
@@ -108,7 +108,7 @@
 .shell-question > .table-question { flex: 1; min-width: 0; }
 .shell-question .table-question { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
 .table-question-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
-.shell-question .table-question button, .table-question-actions button { min-height: var(--height-button-small); padding: 0 9px; border-radius: var(--radius-button-small); font-size: 12px; font-weight: 500; }
+.shell-question .table-question button, .table-question-actions button { min-height: var(--height-button-small); padding: 0 9px; border-radius: var(--radius-button-small); font-size: 12px; font-weight: 400; }
 .shell-question .table-question button:focus-visible, .table-question-actions button:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 1px; }
 .table-question-toggle::after { content: ''; width: 5px; height: 5px; margin: 0 0 3px 7px; border: solid currentColor; border-width: 0 1.5px 1.5px 0; transform: rotate(45deg); }
 .table-question-toggle[aria-expanded="true"]::after { margin: 3px 0 0 7px; transform: rotate(-135deg); }

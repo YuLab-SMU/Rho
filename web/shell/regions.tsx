@@ -7,11 +7,26 @@ export interface TabRender { title: (id: string) => ReactNode; label: (id: strin
 // Where an owner view's element is attached while it shows. The element itself lives for
 // as long as the view is in the layout, so moving it between groups, splits and the narrow
 // surface never remounts an editor or a grid; while hidden it is outside the document.
+// Moving an element that holds focus blurs it, so a move carries the person's focus along:
+// the old place records it on the way out and the new place gives it back.
+const carried = new WeakMap<HTMLElement, HTMLElement>();
+export function place(element: HTMLElement, target: HTMLElement) {
+  const active = document.activeElement, focused = active instanceof HTMLElement && element.contains(active) ? active : carried.get(element);
+  carried.delete(element);
+  if (element.parentElement !== target) target.appendChild(element);
+  if (focused && element.contains(focused) && document.activeElement !== focused) focused.focus({ preventScroll: true });
+}
+export function unplace(element: HTMLElement, from: HTMLElement) {
+  if (element.parentElement !== from) return;
+  const active = document.activeElement;
+  if (active instanceof HTMLElement && element.contains(active)) carried.set(element, active);
+  from.removeChild(element);
+}
 export function Slot({ container, id, labelledBy }: { container: HTMLElement; id: string; labelledBy: string }) {
   const ref = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
-    const slot = ref.current!; slot.appendChild(container);
-    return () => { if (container.parentElement === slot) slot.removeChild(container); };
+    const slot = ref.current!; place(container, slot);
+    return () => unplace(container, slot);
   }, [container]);
   return <div ref={ref} id={id} className="shell-panel" role="tabpanel" aria-labelledby={labelledBy} />;
 }

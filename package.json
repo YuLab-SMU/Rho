@@ -80,9 +80,9 @@
     "check:contracts": "node scripts/contract-owners.mjs --check && tsc -p tsconfig.protocol.json --noCheck && node scripts/protocol.mjs --check && node scripts/contract-types.mjs --check && tsc --noEmit && tsc -p tsconfig.types.json && tsc -p tsconfig.web.json",
     "test:contracts": "node --test test/entry-contracts.test.mjs test/contract-coverage.test.mjs test/protocol.test.mjs test/validate.test.mjs",
     "acceptance:interaction": "node scripts/interaction-acceptance.mjs",
-    "rulers:baseline": "node scripts/interaction-acceptance.mjs",
     "acceptance:smoke": "node scripts/install-smoke.mjs",
     "acceptance:shell": "node scripts/shell-acceptance.mjs",
+    "acceptance:pages": "node scripts/pages-acceptance.mjs",
     "perf": "node scripts/performance.mjs",
     "acceptance:interaction:agent": "RHO_INTERACTION_MODEL=1 node scripts/interaction-acceptance.mjs"
   },

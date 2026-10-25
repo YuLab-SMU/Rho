@@ -1,5 +1,5 @@
 // Workspace performance (docs/WORKSPACE-PLAN.md §2.3), measured in real Chrome against the
-// launcher this checkout builds. RHO_SHELL=next selects the new shell. RHO_PERF_ENFORCE=1
+// launcher this checkout builds, on the default workspace. RHO_PERF_ENFORCE=1
 // compares with the committed W0 baseline and the fixed budgets; otherwise it only records.
 import assert from 'node:assert/strict';
 import * as fs from 'node:fs/promises';
@@ -10,11 +10,11 @@ import { createHash } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
 import { chromium } from '@playwright/test';
 import { RhoClient, native, packageRoot } from './support.mjs';
-const shell = process.env.RHO_SHELL === 'next' ? 'next' : 'legacy', enforce = process.env.RHO_PERF_ENFORCE === '1';
+const enforce = process.env.RHO_PERF_ENFORCE === '1';
 const evidence = path.resolve(process.env.RHO_PERF_EVIDENCE ?? 'work/performance-' + Date.now());
 await fs.mkdir(evidence, { recursive: true, mode: 0o700 });
 const root = await fs.mkdtemp('/tmp/rho-perf-'), state = path.join(root, '.service');
-const report = { shell, passed: false, machine: { platform: process.platform + '-' + process.arch, cpu: (await import('node:os')).cpus()[0]?.model, node: process.version }, bundle: {}, timings: {}, latency: {}, memory: {} };
+const report = { passed: false, machine: { platform: process.platform + '-' + process.arch, cpu: (await import('node:os')).cpus()[0]?.model, node: process.version }, bundle: {}, timings: {}, latency: {}, memory: {} };
 const p95 = xs => { const s = [...xs].sort((a, b) => a - b); return s[Math.min(s.length - 1, Math.ceil(s.length * 0.95) - 1)]; };
 const rss = pid => Number(spawnSync('ps', ['-o', 'rss=', '-p', String(pid)], { encoding: 'utf8' }).stdout.trim()) || 0;
 let child, browser;
@@ -55,13 +55,13 @@ try {
     window.__events = [];
     new PerformanceObserver(list => { for (const e of list.getEntries()) if (e.interactionId) window.__events.push({ id: e.interactionId, name: e.name, duration: e.duration }); }).observe({ type: 'event', buffered: true, durationThreshold: 16 });
   });
-  await page.goto(ready.openUrl + (shell === 'next' ? '&shell=next' : ''));
+  await page.goto(ready.openUrl);
   await page.locator('.project-row').filter({ hasText: 'Performance' }).click();
   const opened = Date.now();
   await page.locator('.nav-row').filter({ hasText: 'workspace' }).click();
   await page.locator('.cm-content:visible').first().waitFor();
   report.timings.openWorkspaceMs = Date.now() - opened;
-  const tab = name => shell === 'next' ? page.getByRole('tab', { name, exact: true }) : page.locator('.dv-tab').filter({ hasText: name }).first();
+  const tab = name => page.getByRole('tab', { name, exact: true });
   // Interactions are counted by interactionId; ones under the 16 ms reporting threshold count as 16.
   const measured = async (count, act) => {
     const before = await page.evaluate(() => window.__events.length); await act();

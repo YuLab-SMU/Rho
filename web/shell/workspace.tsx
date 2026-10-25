@@ -9,7 +9,7 @@ import { OwnerView, availableEntry, title, viewIcon } from './owner.js';
 import { Bar, Digest, Evidence, Interruption, waiting } from './layer.js';
 import { RunView, SourceLine } from './facts.js';
 import { boundResource } from '../executions.js';
-import { Slot, Split, TabGroup, useTabOverflow, type TabRender } from './regions.js';
+import { Slot, Split, TabGroup, place, unplace, useTabOverflow, type TabRender } from './regions.js';
 import './shell.css';
 
 type Tabs = Extract<Region, { kind: 'tabs' }>;
@@ -37,7 +37,14 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
   // What Rho adds above the work: one interruption at a time, hidden until it changes.
   const [evidence, setEvidence] = useState(false), [hidden, setHidden] = useState<string[]>([]);
   const items = waiting(live), unhidden = items.filter(i => !hidden.includes(i.key + ':' + i.text));
-  useEffect(() => { if (live.active && byId.has(live.active)) bring(live.active); }, [live.active, root]);
+  useEffect(() => {
+    if (!live.active || !byId.has(live.active)) return;
+    // Keyboard focus inside a view is the person's place: a move the owners' records make
+    // that would hide it holds it instead, so the move waits as it does while the person works.
+    const here = document.activeElement?.closest<HTMLElement>('[data-owner-view]')?.dataset.ownerView;
+    if (live.movedBy === 'owners' && here && here !== live.active && byId.has(here) && (narrow || groupOf(root, here)?.id === groupOf(root, live.active)?.id)) { live.hold(here); return; }
+    bring(live.active);
+  }, [live.active, root]);
   const brought = useRef('');
   useEffect(() => { if (openView && brought.current !== openView && byId.has(openView)) { brought.current = openView; show(openView); } }, [openView, byId]);
   const focused = order.includes(focus) ? focus : order[0] ?? '';
@@ -90,8 +97,8 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
   useLayoutEffect(() => {
     for (const [id, element] of ownHeaders.current) {
       const target = visible.includes(id) ? headerOf(id) : null;
-      if (target && element.parentElement !== target) target.appendChild(element);
-      else if (!target) element.remove();
+      if (target) place(element, target);
+      else if (element.parentElement) unplace(element, element.parentElement);
     }
   });
   const body = (id: string): ReactNode => {

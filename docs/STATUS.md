@@ -33,30 +33,30 @@ calls, and M1–M10 enforced at return, interrupted, complete and the run view a
 widths; U2, shell (with a declared item) and plugin UI pass; unit 161/161, replay
 27/27. Open 0.41 s, p95 ≤24 ms, initial gzip 90.5 KiB; the 530 KiB total carries both
 shells and is gated once W6 removes the old one.
+**W3 done:** the composition shell is the default workspace; the dockview one is frozen
+behind `#shell=legacy` until W6. UI acceptance (23 checks) runs on the default entry,
+updated to the task-first overview it had waited on since 87ded39e; the sidebar's
+Documents/Files now open their collapsed section before focusing it. A move made by the
+owners' records never hides the view holding keyboard focus, and moving a view carries
+its focus. `scripts/pages-acceptance.mjs` holds M4, M5, M7–M10 on the unpaired landing,
+Home, the overview closed and open, the plugin catalog and page, and the disconnected
+tab (plugin section counts now 4.5:1). S7, U2, plugin UI and shell pass on the default.
 
 Updated: 2026-10-24. S7 live expression and complete table-question feedback.
-
 `src/expression.ts` drives the replay and the real browser through `live-trace.ts` /
-`live-workspace.ts`; project-scoped SSE invalidations reach the browser for Agent
-reads. Working preserves input and exact resource bindings; new versions get separate
-views/selection scopes, layout changes become proposals, and return/reload gives a
-digest without replaying focus or native execution.
-
-Annotations 0.4.3 uses the existing Documents draft, exact table anchor and context
-receipt, then an explicit Agent `replyTo` and optional owner-validated output refs.
-Agent 0.4.4 retains exact object metadata without storing tool inputs/content.
-Assigned tasks keep the existing original-session delivery; unassigned layouts
-prepare a context and name that limit. Reading a question does not answer it.
-
+`live-workspace.ts`. Working preserves input and exact resource bindings; new versions
+get separate views/selection scopes, layout changes become proposals, and return gives
+a digest without replaying focus or native execution. Annotations 0.4.3 uses the
+Documents draft, exact table anchor and context receipt, then an explicit Agent
+`replyTo` with owner-validated output refs; reading a question does not answer it.
 [S7 engineering acceptance](INTERACTION-ACCEPTANCE.md) records real Chrome at four
 widths, browser IME, lost acknowledgement/reload/original retry, no Task Map, immutable
 old/new tables, linked replies, and failure then recovery. Actual Claude Code 2.1.310
 completed the continuation in 28 turns / 132 seconds with four intended R dispatches;
 refresh adds none. S6 remains **human usability unverified** and is not a gate.
 
-The public contract remains generated from its owners and validated at the request
-boundary; [contract acceptance](CONTRACT-ACCEPTANCE.md) keeps the earlier installed
-candidate evidence.
+The public contract stays generated from its owners and validated at the request
+boundary; [contract acceptance](CONTRACT-ACCEPTANCE.md) keeps earlier installed evidence.
 
 ## Task-first project page, truthful execution facts
 
