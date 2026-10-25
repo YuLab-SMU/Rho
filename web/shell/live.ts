@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { BrowserClient, CompositionSummary, TaskMapResponse, WorkspaceSnapshot } from '../../src/browser.js';
-import { actLive, advanceLive, holdView, liveLimits, screenOf, startLive, tickLive, type LiveWorkspace } from '../../src/live-workspace.js';
+import { actLive, advanceLive, holdView, liveLimits, releaseView, screenOf, startLive, tickLive, type LiveWorkspace } from '../../src/live-workspace.js';
 import type { PersonIntent } from '../../src/expression.js';
 import { useRuns } from '../executions.js';
 
@@ -19,7 +19,7 @@ export function useLive(snapshot: WorkspaceSnapshot, composition: CompositionSum
     return () => { current = false; };
   }, [client, snapshot.project.id, snapshot.cursor, mapAllowed]);
   const key = ['rho-expression/1', snapshot.project.id, composition.compositionId, principal].join(':');
-  const state = useRef<LiveWorkspace | null>(null), touched = useRef(false);
+  const state = useRef<LiveWorkspace | null>(null), touched = useRef(false), chosen = useRef<string | null>(null);
   // Who last changed the active view: the person here, or the owners' records (an Agent, a saved layout, the pace).
   const movedBy = useRef<'person' | 'owners'>('owners');
   const [, render] = useState(0), [checkpointProblem, setCheckpointProblem] = useState('');
@@ -37,7 +37,8 @@ export function useLive(snapshot: WorkspaceSnapshot, composition: CompositionSum
       try { const raw = sessionStorage.getItem(key); if (raw && raw.length <= liveLimits.maxCheckpointBytes) { const old = JSON.parse(raw); if (old.format === 1 && old.layout?.compositionId === composition.compositionId) state.current = old; } } catch { /* The owner snapshot stays the baseline. */ }
       if (state.current) { advanceLive(state.current, snapshot, runs, composition, Date.now(), map); actLive(state.current, { kind: 'return' }); }
       else state.current = startLive(snapshot, runs, composition, map);
-      if (touched.current) holdView(state.current, state.current.active);
+      // A view the person chose before the records were read is the one held, not the first.
+      if (touched.current) holdView(state.current, chosen.current && state.current.layout.views.some(v => v.id === chosen.current) ? chosen.current : state.current.active);
       if (document.hidden) actLive(state.current, { kind: 'leave' });
     } else { const before = state.current.active; advanceLive(state.current, snapshot, runs, composition, Date.now(), map); if (state.current.active !== before) movedBy.current = 'owners'; }
     save(); render(n => n + 1);
@@ -50,7 +51,8 @@ export function useLive(snapshot: WorkspaceSnapshot, composition: CompositionSum
     return () => { away(); clearInterval(interval); document.removeEventListener('visibilitychange', visibility); window.removeEventListener('pagehide', away); };
   }, [key]);
   const act = (intent: PersonIntent) => { movedBy.current = 'person'; if (state.current) { if (intent.kind === 'unfollow') holdView(state.current, state.current.active); actLive(state.current, intent); save(); render(n => n + 1); } };
-  const hold = (id: string) => { touched.current = true; movedBy.current = 'person'; if (state.current) { holdView(state.current, id); save(); render(n => n + 1); } };
+  const hold = (id: string) => { touched.current = true; chosen.current = id; movedBy.current = 'person'; if (state.current) { holdView(state.current, id); save(); render(n => n + 1); } };
+  const release = (id: string) => { if (state.current) { releaseView(state.current, id); save(); } };
   // A linked result opens beside what the person has: an owner view of that exact version.
   const openResource = (ref: { id: string; version: string }) => {
     if (!state.current) return;
@@ -67,6 +69,6 @@ export function useLive(snapshot: WorkspaceSnapshot, composition: CompositionSum
     }
     hold(id);
   };
-  return { state: state.current, screen: state.current ? screenOf(state.current) : null, layout: state.current?.layout ?? composition, active: state.current?.active, movedBy: movedBy.current, runs, readRuns, act, hold, openResource, problem: [problem, mapProblem, checkpointProblem, state.current?.limit].filter(Boolean).join(' · ') };
+  return { state: state.current, screen: state.current ? screenOf(state.current) : null, layout: state.current?.layout ?? composition, active: state.current?.active, movedBy: movedBy.current, runs, readRuns, act, release, hold, openResource, problem: [problem, mapProblem, checkpointProblem, state.current?.limit].filter(Boolean).join(' · ') };
 }
 export type Live = ReturnType<typeof useLive>;

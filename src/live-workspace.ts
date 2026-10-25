@@ -96,6 +96,11 @@ export function actLive(state: LiveWorkspace, intent: PersonIntent) {
   const since = state.expression.moves.length;
   actExpression(state.expression, state.trace, intent); projectMove(state, since);
 }
+// The person closes a view they held: it stops being kept against the owner's layout, so
+// their own change to that layout takes effect. Only the person's command releases a hold.
+export function releaseView(state: LiveWorkspace, id: string) {
+  delete state.held[id];
+}
 export function holdView(state: LiveWorkspace, id: string) {
   const descriptor = state.layout.views.find(v => v.id === id);
   if (!descriptor) return;

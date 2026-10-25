@@ -8,6 +8,7 @@ import { RhoService, RhoClient, native, packageRoot } from './support.mjs';
 import { connectMcp, callOperation, mcpToolNames } from './mcp-consumer.mjs';
 import { runClaude } from './claude-consumer.mjs';
 import { rulers, profiles, firstUnit, agentMarker, facts } from './rulers.mjs';
+import { selectionScope } from '../dist/shell-layout.js';
 const root = await fs.mkdtemp('/tmp/rho-s7-'), evidence = path.resolve(process.env.RHO_INTERACTION_EVIDENCE ?? 'work/interaction-' + Date.now());
 await fs.mkdir(evidence, { recursive: true, mode: 0o700 });
 // The rulers are hard assertions; RHO_RULERS_DIAGNOSE=1 records every state without stopping.
@@ -77,7 +78,7 @@ try {
   await grid().locator('.ag-row[row-index="0"] [col-id="value"]').waitFor();
   assert.equal(await grid().locator('.ag-row[row-index="0"] [col-id="value"]').textContent(), '2');
   await grid().locator('.ag-row[row-index="0"] input[type="checkbox"]').check();
-  await poll(() => call('interaction.selection.read', { scope: { kind: 'shared', id: 'table' } }), c => c.selection?.entities.includes('001'), 'exact original row selection');
+  await poll(() => call('interaction.selection.read', { scope: selectionScope({ id: 'table', bindings: { data: ref } }) }), c => c.selection?.entities.includes('001'), 'exact original row selection');
   assert.equal(await attention().getAttribute('data-attention'), 'working');
   await call('interaction.selection.set', { scope: { kind: 'shared', id: 'other-table' }, expectedVersion: 0, changeId: 'other-selection', selection: { resource: ref, entities: ['002'] } });
   await asking().getByRole('button', { name: 'Ask about selected rows', exact: true }).click();

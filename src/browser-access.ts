@@ -21,7 +21,12 @@ export const browserMethods = ['protocol.describe', 'protocol.validate', 'projec
   'task.map.read', 'task.map.present', 'task.map.respond',
   // A person runs an action from the form an Agent proposed, reads a run's bounded output,
   // and may stop a run of a project this pairing includes (docs/WORKSPACE-PLAN.md decisions 2, 3).
-  'action.submit', 'action.output', 'action.cancel'];
+  'action.submit', 'action.output', 'action.cancel',
+  // The person's own layout commands (split, move, close, divider, undo), conditional on the
+  // version they saw; protected views stay protected (docs/WORKSPACE-PLAN.md W5).
+  'composition.apply', 'composition.undo',
+  // A chart's points: the same rows data.page already reads, bounded and read-only.
+  'data.plot'];
 interface Pairing { hash: string; root: string; methods: string[]; expires: number; selectedProjects: string[] }
 export class BrowserAccess {
   limits: typeof browserLimits;

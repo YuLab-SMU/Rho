@@ -16,6 +16,14 @@
     "source": "web/entries/tables.tsx"
   },
   {
+    "plugin": "charts",
+    "package": "@rho-workspace/plugin-charts",
+    "entry": "./ui",
+    "component": "rho.scatter",
+    "version": "0.2.0",
+    "source": "web/entries/charts.tsx"
+  },
+  {
     "plugin": "media",
     "package": "@rho-workspace/plugin-media",
     "entry": "./ui",

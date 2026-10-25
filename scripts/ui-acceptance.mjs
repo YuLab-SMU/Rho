@@ -199,11 +199,11 @@ try {
   const [p] = await admin.call('project.list', {});
   const d = await admin.call('document.open', { projectId: p.id, path: 'notes 中文.md' });
   const edited = await admin.call('document.edit', { projectId: p.id, documentId: d.id, expectedVersion: d.version, edits: [{ from: 0, to: 0, insert: 'Shared notes 中文 🧬\n' }], undoGroup: 'initial' });
-  // Charts' scatter view is not in this build, so it explains itself; the editor views render.
-  const csv = 'id,x,y\n001,1,2\n002,3,4\n';
-  await fs.writeFile(path.join(p.root, 'trend.csv'), csv);
-  const table = await admin.call('resource.register', { projectId: p.id, expectedDigest: createHash('sha256').update(csv).digest('hex'), declaration: { path: 'trend.csv', kind: 'table', format: { encoding: 'csv', columns: [{ name: 'id', type: 'string', nullValues: [] }, { name: 'x', type: 'number', nullValues: [] }, { name: 'y', type: 'number', nullValues: [] }], key: { column: 'id', namespace: 'trend' } } } });
-  let composition = await admin.call('composition.apply', { projectId: p.id, compositionId: 'workspace', expectedVersion: 0, changeId: 'initial', operations: [{ op: 'replace', rootId: 'root', nodes: [{ id: 'root', kind: 'group', children: ['notes'] }, { id: 'notes', kind: 'view', component: 'rho.scatter', version: '0.2.0', props: { title: 'Shared notes', x: 'x', y: 'y' }, bindings: { data: { id: table.id, version: table.version } } }] }] });
+  // A view whose plugin has no browser part explains itself; the editor views render.
+  const model = '{"coefficients":[1.5,-0.2]}';
+  await fs.writeFile(path.join(p.root, 'model.json'), model);
+  const object = await admin.call('resource.register', { projectId: p.id, expectedDigest: createHash('sha256').update(model).digest('hex'), declaration: { path: 'model.json', kind: 'object', format: { encoding: 'json', observation: 'exported-snapshot', classes: ['list'] } } });
+  let composition = await admin.call('composition.apply', { projectId: p.id, compositionId: 'workspace', expectedVersion: 0, changeId: 'initial', operations: [{ op: 'replace', rootId: 'root', nodes: [{ id: 'root', kind: 'group', children: ['notes'] }, { id: 'notes', kind: 'view', component: 'rho.object', version: '0.2.0', props: { title: 'Shared notes' }, bindings: { data: { id: object.id, version: object.version } } }] }] });
   // A layout saved elsewhere appears in the overview without moving the reader; choosing it opens it.
   await page.locator('#overview-layouts').waitFor({ state: 'attached' });
   assert.deepEqual(await page.locator('main h2').allTextContents(), ['No question has been declared for this project yet.', 'Results', 'Documents', 'Files 1', 'Source folders', 'Layouts 1', 'Can this project do work?']);
@@ -212,15 +212,15 @@ try {
   await page.getByRole('heading', { name: "This view can't be shown here yet", exact: true }).waitFor();
   // The view explains itself in the reader's terms; identifiers wait behind View reference.
   assert.deepEqual(await page.locator('.unavailable-facts dt').allTextContents(), ['Shows', 'Needs', 'In this build']);
-  assert.equal(await page.locator('.unavailable-facts dd').first().textContent(), 'trend.csv · table');
-  assert.equal(await page.getByText(table.id, { exact: false }).isVisible(), false);
+  assert.equal(await page.locator('.unavailable-facts dd').first().textContent(), 'model.json · object');
+  assert.equal(await page.getByText(object.id, { exact: false }).isVisible(), false);
   assert.equal(await sidebar.getByRole('button', { name: /^workspace/ }).getAttribute('aria-current'), 'page');
   assert.equal(await sidebar.getByRole('button', { name: /^workspace/ }).locator('.nav-row-count').textContent(), '1 view');
   await page.locator('.shell-tabs [role=tab]').filter({ hasText: 'Shared notes' }).waitFor();
   await noJson();
   await widths('layout-unavailable', noJson);
   await page.getByText('View reference', { exact: true }).click();
-  await page.getByText(table.id, { exact: false }).waitFor();
+  await page.getByText(object.id, { exact: false }).waitFor();
   await page.reload();
   await page.getByRole('heading', { name: "This view can't be shown here yet", exact: true }).waitFor();
   report.checks.push('unicode-project-create-real-catalog-unavailable-view-refresh');
@@ -238,8 +238,8 @@ try {
   await page.keyboard.press('Meta+k');
   await focused(await filter.elementHandle());
   assert.equal(await filter.getAttribute('placeholder'), 'Type a command');
-  assert.deepEqual(await palette.locator('.command-heading').allTextContents(), ['Go to', 'View', 'Connection', 'This tab']);
-  assert.deepEqual(await palette.getByRole('option').allTextContents(), ['Home', 'Overviewnotes 中文', 'Plugins', 'Open another project…', 'Hide project navigation', 'Show context & access', 'RefreshReads again · starts nothing', 'Disconnect this tab']);
+  assert.deepEqual(await palette.locator('.command-heading').allTextContents(), ['Go to', 'View', 'Layout', 'Connection', 'This tab']);
+  assert.deepEqual(await palette.getByRole('option').allTextContents(), ['Home', 'Overviewnotes 中文', 'Plugins', 'Open another project…', 'Hide project navigation', 'Show context & access', 'Close viewShared notes', 'RefreshReads again · starts nothing', 'Disconnect this tab']);
   assert.equal(await palette.locator('.command-footer p').textContent(), 'Commands only. To ask about your work, use Claude Code.');
   assert.equal(await chosen(), 'Home');
   await page.keyboard.press('ArrowUp');

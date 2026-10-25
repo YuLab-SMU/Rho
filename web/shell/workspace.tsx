@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import type { BrowserClient, CompositionSummary, WorkspaceSnapshot } from '../../src/browser.js';
-import { groupOf, regions, tabGroups, viewOrder, type Region } from '../../src/shell-layout.js';
+import { closeView, groupOf, moveView, regions, resizeSplit, selectionScope, splitView, tabGroups, viewOrder, type LayoutNode, type LayoutTree, type Region } from '../../src/shell-layout.js';
+import type { Command, CommandGroup } from '../commands.js';
 import { Icon } from '../icons.js';
 import { registry } from '../registry.js';
 import { useLive } from './live.js';
@@ -17,7 +18,7 @@ type Tabs = Extract<Region, { kind: 'tabs' }>;
 // The workspace shell (docs/WORKSPACE-PLAN.md W1): the owner's composition tree drawn as
 // splits and tab groups, owner views mounted within the rendering budget, and a slot for
 // what Rho adds above the work. It decides nothing about attention; useLive does.
-export function Workspace({ composition: recorded, snapshot, client, onAbout, contextTarget, principalId, onShowContext, feedbackContextActive, openView }: { composition: CompositionSummary; snapshot: WorkspaceSnapshot; client: BrowserClient; onAbout: (pluginId: string) => void; contextTarget: HTMLElement | null; principalId?: string; onShowContext: () => void; feedbackContextActive: boolean; mapChipTarget?: HTMLElement | null; openView?: string }) {
+export function Workspace({ composition: recorded, snapshot, client, onAbout, contextTarget, principalId, onShowContext, feedbackContextActive, openView, onCommands }: { onCommands?: (group: CommandGroup | null) => void; composition: CompositionSummary; snapshot: WorkspaceSnapshot; client: BrowserClient; onAbout: (pluginId: string) => void; contextTarget: HTMLElement | null; principalId?: string; onShowContext: () => void; feedbackContextActive: boolean; mapChipTarget?: HTMLElement | null; openView?: string }) {
   const live = useLive(snapshot, recorded, client, principalId), layout = live.layout;
   const root = useMemo(() => regions(layout), [layout]);
   const order = useMemo(() => viewOrder(root), [root]);
@@ -54,6 +55,50 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
   // Divider positions the person set in this tab, until the owner's layout changes.
   const [weights, setWeights] = useState<{ version: number; values: Record<string, number[]> }>({ version: layout.version, values: {} });
   const own = weights.version === layout.version ? weights.values : {};
+  // Layout commands given without dragging (docs/WORKSPACE-PLAN.md W5): one conditional
+  // replacement of the owner's tree, or the owner's own undo. The person's change is adopted
+  // at once; a refusal (a protected view, a newer layout) is said, and nothing is retried.
+  const [layoutProblem, setLayoutProblem] = useState('');
+  const allowed = (method: string) => snapshot.catalog.operations.some(o => o.method === method && o.state === 'available' && o.authorized);
+  const tree: LayoutTree | null = recorded.rootId && recorded.nodes?.length ? { rootId: recorded.rootId, nodes: recorded.nodes as unknown as LayoutNode[] } : null;
+  // A command runs against the newest layout this tab knows: the last read, or the owner's
+  // reply to this tab's own last change when that is newer than the read.
+  const replied = useRef<{ compositionId: string; version: number; rootId?: string; nodes?: unknown[] } | null>(null);
+  const latest = useRef(recorded);
+  latest.current = replied.current && replied.current.compositionId === recorded.compositionId && replied.current.version > recorded.version ? { ...recorded, ...replied.current } as typeof recorded : recorded;
+  const treeNow = (): LayoutTree | null => latest.current.rootId && latest.current.nodes?.length ? { rootId: latest.current.rootId, nodes: latest.current.nodes as unknown as LayoutNode[] } : null;
+  const remember = (result: { compositionId: string; version: number; rootId?: string; nodes?: unknown[] }) => { replied.current = { compositionId: result.compositionId, version: result.version, rootId: result.rootId, nodes: result.nodes }; latest.current = { ...latest.current, ...replied.current } as typeof recorded; };
+  const newId = (kind: string) => `${kind}-${crypto.randomUUID().slice(0, 8)}`;
+  const refusal = (error: unknown) => setLayoutProblem(error instanceof Error ? error.message : 'The layout change was not accepted.');
+  async function writeLayout(next: LayoutTree | null) {
+    if (!next) return;
+    setLayoutProblem('');
+    try { remember(await client.call('composition.apply', { projectId: snapshot.project.id, compositionId: latest.current.compositionId, expectedVersion: latest.current.version, changeId: 'layout-' + crypto.randomUUID(), operations: [{ op: 'replace', rootId: next.rootId, nodes: next.nodes }] } as never, AbortSignal.timeout(30000)) as never); }
+    catch (error) { refusal(error); }
+  }
+  async function undoLayout() {
+    setLayoutProblem('');
+    try { remember(await client.call('composition.undo', { projectId: snapshot.project.id, compositionId: latest.current.compositionId, expectedVersion: latest.current.version, changeId: 'layout-undo-' + crypto.randomUUID() }, AbortSignal.timeout(30000)) as never); }
+    catch (error) { refusal(error); }
+  }
+  // The recovery for a view this build cannot draw: the same binding in a view it can, as a
+  // new tab beside it. The original view and its reference stay where the Agent put them.
+  async function openBeside(viewId: string, beside: { component: string; version: string; props: Record<string, unknown>; bindings: Record<string, unknown> }) {
+    const parent = treeNow()?.nodes.find(n => n.kind === 'group' && n.children?.includes(viewId));
+    if (!parent) return;
+    setLayoutProblem('');
+    const id = newId('view');
+    try { await client.call('composition.apply', { projectId: snapshot.project.id, compositionId: latest.current.compositionId, expectedVersion: latest.current.version, changeId: 'layout-beside-' + crypto.randomUUID(), operations: [{ op: 'insert', parentId: parent.id, index: parent.children!.indexOf(viewId) + 1, node: { id, kind: 'view', ...beside } }] } as never, AbortSignal.timeout(30000)).then(result => remember(result as never)); show(id); }
+    catch (error) { refusal(error); }
+  }
+  // A divider is written back once the person stops moving it.
+  const resizing = useRef<ReturnType<typeof setTimeout>>(undefined);
+  function resized(splitId: string, values: number[]) {
+    setWeights(w => ({ version: layout.version, values: { ...(w.version === layout.version ? w.values : {}), [splitId]: values } }));
+    clearTimeout(resizing.current);
+    if (tree && allowed('composition.apply')) resizing.current = setTimeout(() => { const now = treeNow(); void writeLayout(now && resizeSplit(now, splitId, values)); }, 600);
+  }
+  useEffect(() => () => clearTimeout(resizing.current), []);
   // Eight mounted heavy entries is a rendering budget, never a buffer eviction: render
   // rights go to the first eight available views in layout order, and a view mounts the
   // first time it shows.
@@ -114,10 +159,11 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
       // One view at a time owns the context panel: the one with focus.
       contextTarget: id === focused && !feedbackContextActive ? contextTarget : null, headerTarget: isVisible ? ownHeader(id) : null,
       renderAllowed: rights.current.has(id), onAbout, onRequestFeedback: requestFeedback,
+      onOpenBeside: tree && allowed('composition.apply') && tree.nodes.some(n => n.id === id) ? beside => void openBeside(id, beside) : undefined,
     }} />;
     if (!resource) return owner;
     return <><SourceLine live={live} snapshot={snapshot} resource={resource} viewId={id} onOpenRef={openRef}>
-      {Question && <Question key={resource.id + resource.version + id} projectId={snapshot.project.id} viewId={id} resource={resource} snapshot={snapshot} client={client} principalId={principalId} headerTarget={ownHeader(id)} onOpenResource={openRef} requestFeedback={requestFeedback ? () => requestFeedback(id) : undefined} />}
+      {Question && <Question key={resource.id + resource.version + id} projectId={snapshot.project.id} viewId={id} resource={resource} snapshot={snapshot} client={client} principalId={principalId} headerTarget={ownHeader(id)} selectionScope={selectionScope(view)} onOpenResource={openRef} requestFeedback={requestFeedback ? () => requestFeedback(id) : undefined} />}
     </SourceLine>{owner}</>;
   };
   const render: TabRender = {
@@ -128,8 +174,28 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
   const firstTitle = (region: Region): string => { const id = region.kind === 'tabs' ? shown(region) : viewOrder(region)[0]; return id ? title(byId.get(id)!, snapshot) : 'view'; };
   const draw = (region: Region): ReactNode => region.kind === 'tabs'
     ? <TabGroup key={region.id} group={region} name={groupName(region.id)} selected={shown(region)} onSelect={show} onHeader={headerRef(region.id)} render={render} />
-    : <Split key={region.id} region={region} weights={own[region.id] ?? region.weights} onResize={values => setWeights(w => ({ version: layout.version, values: { ...(w.version === layout.version ? w.values : {}), [region.id]: values } }))}
+    : <Split key={region.id} region={region} weights={own[region.id] ?? region.weights} onResize={values => resized(region.id, values)}
       label={i => `Resize ${firstTitle(region.children[i - 1])} and ${firstTitle(region.children[i])}`}>{region.children.map(draw)}</Split>;
+  // The focused view's layout commands, offered in the command palette.
+  useEffect(() => {
+    if (!onCommands) return;
+    const commands: Command[] = [], view = byId.get(focused), name = view ? title(view, snapshot) : '';
+    if (tree && view && allowed('composition.apply') && tree.nodes.some(n => n.id === focused)) {
+      // Offered when it applies now; computed again from the latest layout when it runs.
+      const viewId = focused;
+      const offer = (id: string, label: string, change: (t: LayoutTree) => LayoutTree | null, before?: () => void) => {
+        if (change(tree)) commands.push({ id, label, icon: id === 'layout-close' ? 'close' : 'layout', meta: name, run: () => { const now = treeNow(); before?.(); void writeLayout(now && change(now)); } });
+      };
+      offer('layout-split-right', 'Split right', t => splitView(t, viewId, 'horizontal', newId));
+      offer('layout-split-down', 'Split down', t => splitView(t, viewId, 'vertical', newId));
+      offer('layout-next', 'Move to the next group', t => moveView(t, viewId, 1, newId));
+      offer('layout-previous', 'Move to the previous group', t => moveView(t, viewId, -1, newId));
+      offer('layout-close', 'Close view', t => closeView(t, viewId), () => live.release(viewId));
+    }
+    if (allowed('composition.undo') && (recorded as { history?: unknown[] }).history?.length) commands.push({ id: 'layout-undo', label: 'Undo layout change', icon: 'refresh', run: () => void undoLayout() });
+    onCommands(commands.length ? { label: 'Layout', commands } : null);
+  }, [focused, recorded, snapshot.catalog]);
+  useEffect(() => () => onCommands?.(null), []);
   const tabId = useId(), narrowList = useRef<HTMLDivElement>(null);
   useTabOverflow(narrowList, focused, narrow);
   function moveNarrow(event: KeyboardEvent<HTMLDivElement>) {
@@ -142,9 +208,10 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
     <Bar live={live} focusObject={live.screen?.views.find(v => v.id === focused)?.object ?? null} evidence={evidence} held={items.length - unhidden.length} narrow={narrow}
       onEvidence={() => { setEvidence(v => !v); live.act({ kind: 'reveal', target: evidence ? null : live.screen?.agent?.object ?? 'workspace' }); }} />
     <Interruption live={live} items={unhidden} onHide={key => setHidden(h => [...h, key])} />
+    {layoutProblem && <div className="shell-interruption problem" data-rho-layer="transient" data-rho-interruption="" role="alert"><span className="shell-interruption-text">{layoutProblem}</span><button className="shell-quiet" onClick={() => setLayoutProblem('')}>Dismiss</button></div>}
     {evidence ? <Evidence live={live} principalId={principalId} /> : <Digest live={live} />}
     <div className="shell-stage" onPointerDownCapture={event => live.hold((event.target as HTMLElement).closest<HTMLElement>('[data-owner-view]')?.dataset.ownerView ?? focused)} onKeyDownCapture={() => live.hold(focused)} onCompositionStartCapture={() => live.hold(focused)}>
-      {contextTarget && feedbackContextActive && feedbackSource && feedbackAllowed && feedbackEntry && snapshot.feedback?.draftDocumentId && createPortal(feedbackLimit ? <section className="unavailable" role="status"><h3>Close a view before opening feedback</h3><p>Existing views and input are kept within this layout's view limit.</p></section> : <feedbackEntry.View key={[snapshot.project.id, snapshot.feedback.taskId, feedbackSource, principalId].join(':')} viewId={'feedback:' + feedbackSource} view={{ id: 'feedback:' + feedbackSource, component: feedbackEntry.component, version: feedbackEntry.componentVersion, props: { title: 'Your question', taskId: snapshot.feedback.taskId, sourceSelectionScope: { kind: 'shared', id: feedbackSource } }, bindings: { draft: { kind: 'live-document', documentId: snapshot.feedback.draftDocumentId } } }} projectId={snapshot.project.id} snapshot={snapshot} client={client} active principalId={principalId} contextTarget={null} feedbackConfiguration={{ ...snapshot.feedback, draftDocumentId: snapshot.feedback.draftDocumentId }} />, contextTarget)}
+      {contextTarget && feedbackContextActive && feedbackSource && feedbackAllowed && feedbackEntry && snapshot.feedback?.draftDocumentId && createPortal(feedbackLimit ? <section className="unavailable" role="status"><h3>Close a view before opening feedback</h3><p>Existing views and input are kept within this layout's view limit.</p></section> : <feedbackEntry.View key={[snapshot.project.id, snapshot.feedback.taskId, feedbackSource, principalId].join(':')} viewId={'feedback:' + feedbackSource} view={{ id: 'feedback:' + feedbackSource, component: feedbackEntry.component, version: feedbackEntry.componentVersion, props: { title: 'Your question', taskId: snapshot.feedback.taskId, sourceSelectionScope: byId.get(feedbackSource) ? selectionScope(byId.get(feedbackSource)!) : { kind: 'shared', id: feedbackSource } }, bindings: { draft: { kind: 'live-document', documentId: snapshot.feedback.draftDocumentId } } }} projectId={snapshot.project.id} snapshot={snapshot} client={client} active principalId={principalId} contextTarget={null} feedbackConfiguration={{ ...snapshot.feedback, draftDocumentId: snapshot.feedback.draftDocumentId }} />, contextTarget)}
       {!root ? <div className="empty"><h2>No views in this layout</h2><p>The saved layout is empty. No view is created automatically.</p></div>
         : narrow ? <section className="shell-group">
           <div className="shell-tabbar"><div ref={narrowList} className="shell-tabs" role="tablist" aria-label="Views" onKeyDown={moveNarrow}>

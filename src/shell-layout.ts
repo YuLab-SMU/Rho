@@ -53,3 +53,130 @@ export function resize(weights: number[], divider: number, delta: number, floor 
   next[divider] = left; next[divider + 1] = pair - left;
   return next;
 }
+
+// The selection channel of a view. Views bound to one table version share one channel, so
+// a table and a chart of that version select the same entities and a sort or filter in one
+// never changes what the other shows selected; any other view keeps a channel of its own.
+// A new version is a new channel: a selection never migrates to different bytes.
+export function selectionScope(view: { id: string; bindings?: Record<string, unknown> }): { kind: 'shared'; id: string } {
+  const data = view.bindings?.data as { id?: unknown; version?: unknown } | undefined;
+  const part = (value: string) => value.replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 40);
+  return typeof data?.id === 'string' && typeof data.version === 'string' ? { kind: 'shared', id: `linked:${part(data.id)}@${part(data.version)}` } : { kind: 'shared', id: view.id };
+}
+
+// Layout commands without dragging (docs/WORKSPACE-PLAN.md W5): each returns the owner tree
+// after one change, or null when the change does not apply, so the shell can send it as one
+// conditional replacement. A tab group is the node directly under a split (or the root) that
+// holds a view's tabs; a pane left with one child collapses into it.
+export interface LayoutNode { id: string; kind: 'group' | 'view'; children?: string[]; presentation?: { mode?: string; axis?: Axis; weights?: number[] }; [key: string]: unknown }
+export interface LayoutTree { rootId: string; nodes: LayoutNode[] }
+const isSplit = (node: LayoutNode | undefined) => node?.presentation?.mode === 'split';
+const parentOf = (nodes: LayoutNode[], id: string) => nodes.find(n => n.kind === 'group' && n.children?.includes(id));
+function tabOwner(nodes: LayoutNode[], viewId: string) {
+  let id = viewId;
+  for (;;) { const parent = parentOf(nodes, id); if (!parent || isSplit(parent)) return id; id = parent.id; }
+}
+function leaves(nodes: LayoutNode[], id: string): string[] {
+  const node = nodes.find(n => n.id === id);
+  return !node ? [] : node.kind === 'view' ? [id] : (node.children ?? []).flatMap(child => leaves(nodes, child));
+}
+// Groups left empty disappear, and a split left with one pane becomes that pane.
+function tidy(tree: LayoutTree): LayoutTree {
+  let nodes = tree.nodes, rootId = tree.rootId;
+  for (let changed = true; changed;) {
+    changed = false;
+    for (const node of nodes) {
+      if (node.kind !== 'group' || node.id === rootId) continue;
+      const parent = parentOf(nodes, node.id)!;
+      if (!node.children?.length) {
+        const index = parent.children!.indexOf(node.id);
+        parent.children = parent.children!.filter(id => id !== node.id);
+        if (isSplit(parent)) parent.presentation = { ...parent.presentation, weights: (parent.presentation!.weights ?? []).filter((_, i) => i !== index) };
+        nodes = nodes.filter(n => n.id !== node.id); changed = true; break;
+      }
+      if (isSplit(node) && node.children.length === 1) {
+        const only = node.children[0]!;
+        parent.children = parent.children!.map(id => id === node.id ? only : id);
+        nodes = nodes.filter(n => n.id !== node.id); changed = true; break;
+      }
+    }
+    const root = nodes.find(n => n.id === rootId);
+    if (root && isSplit(root) && root.children?.length === 1) {
+      const only = root.children[0]!, child = nodes.find(n => n.id === only)!;
+      if (child.kind === 'group') { nodes = nodes.filter(n => n.id !== rootId); rootId = only; changed = true; }
+    }
+  }
+  return { rootId, nodes };
+}
+const copy = (tree: LayoutTree): LayoutTree => ({ rootId: tree.rootId, nodes: structuredClone(tree.nodes) });
+function detach(tree: LayoutTree, viewId: string) {
+  const parent = parentOf(tree.nodes, viewId)!, index = parent.children!.indexOf(viewId);
+  parent.children = parent.children!.filter(id => id !== viewId);
+  if (isSplit(parent)) parent.presentation = { ...parent.presentation, weights: (parent.presentation!.weights ?? []).filter((_, i) => i !== index) };
+}
+// Takes a view out of the tabs it shares and shows it beside them along the axis.
+export function splitView(tree: LayoutTree, viewId: string, axis: Axis, newId: (kind: string) => string): LayoutTree | null {
+  if (!tree.nodes.some(n => n.id === viewId && n.kind === 'view') || !parentOf(tree.nodes, viewId)) return null;
+  const owner = tabOwner(tree.nodes, viewId);
+  if (owner === viewId || leaves(tree.nodes, owner).length < 2) return null;
+  const next = copy(tree);
+  detach(next, viewId);
+  const pane: LayoutNode = { id: newId('group'), kind: 'group', children: [viewId] };
+  next.nodes.push(pane);
+  const holder = parentOf(next.nodes, owner);
+  if (holder && isSplit(holder) && holder.presentation!.axis === axis) {
+    const index = holder.children!.indexOf(owner), weights = [...(holder.presentation!.weights ?? holder.children!.map(() => 1))], half = (weights[index] ?? 1) / 2;
+    holder.children!.splice(index + 1, 0, pane.id); weights.splice(index, 1, half, half);
+    holder.presentation = { ...holder.presentation, weights };
+  } else {
+    const split: LayoutNode = { id: newId('split'), kind: 'group', children: [owner, pane.id], presentation: { mode: 'split', axis, weights: [1, 1] } };
+    next.nodes.push(split);
+    if (holder) holder.children = holder.children!.map(id => id === owner ? split.id : id); else next.rootId = split.id;
+  }
+  return tidy(next);
+}
+// The tab groups in reading order, as the shell draws them.
+function owners(tree: LayoutTree): string[] {
+  const out: string[] = [];
+  const walk = (id: string, underSplit: boolean) => {
+    const node = tree.nodes.find(n => n.id === id); if (!node) return;
+    if (isSplit(node)) { for (const child of node.children ?? []) walk(child, true); return; }
+    if (underSplit || id === tree.rootId) out.push(id);
+  };
+  walk(tree.rootId, false);
+  return out;
+}
+// Moves a view into the next (1) or previous (-1) tab group, as its last tab.
+export function moveView(tree: LayoutTree, viewId: string, direction: 1 | -1, newId: (kind: string) => string): LayoutTree | null {
+  if (!parentOf(tree.nodes, viewId)) return null;
+  const groups = owners(tree), from = tabOwner(tree.nodes, viewId), target = groups[groups.indexOf(from) + direction];
+  if (!target || target === from) return null;
+  const next = copy(tree);
+  detach(next, viewId);
+  const node = next.nodes.find(n => n.id === target)!;
+  if (node.kind === 'group') node.children = [...(node.children ?? []), viewId];
+  else {
+    const tabs: LayoutNode = { id: newId('group'), kind: 'group', children: [target, viewId] };
+    next.nodes.push(tabs);
+    const holder = parentOf(next.nodes, target)!;
+    holder.children = holder.children!.map(id => id === target ? tabs.id : id);
+  }
+  return tidy(next);
+}
+// Closes a view: its node leaves the tree; its records, input and runs stay with their owners.
+export function closeView(tree: LayoutTree, viewId: string): LayoutTree | null {
+  if (!parentOf(tree.nodes, viewId)) return null;
+  const next = copy(tree);
+  detach(next, viewId);
+  next.nodes = next.nodes.filter(n => n.id !== viewId);
+  return tidy(next);
+}
+// Keeps a divider where the person left it.
+export function resizeSplit(tree: LayoutTree, splitId: string, weights: number[]): LayoutTree | null {
+  const node = tree.nodes.find(n => n.id === splitId);
+  if (!isSplit(node) || node!.children!.length !== weights.length) return null;
+  const next = copy(tree);
+  const split = next.nodes.find(n => n.id === splitId)!;
+  split.presentation = { ...split.presentation, weights: weights.map(w => Math.round(w * 1000) / 1000) };
+  return next;
+}

@@ -4,11 +4,14 @@ import { Icon, type IconName } from '../icons.js';
 import { resourceIcon } from '../project.js';
 import { registry } from '../registry.js';
 import { boundResource } from '../executions.js';
+import { selectionScope } from '../../src/shell-layout.js';
 
 export interface OwnerParams {
   view: ViewDescription; snapshot: WorkspaceSnapshot; client: BrowserClient; principalId?: string;
   compositionId: string; compositionVersion: number; contextTarget: HTMLElement | null; headerTarget: HTMLElement | null;
   renderAllowed: boolean; onAbout: (pluginId: string) => void; onRequestFeedback?: (viewId: string) => void;
+  // Opens a view that can show this one's exact binding beside it; absent when the layout cannot be written.
+  onOpenBeside?: (view: { component: string; version: string; props: Record<string, unknown>; bindings: Record<string, unknown> }) => void;
 }
 const clientEpoch = crypto.randomUUID();
 type Binding = { documentId?: string; id?: string; version?: string | number };
@@ -57,6 +60,20 @@ function explain(view: ViewDescription, snapshot: WorkspaceSnapshot) {
   else { lead = `This build doesn't include the ${viewName} view yet.`; build = `${pluginName} is on here; its view isn't in this build yet`; }
   return { lead: lead + ' ' + untouched, shows: shown.map(s => s.line).join('; '), needs: plugin ? `The ${viewName} view, from the ${pluginName} plugin` : `The ${viewName} view`, build, plugin, pluginName };
 }
+// A view this build can draw for an unavailable view's exact binding: the same table version
+// in a table, the same document in the editor. The unavailable view and its reference stay.
+function besideOf(view: ViewDescription, snapshot: WorkspaceSnapshot) {
+  const named = String(view.props.title ?? view.component);
+  for (const [, b] of bindings(view)) {
+    const table = b.id ? snapshot.resources.find(r => r.id === b.id && r.version === b.version && r.kind === 'table') : undefined;
+    const candidate = table ? { component: 'rho.table', version: '0.2.0', props: { title: named + ' · as a table' }, bindings: { data: { id: b.id, version: b.version } }, label: 'Open this version in a table' }
+      : b.documentId ? { component: 'rho.editor', version: '0.2.0', props: { title: named + ' · in the editor' }, bindings: { document: { kind: 'live-document', documentId: b.documentId } }, label: 'Open this document in the editor' } : null;
+    if (!candidate) continue;
+    const probe = { id: "probe", component: candidate.component, version: candidate.version, props: candidate.props, bindings: candidate.bindings } as unknown as ViewDescription;
+    if (availableEntry(probe, snapshot)) return { label: candidate.label, view: { component: candidate.component, version: candidate.version, props: candidate.props, bindings: candidate.bindings } };
+  }
+  return null;
+}
 // One owner view in the layout. The owner draws its content; the shell attaches the exact
 // layout/build/client identity to the owner's own visibility evidence.
 export function OwnerView({ params, active }: { params: OwnerParams; active: boolean }) {
@@ -72,9 +89,9 @@ export function OwnerView({ params, active }: { params: OwnerParams; active: boo
       try { await params.client.call('view.observe', input); }
       catch (error: any) { if (error?.error?.kind || error?.kind) throw error; await params.client.call('view.observe', input); }
     } : undefined;
-    return <div className="shell-owner" data-owner-body=""><entry.View viewId={view.id} view={view} projectId={snapshot.project.id} snapshot={snapshot} client={params.client} active={active} contextTarget={params.contextTarget} principalId={params.principalId} headerTarget={params.headerTarget} renderObservation={observation} requestFeedback={params.onRequestFeedback ? () => params.onRequestFeedback!(view.id) : undefined} /></div>;
+    return <div className="shell-owner" data-owner-body=""><entry.View viewId={view.id} view={view} projectId={snapshot.project.id} snapshot={snapshot} client={params.client} active={active} contextTarget={params.contextTarget} principalId={params.principalId} selectionScope={selectionScope(view)} headerTarget={params.headerTarget} renderObservation={observation} requestFeedback={params.onRequestFeedback ? () => params.onRequestFeedback!(view.id) : undefined} /></div>;
   }
-  const why = explain(view, snapshot);
+  const why = explain(view, snapshot), fallback = besideOf(view, snapshot);
   return <section className="unavailable" aria-label={title(view)}>
     <span className="unavailable-icon"><Icon name={viewIcon(view, snapshot)} size={22} stroke={1.7} /></span>
     <h2>This view can't be shown here yet</h2>
@@ -85,6 +102,7 @@ export function OwnerView({ params, active }: { params: OwnerParams; active: boo
       <div><dt>In this build</dt><dd>{why.build}</dd></div>
     </dl>
     <div className="unavailable-actions">
+      {fallback && params.onOpenBeside && <button className="quiet-button" onClick={() => params.onOpenBeside!(fallback.view)}>{fallback.label}</button>}
       {why.plugin && <button className="quiet-button" onClick={() => params.onAbout(why.plugin!.id)}>About {why.pluginName}</button>}
       <details className="view-reference"><summary>View reference</summary>
         <dl>

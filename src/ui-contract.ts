@@ -66,6 +66,9 @@ export interface UiViewProps {
   // Owner reports real cells, shell attaches exact layout/build/client identity.
   renderObservation?: (evidence: { evidence: 'dom-visible' | 'hidden' | 'unavailable' | 'unmounted'; coverage: any; time: { browserObservedAt: string; performanceNowMs: number; clockDomain: string } }) => Promise<void>;
   requestFeedback?: () => void;
+  // The selection channel the shell assigns (shell-layout.ts selectionScope): views of one
+  // table version share it. Without it a view uses a channel of its own id.
+  selectionScope?: { kind: 'shared'; id: string };
   // A rendered feedback view always has its draft document: the shell only mounts the
   // entry when the routed configuration names one, and the entry re-checks the binding.
   feedbackConfiguration?: Omit<NonNullable<WorkspaceSnapshot['feedback']>, 'draftDocumentId'> & { draftDocumentId: string };
@@ -87,7 +90,7 @@ export interface UiContribution {
   // The full form inside a layout.
   View: ComponentType<UiViewProps>;
   // Optional object feedback supplied only by the selected Annotations entry.
-  TableQuestion?: ComponentType<Pick<UiViewProps, 'projectId' | 'viewId' | 'snapshot' | 'client' | 'principalId' | 'requestFeedback' | 'headerTarget'> & {
+  TableQuestion?: ComponentType<Pick<UiViewProps, 'projectId' | 'viewId' | 'snapshot' | 'client' | 'principalId' | 'requestFeedback' | 'headerTarget' | 'selectionScope'> & {
     resource: { id: string; version: string };
     onOpenResource?: (ref: { id: string; version: string }) => void;
   }>;

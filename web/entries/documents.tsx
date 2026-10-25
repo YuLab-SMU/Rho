@@ -10,7 +10,8 @@ function Editor(props: UiViewProps) {
   const canType = editable(props);
   const saveable = props.snapshot.catalog.operations.some(o => o.method === 'document.save' && o.state === 'available' && o.authorized);
   return <DocumentEditorView view={props.view} projectId={props.projectId} client={props.client} active={props.active}
-      documentVersion={doc?.version} documentRevision={doc?.revision} principalId={props.principalId} contextTarget={props.contextTarget} headerTarget={props.headerTarget} maxUnconfirmedBytes={bufferBytes(props)} editable={canType} saveable={saveable} />;
+      documentVersion={doc?.version} documentRevision={doc?.revision} principalId={props.principalId} contextTarget={props.contextTarget} headerTarget={props.headerTarget} maxUnconfirmedBytes={bufferBytes(props)} editable={canType} saveable={saveable}
+      askable={props.snapshot.catalog.operations.some(o => o.method === 'context.create' && o.state === 'available' && o.authorized)} />;
 }
 // The item's passage, change, outline or summary inside Rho's frame. Cards read
 // the same buffer as the editor; a reference to another item is Rho's chip.

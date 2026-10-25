@@ -6,6 +6,7 @@ import { execFile, spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { promisify } from 'node:util';
 import { createHash } from 'node:crypto';
+import { selectionScope } from '../dist/shell-layout.js';
 
 const packageRoot = path.resolve(process.env.RHO_PACKAGE_ROOT ?? fileURLToPath(new URL('..', import.meta.url)));
 let driver;
@@ -176,7 +177,8 @@ try {
   const keyCell = page.locator('.ag-row[row-index="0"] [col-id="id"]');
   assert.equal(await keyCell.innerText(), 'id-0000');
   await page.locator('.ag-row[row-index="0"] input[type="checkbox"]').check();
-  const scope = { kind: 'shared', id: 'Table' };
+  // The table's channel is the one every view of this version shares (shell-layout.ts).
+  const scope = selectionScope({ id: 'Table', bindings: { data: { id: table.id, version: table.version } } });
   const readSelection = () => call('interaction.selection.read', { scope });
   await poll(readSelection, s => s.selection?.entities.includes('id-0000'), 'shared keyed selection');
   await page.locator('.ag-header-cell[col-id="score"]').click();
