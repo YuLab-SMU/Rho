@@ -18,7 +18,10 @@ export const browserMethods = ['protocol.describe', 'protocol.validate', 'projec
   // reference, starts nothing, and the Agent's fetch stays a separate fact.
   'context.create', 'document.open', 'annotation.create',
   // People see and steer the task map; only the Agent declares its items.
-  'task.map.read', 'task.map.present', 'task.map.respond'];
+  'task.map.read', 'task.map.present', 'task.map.respond',
+  // A person runs an action from the form an Agent proposed, reads a run's bounded output,
+  // and may stop a run of a project this pairing includes (docs/WORKSPACE-PLAN.md decisions 2, 3).
+  'action.submit', 'action.output', 'action.cancel'];
 interface Pairing { hash: string; root: string; methods: string[]; expires: number; selectedProjects: string[] }
 export class BrowserAccess {
   limits: typeof browserLimits;

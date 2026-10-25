@@ -91,7 +91,8 @@ export const integrityReportSchema = { ...obj({
   files: integer, checkedAt: timestamp, manifestDigest: digest
 }, ['state']), additionalProperties: true };
 export const domainReportSchema = { ...obj({ state: { enum: ['unchecked', 'checked'] }, scope: text, detail: { type: 'object' } }, ['state']), additionalProperties: true };
-export const cancellationSchema = obj({ requestedAt: timestamp, cli: cliSchema, confirmation: text });
+// Who asked is recorded beside the submitter; older records named no requester.
+export const cancellationSchema = obj({ requestedAt: timestamp, requestedBy: text, cli: cliSchema, confirmation: text }, ['requestedAt', 'cli', 'confirmation']);
 
 // --- Selections -------------------------------------------------------------
 export const selectionValueSchema = { oneOf: [

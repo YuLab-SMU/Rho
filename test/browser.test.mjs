@@ -27,7 +27,9 @@ test('one-use pairing grants a narrowed root, never operator/native/session auth
     assert.deepEqual(replies.map(r => r.status).sort(), [200, 401]);
     const { value: grant } = await replies.find(r => r.status === 200).json();
     assert.notEqual(grant.token, f.service.adminToken);
-    assert.ok(grant.methods.every(m => !m.startsWith('session.') && !m.startsWith('action.') && !m.startsWith('requirements.')));
+    assert.ok(grant.methods.every(m => !m.startsWith('session.') && !m.startsWith('requirements.')));
+    // A person submits from an Agent's proposed form, reads bounded output and may stop a run (decisions 2, 3); nothing else.
+    assert.deepEqual(grant.methods.filter(m => m.startsWith('action.')).sort(), ['action.cancel', 'action.output', 'action.submit']);
     const browser = new BrowserClient({ url: f.service.url, ...grant });
     const p = await browser.call('project.create', { name: 'project 中文' });
     const reopened = await browser.call('project.open', { path: 'project 中文' }); assert.equal(reopened.id, p.id);
@@ -47,7 +49,7 @@ test('one-use pairing grants a narrowed root, never operator/native/session auth
     // U2 grants identity-bearing edits and saves, without global undo or execution.
     assert.ok(grant.principalId.startsWith('browser:'));
     for (const method of ['document.edit', 'document.save', 'document.undoOwn', 'document.revert', 'data.page', 'interaction.selection.set', 'context.create', 'document.open', 'annotation.create']) assert.ok(grant.methods.includes(method), method);
-    for (const method of ['session.grant', 'session.browser.pair', 'session.browser.revoke', 'action.submit', 'capability.configure', 'document.abandonSave', 'document.undo', 'annotation.reply', 'composition.put', 'view.close']) await assert.rejects(direct.call(method, {}), e => e.error.kind === 'unauthorized', method);
+    for (const method of ['session.grant', 'session.browser.pair', 'session.browser.revoke', 'action.retry', 'action.lookup', 'capability.configure', 'document.abandonSave', 'document.undo', 'annotation.reply', 'composition.put', 'view.close']) await assert.rejects(direct.call(method, {}), e => e.error.kind === 'unauthorized', method);
     assert.equal((await browser.call('observation.snapshot', { projectId: p.id })).host.exitCode, 3);
     assert.equal(f.service.bridge.owned.size, 0);
     await assert.rejects(fs.stat(path.join(p.root, '.rho/host.sock')), { code: 'ENOENT' });

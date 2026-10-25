@@ -28,6 +28,28 @@ const integrityWords: Record<IntegrityState, string> = {
 export const executionWord = (state: string) => executionWords[state] ?? state;
 export const integrityWord = (state: IntegrityState) => integrityWords[state] ?? state;
 
+// What a stop request led to, from Core's own run status and signal record. Accepting a
+// request is not a stop: only an ended process is "stopped", and a process that ended on
+// its own before any signal was sent finished first, whatever its exit.
+export type StopState = NonNullable<RunFacts['stop']>['state'];
+export interface CoreExit { Code?: number; Signal?: number }
+export interface CoreStatus { Finished?: { exit?: CoreExit | 'Unknown' | null }; NotStarted?: unknown; Gone?: unknown; Detached?: unknown }
+export interface CoreCancel { term_sent_at?: unknown; kill_sent_at?: unknown }
+export function stopState(status: CoreStatus, cancel?: CoreCancel | null): StopState {
+  const signalled = !!(cancel?.term_sent_at || cancel?.kill_sent_at);
+  if (status.Finished) {
+    const exit = typeof status.Finished.exit === 'object' ? status.Finished.exit : null;
+    return !signalled || exit?.Code === 0 ? 'finished-first' : 'stopped';
+  }
+  if (status.NotStarted) return 'stopped';
+  if (status.Gone || status.Detached) return 'unconfirmed';
+  return signalled ? 'signalled' : 'requested';
+}
+export function exitWords(exit: CoreExit | 'Unknown' | null | undefined) {
+  if (exit === undefined || exit === null) return null;
+  return typeof exit === 'object' && exit.Signal !== undefined ? 'signal ' + exit.Signal : typeof exit === 'object' && exit.Code !== undefined ? 'code ' + exit.Code : 'unknown';
+}
+
 export function byId(runs: RunFacts[]) { return new Map(runs.map(run => [run.operationId, run])); }
 
 // The run that produced a registered artifact version, when the owner recorded one.

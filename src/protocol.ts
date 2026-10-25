@@ -225,7 +225,12 @@ export const responses: Record<string, any> = { ...base.responses, ...ownerRespo
     // withheld: submissions of one file share it, so a retry chain is visible
     // without this summary disclosing the project's file names.
     sourceKey: { anyOf: [text, { type: 'null' }] },
-    hasStderr: { type: 'boolean' }
+    hasStderr: { type: 'boolean' },
+    // A stop request and what Core reported afterwards, kept apart: "requested" and
+    // "signalled" are not stopped; only an ended process is.
+    stop: { anyOf: [{ type: 'null' }, response({ requestedAt: text, by: text, state: { enum: ['requested', 'signalled', 'stopped', 'finished-first', 'unconfirmed'] }, exit: { anyOf: [text, { type: 'null' }] } })] },
+    // The failed or unknown run this one repairs, under its own new identity.
+    repairOf: { anyOf: [text, { type: 'null' }] }
   })), total: integer, truncated: { type: 'boolean' } }),
   'protocol.validate': response({ method: text, valid: { type: 'boolean' }, problems: array(response({ path: text, keyword: text, message: text, fix: text })), requires: array(text) }),
   // A passing check carries no remedy, so the remedy is a possibly-empty string.

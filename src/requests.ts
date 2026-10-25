@@ -9,7 +9,7 @@ import type { Principal, Project } from './state.js';
 const ajv = new Ajv({ allErrors: true, strict: false });
 export interface Operation {
   operationId: string; principal: string; projectId: string; requestDigest: string; request: any; action: string; actionVersion: string; acceptedAt: string;
-  core: { caller: string; requestId: string }; delivery: string; execution: string; native: any; integrity: any; domain: any; interpretation: any; plan: ActionPlan; lastCli?: CliResult; checks?: any; cancellation?: any;
+  core: { caller: string; requestId: string }; delivery: string; execution: string; native: any; integrity: any; domain: any; interpretation: any; plan: ActionPlan; lastCli?: CliResult; checks?: any; cancellation?: any; repairOf?: string;
 }
 export const publicOperation = (run: Operation) => ({ ...run, request: run.request, plan: { ...run.plan, code: undefined, codeDigest: digest(run.plan.code) } });
 export const requestLimits = { maxConcurrentActions: 2, maxOperations: 256, maxLogPageBytes: 65536, maxCodeBytes: 1024 * 1024, maxReconciled: 8 };
@@ -65,7 +65,22 @@ export class Requests {
   }
   // A single lookup reports the same reconciled facts as a listing: a caller that asks
   // about one run must not be told a different story than the one who lists them all.
-  async lookup(principal: Principal, operationId: string) { return this.reconcile(await readJson<Operation>(await this.file(principal, operationId))); }
+  // A read may reach a run another principal of this project submitted (a person's run
+  // from the Agent's proposal); changing a run stays with whoever submitted it.
+  async lookup(principal: Principal, operationId: string, shared = false) {
+    const own = await readJson<Operation | null>(await this.file(principal, operationId), shared ? null : undefined);
+    return own ? this.reconcile(own) : this.find(operationId);
+  }
+  // The project's run with this operation ID, whoever submitted it. Missing, guessed and
+  // another project's IDs get the same answer: there is no such run here.
+  async find(operationId: string) {
+    const d = await this.directory();
+    const runs = await Promise.all((await fs.readdir(d)).filter(f => /^[a-f0-9]{64}\.json$/.test(f)).map(f => readJson<Operation>(path.join(d, f))));
+    const matches = runs.filter(r => r.operationId === operationId && r.projectId === this.project.id);
+    requireThat(matches.length > 0, 'not_found', 'No run with this operation ID in this project.');
+    requireThat(matches.length === 1, 'conflict', 'More than one submitter used this operation ID; ask the one that submitted the run you mean.');
+    return this.reconcile(matches[0]!);
+  }
   async submit(principal: Principal, body: any, preparationAction = false) {
     const file = await this.file(principal, body.operationId);
     const request = { kind: preparationAction ? 'requirements.prepare' : 'action.submit', ...body };
@@ -74,6 +89,12 @@ export class Requests {
     if (existing) {
       requireThat(existing.requestDigest === requestDigest, 'conflict', 'This operationId already names different immutable content.', { operationId: body.operationId, requestDigest: existing.requestDigest });
       return existing; // Explicit action.retry can deliver an accepted not-sent intent.
+    }
+    // A repair is a new identity that names the run it repairs; it never reuses that run's ID.
+    if (body.repairOf !== undefined) {
+      requireThat(body.repairOf !== body.operationId, 'invalid', 'A repair is a new run: give it its own operationId and name the original in repairOf.');
+      const original = await this.find(body.repairOf);
+      requireThat(['failed', 'unknown'].includes(original.execution), 'condition', 'Only a failed run or one with an unknown outcome is repaired; read it with action.lookup first.', { operationId: body.repairOf, execution: original.execution });
     }
     const actions = this.owners.assembly.catalog.actions;
     const action = preparationAction ? { id: 'r.execute', version: '0.2.0', inputSchema: {} } : actions.find(a => a.id === body.action);
@@ -99,7 +120,7 @@ export class Requests {
     const core = { caller: 'rho:' + digest(principal.id + ':' + this.project.id).slice(0, 48), requestId: this.key(principal, body.operationId) };
     const plan = preparationAction ? await provider.preparation(this.project.root, requirements, this.bridge.rscript) : await this.owners.assembly.need('r').planExecution(this.project.root, body.input, core.requestId, checks.environment, this.owners.need('files'), this.owners.documents, this.owners.assembly.config.r);
     requireThat(Buffer.byteLength(plan.code) <= this.limits.maxCodeBytes, 'limit', 'Script snapshot exceeds the selected code byte limit.', { limit: 'maxCodeBytes', maximum: this.limits.maxCodeBytes });
-    const run: Operation = { operationId: body.operationId, principal: principal.id, projectId: this.project.id, requestDigest, request, action: preparationAction ? 'requirements.prepare:' + action.id : action.id, actionVersion: action.version, acceptedAt: now(), core, delivery: 'not-sent', execution: 'unobserved', native: null, integrity: { state: 'unchecked' }, domain: { state: 'unchecked' }, interpretation: { state: 'absent' }, plan, checks };
+    const run: Operation = { operationId: body.operationId, principal: principal.id, projectId: this.project.id, requestDigest, request, action: preparationAction ? 'requirements.prepare:' + action.id : action.id, actionVersion: action.version, acceptedAt: now(), core, delivery: 'not-sent', execution: 'unobserved', native: null, integrity: { state: 'unchecked' }, domain: { state: 'unchecked' }, interpretation: { state: 'absent' }, plan, checks, ...(body.repairOf ? { repairOf: body.repairOf } : {}) };
     await atomicJson(file, run); // Durable service acknowledgement precedes ANY Core submit.
     await this.emit('operation.accepted', run.operationId);
     return this.deliver(run, true);
@@ -136,31 +157,34 @@ export class Requests {
     return this.deliver(run, run.delivery === 'not-sent');
   }
   async observe(principal: Principal, operationId: string) {
-    const run = await this.lookup(principal, operationId);
+    const run = await this.lookup(principal, operationId, true);
     const result = await this.bridge.call(this.project.root, 'lookup', run.core.caller, run.core.requestId, ['--record']);
     this.apply(run, result, false);
     if (run.action.startsWith('requirements.prepare:') && run.execution === 'completed' && run.plan.source.requirements && this.owners.assembly.optional('requirements')) run.checks = await this.owners.assembly.need('requirements').checkRequirements(this.project.root, run.plan.source.requirements, this.bridge.rscript);
     await this.persist(run); return run;
   }
+  // An Agent cancels what it submitted. A person's tab whose pairing includes this project
+  // may stop any of its runs (docs/WORKSPACE-PLAN.md decision 2); the submitter stays the
+  // submitter and the request names who asked.
   async cancel(principal: Principal, operationId: string) {
-    const run = await this.lookup(principal, operationId);
+    const run = principal.kind === 'browser' ? await this.find(operationId) : await this.lookup(principal, operationId);
     const result = await this.bridge.call(this.project.root, 'cancel', run.core.caller, run.core.requestId);
-    run.cancellation = { requestedAt: now(), cli: result, confirmation: 'Observe the original native status; request acknowledgement is not confirmed stop.' };
+    run.cancellation = { requestedAt: now(), requestedBy: principal.id, cli: result, confirmation: 'Observe the original native status; request acknowledgement is not confirmed stop.' };
     this.apply(run, result, false); await this.persist(run); await this.emit('operation.cancel-requested', operationId); return run;
   }
   async output(principal: Principal, operationId: string, stream: string, offset: number, maxBytes = 65536) {
     requireThat(maxBytes <= this.limits.maxLogPageBytes, 'limit', 'Log page exceeds the retained read budget.', { limit: 'maxLogPageBytes', maximum: this.limits.maxLogPageBytes });
-    const run = await this.lookup(principal, operationId);
+    const run = await this.lookup(principal, operationId, true);
     return this.bridge.call(this.project.root, 'read', run.core.caller, run.core.requestId, ['--stream', stream, '--offset', String(offset), '--max-bytes', String(maxBytes)]);
   }
   async artifacts(principal: Principal, operationId: string) {
-    const run = await this.lookup(principal, operationId);
+    const run = await this.lookup(principal, operationId, true);
     const facts = await this.owners.assembly.need('files').collectArtifacts(this.project.root, this.project.id, run, this.owners.need('files'));
     if (run.integrity.state !== 'verified') run.integrity = facts.integrity; if (run.domain.state === 'unchecked') run.domain = facts.domain;
     await this.persist(run); return facts;
   }
   async check(principal: Principal, operationId: string) {
-    const run = await this.lookup(principal, operationId);
+    const run = await this.lookup(principal, operationId, true);
     const facts = await this.owners.assembly.need('files').verifyArtifacts(this.project.root, run, this.owners.need('files'));
     run.integrity = facts.integrity; run.domain = facts.domain; await this.persist(run); return facts;
   }

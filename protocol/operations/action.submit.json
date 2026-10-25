@@ -379,6 +379,10 @@
       "operationId": {
         "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
         "type": "string"
+      },
+      "repairOf": {
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+        "type": "string"
       }
     },
     "required": [
@@ -1604,6 +1608,10 @@
             "type": "string",
             "format": "date-time"
           },
+          "requestedBy": {
+            "type": "string",
+            "minLength": 1
+          },
           "cli": {
             "type": "object",
             "additionalProperties": false,
@@ -1633,6 +1641,10 @@
           "cli",
           "confirmation"
         ]
+      },
+      "repairOf": {
+        "type": "string",
+        "minLength": 1
       }
     },
     "required": [

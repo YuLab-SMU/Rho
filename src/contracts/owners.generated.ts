@@ -5260,6 +5260,10 @@ export const ownerContracts: OwnerContractSnapshot = {
               "operationId": {
                 "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
                 "type": "string"
+              },
+              "repairOf": {
+                "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+                "type": "string"
               }
             },
             "required": [
@@ -5387,6 +5391,10 @@ export const ownerContracts: OwnerContractSnapshot = {
               },
               "projectId": {
                 "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+                "type": "string"
+              },
+              "repairOf": {
+                "minLength": 1,
                 "type": "string"
               },
               "request": {
@@ -16871,9 +16879,9 @@ export const ownerContracts: OwnerContractSnapshot = {
       "packageVersion": "0.4.1",
       "entry": "./operations",
       "entryPath": "Projects/Rho-plugins/plugins/r/dist/operations.js",
-      "entrySha256": "c4f031296d54a47adb2c2294d7a71266c4fb7a57139ed6afb81894b0421a554c",
+      "entrySha256": "cfb7ab9eb254d50d29db6f34c283fb79b00d65bd143331a29df85d15c64dfdd9",
       "exports": {
-        "operationContracts": "a9bfe1ad409d2f9f2765e79bf07471a60cf8a239550e5c6b6ca025729d71592f"
+        "operationContracts": "e3a2618fc27980f387bd8e5e31d013e034ff6fb583217e2c861b01154892c0d5"
       }
     },
     "requirements": {

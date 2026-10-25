@@ -4,33 +4,33 @@
   "schemaVersion": 2,
   "shared": {
     "path": "operations/shared.json",
-    "bytes": 75031,
-    "sha256": "3bfdc40b00905945f487d816f91d20bc5db4246727812e93f9aee0bc1c671921"
+    "bytes": 75222,
+    "sha256": "6d8afb5218bc7d7dedc08252262ba1a88c314242e7b03313b42cd43be6b4ccbb"
   },
   "operations": {
     "action.cancel": {
       "summary": "action.cancel",
       "path": "operations/action.cancel.json",
-      "bytes": 39444,
-      "sha256": "62c0fc7f85986803a87ffdd1e8fa060af2b0056d994afa097206c0514e966c30"
+      "bytes": 39619,
+      "sha256": "3923931df78d23f7e1f6c0fab5fc4d411bc29d7e7e9ba8d44ac1b572f4f3d98c"
     },
     "action.list": {
       "summary": "action.list",
       "path": "operations/action.list.json",
-      "bytes": 41882,
-      "sha256": "0fb5db6b341a22f94e1a30b4011d1614de4ef86fa6404ec79e8ba077b78e27d7"
+      "bytes": 42073,
+      "sha256": "b29c76c734da2ff76dd522b83d5fb1584bc98cbfe5b6730c6244c65f69ef0f33"
     },
     "action.lookup": {
       "summary": "Read the original accepted operation. Missing acknowledgement is not permission for a new identity.",
       "path": "operations/action.lookup.json",
-      "bytes": 39541,
-      "sha256": "5385e472c3b75c10bf9f2678b90f348dd04fac18cf718c43931190b00894fcf6"
+      "bytes": 39716,
+      "sha256": "8aa8cfed2c1df5b65a025b0efeff95128e6c419c7f27e483bf424bcf193de20e"
     },
     "action.observe": {
       "summary": "Observe original Core facts. Never starts or recovers a Host.",
       "path": "operations/action.observe.json",
-      "bytes": 39504,
-      "sha256": "150b81f51bd01cfdaa85c6037c4f547793f67c799de95a6463c3786ec4ec8c09"
+      "bytes": 39679,
+      "sha256": "a362d1d37a5c9f3f437b067a80511e519f9efe0e371e0e9fdf8048bb36f9e555"
     },
     "action.output": {
       "summary": "action.output",
@@ -41,14 +41,14 @@
     "action.retry": {
       "summary": "action.retry",
       "path": "operations/action.retry.json",
-      "bytes": 39443,
-      "sha256": "6fce4091cd60e5af63147b07cbc1f834d3fa6a4d121197eb083f7166efd89eaf"
+      "bytes": 39618,
+      "sha256": "d22b746230ca9cb81532bd60ed14f883468b0a731af668537848e96fd2b931d0"
     },
     "action.submit": {
       "summary": "Execute the explicitly selected project R script snapshot and requirements. Persist operationId before delivery; identical retries retain the original Core identity. Output directory is the first R argument, followed by explicit args or frozen resource paths. Artifact paths are output-relative; completion is run-directory-relative, returned as plan.completion, so an inventory can remain beside immutable producer artifacts.",
       "path": "operations/action.submit.json",
-      "bytes": 51604,
-      "sha256": "d22c0086e870d4adc997cc4de91ca63e1391c2c0958f82913b5670a18271fc7f"
+      "bytes": 51881,
+      "sha256": "6387f0d1cb59c8210d8a2a292a8b0d8c39adbd1e29c2f14085fa969e53d216aa"
     },
     "annotation.create": {
       "summary": "annotation.create",
@@ -293,8 +293,8 @@
     "observation.snapshot": {
       "summary": "observation.snapshot",
       "path": "operations/observation.snapshot.json",
-      "bytes": 154631,
-      "sha256": "db9bc13bbd9ef2c2cfbcc7cfd8421767ac45205f4542160304d3450f2771c3c4"
+      "bytes": 154854,
+      "sha256": "435cabf5a09887e2590fe46e21ea70f8999982ed354dd4131717d72a6c7e8e84"
     },
     "project.create": {
       "summary": "project.create",
@@ -347,8 +347,8 @@
     "project.runs": {
       "summary": "Report what this project has run and what it is running: one bounded summary per operation with its execution state, accepted time, author kind, the artifact paths its plan declared, whether each of those files is on disk now, whether the producer wrote a completion inventory, and the recorded integrity and domain states. A declaration, a file on disk and a verified artifact are separate facts. It carries no request body, no code and no output text, and starts nothing.",
       "path": "operations/project.runs.json",
-      "bytes": 4323,
-      "sha256": "9f2f31f7f5e7c2dd93257b6f77f7055e4b93c85812c32d2339ca9b485cfd00b3"
+      "bytes": 6020,
+      "sha256": "a6aaffa44bc274fb8aa85c86566b6f7c81a60d0503733944dd545e9a322979f9"
     },
     "project.source.add": {
       "summary": "project.source.add",
@@ -383,8 +383,8 @@
     "requirements.prepare": {
       "summary": "requirements.prepare",
       "path": "operations/requirements.prepare.json",
-      "bytes": 40185,
-      "sha256": "6518f0da41be4115e377fc32052e240586f5beb557238e811027915998578f1e"
+      "bytes": 40360,
+      "sha256": "10886c899156957e072c4439ab78b9582e43ca4dbf7e8d9fd5b5f3ee71c51de4"
     },
     "resource.list": {
       "summary": "resource.list",

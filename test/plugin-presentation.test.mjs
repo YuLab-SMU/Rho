@@ -45,7 +45,7 @@ test('browser catalogs and snapshots preserve owner presentation through project
       assert.equal(operation.state, 'unavailable');
       assert.deepEqual(operation.presentation, catalog.operations.find(o => o.method === operation.method).presentation);
     }
-    const denied = snapshot.catalog.operations.find(o => o.method === 'action.submit');
+    const denied = snapshot.catalog.operations.find(o => o.method === 'artifact.check');
     assert.equal(denied.authorized, false);
     assert.deepEqual(denied.presentation, catalog.operations.find(o => o.method === denied.method).presentation);
     assert.equal(snapshot.host.exitCode, 3);

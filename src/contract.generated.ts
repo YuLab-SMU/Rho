@@ -327,6 +327,7 @@ export interface ActionCancelOutput {
   };
   cancellation?: {
     requestedAt: string;
+    requestedBy?: string;
     cli: {
       exitCode: number;
       reply: {
@@ -335,6 +336,7 @@ export interface ActionCancelOutput {
     };
     confirmation: string;
   };
+  repairOf?: string;
 }
 
 export interface ActionListInput {
@@ -629,6 +631,7 @@ export type ActionListOutput = {
   };
   cancellation?: {
     requestedAt: string;
+    requestedBy?: string;
     cli: {
       exitCode: number;
       reply: {
@@ -637,6 +640,7 @@ export type ActionListOutput = {
     };
     confirmation: string;
   };
+  repairOf?: string;
 }[];
 
 export interface ActionLookupInput {
@@ -932,6 +936,7 @@ export interface ActionLookupOutput {
   };
   cancellation?: {
     requestedAt: string;
+    requestedBy?: string;
     cli: {
       exitCode: number;
       reply: {
@@ -940,6 +945,7 @@ export interface ActionLookupOutput {
     };
     confirmation: string;
   };
+  repairOf?: string;
 }
 
 export interface ActionObserveInput {
@@ -1235,6 +1241,7 @@ export interface ActionObserveOutput {
   };
   cancellation?: {
     requestedAt: string;
+    requestedBy?: string;
     cli: {
       exitCode: number;
       reply: {
@@ -1243,6 +1250,7 @@ export interface ActionObserveOutput {
     };
     confirmation: string;
   };
+  repairOf?: string;
 }
 
 export interface ActionOutputInput {
@@ -1551,6 +1559,7 @@ export interface ActionRetryOutput {
   };
   cancellation?: {
     requestedAt: string;
+    requestedBy?: string;
     cli: {
       exitCode: number;
       reply: {
@@ -1559,6 +1568,7 @@ export interface ActionRetryOutput {
     };
     confirmation: string;
   };
+  repairOf?: string;
 }
 
 export interface ActionSubmitInput {
@@ -1657,6 +1667,7 @@ export interface ActionSubmitInput {
         };
   };
   operationId: string;
+  repairOf?: string;
 }
 
 export interface ActionSubmitOutput {
@@ -1947,6 +1958,7 @@ export interface ActionSubmitOutput {
   };
   cancellation?: {
     requestedAt: string;
+    requestedBy?: string;
     cli: {
       exitCode: number;
       reply: {
@@ -1955,6 +1967,7 @@ export interface ActionSubmitOutput {
     };
     confirmation: string;
   };
+  repairOf?: string;
 }
 
 export interface AnnotationCreateInput {
@@ -6237,6 +6250,7 @@ export interface ObservationSnapshotOutput {
     };
     cancellation?: {
       requestedAt: string;
+      requestedBy?: string;
       cli: {
         exitCode: number;
         reply: {
@@ -6245,6 +6259,7 @@ export interface ObservationSnapshotOutput {
       };
       confirmation: string;
     };
+    repairOf?: string;
   }[];
   resources: {
     id: string;
@@ -7307,6 +7322,13 @@ export interface ProjectRunsOutput {
     script: string | null;
     sourceKey: string | null;
     hasStderr: boolean;
+    stop: null | {
+      requestedAt: string;
+      by: string;
+      state: 'requested' | 'signalled' | 'stopped' | 'finished-first' | 'unconfirmed';
+      exit: string | null;
+    };
+    repairOf: string | null;
   }[];
   total: number;
   truncated: boolean;
@@ -7721,6 +7743,7 @@ export interface RequirementsPrepareOutput {
   };
   cancellation?: {
     requestedAt: string;
+    requestedBy?: string;
     cli: {
       exitCode: number;
       reply: {
@@ -7729,6 +7752,7 @@ export interface RequirementsPrepareOutput {
     };
     confirmation: string;
   };
+  repairOf?: string;
 }
 
 export interface ResourceListInput {

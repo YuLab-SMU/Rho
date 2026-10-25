@@ -127,6 +127,64 @@
             },
             "hasStderr": {
               "type": "boolean"
+            },
+            "stop": {
+              "anyOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "requestedAt": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "by": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "state": {
+                      "enum": [
+                        "requested",
+                        "signalled",
+                        "stopped",
+                        "finished-first",
+                        "unconfirmed"
+                      ]
+                    },
+                    "exit": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "requestedAt",
+                    "by",
+                    "state",
+                    "exit"
+                  ],
+                  "additionalProperties": true
+                }
+              ]
+            },
+            "repairOf": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1
+                },
+                {
+                  "type": "null"
+                }
+              ]
             }
           },
           "required": [
@@ -143,7 +201,9 @@
             "domain",
             "script",
             "sourceKey",
-            "hasStderr"
+            "hasStderr",
+            "stop",
+            "repairOf"
           ],
           "additionalProperties": true
         }

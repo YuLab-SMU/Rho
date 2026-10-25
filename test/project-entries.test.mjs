@@ -70,7 +70,8 @@ test('opening a file shows it once and keeps the person confined to their projec
     await assert.rejects(f.browser.call('project.openFile', { projectId: f.p.id, path: '.rho/rho/task-map.json', compositionId: 'workspace', expectedVersion: other.composition.version, changeId: 'open-5' }), e => e.error.kind === 'scope');
     // Reading a folder is not permission to declare resources or execute.
     await assert.rejects(f.browser.call('resource.register', { projectId: f.p.id }), e => e.error.kind === 'unauthorized');
-    await assert.rejects(f.browser.call('action.submit', { projectId: f.p.id }), e => e.error.kind === 'unauthorized');
+    await assert.rejects(f.browser.call('action.retry', { projectId: f.p.id, operationId: 'x' }), e => e.error.kind === 'unauthorized');
+    await assert.rejects(f.browser.call('action.submit', { projectId: f.p.id }), e => e.error.kind === 'invalid');
   } finally { await f.cleanup(); }
 });
 

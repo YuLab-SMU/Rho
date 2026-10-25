@@ -26,6 +26,7 @@ import { readOperation, type OperationRequest } from './operation-request.js';
 import { isRhoMethod } from './contract-runtime.js';
 import type { RhoMethod, RhoOutput } from './contract.generated.js';
 import { TaskRouting } from './task-routing.js';
+import { exitWords, stopState } from './execution-facts.js';
 import type { nativeActivityLimits, agentDeliveryLimits } from '@rho-workspace/plugin-agent';
 import { ownerContracts } from './contracts/owners.generated.js';
 export interface FeedbackTransport { accept(envelope: any): Promise<any>; lookup(envelope: any): Promise<any> }
@@ -46,6 +47,13 @@ ajv.addFormat('date-time', { type: 'string', validate: isNativeTime });
 //             completion inventory the producer wrote.
 // A failed run can leave every declared file on disk and still have produced
 // nothing anyone verified, so a reader has to be able to see all three.
+const authorKind = (principal: string) => principal.startsWith('agent:') ? 'Agent' : principal === 'operator' ? 'Operator' : principal.startsWith('browser:') ? 'Person' : principal;
+// A stop is a request until Core reports the process ended; acceptance is not a stop.
+function stopFacts(run: Operation) {
+  if (!run.cancellation?.requestedAt) return null;
+  const status = run.native?.status ?? {};
+  return { requestedAt: String(run.cancellation.requestedAt), by: authorKind(String(run.cancellation.requestedBy ?? run.principal)), state: stopState(status, run.native?.cancel), exit: exitWords(status.Finished?.exit) };
+}
 async function runFacts(project: Project, run: Operation) {
   const declared = Array.isArray(run.plan?.source?.artifacts) ? run.plan.source.artifacts as Array<{ path: string }> : [];
   const output: string | undefined = (run.plan as any)?.output;
@@ -67,7 +75,7 @@ async function runFacts(project: Project, run: Operation) {
     execution: run.execution,
     delivery: run.delivery,
     acceptedAt: run.acceptedAt,
-    author: run.principal.startsWith('agent:') ? 'Agent' : run.principal === 'operator' ? 'Operator' : run.principal.startsWith('browser:') ? 'Person' : run.principal,
+    author: authorKind(run.principal),
     declared: files,
     missing: files.filter(file => !file.present).map(file => file.path),
     completion: completion ? 'present' as const : 'absent' as const,
@@ -77,7 +85,9 @@ async function runFacts(project: Project, run: Operation) {
     // The path stays out of this summary on purpose; its digest is enough to group
     // the submissions of one file into a retry chain.
     sourceKey: typeof (run.plan?.source as { path?: unknown } | undefined)?.path === 'string' ? digest((run.plan.source as { path: string }).path).slice(0, 16) : null,
-    hasStderr: Number(run.native?.stderr?.retained_bytes ?? 0) > 0
+    hasStderr: Number(run.native?.stderr?.retained_bytes ?? 0) > 0,
+    stop: stopFacts(run),
+    repairOf: run.repairOf ?? null
   };
 }
 const validators = Object.fromEntries(Object.entries(operations).map(([k, v]) => [k, ajv.compile<any>(v)]));
@@ -722,7 +732,7 @@ export class RhoService {
     if (method === 'requirements.check') return this.plugins.need('requirements').checkRequirements(p.root, b.requirements, this.bridge.rscript);
     if (method === 'requirements.prepare') return publicOperation(await requests.submit(principal, b, true));
     if (method === 'action.submit') return publicOperation(await requests.submit(principal, b));
-    if (method === 'action.lookup') return publicOperation(await requests.lookup(principal, b.operationId));
+    if (method === 'action.lookup') return publicOperation(await requests.lookup(principal, b.operationId, true));
     if (method === 'action.observe') return publicOperation(await requests.observe(principal, b.operationId));
     if (method === 'action.retry') return publicOperation(await requests.retry(principal, b.operationId));
     if (method === 'action.cancel') return publicOperation(await requests.cancel(principal, b.operationId));

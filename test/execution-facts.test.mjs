@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   attention, distinctScripts, executionWord, integrityWord, producerOf, readRuns, results,
-  sameSourceKey, shortPath
+  sameSourceKey, shortPath, stopState, exitWords
 } from '../dist/execution-facts.js';
 
 // These are Rho's reading of what was run and produced. They decide what the project
@@ -107,4 +107,23 @@ test('versions are separate identities and never collapse by path', () => {
 test('a path is named the way a reader says it', () => {
   assert.equal(shortPath('.rho/plugins/runs/ab/artifacts/effects.csv'), 'effects.csv');
   assert.equal(shortPath('C:\\work\\atlas\\effects.csv'), 'effects.csv');
+});
+
+test('a stop request is not a stop: only an ended process is stopped', () => {
+  const at = '2026-10-24T00:00:00Z';
+  assert.equal(stopState({ Running: {} }, null), 'requested');
+  assert.equal(stopState({ Starting: {} }, {}), 'requested');
+  assert.equal(stopState({ Running: {} }, { term_sent_at: at }), 'signalled');
+  assert.equal(stopState({ Running: {} }, { term_sent_at: at, kill_sent_at: at }), 'signalled');
+  assert.equal(stopState({ Finished: { exit: { Signal: 15 } } }, { term_sent_at: at }), 'stopped');
+  assert.equal(stopState({ Finished: { exit: { Code: 1 } } }, { term_sent_at: at }), 'stopped');
+  assert.equal(stopState({ Finished: { exit: 'Unknown' } }, { kill_sent_at: at }), 'stopped');
+  assert.equal(stopState({ NotStarted: {} }, null), 'stopped');
+  // Ended on its own before any signal: it finished first, success or not.
+  assert.equal(stopState({ Finished: { exit: { Code: 0 } } }, { term_sent_at: at }), 'finished-first');
+  assert.equal(stopState({ Finished: { exit: { Code: 1 } } }, null), 'finished-first');
+  // Core no longer knows the process: nothing is claimed.
+  assert.equal(stopState({ Gone: {} }, { term_sent_at: at }), 'unconfirmed');
+  assert.equal(stopState({ Detached: {} }, null), 'unconfirmed');
+  assert.deepEqual([exitWords({ Signal: 15 }), exitWords({ Code: 2 }), exitWords('Unknown'), exitWords(undefined)], ['signal 15', 'code 2', 'unknown', null]);
 });

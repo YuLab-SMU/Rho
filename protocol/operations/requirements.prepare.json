@@ -1262,6 +1262,10 @@
             "type": "string",
             "format": "date-time"
           },
+          "requestedBy": {
+            "type": "string",
+            "minLength": 1
+          },
           "cli": {
             "type": "object",
             "additionalProperties": false,
@@ -1291,6 +1295,10 @@
           "cli",
           "confirmation"
         ]
+      },
+      "repairOf": {
+        "type": "string",
+        "minLength": 1
       }
     },
     "required": [
