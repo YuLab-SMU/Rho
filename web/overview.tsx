@@ -84,7 +84,7 @@ export function ProjectOverview({ project, location, snapshot, onLayout, client,
     <section className="overview-inquiry" aria-labelledby="overview-question">
       <h2 id="overview-question" tabIndex={-1}>{map?.question ?? 'No question has been declared for this project yet.'}</h2>
       {reading2 && <p className="overview-tally">
-        <span>{runs!.length} {runs!.length === 1 ? 'run' : 'runs'} · {reading2.completed} completed{reading2.failed ? ' · ' + reading2.failed + ' failed' : ''}{reading2.moving ? ' · ' + reading2.moving + ' running' : ''}{reading2.unknown ? ' · ' + reading2.unknown + ' unknown' : ''}</span>
+        <span>{runs!.length} {runs!.length === 1 ? 'run' : 'runs'} · {reading2.completed} completed{reading2.failed ? ' · ' + reading2.failed + ' failed' : ''}{reading2.moving ? ' · ' + reading2.moving + ' running' : ''}{reading2.unobserved ? ' · ' + reading2.unobserved + ' not observed' : ''}{reading2.unknown ? ' · ' + reading2.unknown + ' unknown' : ''}</span>
         {map && map.items.length > 0 && <span>{map.items.length} items the Agent declared</span>}
         {/* Executing code says nothing about whether a result is right; the absence
             of a domain check is a fact worth stating next to the run counts. */}

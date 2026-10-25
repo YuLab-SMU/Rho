@@ -47,6 +47,23 @@ test('a verified run needs no attention', () => {
   assert.deepEqual(attention([run({ declared: [file('a.csv')] })]), []);
 });
 
+// H0 audit P0-2: a run Core never observed executing, or one still running, wrote
+// nothing yet; the overview said it "wrote 4 declared files that nothing verified".
+test('only a completed run is said to have written its files, counted as found', () => {
+  const declared = [file('a.csv', false, 0), file('b.csv', false, 0), file('c.png', false, 0), file('d.csv', false, 0)];
+  for (const execution of ['unobserved', 'active', 'unknown']) {
+    const items = attention([run({ execution, integrity: 'unchecked', completion: 'absent', declared, missing: declared.map(f => f.path) })]);
+    assert.ok(items.every(item => item.kind !== 'unverified'), execution + ' wrote nothing yet');
+  }
+  const partial = attention([run({ integrity: 'unchecked', declared: [file('a.csv'), file('b.csv', false, 0)] })]);
+  assert.equal(partial.length, 1);
+  assert.match(partial[0].text, /wrote 1 declared file that nothing verified/);
+  assert.deepEqual(attention([run({ integrity: 'unchecked', declared: [file('a.csv', false, 0)] })]), [], 'nothing on disk, nothing to verify');
+  const counts = readRuns([run({ execution: 'unobserved' }), run({ execution: 'active' })]);
+  assert.equal(counts.moving, 1, 'accepted but unobserved is not running');
+  assert.equal(counts.unobserved, 1);
+});
+
 test('an outcome with no observation is reported as unknown, never as done', () => {
   assert.equal(executionWord('unknown'), 'outcome unknown');
   assert.equal(executionWord('unobserved'), 'accepted, not observed');

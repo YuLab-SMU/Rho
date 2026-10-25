@@ -75,7 +75,9 @@ export function readRuns(runs: RunFacts[]) {
   return {
     completed: count(run => run.execution === 'completed'),
     failed: count(run => run.execution === 'failed'),
-    moving: count(run => ['active', 'unobserved'].includes(run.execution)),
+    // Accepted but never observed executing is not running: nothing says it started.
+    moving: count(run => run.execution === 'active'),
+    unobserved: count(run => run.execution === 'unobserved'),
     unknown: count(run => run.execution === 'unknown')
   };
 }
@@ -90,9 +92,12 @@ export function attention(runs: RunFacts[]) {
     const present = run.declared.filter(file => file.present).length;
     items.push({ kind: 'failed', operationId: run.operationId, text: run.declared.length ? `${run.operationId} failed; ${present} of ${run.declared.length} declared files are on disk and nothing verified them` : `${run.operationId} failed and wrote no declared file` });
   }
+  // Only a run that completed wrote anything to name; a running, unobserved or unknown
+  // run has not, and what it wrote is the files actually present, not the declared list.
   for (const run of runs) {
-    if (run.execution === 'failed' || run.integrity === 'verified' || !run.declared.length) continue;
-    items.push({ kind: 'unverified', operationId: run.operationId, text: `${run.operationId} wrote ${run.declared.length} declared file${run.declared.length === 1 ? '' : 's'} that nothing verified` });
+    const present = run.declared.filter(file => file.present).length;
+    if (run.execution !== 'completed' || run.integrity === 'verified' || !present) continue;
+    items.push({ kind: 'unverified', operationId: run.operationId, text: `${run.operationId} wrote ${present} declared file${present === 1 ? '' : 's'} that nothing verified` });
   }
   return items;
 }
