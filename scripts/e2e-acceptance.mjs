@@ -298,9 +298,19 @@ async function standInPropose(agent, call) {
     { id: 'run', kind: 'view', component: 'rho.action', version: '1', props: { title: 'Compare plant weight by group', action: 'r.execute', actionVersion: '0.2.0', operationId: 'plants-summary', input }, bindings: {} }] }] });
 }
 async function standInAnswer(agent, request) {
+  // As long as a real answer: a model explains its method, numbers and how to read them.
+  const answerText = [
+    'Yes, at the conventional 5% level, though only just.',
+    'I added a Welch two-sample t-test of trt2 against ctrl to analysis.R and reran it on the same plants.csv version.',
+    '- Two-sided (trt2 ≠ ctrl): t = 2.134, df = 16.79, p = 0.0479. Mean difference 0.494, 95% CI 0.005 to 0.983.',
+    '- One-sided (trt2 > ctrl): p = 0.0239.',
+    'How to read it: the difference is unlikely to be chance alone, but the evidence is weak. The lower bound of the interval is almost 0, and this is one comparison out of three possible pairs; a Bonferroni correction (0.048 × 3 ≈ 0.14) or Tukey HSD after an ANOVA would not call it significant.',
+    'Use the one-sided p only if "trt2 is heavier" was your hypothesis before you looked at the data.',
+    'The full results are in ttest_trt2_vs_ctrl.csv: one row per alternative, with the mean difference, t, df, interval and p-value.'
+  ].join('\n\n');
   await agent('context.read', { contextId: request.match(/read context (\S+?)\./)[1] });
   const [thread] = await agent('annotation.list');
   const answer = await agent('document.open', { path: 'answer.md' });
-  const written = await agent('document.edit', { documentId: answer.id, expectedVersion: answer.version, edits: [{ from: 0, to: 0, insert: 'trt2 against ctrl: a Welch t-test on the 10 + 10 plants gives p = 0.048.' }], undoGroup: 'answer' });
+  const written = await agent('document.edit', { documentId: answer.id, expectedVersion: answer.version, edits: [{ from: 0, to: 0, insert: answerText }], undoGroup: 'answer' });
   await agent('annotation.reply', { annotationId: thread.annotationId, expectedVersion: thread.version ?? 1, changeId: 'answer', replyTo: thread.messages[0].id, draft: { documentId: answer.id, version: written.version }, resources: [] });
 }

@@ -45,8 +45,9 @@ export function SourceLine({ live, snapshot, resource, viewId, onOpenRef, childr
     {notes.map(i => <span key={i.id} data-fact="agent" className="shell-agent-words" title={[i.title, i.summary].filter(Boolean).join(' — ')}>Agent: {i.title} · {i.state}</span>)}
     {newer && <button className="shell-link" onClick={() => onOpenRef({ id: newer.id, version: newer.version })}>Newer version · {newerName}</button>}
   </div>
-  {/* The person's own question on this version is a temporary addition (M2), on its own line. */}
-  {children && <div className="shell-question" data-rho-layer="transient">{children}</div>}</>;
+  {/* The person's own question on this version is a temporary addition (M2), on its own line.
+      A long answer scrolls inside it, so the work keeps most of the view. */}
+  {children && <div className="shell-question" data-rho-layer="transient" data-scroll-region="" role="region" aria-label="Question and answers" tabIndex={0}>{children}</div>}</>;
 }
 
 // What a stop request has led to, in Core's terms: a request is not a stop, and only an
