@@ -48,6 +48,7 @@
 @media (max-width: 767px) {
   .shell-tabbar { min-height: 44px; padding: 0 var(--space-4); }
   .shell-tabs button { max-width: 72vw; min-height: var(--height-button); padding: 0 var(--space-5); }
+  .shell-header-narrow { margin-left: 0; justify-content: flex-end; }
 }
 
 /* What Rho adds: the activity bar under the work, at most one interruption, the digest
@@ -111,14 +112,21 @@
 .shell-notes li p { margin: var(--space-1) 0 0; color: var(--color-muted); }
 .shell-evidence:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
 /* An artifact's line: produced by, verified by, the Agent's words, then the question. */
-/* One line at any width: in a narrow pane the verification words shrink first, then the
-   producer, each ending in an ellipsis with the whole fact in its title (M2, M6). */
+/* One line in a pane: in a narrow pane the verification words shrink first, then the
+   producer, each ending in an ellipsis with the whole fact in its title (M2, M6). A phone
+   has no hover to read a title, so below 768 the line wraps and every fact stays whole. */
 .shell-source { flex: none; display: flex; align-items: center; gap: var(--space-1) var(--space-4); min-width: 0; min-height: var(--height-button); padding: var(--space-1) var(--space-5); border-bottom: 1px solid var(--color-divider); background: var(--color-surface); font-size: var(--font-size-sm); white-space: nowrap; }
 .shell-source > * { flex: none; }
 .shell-source .shell-producer { flex: 0 1 auto; min-width: 4em; border-color: transparent; background: transparent; padding: 0 var(--space-2); }
 .shell-source .shell-producer > span, .shell-source .shell-verified { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .shell-source .shell-verified { flex: 0 100 auto; min-width: 3em; }
 .shell-source .shell-producer:hover { background: var(--color-hover); }
+@media (max-width: 767px) {
+  .shell-source { flex-wrap: wrap; white-space: normal; }
+  .shell-source .shell-producer, .shell-source .shell-verified, .shell-source .shell-agent-words { flex: 0 1 auto; min-width: 0; }
+  .shell-source .shell-producer { padding: 0; text-align: left; white-space: normal; }
+  .shell-source .shell-producer > span, .shell-source .shell-verified, .shell-source .shell-agent-words { overflow: visible; text-overflow: clip; white-space: normal; }
+}
 .shell-state.completed { color: var(--color-ink); }
 .shell-state.failed { color: var(--color-failed); }
 .shell-state.unknown, .shell-state.unobserved { color: var(--color-muted); font-style: italic; }

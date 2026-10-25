@@ -80,11 +80,16 @@ function Timeline({ live, narrow }: { live: Live; narrow: boolean }) {
   for (let i = 1; i < xs.length; i++) xs[i] = Math.max(xs[i], xs[i - 1] + gap);
   for (let i = xs.length - 1; i >= 0; i--) xs[i] = Math.min(xs[i], i === xs.length - 1 ? 1 : xs[i + 1] - gap);
   const marks = shown.map((run, i) => ({ run, x: Math.max(0, xs[i]) }));
+  // Pauses closer together than a mark is wide read as one break, not a pile of slashes.
+  const breaks = place.breaks.reduce<number[]>((kept, b) => kept.length && width && (b - kept.at(-1)!) * width < 20 ? kept : [...kept, b], []);
+  // When the marks stand shoulder to shoulder they are an ordered row, not times; the ticks
+  // and breaks under them would claim a scale the row no longer has.
+  const crowded = width > 0 && width < shown.length * 40;
   const latest = runs.at(-1);
   return <span ref={track} className={'shell-timeline' + (narrow ? ' inline' : '')} role="group" aria-label="Runs over time">
-    {!narrow && facts.length > 0 && <span className="shell-ticks" aria-hidden="true">
+    {!narrow && !crowded && facts.length > 0 && <span className="shell-ticks" aria-hidden="true">
       {facts.map(f => <i key={f.seq} className={kind(f.actor)} style={{ left: (place.x(Date.parse(f.at!)) * 100).toFixed(2) + '%' }} />)}
-      {place.breaks.map(b => <b key={b} className="shell-gap" style={{ left: (b * 100).toFixed(2) + '%' }} />)}
+      {breaks.map(b => <b key={b} className="shell-gap" style={{ left: (b * 100).toFixed(2) + '%' }} />)}
     </span>}
     {marks.map(({ run, x }) => <button key={run.id} className={'shell-mark ' + run.state + (superseded(screen, run) ? ' superseded' : '') + (run === latest ? ' latest' : '')} style={narrow ? undefined : { left: `calc(${(x * 100).toFixed(2)}% - 10px)` }}
       aria-label={`${name(run.id)} ${run.state}`} title={`${name(run.id)} · ${runWords[run.state] ?? run.state}${superseded(screen, run) ? ' · a later run completed' : ''}`} onClick={() => act({ kind: 'open', target: run.id })}>{run.run}</button>)}
