@@ -4,7 +4,7 @@ import { atomicBytes, atomicJson, confined, digest, now, requireThat } from '@rh
 import type { Operation } from './requests.js';
 import type { Project } from './state.js';
 
-// One run, exported (docs/WORKSPACE-PLAN.md W6): the script that ran, the files it declared and
+// One run, exported: the script that ran, the files it declared and
 // a record of where they came from and what was checked, as ordinary files a person opens with
 // their own tools. Nothing runs again and nothing is called checked that was not: a declared
 // file that was not written, or no longer matches the inventory the run wrote, is named in the

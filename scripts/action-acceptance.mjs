@@ -1,9 +1,9 @@
-// W4 exit check (docs/WORKSPACE-PLAN.md): an action the Agent proposes opens as a form bound
+// Browser behavior: an action the Agent proposes opens as a form bound
 // to its real inputs; the person edits one and submits, and the owner dispatches it exactly
 // once; a refresh during the run keeps the same operationId; a stop reads "requested" until
 // Core reports the process ended; a failed run's repair context carries the real error text
 // and references, and the repair links the original both ways; an unknown outcome is said as
-// unknown (M4). Real Core and R throughout; the Agent is a deterministic protocol client.
+// unknown. Real Core and R throughout; the Agent is a deterministic protocol client.
 import assert from 'node:assert/strict';
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
@@ -12,11 +12,11 @@ import { once } from 'node:events';
 import { createHash } from 'node:crypto';
 import { chromium } from '@playwright/test';
 import { RhoClient, native, packageRoot } from './support.mjs';
-import { rulers, profiles } from './rulers.mjs';
+import { inspectResponsive } from './browser-checks.mjs';
 const evidence = path.resolve(process.env.RHO_ACTION_EVIDENCE ?? 'work/actions-' + Date.now());
 await fs.mkdir(evidence, { recursive: true, mode: 0o700 });
 const root = await fs.mkdtemp('/tmp/rho-actions-'), state = path.join(root, '.service');
-const report = { scenario: 'W4-actions', passed: false, checks: [], rulers: [] };
+const report = { scenario: 'action-forms', passed: false, checks: [], responsive: [] };
 const passed = (name, detail = {}) => { report.checks.push({ name, ...detail }); process.stdout.write(`ok · ${name}\n`); };
 const digestOf = text => createHash('sha256').update(text).digest('hex');
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -24,7 +24,7 @@ async function until(read, predicate, label, ms = 30000) {
   const deadline = Date.now() + ms;
   for (;;) { const value = await read(); if (predicate(value)) return value; if (Date.now() > deadline) throw new Error('Timed out: ' + label + ' · last ' + JSON.stringify(value)?.slice(0, 400)); await sleep(200); }
 }
-let child, browser, orphan;
+let child, browser, orphan, page;
 try {
   child = spawn(process.execPath, [path.join(packageRoot, 'dist/cli.js'), '--root', root, '--state-dir', state, '--core', native.coreBinary, '--rscript', native.rscript], { stdio: ['ignore', 'pipe', 'pipe'] });
   child.stderr.resume();
@@ -60,7 +60,7 @@ try {
   report.browser = browser.version();
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: new URL(ready.openUrl).origin });
-  const page = await context.newPage(), errors = [];
+  page = await context.newPage(); const errors = [];
   page.on('pageerror', e => errors.push(e.message));
   const form = page.locator('[data-rho-action-form="w4-form"]');
   // A reload restores whatever the tab last showed: Home, the project, or the layout itself.
@@ -70,6 +70,8 @@ try {
     if (await form.isVisible()) return;
     if (await projectRow.isVisible()) await projectRow.click();
     await layoutRow.click();
+    const formTab = page.getByRole('tab', { name: 'Scale the values', exact: true });
+    await formTab.waitFor(); await formTab.click();
     await form.waitFor();
   };
   await page.goto(ready.openUrl);
@@ -92,7 +94,7 @@ try {
   await args.fill('3');
   await until(() => form.locator('.shell-field-problem').count(), n => n === 0, 'the edited proposal is valid');
   await form.getByRole('button', { name: 'Run', exact: true }).and(page.locator(':enabled')).waitFor();
-  await rulers(page, { name: 'form', profile: profiles.shell, first: () => form.locator('h2'), enforce: true, evidence, report });
+  await inspectResponsive(page, { name: 'form', first: () => form.locator('h2'), evidence, report });
   passed('form bound to the proposed inputs, owner problems shown per field', { fields: ['script', 'args', 'completion'] });
 
   // 2. Submit with two clicks in one task: the owner dispatches once.
@@ -165,7 +167,7 @@ try {
   const contextId = request.match(/context ([a-f0-9]{64})/)?.[1];
   assert.ok(contextId && request.includes('repairOf "w4-broken"'), request);
   // The failure waits on the person, so its one interruption is allowed (as in S7's interrupted state).
-  await rulers(page, { name: 'repair', profile: profiles.shell, first: () => runView('w4-broken').locator('h2'), transientAllowed: true, enforce: true, evidence, report });
+  await inspectResponsive(page, { name: 'repair', first: () => runView('w4-broken').locator('h2'), transientAllowed: true, evidence, report });
   const facts = (await agent('context.read', { contextId })).run;
   assert.match(facts.error.text, /Deliberate failure: column x missing/);
   assert.deepEqual(facts.script, { kind: 'disk', path: 'broken.R', digest: digestOf(broken) });
@@ -197,12 +199,13 @@ try {
   await unknownView.locator('[data-rho-execution="unknown"]').waitFor({ timeout: 30000 });
   assert.match(await unknownView.locator('[data-rho-execution]').textContent(), /^outcome unknown · submitted by the Agent at /);
   assert.equal(await unknownView.getByRole('button', { name: 'Ask the Agent to fix', exact: true }).count(), 1);
-  await rulers(page, { name: 'unknown-run', profile: profiles.shell, first: () => unknownView.locator('h2'), transientAllowed: true, enforce: true, evidence, report });
-  passed('unknown outcome shown as unknown; M1–M10 hold on the run view', { execution: 'unknown' });
+  await inspectResponsive(page, { name: 'unknown-run', first: () => unknownView.locator('h2'), transientAllowed: true, evidence, report });
+  passed('unknown outcome shown as unknown; run view remains usable at four widths', { execution: 'unknown' });
 
   assert.deepEqual(errors, []);
   report.passed = true;
 } catch (error) {
+  if (page) { await page.screenshot({ path: path.join(evidence, 'failure.png') }).catch(() => {}); await fs.writeFile(path.join(evidence, 'failure.txt'), await page.locator('body').innerText().catch(() => '')); }
   report.failure = { message: String(error.message).slice(0, 3000), stack: String(error.stack ?? '').split('\n').filter(l => l.includes('.mjs')).slice(0, 4) }; process.exitCode = 1;
 } finally {
   await browser?.close().catch(() => {});

@@ -35,7 +35,7 @@ let child, browser, context, page, url, originalClipboard, port = 0;
 const errors = [];
 const requests = [];
 const run = promisify(execFile);
-const report = { scenario: 'u2-documents-tables', passed: false, node: process.version, npmInstall: process.env.RHO_UI_INSTALLED === '1' ? 'outside-checkouts' : 'source-build', browser: '', counts: { hostStarts: 0, nativeDispatches: 0 }, widths: [], checks: [], limits: ['Chrome 154 is not installed; exact browser version recorded', 'IME uses real Chrome CDP composition, not a physical macOS candidate-window trial', 'U3/U4 and actual model UI collaboration are separate gates'], assets: JSON.parse(await fs.readFile(path.join(packageRoot, 'dist/web/composition.json'), 'utf8')) };
+const report = { scenario: 'u2-documents-tables', passed: false, node: process.version, npmInstall: process.env.RHO_UI_INSTALLED === '1' ? 'outside-checkouts' : 'source-build', browser: '', counts: { hostStarts: 0, nativeDispatches: 0 }, widths: [], checks: [], limits: ['IME uses real Chrome CDP composition, not a physical macOS candidate-window trial', 'Actual model collaboration is separate evidence'], assets: JSON.parse(await fs.readFile(path.join(packageRoot, 'dist/web/composition.json'), 'utf8')) };
 async function start() {
   child = spawn(process.execPath, ['--import', instrument, path.join(packageRoot, 'dist/cli.js'), '--root', root, '--state-dir', state, '--port', String(port), '--limits', limitsFile, '--core', native.coreBinary, '--rscript', native.rscript, ...(process.env.RHO_UI_PLUGINS ? ['--plugins', process.env.RHO_UI_PLUGINS] : [])], { stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, RHO_CORE_BINARY: native.coreBinary } });
   child.stderr.resume();
@@ -195,8 +195,10 @@ try {
   await page.getByRole('button', { name: 'Remove filter', exact: true }).click();
   await poll(() => page.getByRole('toolbar', { name: 'Table', exact: true }).innerText(), t => t.includes('1,400 rows') && !t.includes(' of '), 'remove filter');
   await page.waitForFunction(() => [...document.querySelectorAll('[class*="ag-"]')].some(e => e.scrollHeight > 40000));
+  const rowHeight = await page.locator('.ag-row').first().evaluate(row => row.getBoundingClientRect().height);
+  assert.ok(rowHeight > 0);
   for (const offset of [200, 400, 600, 800, 1000, 1200]) {
-    await page.locator('.ag-grid-viewport').evaluate((root, top) => { const e = [root, ...root.querySelectorAll('*')].find(e => /auto|scroll/.test(getComputedStyle(e).overflowY) && e.scrollHeight > 40000); if (e) e.scrollTop = top; }, (offset + 20) * 30);
+    await page.locator('.ag-grid-viewport').evaluate((root, top) => { const e = [root, ...root.querySelectorAll('*')].find(e => /auto|scroll/.test(getComputedStyle(e).overflowY) && e.scrollHeight > 40000); if (e) e.scrollTop = top; }, (offset + 20) * rowHeight);
     await poll(() => Promise.resolve(requests), rs => rs.some(r => r.offset === offset), 'block ' + offset);
   }
   assert.ok(requests.every(r => r.limit === 200));
@@ -222,7 +224,7 @@ try {
     state = await current();
     await agent.call('document.edit', { documentId: d.id, expectedVersion: state.version, expectedRevision: state.revision, changeId: 'expiry-' + n, undoGroup: 'expiry-' + n, edits: [{ from: state.content.length, to: state.content.length, insert: '.' }] });
   }
-  await page.reload(); await page.getByRole('status').filter({ hasText: 'Up to date' }).waitFor();
+  await page.reload(); await page.getByRole('status').filter({ hasText: 'Connected' }).waitFor();
   if (await page.locator('.project-row').count()) await page.locator('.project-row').first().click();
   await page.locator('.nav-row').filter({ hasText: 'workspace' }).click();
   await tab('Pinned'); await page.getByRole('alert').filter({ hasText: 'Version 1 is no longer available' }).waitFor();

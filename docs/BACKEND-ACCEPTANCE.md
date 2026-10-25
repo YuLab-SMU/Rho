@@ -8,7 +8,7 @@ functional headless package, calling client and inert state fixtures are deliver
 This record separates actual source checks and integration runs from the accepted
 immutable installation candidate. Browser
 views, native input, accessibility, layout and overall product release remain
-pending under [WEBUI-FIRST](WEBUI-FIRST.md).
+outside this backend acceptance record.
 
 Architecture clarification, 2026-10-16: this is a successful vertical prototype
 whose catalog, readers and packaging remain coupled to the paired workflow.

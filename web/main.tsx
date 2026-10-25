@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState, type Reac
 import { createRoot } from 'react-dom/client';
 import { BrowserClient, type BrowserConnection, type ProjectSummary, type WorkspaceSnapshot } from '../src/browser.js';
 import { Home, located, projectName as name, trapTab } from './home.js';
-import { AgentAccess } from './agents.js';
+import { AgentAccess, AgentRequest } from './agents.js';
 import { ProjectNavigation, type Section } from './project.js';
 import { Icon } from './icons.js';
 import { CommandPalette, type Command, type CommandGroup } from './commands.js';
@@ -53,15 +53,14 @@ function App() {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [project, setProject] = useState<ProjectSummary | null>(null);
   const [snapshot, setSnapshot] = useState<WorkspaceSnapshot | null>(null);
-  // The Agent map's reference form lives in the title bar; the workspace draws it here.
-  const [mapChip, setMapChip] = useState<HTMLSpanElement | null>(null);
-  // The workspace draws the Agent's column and the activity bar into the frame's own places.
-  const [agentSlot, setAgentSlot] = useState<HTMLElement | null>(null), [footerSlot, setFooterSlot] = useState<HTMLElement | null>(null);
+  const [agentOpen, setAgentOpen] = useState(false);
+  // An open workspace can contribute recorded activity to the optional inspector.
+  const [agentSlot, setAgentSlot] = useState<HTMLElement | null>(null);
   const [phase, setPhase] = useState<Phase>('connecting');
   const [readAt, setReadAt] = useState<Date | null>(null), [offlineAt, setOfflineAt] = useState<Date | null>(null);
   const [error, setError] = useState('');
   const [homeFocus, setHomeFocus] = useState(false), [mainFocus, setMainFocus] = useState(false);
-  const [compositionId, setCompositionId] = useState(''), [openView, setOpenView] = useState(''), [overview, setOverview] = useState(false), [section, setSection] = useState<Section | null>(null);
+  const [compositionId, setCompositionId] = useState(''), [openView, setOpenView] = useState(''), [overview, setOverview] = useState(false), [section, setSection] = useState<Section>('overview');
   // About from a view opens that plugin and offers the way back to the project.
   const [pluginId, setPluginId] = useState(''), [pluginReturn, setPluginReturn] = useState(false);
   const [context, setContext] = useState(false), [navigation, setNavigation] = useState(true);
@@ -74,6 +73,7 @@ function App() {
   const dialog = useRef<HTMLDialogElement>(null), commandTrigger = useRef<HTMLButtonElement>(null);
   const confirmDialog = useRef<HTMLDialogElement>(null), disconnectTrigger = useRef<HTMLButtonElement>(null), confirmReturn = useRef<HTMLElement | null>(null);
   const navigationTrigger = useRef<HTMLButtonElement>(null), contextTrigger = useRef<HTMLButtonElement>(null);
+  const agentTrigger = useRef<HTMLButtonElement>(null);
   const awayHeading = useRef<HTMLHeadingElement>(null);
   // Elements behind the open palette are inert, so a command that moves focus waits for it to close.
   const afterCommands = useRef<(() => void) | null>(null);
@@ -90,7 +90,7 @@ function App() {
     // a person arriving should see what the work is and where it stands.
     if (!restoreLayout) sessionStorage.removeItem('rho.layout.v1:' + connection?.principalId + ':' + next.id);
     const retainedLayout = restoreLayout ? sessionStorage.getItem('rho.layout.v1:' + connection?.principalId + ':' + next.id) : null;
-    setOverview(!retainedLayout); if (retainedLayout) setCompositionId(retainedLayout); setPluginReturn(false);
+    setSection('overview'); setOverview(!retainedLayout); if (retainedLayout) setCompositionId(retainedLayout); setPluginReturn(false);
     sessionStorage.setItem(projectKey, next.id); setProject(next); setScreen('project');
     if (matchMedia('(max-width: 767px)').matches) setNavigation(false);
   }
@@ -152,11 +152,12 @@ function App() {
     function close(event: KeyboardEvent) {
       if (event.key !== 'Escape' || commands || confirming) return;
       if (context) { setContext(false); contextTrigger.current?.focus(); }
+      else if (agentOpen) { setAgentOpen(false); agentTrigger.current?.focus(); }
       else if (narrow && navigation) { setNavigation(false); navigationTrigger.current?.focus(); }
     }
     window.addEventListener('keydown', close);
     return () => window.removeEventListener('keydown', close);
-  }, [context, narrow, navigation, commands, confirming]);
+  }, [context, agentOpen, narrow, navigation, commands, confirming]);
   useEffect(() => {
     if (commands && narrow) { setNavigation(false); setContext(false); }
     if (commands) dialog.current?.showModal(); else if (dialog.current?.open) dialog.current.close();
@@ -164,13 +165,6 @@ function App() {
   useEffect(() => { if (confirming) confirmDialog.current?.showModal(); else if (confirmDialog.current?.open) confirmDialog.current.close(); }, [confirming]);
   useEffect(() => { if (!connection && away !== 'fresh' && away !== 'linking') awayHeading.current?.focus(); }, [connection, away]);
   // The sheet leaves with the home page; once it is gone, focus moves to the project instead of the document body.
-  // A section behind a disclosure opens before it takes focus; a closed one cannot.
-  useEffect(() => {
-    if (!section || !snapshot || screen !== 'project') return;
-    const target = document.getElementById('overview-' + section), disclosure = target?.closest('details');
-    if (disclosure) disclosure.open = true;
-    target?.focus(); setSection(null);
-  }, [section, snapshot, screen]);
   useEffect(() => { if (mainFocus) { setMainFocus(false); document.getElementById('main')?.focus(); } }, [mainFocus]);
   function command(run: () => void) { setCommands(false); run(); }
   function runCommand(next: Command) { command(next.run); }
@@ -185,16 +179,16 @@ function App() {
   // Opening a layout may name the view to bring forward: from the project page a
   // person picks an artifact, not a tab.
   function layout(id: string, view?: string) { if (project) sessionStorage.setItem('rho.layout.v1:' + connection?.principalId + ':' + project.id, id); setCompositionId(id); setOpenView(view ?? ''); setOverview(false); setScreen('project'); }
-  function showOverview() { if (project) sessionStorage.removeItem('rho.layout.v1:' + connection?.principalId + ':' + project.id); setOverview(true); setScreen('project'); }
+  function showOverview() { setSection('overview'); if (project) sessionStorage.removeItem('rho.layout.v1:' + connection?.principalId + ':' + project.id); setOverview(true); setScreen('project'); }
   function showSection(next: Section) { showOverview(); setScreen('project'); setSection(next); }
   function plugins() { setPluginId(''); setPluginReturn(false); setScreen('plugins'); }
   function about(id: string) { setPluginId(id); setPluginReturn(true); setScreen('plugins'); }
   function goHome() { setScreen('home'); setHomeFocus(true); }
   // A choice in the drawer closes it; focus returns to the navigation button unless the choice moves it.
-  const pick = (run: () => void) => () => { run(); setNavigation(false); };
+  const pick = (run: () => void) => () => { run(); if (narrow) setNavigation(false); };
   function end(reason: Away) {
     sessionStorage.removeItem(sessionKey); sessionStorage.removeItem(projectKey); confirmReturn.current = null;
-    for (const key of Object.keys(sessionStorage)) if (['rho.layout.v1:', 'rho-expression/1:', 'rho-table-question/1:'].some(prefix => key.startsWith(prefix))) sessionStorage.removeItem(key);
+    for (const key of Object.keys(sessionStorage)) if (['rho.layout.v1:', 'rho-expression/1:', 'rho-table-question/1:', 'rho.request.v1:'].some(prefix => key.startsWith(prefix))) sessionStorage.removeItem(key);
     setConnection(null); setClient(null); setProject(null); setSnapshot(null); setProjects([]); setError(''); setReadAt(null); setOfflineAt(null);
     setContext(false); setCommands(false); setConfirming(false); setScreen('home'); setAway(reason); setAwayDetail('');
   }
@@ -243,7 +237,7 @@ function App() {
   ];
   // Session grants decide the access copy; older read-only sessions keep theirs.
   const edits = connection.methods.includes('document.edit'), runs = connection.methods.includes('action.submit');
-  const access = edits ? `Open and watch projects, edit open documents and pick table rows.${runs ? ' Run an action an Agent proposed and stop a run.' : ''} Saving stays with Claude Code.` : 'Open, create and watch projects. No edits or runs.';
+  const access = edits ? `Open and watch projects, edit open documents and pick table rows.${runs ? ' Run an action an Agent proposed and stop a run.' : ''} Save documents using the editor.` : 'Open, create and watch projects. No edits or runs.';
   const contextSections = <>
     <div ref={setContextSlot} className="context-slot" />
     {!feedbackContext && <>
@@ -263,109 +257,83 @@ function App() {
     </section>
     </>}
   </>;
+  const navigationContents = <>
+    <button className="brand" onClick={goHome} aria-label="Rho home"><span className="brand-mark">ρ</span><strong>Rho</strong></button>
+    <button className="project-switcher" onClick={pick(goHome)}><Icon name="folder" size={18} /><span>{project ? name(project) : 'Your projects'}</span><Icon name="chevron" size={13} /></button>
+    {project && <>
+      {screen === 'plugins' ? <><button className="nav-row" onClick={pick(showOverview)}><Icon name="chevron" size={14} /><span>Back to project</span></button><PluginNavigation catalog={snapshot?.catalog} pluginId={pluginId} onSelect={id => pick(() => choosePlugin(id))()} /></>
+      : <ProjectNavigation project={project} location={located(project, folder)} snapshot={snapshot} overview={!composition && screen === 'project'} section={section} compositionId={composition?.compositionId ?? ''}
+          onOverview={pick(showOverview)} onLayout={id => pick(() => layout(id))()} onSection={next => pick(() => showSection(next))()} />}
+    </>}
+    <div className="navigation-footer">
+      {project && <button className="nav-row" aria-current={screen === 'plugins' ? 'page' : undefined} onClick={pick(plugins)}><Icon name="plugins" size={17} /><span>Plugins</span></button>}
+      <button className="nav-row" onClick={() => { setNavigation(false); setFeedbackContext(false); setContext(true); }}><Icon name="context" size={17} /><span>Connection & access</span></button>
+    </div>
+  </>;
+  const agentContents = <>
+    <div className="drawer-heading"><h2>Agent</h2><button className="icon-button" aria-label="Close Agent" onClick={() => { setAgentOpen(false); agentTrigger.current?.focus(); }}><Icon name="close" size={18} /></button></div>
+    {snapshot && <AgentRequest key={snapshot.project.id} snapshot={snapshot} principalId={connection.principalId ?? 'browser'} />}
+    <div ref={setAgentSlot} className="agent-slot" />
+    {!composition && <section className="context-section"><h3>Sessions</h3><AgentAccess snapshot={snapshot} /></section>}
+  </>;
+  const currentTitle = screen === 'home' ? 'Projects' : screen === 'plugins' ? pluginTitle || 'Plugins' : composition?.compositionId ?? ({ overview: 'Overview', files: 'Files', documents: 'Files', activity: 'Activity', settings: 'Project settings' }[section]);
   return <div className="application">
     <a className="skip-link" href="#main">Skip to workspace</a>
-    <header className="topbar">
-      <div className="topbar-lead">{narrow ? <button ref={navigationTrigger} className="icon-button" aria-label="Open navigation" aria-haspopup="dialog" aria-expanded={navigation} onClick={() => setNavigation(true)}><Icon name="sidebar" size={18} stroke={1.7} /></button>
-        : <strong className="wordmark topbar-wordmark">Rho</strong>}</div>
-      {narrow ? <div className="location location-stack">
-        <span className="location-name">{screen === 'project' && project ? composition?.compositionId ?? name(project) : screen === 'plugins' ? pluginTitle || 'Plugins' : 'Home'}</span>
-        {pluginTitle && <span className="location-detail">Plugins</span>}
-        {screen === 'project' && project && <span className="location-detail">{composition ? name(project) : 'Overview'}{!edits && <> · <span title="This tab can open and watch projects. It can't edit or run anything.">Read-only</span></>}</span>}
-      </div> : <div className="location">
-        {screen === 'project' && project ? <>
-          <span className="location-name">{name(project)}</span>
-          {composition && screen === 'project' && <> <span className="location-separator" aria-hidden="true">/</span> <span className="location-layout">{composition.compositionId}</span></>}
-          {!edits && <>{' '}<span className="read-only" title="This tab can open and watch projects. It can't edit or run anything."><Icon name="lock" size={12} stroke={2} /><span className="read-only-label">Read-only</span></span></>}
-        </> : pluginTitle ? <>
-          <button className="location-link" onClick={() => choosePlugin('')}>Plugins</button>
-          <span className="location-separator" aria-hidden="true"><Icon name="chevron" size={12} stroke={1.6} /></span>
-          <span className="location-name">{pluginTitle}</span>
-        </> : <span className="location-name">{screen === 'plugins' ? 'Plugins' : 'Home'}</span>}
-      </div>}
-      <span ref={setMapChip} className="map-chip-slot" />
-      <button ref={commandTrigger} className="command-trigger" aria-label="Commands · Type a command" aria-keyshortcuts="Meta+K Control+K" onClick={() => setCommands(true)}><Icon name="search" size={14} stroke={1.8} /><span className="command-trigger-text">Type a command</span><kbd>{shortcut}</kbd></button>
-      <span className={'connection ' + phase} role="status">
-        <span className="connection-label">{phase === 'live' ? 'Up to date' : phase === 'offline' ? 'Offline' : 'Connecting'}</span>
-        {readAt && <>{' '}<span className="connection-time">{(phase === 'live' ? '' : 'last read ') + clock(readAt)}</span></>}
-      </span>
-      <button ref={contextTrigger} className="icon-button context-toggle" aria-label="Context & access" aria-controls={narrow ? undefined : 'project-context'} aria-haspopup={narrow ? 'dialog' : undefined} aria-expanded={context && !feedbackContext} onClick={() => { setFeedbackContext(false); setContext(v => feedbackContext || !v); }}><Icon name="context" size={18} stroke={1.7} /></button>
-    </header>
     <div className="app-body">
-      <nav className="app-rail" aria-label="Application">
-        <Rail name="Home" icon="home" active={screen === 'home'} onClick={() => setScreen('home')} />
-        <Rail name="Projects" icon="project" active={screen === 'project'} expanded={screen === 'project' && !narrow ? navigation : undefined} onClick={() => !project ? goHome() : screen === 'project' && !narrow ? setNavigation(v => !v) : setScreen('project')} />
-        <Rail name="Plugins" icon="plugins" active={screen === 'plugins'} onClick={() => project ? plugins() : setScreen('home')} />
-      </nav>
-      {!narrow && projectVisible && navigation && <aside id="project-navigation" className="project-nav" aria-label={sidebarName}>
-        {screen === 'plugins' ? <PluginNavigation catalog={snapshot?.catalog} pluginId={pluginId} onSelect={choosePlugin} /> : <ProjectNavigation project={project} location={located(project, folder)} snapshot={snapshot} overview={screen === 'project' && !composition} compositionId={screen === 'project' ? composition?.compositionId ?? '' : ''}
-          onOverview={showOverview} onLayout={layout} onSection={showSection} />}
-      </aside>}
-      <main id="main" tabIndex={-1} className={projectVisible ? 'main project-main' : 'main'}>
-        {screen === 'project' && snapshot?.presentation?.pending && <div className="offline-bar" role="status">
-          <p>New output is ready. Its display could not be confirmed; your current views are kept.</p>
-          <button className="small-button" onClick={() => showSection('files')}>Show files</button>
-        </div>}
-        {(phase === 'offline' || reconnecting) && <div className="offline-bar" role="alert">
-          <Icon name="offline" size={16} stroke={1.6} />
-          <p>{reconnecting ? 'Reconnecting. ' : "Can't reach Rho. "}{seen}</p>
-          <button className="small-button" disabled={reconnecting} onClick={reread}>Reconnect</button>
-        </div>}
-        {screen === 'home' || !project ? <Home client={client!} projects={projects} folder={folder}
-          focusRequest={homeFocus} onFocused={() => setHomeFocus(false)} onChoose={chooseProject} onOpened={opened} onAccessEnded={() => end('ended')} />
-          : !snapshot ? <div className="page-section"><h1>Reading your project</h1><p>Waiting for a bounded owner snapshot. No runtime is being started.</p></div>
-          : screen === 'plugins' ? <PluginCatalog catalog={snapshot.catalog} project={name(project)} pluginId={pluginId} onSelect={choosePlugin}
-            back={pluginReturn ? { label: 'Back to ' + name(project), run: () => { setPluginReturn(false); setPluginId(''); setScreen('project'); setMainFocus(true); } } : undefined} />
-          : composition ? <Suspense fallback={<p className="page-section">Loading the workspace renderer...</p>}><Workspace key={snapshot.project.id + composition.compositionId} composition={composition} snapshot={snapshot} client={client!} onAbout={about} contextTarget={context ? contextSlot : null} principalId={connection.principalId} feedbackContextActive={feedbackContext} onShowContext={() => { setFeedbackContext(true); setContext(true); }} mapChipTarget={mapChip} openView={openView} onCommands={setLayoutCommands} agentTarget={agentSlot} footerTarget={footerSlot} /></Suspense>
-          : <Suspense fallback={<p className="page-section">Loading the project page…</p>}><ProjectOverview client={client!} onProjectChanged={next => { setProject(next); setProjects(list => list.map(p => p.id === next.id ? next : p)); }} project={project} location={located(project, folder)} snapshot={snapshot} onLayout={layout} onOpened={id => { layout(id); reread(); }} /></Suspense>}
-      </main>
-      {screen === 'project' && composition && <div ref={setAgentSlot} className="agent-slot" />}
-      {context && !narrow && <aside id="project-context" className="context-drawer" aria-label={feedbackContext ? 'Your question' : 'Context and access'}>
-        <div className="drawer-heading"><h2>{feedbackContext ? 'Your question' : 'Context & access'}</h2><button className="icon-button" aria-label="Close context" onClick={() => { setContext(false); contextTrigger.current?.focus(); }}><Icon name="close" size={14} stroke={2} /></button></div>
-        {contextSections}
-        {!feedbackContext && <p className="context-footnote">Closing this tab only stops watching. Work that is running keeps running.</p>}
-      </aside>}
+      {!narrow && navigation && <aside className="project-nav" aria-label={sidebarName}>{navigationContents}</aside>}
+      <div className="app-content">
+        <header className="topbar">
+          <button ref={navigationTrigger} className="icon-button" aria-label={navigation ? 'Hide navigation' : 'Open navigation'} aria-expanded={navigation} onClick={() => setNavigation(v => !v)}><Icon name="sidebar" size={19} /></button>
+          <div className="location"><span className="location-name">{currentTitle}</span>{!edits && <span className="read-only"><Icon name="lock" size={12} />Read-only</span>}</div>
+          <div className="topbar-actions">
+            <button ref={commandTrigger} className="command-trigger" aria-label="Commands · Type a command" aria-keyshortcuts="Meta+K Control+K" onClick={() => setCommands(true)}><Icon name="search" size={16} /><span>Commands</span><kbd>{shortcut}</kbd></button>
+            <span className={'connection ' + phase} role="status" title={connectionNote}><span className="status-dot" /><span className="connection-label">{phase === 'live' ? 'Connected' : phase === 'offline' ? 'Offline' : 'Connecting'}</span></span>
+            {projectVisible && <button ref={agentTrigger} className="agent-toggle" aria-expanded={agentOpen} aria-label="Agent" onClick={() => { setAgentOpen(v => !v); setContext(false); }}><Icon name="prompt" size={17} /><span>Agent</span></button>}
+            <button ref={contextTrigger} className="icon-button context-toggle" aria-label="Context & access" aria-expanded={context && !feedbackContext} onClick={() => { setFeedbackContext(false); setContext(v => feedbackContext || !v); setAgentOpen(false); }}><Icon name="context" size={18} /></button>
+          </div>
+        </header>
+        <div className="content-row">
+          <main id="main" tabIndex={-1} className={composition && screen === 'project' ? 'main project-main workspace-main' : 'main'}>
+            {screen === 'project' && snapshot?.presentation?.pending && <div className="offline-bar" role="status"><p>New output is ready. Your current views are kept.</p><button onClick={() => showSection('files')}>Show files</button></div>}
+            {(phase === 'offline' || reconnecting) && <div className="offline-bar" role="alert"><Icon name="offline" size={17} /><p>{reconnecting ? 'Reconnecting. ' : "Can't reach Rho. "}{seen}</p><button disabled={reconnecting} onClick={reread}>Reconnect</button></div>}
+            {screen === 'home' || !project ? <Home client={client!} projects={projects} folder={folder} focusRequest={homeFocus} onFocused={() => setHomeFocus(false)} onChoose={chooseProject} onOpened={opened} onAccessEnded={() => end('ended')} />
+              : !snapshot ? <Loading text="Opening project…" />
+              : screen === 'plugins' ? <PluginCatalog catalog={snapshot.catalog} project={name(project)} pluginId={pluginId} onSelect={choosePlugin} back={pluginReturn ? { label: 'Back to project', run: () => { setPluginReturn(false); setPluginId(''); setScreen('project'); setMainFocus(true); } } : undefined} />
+              : composition ? <>
+                <div className="workspace-tools"><button className="text-button" onClick={showOverview}><Icon name="chevron" size={13} />Project</button><span className="workspace-question">{snapshot.taskMap?.question ?? name(project)}</span>
+                  {layoutCommands && <details className="view-menu"><summary><Icon name="layout" size={15} />Arrange views</summary><div>{layoutCommands.commands.map(c => <button key={c.id} onClick={e => { c.run(); e.currentTarget.closest('details')?.removeAttribute('open'); }}><Icon name={c.icon} size={15} />{c.label}</button>)}</div></details>}
+                </div>
+                <Suspense fallback={<Loading text="Opening workspace…" />}><Workspace key={snapshot.project.id + composition.compositionId} composition={composition} snapshot={snapshot} client={client!} onAbout={about} contextTarget={context ? contextSlot : null} principalId={connection.principalId} feedbackContextActive={feedbackContext} onShowContext={() => { setFeedbackContext(true); setContext(true); setAgentOpen(false); }} openView={openView} onCommands={setLayoutCommands} agentTarget={agentOpen ? agentSlot : null} onShowAgent={() => setAgentOpen(true)} /></Suspense>
+              </> : <Suspense fallback={<Loading text="Opening project…" />}><ProjectOverview key={project.id} section={section} onSection={showSection} onAgent={() => setAgentOpen(true)} client={client!} onProjectChanged={next => { setProject(next); setProjects(list => list.map(p => p.id === next.id ? next : p)); }} project={project} location={located(project, folder)} snapshot={snapshot} onLayout={layout} onOpened={id => { layout(id); reread(); }} /></Suspense>}
+          </main>
+          {projectVisible && agentOpen && !narrow && <aside className="inspector-pane" aria-label="Agent panel">{agentContents}</aside>}
+          {context && !narrow && <aside id="project-context" className="context-drawer inspector-pane" aria-label={feedbackContext ? 'Your question' : 'Context and access'}><div className="drawer-heading"><h2>{feedbackContext ? 'Your question' : 'Connection & access'}</h2><button className="icon-button" aria-label="Close context" onClick={() => { setContext(false); contextTrigger.current?.focus(); }}><Icon name="close" size={18} /></button></div>{contextSections}</aside>}
+        </div>
+      </div>
     </div>
-    {screen === 'project' && composition && <div ref={setFooterSlot} className="footer-slot" />}
-    {narrow && navigation && <Overlay className="drawer" label="Navigation" returnFocus={navigationTrigger} onClose={() => setNavigation(false)}>
-      <div className="drawer-top"><strong>Rho</strong><button className="icon-button" aria-label="Close navigation" onClick={() => setNavigation(false)}><Icon name="close" size={16} stroke={1.8} /></button></div>
-      <nav className="drawer-sections" aria-label="Application">
-        <Rail name="Home" icon="home" active={screen === 'home'} onClick={pick(() => setScreen('home'))} />
-        <Rail name="Projects" icon="project" active={screen === 'project'} onClick={pick(() => project ? setScreen('project') : goHome())} />
-        <Rail name="Plugins" icon="plugins" active={screen === 'plugins'} onClick={pick(() => project ? plugins() : setScreen('home'))} />
-      </nav>
-      {projectVisible && <div className="drawer-project">{screen === 'plugins' ? <PluginNavigation catalog={snapshot?.catalog} pluginId={pluginId} onSelect={id => pick(() => choosePlugin(id))()} /> : <ProjectNavigation project={project} location={located(project, folder)} snapshot={snapshot} overview={screen === 'project' && !composition} compositionId={screen === 'project' ? composition?.compositionId ?? '' : ''}
-        onOverview={pick(showOverview)} onLayout={id => pick(() => layout(id))()} onSection={next => pick(() => showSection(next))()} />}</div>}
-      <div className="drawer-foot"><button className="nav-row" onClick={() => { setNavigation(false); setCommands(true); }}><Icon name="prompt" size={16} stroke={1.8} /><span className="nav-row-name">Commands</span></button></div>
-    </Overlay>}
-    {narrow && context && <Overlay className="context-sheet" label={feedbackContext ? 'Your question' : 'Context and access'} returnFocus={contextTrigger} onClose={() => setContext(false)}>
-      <span className="sheet-handle" aria-hidden="true" />
-      <div className="drawer-heading"><h2>{feedbackContext ? 'Your question' : 'Context & access'}</h2><button className="done-button" onClick={() => setContext(false)}>Done</button></div>
-      {contextSections}
-    </Overlay>}
-    <dialog ref={dialog} className="commands" aria-label="Commands" onCancel={() => setCommands(false)} onClose={e => { if (e.currentTarget.open) return; setCommands(false); const next = afterCommands.current; afterCommands.current = null; if (next) next(); else commandReturn()?.focus(); }}
-      onClick={e => { if (e.target === e.currentTarget) setCommands(false); }}>
-      {commands && <CommandPalette groups={groups} onRun={runCommand} />}
-    </dialog>
+    {narrow && navigation && <Overlay className="drawer" label="Navigation" returnFocus={navigationTrigger} onClose={() => setNavigation(false)}><button className="icon-button drawer-close" aria-label="Close navigation" onClick={() => setNavigation(false)}><Icon name="close" size={18} /></button>{navigationContents}</Overlay>}
+    {narrow && agentOpen && <Overlay className="context-sheet" label="Agent panel" returnFocus={agentTrigger} onClose={() => setAgentOpen(false)}>{agentContents}</Overlay>}
+    {narrow && context && <Overlay className="context-sheet" label={feedbackContext ? 'Your question' : 'Context and access'} returnFocus={contextTrigger} onClose={() => setContext(false)}><div className="drawer-heading"><h2>{feedbackContext ? 'Your question' : 'Connection & access'}</h2><button className="done-button" onClick={() => setContext(false)}>Done</button></div>{contextSections}</Overlay>}
+    <dialog ref={dialog} className="commands" aria-label="Commands" onCancel={() => setCommands(false)} onClose={e => { if (e.currentTarget.open) return; setCommands(false); const next = afterCommands.current; afterCommands.current = null; if (next) next(); else commandReturn()?.focus(); }} onClick={e => { if (e.target === e.currentTarget) setCommands(false); }}>{commands && <CommandPalette groups={groups} onRun={runCommand} />}</dialog>
     <dialog ref={confirmDialog} className="confirm" aria-labelledby="disconnect-title" aria-describedby="disconnect-body" onCancel={() => setConfirming(false)} onClose={() => { setConfirming(false); confirmReturn.current?.focus(); }}>
-      <h2 id="disconnect-title">Disconnect this tab?</h2>
-      <p id="disconnect-body">This tab stops watching and forgets its access. Your projects and running work don't change. To come back, ask your Agent to open Rho.</p>
-      <div className="dialog-actions"><button onClick={() => setConfirming(false)}>Cancel</button><button className="danger" onClick={() => end('disconnected')}>Disconnect</button></div>
+      <h2 id="disconnect-title">Disconnect this tab?</h2><p id="disconnect-body">Your projects and running work stay available. Ask your Agent for a new link to reconnect.</p><div className="dialog-actions"><button onClick={() => setConfirming(false)}>Cancel</button><button className="danger" onClick={() => end('disconnected')}>Disconnect</button></div>
     </dialog>
   </div>;
 }
+function Loading({ text }: { text: string }) { return <div className="loading-state" role="status"><span className="loading-dot" /><span>{text}</span></div>; }
+
 // A modal overlay below 768. Focus stays inside; Escape, the backdrop or its own button closes it,
 // and focus returns to the button that opened it.
 function Overlay({ className, label, returnFocus, onClose, children }: { className: string; label: string; returnFocus: RefObject<HTMLElement | null>; onClose: () => void; children: ReactNode }) {
   const ref = useRef<HTMLDialogElement>(null);
   useLayoutEffect(() => {
     const dialog = ref.current!; dialog.showModal();
-    return () => { if (dialog.open) dialog.close(); returnFocus.current?.focus(); };
+    // Portalled owner content follows a different React ancestor. Trap actual DOM keys
+    // so its last focusable control stays inside this modal too.
+    dialog.addEventListener('keydown', trapTab);
+    return () => { dialog.removeEventListener('keydown', trapTab); if (dialog.open) dialog.close(); returnFocus.current?.focus(); };
   }, []);
-  return <dialog ref={ref} className={className} aria-label={label} onKeyDown={trapTab} onClose={onClose}
+  return <dialog ref={ref} className={className} aria-label={label} onClose={onClose}
     onClick={e => { if (e.target === e.currentTarget) e.currentTarget.close(); }}>{children}</dialog>;
-}
-function Rail({ name, icon, active, expanded, onClick }: { name: string; icon: Parameters<typeof Icon>[0]['name']; active: boolean; expanded?: boolean; onClick: () => void }) {
-  return <button className={'rail-button' + (active ? ' active' : '')} aria-current={active ? 'page' : undefined} aria-expanded={expanded} onClick={onClick}><Icon name={icon} /><span>{name}</span></button>;
 }
 createRoot(document.getElementById('root')!).render(<App />);

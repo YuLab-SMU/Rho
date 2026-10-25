@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 
-// The shell renders Screen and owner records; it does not decide attention (docs/WORKSPACE-PLAN.md
-// W1). It may reach the rules only through the live adapter.
+// The shell renders Screen and owner records; it does not decide attention.
+// It may reach the rules only through the live adapter.
 const shell = new URL('../web/shell/', import.meta.url).pathname;
 const allowed = new Set(['browser', 'expression', 'live-workspace', 'shell-layout', 'ui-contract', 'plugin-presentation', 'execution-facts']);
 const files = fs.readdirSync(shell, { recursive: true }).map(String).filter(f => /\.(ts|tsx)$/.test(f));

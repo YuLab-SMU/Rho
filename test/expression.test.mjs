@@ -7,9 +7,8 @@ import { taskMapLimits } from '../dist/task-map.js';
 
 // The expression rules replayed over one recorded Agent run (agent-exp-2215: 61 calls,
 // five R runs, two of them failing), followed by the two questions a browser asked about
-// its results and the one receipt. Each test is one sentence of
-// docs/INTERACTION-MODEL.md that the replay prototype has to make true.
-const trace = JSON.parse(fs.readFileSync(new URL('../prototypes/replay/trace/airquality.json', import.meta.url), 'utf8'));
+// its results and the one receipt. Assertions preserve identity and observation semantics.
+const trace = JSON.parse(fs.readFileSync(new URL('./fixtures/trace/airquality.json', import.meta.url), 'utf8'));
 const last = trace.facts.length - 1;
 const runEnd = trace.facts.findLastIndex(f => f.actor === trace.facts[0].actor);
 const agentMoves = screen => screen.moves.filter(m => m.by === 'agent');
@@ -230,7 +229,7 @@ test("a source's runs fold behind the latest; folding never hides what is shown,
 });
 
 test('only two things claim the space above the main area: a run the person waits on that failed, and a layout the person decides on', () => {
-  const check = fold(JSON.parse(fs.readFileSync(new URL('../prototypes/replay/trace/check.records.json', import.meta.url), 'utf8')));
+  const check = fold(JSON.parse(fs.readFileSync(new URL('./fixtures/trace/check.records.json', import.meta.url), 'utf8')));
   // Following, the person pins the view they are on: run 5, where the Agent left them.
   const pinned = [{ at: 53, kind: 'pin', target: 'run:5' }];
   const cases = [[trace, []], [trace, working], [trace, [{ at: 29, kind: 'leave' }, { at: 57, kind: 'return' }]], [trace, pinned], [check, []], [check, [{ at: 9, kind: 'open', target: 'source:check.R' }]]];

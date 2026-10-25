@@ -41,12 +41,14 @@ export function SourceLine({ live, snapshot, resource, viewId, onOpenRef, childr
     {run ? <button className="shell-producer" data-rho-producer="" disabled={!object} title={object ? `Open ${run.operationId}, the run that produced this version` : 'This run is outside the retained records'} onClick={() => object && live.act({ kind: 'open', target: object })}>
       <span data-fact="observed" className={'shell-state ' + run.execution}><span className="shell-run-id">{run.operationId}</span> · {executionWord(run.execution)}</span>
     </button> : runs && <span data-fact="observed" className="shell-meta">{(resource.provenance as { operationId?: string })?.operationId?.startsWith('registration:') ? 'Registered file' : 'No recorded run'}</span>}
-    {run && (() => { const checked = `${run.declared.length ? integrityWord(run.integrity) : 'no declared file'} · ${domainWord(run)}`; return <span data-fact="verified" className={'shell-verified ' + run.integrity} title={checked}>{checked}</span>; })()}
+    {run && (() => { const integrity = run.declared.length ? integrityWord(run.integrity) : 'no declared file', checked = `${integrity} · ${domainWord(run)}`;
+      // What Rho checked, then what nothing checked: only the first may carry the verified colour.
+      return <span data-fact="verified" className={'shell-verified ' + run.integrity} title={checked}><span className="shell-integrity">{integrity}</span> · {domainWord(run)}</span>; })()}
     {words && <span data-fact="agent" className="shell-agent-words" title={words}>Agent: “{words}”</span>}
     {notes.map(i => <span key={i.id} data-fact="agent" className="shell-agent-words" title={[i.title, i.summary].filter(Boolean).join(' — ')}>Agent: {i.title} · {i.state}</span>)}
     {newer && <button className="shell-link" onClick={() => onOpenRef({ id: newer.id, version: newer.version })}>Newer version · {newerName}</button>}
   </div>
-  {/* The person's own question on this version is a temporary addition (M2), on its own line.
+  {/* The person's own question on this version is a temporary addition, on its own line.
       A long answer scrolls inside it, so the work keeps most of the view. */}
   {children && <div className="shell-question" data-rho-layer="transient" data-scroll-region="" role="region" aria-label="Question and answers" tabIndex={0}>{children}</div>}</>;
 }
@@ -176,7 +178,7 @@ export function RunView({ snapshot, client, operationId, runs, readRuns, firstLi
 const minutes = (ms: number) => { const s = Math.max(0, Math.round(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 // How long Core saw a run's process live: from its spawn to the exit it observed.
 const took = (run: RunFacts) => run.startedAt && run.endedAt ? Date.parse(run.endedAt) - Date.parse(run.startedAt) : null;
-const fileIcon = (name: string): IconName => /\.(png|jpe?g|gif|svg|webp)$/i.test(name) ? 'image' : /\.(csv|tsv|parquet)$/i.test(name) ? 'table' : 'file';
+export const fileIcon = (name: string): IconName => /\.(png|jpe?g|gif|svg|webp)$/i.test(name) ? 'image' : /\.(csv|tsv|parquet)$/i.test(name) ? 'table' : 'file';
 
 // The files a run declared become openable once they are registered with their provenance.
 // With an inventory the run wrote, registering checks each file's bytes against it; without

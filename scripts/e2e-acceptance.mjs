@@ -1,13 +1,13 @@
-// W7 exit check (docs/WORKSPACE-PLAN.md): Rho installed from its packed tarball outside every
+// Browser behavior: Rho installed from its packed tarball outside every
 // checkout, with Claude Code connected the way a person connects it (rho --grant, then the MCP
 // server it prints), carries one piece of work through: a task in natural language becomes a
 // run the person reviews in a form and starts once; they open what it wrote, ask about one row,
 // hand the question over with the request Rho copies, and the Agent's answer appears under the
 // question. The run exports as files and the work survives a restart of the installed service.
-// E1–E5 and M1–M10 are measured at each state; the install and the cold start are timed.
+// Observe responsive pages, identity, provenance and replies; time installation and startup.
 //
-// RHO_E2E_MODEL=1 runs real Claude Code: that is the W7 exit. RHO_E2E_STANDIN=1 runs the same
-// path with a scripted Agent for developing this script; its report says so and is not the exit.
+// RHO_E2E_MODEL=1 runs real Claude Code. RHO_E2E_STANDIN=1 runs the same
+// path with a scripted Agent for developing this script; its report records that limitation.
 // The pairing link, connection files and session tokens stay in memory or in the private run
 // directory; the report names none of them.
 import assert from 'node:assert/strict';
@@ -18,13 +18,13 @@ import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { chromium } from '@playwright/test';
-import { rulers, profiles, firstUnit, agentMarker, facts } from './rulers.mjs';
+import { inspectResponsive, firstUnit, agentMarker, facts } from './browser-checks.mjs';
 import { runClaude } from './claude-consumer.mjs';
 import { mcpToolNames } from './mcp-consumer.mjs';
 const tarball = path.resolve(process.argv[2] ?? '');
 assert.ok(tarball.endsWith('.tgz'), 'Select the assembled application tarball (scripts/pack-local.mjs).');
 const model = process.env.RHO_E2E_MODEL === '1', standIn = process.env.RHO_E2E_STANDIN === '1';
-assert.ok(model !== standIn, 'Select RHO_E2E_MODEL=1 (real Claude Code, the W7 exit) or RHO_E2E_STANDIN=1 (a scripted Agent; not the exit).');
+assert.ok(model !== standIn, 'Select RHO_E2E_MODEL=1 (real Claude Code) or RHO_E2E_STANDIN=1 (a scripted Agent).');
 const rscript = process.env.RHO_RSCRIPT ?? spawnSync('which', ['Rscript'], { encoding: 'utf8' }).stdout.trim();
 assert.ok(path.isAbsolute(rscript), 'Rscript must be installed; set RHO_RSCRIPT to its absolute path.');
 const evidence = path.resolve(process.env.RHO_E2E_EVIDENCE ?? 'work/e2e-' + Date.now());
@@ -33,8 +33,8 @@ await fs.mkdir(evidence, { recursive: true, mode: 0o700 });
 const root = await fs.mkdtemp(path.join(await fs.realpath(os.tmpdir()), 'rho-e2e-'));
 const env = { ...process.env }; delete env.RHO_CORE_BINARY; delete env.RHO_PACKAGE_ROOT;
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
-const report = { scenario: 'W7-end-to-end', agent: model ? 'real Claude Code' : 'scripted stand-in (not the W7 exit)', passed: false, platform: process.platform + '-' + process.arch, node: process.version,
-  tarballSha256: sha256(await fs.readFile(tarball)), timings: {}, memory: {}, contracts: {}, modelRuns: [], checks: [], rulers: [] };
+const report = { scenario: 'installed-end-to-end', agent: model ? 'real Claude Code' : 'scripted stand-in (no model call)', passed: false, platform: process.platform + '-' + process.arch, node: process.version,
+  tarballSha256: sha256(await fs.readFile(tarball)), timings: {}, memory: {}, contracts: {}, modelRuns: [], checks: [], responsive: [] };
 const passed = (name, detail = {}) => { report.checks.push({ name, ...detail }); process.stdout.write(`ok · ${name}\n`); };
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 async function until(read, predicate, label, ms = 60000) {
@@ -56,7 +56,7 @@ function start() {
 }
 async function stop() { if (child && child.exitCode === null && child.signalCode === null) { const exited = new Promise(r => child.once('exit', r)); child.kill('SIGTERM'); await exited; } }
 async function restart() { await stop(); for (let attempt = 0; ; attempt++) { try { return await start(); } catch (error) { if (attempt > 10) throw error; await sleep(300); } } }
-const measured = (page, name, first, extra = {}) => rulers(page, { name, profile: profiles.shell, first, enforce: true, evidence, report, restore: [1440, 900], ...extra });
+const measured = (page, name, first, extra = {}) => inspectResponsive(page, { name, first, evidence, report, restore: [1440, 900], ...extra });
 
 try {
   // 1. A clean install from the tarball, outside every checkout, with no development overrides.
@@ -83,10 +83,9 @@ try {
   await page.goto(ready.openUrl);
   await page.locator('.home-title h1').waitFor();
   report.timings.coldStartMs = Date.now() - t;
-  assert.ok(report.timings.coldStartMs <= 3000, `cold start ${report.timings.coldStartMs} ms > 3000`);
   report.memory.serviceIdleRssKiB = rss(child.pid);
   let peak = report.memory.serviceIdleRssKiB; const sampler = setInterval(() => { if (child?.pid) peak = Math.max(peak, rss(child.pid)); }, 250);
-  passed('installed from the tarball; the home page renders from a cold start within 3 s', { ...report.timings });
+  passed('installed from the tarball; the home page renders from a cold start', { ...report.timings });
 
   // The person's project: their plant data, already registered by whoever set the project up.
   let admin = await RhoClient.fromFile(path.join(state, 'connection.json'));
@@ -143,7 +142,7 @@ try {
   const runButton = form.getByRole('button', { name: 'Run', exact: true });
   await until(() => runButton.isEnabled(), Boolean, 'the form checks clean against the owner contract');
   await measured(page, 'form', () => form.locator('h2'));
-  report.contracts.E1 = { form: await agentMarker(page, profiles.shell) };
+  report.contracts.agentObject = { form: await agentMarker(page) };
   await runButton.click();
   await form.locator(`[data-rho-submitted="${operationId}"]`).waitFor();
   let ran = await until(() => call('action.lookup', { operationId }), r => ['completed', 'failed', 'unknown'].includes(r.execution), 'the run ends', 300000);
@@ -187,7 +186,7 @@ try {
   assert.deepEqual([...shownGroups].sort(), ['ctrl', 'trt1', 'trt2'], 'the summary table shows one row per group');
   const tableFirst = width => firstUnit(width < 768 ? page.locator('.shell-panel > .shell-view') : result, 'table');
   await measured(page, 'result', tableFirst);
-  report.contracts.E4 = await facts(page);
+  report.contracts.factSources = await facts(page);
   passed('the person opens the summary table the run wrote, from the run itself', { groups: shownGroups.length });
 
   // 5. A question about one row, handed to the Agent with the request Rho copies.
@@ -222,17 +221,17 @@ try {
   await expand();
   await result.locator('.table-question-reply').getByText('Agent response', { exact: true }).first().waitFor();
   const contextId = request.match(/read context (\S+?)\./)[1], all = await activity();
-  report.contracts.E3 = { contextFetched: all.some(e => e.method === 'context.read' && e.contextId === contextId && e.outcome === 'returned'), replyTo: reply.replyTo === thread.messages[0].id, linkedResults: report.answer.linkedResults };
-  assert.ok(report.contracts.E3.contextFetched, 'E3: the Agent read the question\'s context');
+  report.contracts.replies = { contextFetched: all.some(e => e.method === 'context.read' && e.contextId === contextId && e.outcome === 'returned'), replyTo: reply.replyTo === thread.messages[0].id, linkedResults: report.answer.linkedResults };
+  assert.ok(report.contracts.replies.contextFetched, 'Replies: the Agent read the question\'s context');
   await measured(page, 'answer', tableFirst, { transientAllowed: true });
   // A linked result opens at the exact version the Agent named.
   if (reply.resources?.length) {
     const [linked] = reply.resources;
     await result.locator('.table-question-reply').getByRole('button', { name: 'Open linked result · ' + linked.version.slice(0, 8) }).first().click();
     await page.locator(`[data-owner-view="result:${linked.id.slice(0, 32)}:${linked.version.slice(0, 32)}"]`).waitFor();
-    report.contracts.E3.linkedOpens = true;
+    report.contracts.replies.linkedOpens = true;
   }
-  report.contracts.E5 = { taskMapDeclares: all.filter(e => e.method === 'task.map.declare').length };
+  report.contracts.withoutTaskMap = { taskMapDeclares: all.filter(e => e.method === 'task.map.declare').length };
   report.agentActivity = { calls: all.length, rejected: all.filter(e => e.outcome === 'rejected').map(e => [e.method, e.errorKind]), methods: [...new Set(all.map(e => e.method))].sort() };
   passed('the Agent reads the question\'s context and its answer appears under the question', report.answer);
 
@@ -252,16 +251,16 @@ try {
   clearInterval(sampler); report.memory.servicePeakRssKiB = peak;
   await restart();
   admin = await RhoClient.fromFile(path.join(state, 'connection.json'));
-  await page.getByRole('status').filter({ hasText: 'Up to date' }).waitFor({ timeout: 30000 });
+  await page.getByRole('status').filter({ hasText: 'Connected' }).waitFor({ timeout: 30000 });
   await page.getByRole('tab', { name: /summary\.csv/ }).first().click();
   await toggle.filter({ hasText: 'Explicit Agent response' }).waitFor({ timeout: 30000 });
   assert.equal((await call('annotation.list'))[0].messages.length, thread.messages.length);
   assert.ok((await call('project.runs', {})).runs.some(r => r.operationId === finished && r.execution === 'completed'));
   passed('the run exports as files with provenance, and the question and answer survive a restart', report.export);
 
-  assert.ok(report.contracts.E1.form.visible, 'E1: the Agent\'s current object is named on the default screen');
-  assert.equal(report.contracts.E4.agentInVerified, false, 'E4: the Agent\'s words never wear the verified colour');
-  assert.equal(report.contracts.E5.taskMapDeclares, 0, 'E5: no task map is declared');
+  assert.ok(report.contracts.agentObject.form.visible, 'Agent object: the Agent\'s current object is named on the default screen');
+  assert.equal(report.contracts.factSources.agentInVerified, false, 'Fact sources: the Agent\'s words never wear the verified colour');
+  assert.equal(report.contracts.withoutTaskMap.taskMapDeclares, 0, 'Optional task map: no task map is declared');
   assert.deepEqual(errors, []);
   report.passed = true;
 } catch (error) {

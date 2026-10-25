@@ -9,13 +9,13 @@ parity without importing absent implementations. The reusable backend exposes `/
 stdio MCP adapter. Its sole registered execution action is `r.execute`: an
 explicit project script, requirements, arguments and output declarations.
 Analysis recipes and scientific checkers are external consumers, excluded from
-the application and Plugins npm packages. Browser UI remains separate work.
+the application and Plugins npm packages. The browser consumes the same public capabilities.
 See [extraction](https://github.com/YuLab-SMU/Rho/blob/main/docs/PLUGIN-EXTRACTION.md)
 and [extraction acceptance](EXTRACTION-ACCEPTANCE.md). The
 [split acceptance](PLUGIN-SPLIT-ACCEPTANCE.md) records the independent package boundary.
 The [0.4 boundary review](PLUGIN-BOUNDARY-ACCEPTANCE.md) records the follow-up decoupling.
-The [UI handoff reference](PLUGIN-UI-HANDOFF.md) maps all eight owners to HTTP
-operations and distinguishes implemented backend APIs from missing browser pieces.
+The public contract lists each owner’s HTTP operations. Current browser behavior
+is documented in [Frontend](FRONTEND.md).
 
 ## Headless collaboration extension
 
@@ -118,8 +118,7 @@ can use the same resolver. Plain relative paths and generated outputs belong to
 the workspace directory; no implicit union, file copying, symlinks or change of
 native working directory is performed. Callers must choose explicit sources and
 inputs. The existing macOS socket-path bound still applies to an actual execution.
-See [browser projects](UI.md#projects-and-source-folders) for native-window limits
-and the separately scoped first-use verification.
+Native folder selection is platform-specific; source references do not expand scope.
 
 ## Public contract and client
 
@@ -232,8 +231,10 @@ units and bounds. Rendering, raster decoding, zoom and accessibility are UI work
 An object is an explicit JSON `exported-snapshot` with classes/provenance.
 Batch Rscript supplies no live R variables or R-memory recovery.
 
-Registered unavailable UI entries are `rho.editor`, `rho.table`,
-`rho.scatter`, `rho.media` and `rho.object`, version 0.2.0. Their owner
+Registered UI contracts include `rho.editor`, `rho.table`,
+`rho.scatter`, `rho.media` and `rho.object`, version 0.2.0. Availability is
+reported by the selected owner entry; `rho.object` currently has no browser renderer.
+The owner
 validates props and resource roles; scatter requires explicit numeric `x`/`y`
 and an entity key. Rho persists the chosen bindings and layout intent.
 
@@ -414,8 +415,8 @@ execution exactly-once or an independently installed application composition.
 
 The phase-2 source candidate selected Agent 0.4.1 and Tables 0.4.1; other owners
 remained at 0.4.0. This continuation authorizes the scoped phase 2–5 implementation.
-The existing Paper candidate-beside-
-source arrangement supplies the split intent; no new teaching dashboard is selected.
+The recorded scenario used a source and candidate side by side. This is historical
+verification context, not a requirement for frontend layout.
 
 After original resources and task routing exist, a trusted embedding integration
 calls `RhoService.configurePresentation(projectId, policy)`. The complete
@@ -727,7 +728,6 @@ context/process loss, stale authorization, hook crashes and expired-receipt case
 use installed SDK/fault fixtures; native automatic compaction was not forced.
 Local evidence is `work/phase5-installed-dual-agent-20261021/results.html` with
 requirements, exact identities, filtered actual traces and failure accounting.
-The 900px view retains internal scrolling/column ellipsis. Full Paper teaching
-experience, accessibility, same-project multi-task, OS execution deduplication
+The 900px view retains internal scrolling/column ellipsis. Human usability, accessibility, same-project multi-task, OS execution deduplication
 and official distribution are not accepted by this bounded flow. No registry
 publication or signing was performed.

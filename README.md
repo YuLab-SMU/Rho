@@ -38,17 +38,17 @@ contract. Electron is reserved for a later desktop client that reuses the WebUI
 and component boundaries. Functional views use CodeMirror 6, AG Grid Community
 and ECharts.
 
-Install the packed tarball, start `rho`, and connect Claude Code with
-`rho --grant` ([Install and start](docs/HEADLESS.md#install-and-start)). A task in
-natural language becomes a run the person reviews and starts; its outputs open
-from the run, a question about a table row goes back to the Agent, and a run
-exports as ordinary files with its provenance. The
-[W7 acceptance](docs/W7-ACCEPTANCE.md) records that path with real Claude Code
-from an installed package; npm registry publication is not done yet.
-[Status](docs/STATUS.md) records the current evidence and limits.
+Install the packed tarball, start `rho`, and connect an external Agent with
+`rho --grant` ([Install and start](docs/HEADLESS.md#install-and-start)). Projects,
+files, execution records and workspaces are available through the local WebUI.
+The Agent uses the same scoped capabilities; a browser request copied to an external
+Agent is explicitly a handoff.
 
-Start with the [prioritized first-release tasks](docs/WEBUI-FIRST.md),
-[Architecture](docs/ARCHITECTURE.md), [Technology stack](docs/TECHSTACK.md)
-and [Roadmap](docs/ROADMAP.md). The [documentation index](docs/README.md) covers
-product design, development and distribution. Contributions follow
-[Contributing](CONTRIBUTING.md); source is licensed under [AGPL-3.0](LICENSE).
+The frontend was reconstructed on 2026-10-25 after withdrawing the earlier design
+plans and visual rules. See [Frontend](docs/FRONTEND.md) for the current interface,
+[Status](docs/STATUS.md) for executed checks and limits, and the
+[documentation index](docs/README.md) for backend and release information.
+npm registry publication has not been performed.
+
+Contributions follow [Contributing](CONTRIBUTING.md); source is licensed under
+[AGPL-3.0](LICENSE).

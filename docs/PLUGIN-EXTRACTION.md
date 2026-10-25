@@ -119,4 +119,4 @@ PX-03 的对象支持首先限定为 batch 的显式导出快照；不把实时 
 
 前五项的后端结果、实际安装和保留失败统一见[解耦验收](EXTRACTION-ACCEPTANCE.md)。
 第六项仍待 UI 实施。原 BP 证据保持原范围；[Status](STATUS.md)记录当前状态，
-[首版交付清单](WEBUI-FIRST.md)继续持有全部产品发布条件。
+[Release](RELEASE.md)记录发布边界。

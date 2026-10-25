@@ -3,7 +3,7 @@
 Start with [Status](STATUS.md), [Architecture](ARCHITECTURE.md),
 [Roadmap](ROADMAP.md) and [Technology stack](TECHSTACK.md). The local backend is
 implemented; its [build, check and assembly commands](HEADLESS.md#budgets-verification-and-assembly)
-exercise the actual headless composition. Browser implementation is pending.
+exercise the actual headless composition. The browser implementation is described in [Frontend](FRONTEND.md).
 
 ## Work in the source owner
 
@@ -26,8 +26,7 @@ Component repositories retain their own workflows.
 The first product delivery uses npm and a local WebUI, combining natural-language
 action, linked script/table/plot resources and movable views within one browser
 window. Native cross-window movement belongs to a later desktop client. The
-[prioritized task list](WEBUI-FIRST.md) and
-[completion criteria](ROADMAP.md#first-integrated-flow) guide bounded changes in
+[product flow](ROADMAP.md#first-integrated-flow) guide bounded changes in
 each owner while the final acceptance exercises the actual application combination.
 
 1. Define the action, inputs, visible result, failure behavior and responsible owner.
@@ -48,8 +47,7 @@ batch. Inspect every changed page for missing content/glyphs, clipping, overlap
 and broken tables. Recheck affected pagination after fixes; reuse valid unchanged
 observations. Only executed checks count as passes.
 
-Substantial UI work follows [Product design](DESIGN.md) and user review. Test real
-behavior with actual resources at normal, wide and constrained sizes. Verify
+Test real browser behavior with actual resources at normal, wide and constrained sizes. Verify
 applicable native IME, focus, keyboard access, clipboard, undo and external writes;
 synthetic key events alone do not prove native input behavior.
 

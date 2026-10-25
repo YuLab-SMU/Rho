@@ -1,4 +1,4 @@
-// W6 exit check (docs/WORKSPACE-PLAN.md): work outlives the tab, the service and the shell
+// Browser behavior: work outlives the tab, the service and the shell
 // that showed it. A run opens from the project page in the workspace's own run view; a run's
 // script, tables and figure export as ordinary files with where they came from and what was
 // checked, partial and missing files said as such, and unsaved text exported only by choice;
@@ -14,11 +14,11 @@ import { once } from 'node:events';
 import { createHash } from 'node:crypto';
 import { chromium } from '@playwright/test';
 import { RhoClient, native, packageRoot } from './support.mjs';
-import { rulers, profiles } from './rulers.mjs';
+import { inspectResponsive } from './browser-checks.mjs';
 const evidence = path.resolve(process.env.RHO_CONTINUITY_EVIDENCE ?? 'work/continuity-' + Date.now());
 await fs.mkdir(evidence, { recursive: true, mode: 0o700 });
 const root = await fs.mkdtemp('/tmp/rho-continuity-'), state = path.join(root, '.service');
-const report = { scenario: 'W6-continuity', passed: false, checks: [], rulers: [] };
+const report = { scenario: 'recovery-and-export', passed: false, checks: [], responsive: [] };
 const passed = (name, detail = {}) => { report.checks.push({ name, ...detail }); process.stdout.write(`ok · ${name}\n`); };
 const digestOf = bytes => createHash('sha256').update(bytes).digest('hex');
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -38,10 +38,10 @@ async function start() {
   port = Number(new URL(ready.url).port);
   return ready;
 }
-// A page (the project page and what opens over it) holds the page rulers; the workspace adds M1–M3.
-const pageRulers = async (page, name, first) => {
-  const results = await rulers(page, { name, profile: profiles.shell, first, evidence, report, restore: [1440, 900] });
-  const failing = results.flatMap(r => r.failures.filter(f => ['M4', 'M5', 'M7', 'M8', 'M9', 'M10'].some(m => f.startsWith(m + ' '))).map(f => `${name} ${r.width}: ${f}`));
+// Observe the page and any open dialog at different viewport widths.
+const inspectState = async (page, name, first) => {
+  const results = await inspectResponsive(page, { name, first, evidence, report, restore: [1440, 900] });
+  const failing = results.flatMap(r => r.failures.map(f => `${name} ${r.width}: ${f}`));
   assert.deepEqual(failing, []);
 };
 async function stop(signal = 'SIGTERM') {
@@ -80,7 +80,7 @@ try {
 
   // 1. The project page opens a run in the workspace's run view: the same facts, the stop and
   // the output, without loading a second account of an execution. Closing returns focus.
-  const row = page.locator('.overview-attention-row').filter({ hasText: 'w6-broken' });
+  const row = page.locator('.activity-row').filter({ hasText: 'w6-broken' });
   await row.click();
   const dialog = page.locator('dialog.run-dialog[open]');
   await dialog.locator('[data-rho-execution="failed"]').waitFor();
@@ -91,7 +91,7 @@ try {
   await dialog.getByRole('button', { name: 'Copy request for the Agent', exact: true }).click();
   const contextId = (await page.evaluate(() => navigator.clipboard.readText())).match(/read context (\S+?),/)?.[1];
   assert.ok(contextId, 'the copied request names its context');
-  await pageRulers(page, 'run-dialog');
+  await inspectState(page, 'run-dialog');
   await dialog.getByRole('button', { name: 'Close', exact: true }).click();
   await dialog.waitFor({ state: 'detached' });
   assert.equal(await row.evaluate(element => element === document.activeElement), true, 'focus returns to the run row');
@@ -112,19 +112,19 @@ try {
   await until(() => agent('action.lookup', { operationId: 'w6-export' }), r => r.execution === 'completed', 'the analysis completes');
   const code = await agent('document.open', { path: 'analysis.R' });
   await call('document.edit', { documentId: code.id, expectedVersion: code.version, edits: [{ from: 0, to: 0, insert: '# next idea\n' }], undoGroup: 'later' });
-  await page.locator('main summary').filter({ hasText: 'Execution records' }).click();
-  await page.locator('main').getByRole('button', { name: 'w6-export', exact: true }).click();
+  await page.locator('.project-nav').getByRole('button', { name: 'Activity', exact: true }).click();
+  await page.locator('.activity-row').filter({ hasText: 'w6-export' }).click();
   await dialog.locator('[data-rho-execution="completed"]').waitFor();
   await dialog.getByRole('button', { name: 'Export files…', exact: true }).click();
   await dialog.getByRole('button', { name: 'Export', exact: true }).click();
   // The owner asks about the unsaved text; nothing is written until the person answers.
   await dialog.getByText('analysis.R has unsaved changes.').waitFor();
   await assert.rejects(fs.access(path.join(project.root, 'exports/w6-export')));
-  await pageRulers(page, 'export-choice');
+  await inspectState(page, 'export-choice');
   await dialog.getByRole('button', { name: 'Include them', exact: true }).click();
   await dialog.locator('[data-rho-export="done"]').getByText('Exported 4 files to exports/w6-export · partial').waitFor();
   await dialog.getByText('summary.txt · The run declared this file but did not write it.').waitFor();
-  await pageRulers(page, 'export-done');
+  await inspectState(page, 'export-done');
   const exported = path.join(project.root, 'exports/w6-export'), bytes = name => fs.readFile(path.join(exported, name));
   // Each file opens without Rho: the CSV parses, the PNG is a 640×420 image, the script is the code that ran.
   const table = String(await bytes('outputs/table.csv')).trim().split('\n').map(line => line.split(','));
@@ -199,7 +199,7 @@ try {
   const registered = (await call('resource.list', { operationId: 'w6-export' })).resources.find(r => r.path.endsWith('table.csv'));
   const before = { tabs: await page.getByRole('tab').allTextContents(), layout: (await call('composition.read', { compositionId: 'workspace' })).version };
   await restart('SIGTERM');
-  await page.getByRole('status').filter({ hasText: 'Up to date' }).waitFor({ timeout: 30000 });
+  await page.getByRole('status').filter({ hasText: 'Connected' }).waitFor({ timeout: 30000 });
   assert.ok((await admin.call('project.list', {})).some(p => p.id === project.id));
   assert.equal((await call('resource.read', { resource: { id: registered.id, version: registered.version }, offset: 0 })).resource.version, registered.version);
   const restored = await call('document.read', { documentId: code.id });
@@ -226,9 +226,9 @@ try {
   const stored = await call('document.read', { documentId: code.id });
   assert.ok(stored.content.endsWith('# draft kept\n'), 'only what was stored comes back');
   assert.equal(stored.content.includes('# unsent'), false);
-  await page.getByRole('status').filter({ hasText: 'Up to date' }).waitFor({ timeout: 30000 });
+  await page.getByRole('status').filter({ hasText: 'Connected' }).waitFor({ timeout: 30000 });
   assert.equal(await owner('code').locator('[data-rho-unconfirmed]').count(), 1, 'the change stays marked unconfirmed');
-  await rulers(page, { name: 'unconfirmed', profile: profiles.shell, first: () => editor, transientAllowed: true, enforce: true, evidence, report });
+  await inspectResponsive(page, { name: 'unconfirmed', first: () => editor, transientAllowed: true, evidence, report });
   await page.unroute('**/api/v2/document.edit');
   await owner('code').locator('[data-rho-unconfirmed]').waitFor({ state: 'detached', timeout: 15000 });
   const confirmed = await call('document.read', { documentId: code.id });

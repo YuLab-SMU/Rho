@@ -1,6 +1,5 @@
 // Rho's expression layer: what the screen shows, given the facts Rho observed about
-// objects and what the person is doing. DOM-free, so the shell, the replay prototype
-// and the tests all read the same rules (docs/INTERACTION-MODEL.md).
+// objects and what the person is doing. DOM-free, shared by the shell and tests.
 //
 // Facts are about objects; the Agent is only their author. The Agent never asks the
 // screen to show anything. It works, and the work moves the screen through six rules:

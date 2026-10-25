@@ -31,7 +31,7 @@ export function Slot({ container, id, labelledBy }: { container: HTMLElement; id
   return <div ref={ref} id={id} className="shell-panel" role="tabpanel" aria-labelledby={labelledBy} />;
 }
 
-// A tab list that scrolls says which side has more (M6) and keeps the selected tab in sight.
+// A tab list that scrolls says which side has more and keeps the selected tab in sight.
 export function useTabOverflow(ref: RefObject<HTMLElement | null>, selected: string, shown = true) {
   useLayoutEffect(() => {
     const list = ref.current; if (!list) return;

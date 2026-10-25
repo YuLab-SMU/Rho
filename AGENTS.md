@@ -5,9 +5,7 @@ Read [Status](docs/STATUS.md), [Architecture](docs/ARCHITECTURE.md),
 [documentation index](docs/README.md) first.
 Rho contains a versioned local backend, client and headless acceptance scripts.
 Read [Headless backend](docs/HEADLESS.md) and its
-[acceptance record](docs/BACKEND-ACCEPTANCE.md). Scoped browser checks are recorded
-in [S7 acceptance](docs/INTERACTION-ACCEPTANCE.md); the
-[workspace plan](docs/WORKSPACE-PLAN.md) sequences the remaining UI work and its checks.
+[acceptance record](docs/BACKEND-ACCEPTANCE.md). The current browser implementation is described in [Frontend](docs/FRONTEND.md).
 
 ## Source ownership
 
@@ -67,21 +65,12 @@ observations of unchanged content. Keep failures, incomplete evidence and domain
 limits. [Status](docs/STATUS.md) is the single current summary, under 300 lines;
 update it when behavior, verification, focus or unresolved work changes.
 
-Read [Product design](docs/DESIGN.md) before UI work. Product-authored UI is English
-and preserves Unicode user content. UI acceptance is measured, not reviewed: the
-behaviour contracts E1–E5, rulers M1–M10 and performance budgets of the
-[workspace plan](docs/WORKSPACE-PLAN.md) decide it, in real Chrome at four widths
-with applicable native input and accessibility. Paper is a sketchpad for comparing
-layout alternatives when that helps; user review is not a gate.
-
-The user approved the [workspace plan](docs/WORKSPACE-PLAN.md) W0–W7 on 2026-10-24
-("执行完整计划"). Within it, Agents implement, verify, revise, commit and, once the
-milestone's checks pass, fast-forward push main without asking per step. Exit
-conditions are fixed in the plan: correct or tighten them there with a reason before
-code depends on it; loosening them, changing the end goal, a materially different
-product direction, or publishing to a registry needs the user. Findings outside the
-current milestone go to the plan's parking lot. Engineering checks are recorded as
-engineering checks; human understanding remains **not yet evidenced** and is not a gate.
+The previous frontend plans, design boards and visual acceptance rulers were withdrawn
+at the user's request on 2026-10-25. They are not requirements or reference designs.
+Work from the user's current task and the actual capabilities of the application.
+Check usable flows in a real browser, including failure, input and recovery behavior.
+Do not infer product quality from a stylesheet checklist. Product text is English;
+user content retains its original Unicode.
 
 Use disposable projects and owned Hosts for execution checks. Inspect existing
 work before starting another Host on the same project. Do not restart a user Host

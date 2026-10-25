@@ -10,7 +10,7 @@ import { BrowserClient } from '../dist/browser.js';
 import { runtime } from '../dist/runtime.js';
 import { digest } from '@rho-workspace/plugin-contracts';
 
-// Decision 2 (docs/WORKSPACE-PLAN.md): a tab whose pairing includes a project may stop that
+// A tab whose pairing includes a project may stop that
 // project's runs; it finds a run only among that project's runs, a missing, guessed or other
 // project's ID gets one answer, the request names who asked, and an Agent's own cancel is as before.
 const sleep = 'cat("started\\n")\nSys.sleep(30)\n', fails = 'stop("Deliberate failure")\n';

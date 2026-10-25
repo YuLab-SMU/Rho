@@ -169,7 +169,7 @@ export class Requests {
     await this.persist(run); return run;
   }
   // An Agent cancels what it submitted. A person's tab whose pairing includes this project
-  // may stop any of its runs (docs/WORKSPACE-PLAN.md decision 2); the submitter stays the
+  // may stop any of its runs; the submitter stays the
   // submitter and the request names who asked.
   async cancel(principal: Principal, operationId: string) {
     const run = principal.kind === 'browser' ? await this.find(operationId) : await this.lookup(principal, operationId);

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { beneath, lastSegment, type BrowserClient, type FolderSelection, type ProjectSummary, type SourceFolder } from '../src/browser.js';
 import { onPlatform } from './platform.js';
 import { Icon } from './icons.js';
@@ -16,9 +16,9 @@ export function when(iso: string, now = new Date()) {
   return { text, full: at.toLocaleString('en-US', { dateStyle: 'full', timeStyle: 'short' }) };
 }
 // Keyboard focus stays inside an open sheet; Escape and the backdrop close it.
-export function trapTab(event: KeyboardEvent<HTMLElement>) {
-  if (event.key !== 'Tab') return;
-  const items = [...event.currentTarget.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), [href], [tabindex]:not([tabindex="-1"])')];
+export function trapTab(event: { key: string; shiftKey: boolean; preventDefault(): void; currentTarget: EventTarget | null }) {
+  if (event.key !== 'Tab' || !(event.currentTarget instanceof HTMLElement)) return;
+  const items = [...event.currentTarget.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled), summary, [href], [tabindex]:not([tabindex="-1"])')].filter(el => el.getClientRects().length > 0);
   const first = items[0], last = items.at(-1);
   if (!first || !last) return;
   if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
@@ -47,9 +47,10 @@ export function Home({ client, projects, folder, focusRequest, onFocused, onOpen
   client: BrowserClient; projects: ProjectSummary[]; folder: Folder; focusRequest: boolean; onFocused: () => void;
   onOpened: (project: ProjectSummary) => void; onChoose: (project: ProjectSummary) => void; onAccessEnded: () => void;
 }) {
+  const [query, setQuery] = useState('');
   const [sheet, setSheet] = useState(false), [picking, setPicking] = useState(false), [failure, setFailure] = useState('');
   const trigger = useRef<HTMLElement | null>(null), openButton = useRef<HTMLButtonElement>(null), firstRow = useRef<HTMLButtonElement>(null);
-  const sorted = [...projects].sort((a, b) => b.openedAt.localeCompare(a.openedAt));
+  const sorted = [...projects].filter(p => !query || projectName(p).toLocaleLowerCase().includes(query.toLocaleLowerCase())).sort((a, b) => b.openedAt.localeCompare(a.openedAt));
   const refocus = useRefocus<HTMLElement>(picking);
   // "Open a project…" lands on the most recent project, or on Open folder when there is none.
   useEffect(() => { if (focusRequest) { (firstRow.current ?? openButton.current)?.focus(); onFocused(); } }, [focusRequest]);
@@ -76,12 +77,14 @@ export function Home({ client, projects, folder, focusRequest, onFocused, onOpen
   return <section className="home">
     <div className="home-column">
       <header className="home-header">
-        <div className="home-title"><h1>{projects.length ? 'Welcome back' : 'Welcome to Rho'}</h1>
-          <p>{projects.length ? 'Pick up a project, or open another folder on ' + onPlatform + '.' : 'Open a folder on ' + onPlatform + ', or start a new project.'}</p></div>
+        <div className="home-title"><h1>Your projects</h1>
+          <p>{projects.length ? 'Pick up where you left off.' : 'A place for your code, data and ideas.'}</p></div>
         {projects.length > 0 && <div className="home-actions">{entries}</div>}
       </header>
+      {projects.length > 0 && <label className="search-field project-search"><Icon name="search" size={18} /><input aria-label="Find a project" placeholder="Find a project…" value={query} onChange={e => setQuery(e.target.value)} /></label>}
       {projects.length ? <div className="project-list" role="group" aria-labelledby="project-list-label">
         <div className="project-list-heading"><span id="project-list-label">Projects</span><span aria-hidden="true">Added</span></div>
+        {!sorted.length && <div className="empty-state compact"><p>No projects match “{query}”.</p><button onClick={() => setQuery('')}>Clear search</button></div>}
         {sorted.map((p, index) => {
           const added = when(p.openedAt);
           return <button ref={index === 0 ? firstRow : undefined} className="project-row" key={p.id} onClick={() => onChoose(p)}>
@@ -101,7 +104,7 @@ export function Home({ client, projects, folder, focusRequest, onFocused, onOpen
       </div>}
       {picking && <p className="home-note" role="status">Choose a folder in the system window. Cancel to return here.</p>}
       {failure && <p className="home-note" role="alert">{failure}</p>}
-      <p className="home-note"><Icon name="info" size={14} stroke={1.3} />Opening a folder starts no tasks and installs nothing.</p>
+
     </div>
     {sheet && <ProjectSheet client={client} folder={folder} onOpened={onOpened} onAccessEnded={onAccessEnded} onClose={() => { setSheet(false); trigger.current?.focus(); }} />}
   </section>;

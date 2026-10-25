@@ -5,9 +5,9 @@ import { express } from '../dist/expression.js';
 import { align, fold, ledger } from '../dist/trace.js';
 
 // The same recorded run seen two ways: the Agent's transcript (calls.jsonl plus owner
-// records, prototypes/replay/trace/airquality.json) and Rho's own records alone
-// (records.json, folded by src/trace.ts). docs/INTERACTION-PLAN.md S2.
-const read = name => JSON.parse(fs.readFileSync(new URL('../prototypes/replay/trace/' + name, import.meta.url), 'utf8'));
+// records, test/fixtures/trace/airquality.json) and Rho's own records alone
+// (records.json, folded by src/trace.ts).
+const read = name => JSON.parse(fs.readFileSync(new URL('./fixtures/trace/' + name, import.meta.url), 'utf8'));
 const transcript = read('airquality.json'), records = read('records.json');
 const folded = fold(records), at = align(transcript, folded);
 const runAgent = transcript.facts[0].actor;
@@ -87,7 +87,7 @@ test('the screen folded from Rho records never shows an object it cannot name', 
   assert.deepEqual(express(folded, working, folded.facts.length - 1).escalations, []);
 });
 
-// The second run (docs/INTERACTION-PLAN.md S4): real Claude Code making a failing R check
+// A second recorded run: real Claude Code making a failing R check
 // pass, recorded with nothing but Rho's own records.
 const check = fold(read('check.records.json')), checkAgent = check.facts[0].actor, checkEnd = check.facts.length - 1;
 

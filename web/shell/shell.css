@@ -1,299 +1,160 @@
-/* The workspace shell: the owner's layout tree as splits and tab groups. Theme tokens only
-   (test/web-style.test.mjs); the work fills every pixel Rho does not need. */
 .shell { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-.shell-stage { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: var(--space-5) var(--space-6) var(--space-6); }
-/* The question the Agent declared heads the work it is about. */
-.shell-heading { flex: none; padding: var(--space-6) var(--space-7) 0; }
-.shell-heading h1 { font-size: var(--font-size-xl); line-height: var(--line-height-xl); overflow-wrap: anywhere; }
-.shell-split { flex: 1; min-width: 0; min-height: 0; display: flex; }
-.shell-split[data-axis="vertical"] { flex-direction: column; }
-.shell-pane { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
-.shell-divider { flex: none; position: relative; z-index: 1; background: transparent; touch-action: none; }
-/* The divider takes its own 7px: a hit area that overlapped the panes would cover their edges (M1). */
-/* Between two cards the gutter is the divider; its line shows only under the pointer or focus. */
-.shell-split[data-axis="horizontal"] > .shell-divider { width: 12px; cursor: col-resize; }
-.shell-split[data-axis="vertical"] > .shell-divider { height: 12px; cursor: row-resize; }
-.shell-divider::before { content: ''; position: absolute; background: transparent; }
-.shell-split[data-axis="horizontal"] > .shell-divider::before { top: 0; bottom: 0; left: 5px; width: 1px; }
-.shell-split[data-axis="vertical"] > .shell-divider::before { left: 0; right: 0; top: 5px; height: 1px; }
-.shell-divider:hover::before, .shell-divider:focus-visible::before { background: var(--color-accent); }
-.shell-split[data-axis="horizontal"] > .shell-divider:hover::before, .shell-split[data-axis="horizontal"] > .shell-divider:focus-visible::before { left: 4px; width: 3px; }
-.shell-split[data-axis="vertical"] > .shell-divider:hover::before, .shell-split[data-axis="vertical"] > .shell-divider:focus-visible::before { top: 4px; height: 3px; }
-.shell-divider:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
-.shell-group { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; background: var(--color-surface); border: 1px solid var(--color-hairline); border-radius: var(--radius-lg); }
-/* Tabs keep their row; owner controls wrap below them when the group is narrow. */
-.shell-tabbar { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-4); min-height: calc(var(--height-button) + 8px); padding: 0 var(--space-4) 0 var(--space-3); border-bottom: 1px solid var(--color-divider); background: var(--color-surface); }
-.shell-tabs { flex: 1 1 auto; min-width: 0; display: flex; align-items: stretch; align-self: stretch; gap: var(--space-2); overflow-x: auto; scrollbar-width: none; }
-/* Which side has more tabs: a fade on that edge (M6). */
-.shell-tabs[data-overflow="end"] { mask-image: linear-gradient(to right, var(--color-ink) calc(100% - 32px), transparent); }
-.shell-tabs[data-overflow="start"] { mask-image: linear-gradient(to left, var(--color-ink) calc(100% - 32px), transparent); }
-.shell-tabs[data-overflow="both"] { mask-image: linear-gradient(to right, transparent, var(--color-ink) 32px, var(--color-ink) calc(100% - 32px), transparent); }
-.shell-tabs button { flex: none; max-width: 280px; overflow: hidden; min-height: calc(var(--height-button) + 6px); padding: 0 var(--space-4); border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; color: var(--color-muted); font-size: var(--font-size-md); font-weight: 400; line-height: var(--line-height-md); white-space: nowrap; }
+.shell-stage { display: flex; flex-direction: column; flex: 1; min-height: 0; padding: 12px; background: var(--color-canvas); }
+.shell-split { display: flex; flex: 1; min-width: 0; min-height: 0; }
+.shell-split[data-axis=vertical] { flex-direction: column; }
+.shell-pane { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.shell-divider { flex: none; position: relative; touch-action: none; }
+.shell-split[data-axis=horizontal] > .shell-divider { width: 10px; cursor: col-resize; }
+.shell-split[data-axis=vertical] > .shell-divider { height: 10px; cursor: row-resize; }
+.shell-divider::after { content: ''; position: absolute; border-radius: 2px; }
+.shell-split[data-axis=horizontal] > .shell-divider::after { width: 2px; left: 4px; top: 12px; bottom: 12px; }
+.shell-split[data-axis=vertical] > .shell-divider::after { height: 2px; top: 4px; left: 12px; right: 12px; }
+.shell-divider:hover::after, .shell-divider:focus-visible::after { background: var(--color-accent); }
+.shell-divider:focus-visible { outline-offset: -2px; }
+.shell-group { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; overflow: hidden; background: white; border: 1px solid var(--color-hairline); border-radius: 8px; }
+.shell-tabbar { display: flex; flex-wrap: wrap; align-items: center; flex: none; min-height: 42px; padding: 0 8px; border-bottom: 1px solid var(--color-hairline); }
+.shell-tabs { display: flex; align-self: stretch; align-items: stretch; flex: 1; min-width: 0; overflow-x: auto; scrollbar-width: thin; }
+.shell-tabs button { flex: none; max-width: 260px; min-height: 40px; padding: 0 12px; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; font-size: 13px; font-weight: 400; color: var(--color-meta); white-space: nowrap; }
 .shell-tabs button:hover { background: var(--color-hover); }
-/* The shown view's tab is its title, underlined in the focus colour. */
-.shell-tabs button[aria-selected="true"] { color: var(--color-ink); font-weight: 600; border-bottom-color: var(--color-accent); }
-.shell-tabs button:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
-.shell-tab-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.shell-header-slot { flex: 0 1 auto; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4); margin-left: auto; }
+.shell-tabs button[aria-selected=true] { border-bottom-color: var(--color-accent); color: var(--color-accent-strong); font-weight: 600; }
+.shell-tabs button:focus-visible { outline-offset: -3px; }
+.shell-tab-name { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.shell-header-slot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-left: auto; min-width: 0; }
 .shell-header-slot:not(:has(.shell-view-header > *)) { display: none; }
 .shell-view-header { display: contents; }
-.shell-header-narrow { padding: var(--space-2) var(--space-4); border-bottom: 1px solid var(--color-divider); }
-/* The view body stays clear of the card's rounded corners, so no content sits under the curve. */
-.shell-panel { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 0 var(--space-2) var(--space-2); }
-.shell-view { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-.shell-owner { flex: 1; min-height: 0; position: relative; display: flex; flex-direction: column; }
+.shell-header-narrow { padding: 7px 10px; border-bottom: 1px solid var(--color-hairline); }
+.shell-panel, .shell-view, .shell-owner { display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; }
+.shell-panel { overflow: hidden; }
+.shell-owner { position: relative; }
 .shell-owner > * { flex: 1; min-height: 0; }
-.shell-problem { flex: none; margin: 0; padding: var(--space-3) var(--space-5); border-bottom: 1px solid var(--color-divider); background: var(--color-amber-soft); color: var(--color-ink); }
-.shell-run { padding: var(--space-7); overflow: auto; }
-@media (max-width: 767px) {
-  .shell-tabbar { min-height: 44px; padding: 0 var(--space-4); }
-  .shell-tabs button { max-width: 72vw; min-height: var(--height-button); padding: 0 var(--space-5); }
-  .shell-header-narrow { margin-left: 0; justify-content: flex-end; }
-}
-
-/* What Rho adds: the activity bar under the work, at most one interruption, the digest
-   only on return, the evidence only on request, and from 1280 the Agent's column. */
-.shell-bar { flex: none; display: flex; align-items: center; gap: var(--space-2) var(--space-5); min-height: 40px; padding: var(--space-1) var(--space-5) var(--space-1) var(--space-6); background: var(--color-canvas); font-size: var(--font-size-sm); line-height: var(--line-height-sm); white-space: nowrap; }
-.shell-bar button, .shell-interruption button, .shell-digest button, .shell-source button, .shell-run button, .agent-column button { min-height: var(--height-button-small); padding: 0 var(--space-4); border-radius: var(--radius-sm); font-size: var(--font-size-sm); font-weight: 400; white-space: nowrap; }
-.shell-bar button:focus-visible, .shell-interruption button:focus-visible, .shell-digest button:focus-visible, .shell-source button:focus-visible, .shell-run button:focus-visible, .agent-column button:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 1px; }
-.shell-span { flex: none; color: var(--color-meta); }
-.shell-span strong { color: var(--color-ink); }
-.shell-follow { gap: var(--space-4); background: var(--color-surface); }
-.shell-follow[aria-pressed="true"] { color: var(--color-accent-strong); border-color: var(--color-accent); background: var(--color-accent-soft); }
-.shell-switch { position: relative; width: 24px; height: 14px; flex: none; border-radius: var(--radius-pill); background: var(--color-control-border); }
-.shell-switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 10px; height: 10px; border-radius: 50%; background: var(--color-surface); }
-.shell-follow[aria-pressed="true"] .shell-switch { background: var(--color-accent); }
-.shell-follow[aria-pressed="true"] .shell-switch::after { left: 12px; }
-.shell-agent { flex: 0 1 auto; justify-content: flex-start; min-width: 0; gap: var(--space-3); border-color: transparent; background: transparent; }
-.shell-agent:hover { background: var(--color-hover); }
-.shell-agent-who { flex: none; color: var(--color-muted); }
-/* When the bar is short of room the state gives way before the object's name does. */
-.shell-agent-object { flex: 0 1 auto; min-width: 2.5em; overflow: hidden; text-overflow: ellipsis; color: var(--color-ink); font-weight: 600; }
-.shell-agent-state { flex: 0 100 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--color-muted); font-weight: 400; }
-/* Recorded activity along time: ticks are recorded facts, numbered marks are runs. */
-.shell-timeline { position: relative; flex: 1 1 auto; min-width: 96px; height: 28px; margin-inline: var(--space-5); }
-.shell-timeline.inline { display: inline-flex; align-items: center; gap: var(--space-2); flex: 0 1 auto; min-width: 0; height: auto; margin: 0; }
-.shell-ticks { position: absolute; inset: 0; }
-.shell-ticks::before { content: ''; position: absolute; left: 0; right: 0; bottom: 4px; height: 1px; background: var(--color-hairline); }
-.shell-ticks i { position: absolute; bottom: 4px; width: 1px; height: 6px; background: var(--color-control-border); }
-.shell-ticks i.agent { height: 10px; background: var(--color-meta); }
-.shell-gap { position: absolute; bottom: 1px; width: 6px; height: 7px; border-inline: 1.5px solid var(--color-meta); background: var(--color-canvas); transform: translateX(-50%) skewX(-20deg); }
-.shell-bar .shell-mark { position: absolute; top: 0; width: 20px; min-height: 20px; height: 20px; padding: 0; border-radius: 50%; border: 1.5px solid var(--color-muted); background: var(--color-surface); color: var(--color-muted); font: 600 var(--font-size-sm)/var(--line-height-sm) var(--font-mono); }
-.shell-timeline.inline .shell-mark { position: static; }
-.shell-bar .shell-mark.completed { border-color: var(--color-verified); color: var(--color-verified-text); }
-.shell-bar .shell-mark.failed { border-color: var(--color-failed); background: var(--color-failed); color: var(--color-surface); }
-/* A failure a later run replaced keeps its place and number, outlined, without the failure colour (R7). */
-.shell-bar .shell-mark.failed.superseded { border-color: var(--color-control-border); background: var(--color-selected); color: var(--color-muted); }
-.shell-bar .shell-mark.running { border-color: var(--color-accent); border-style: dashed; color: var(--color-accent-strong); }
-.shell-bar .shell-mark.unknown, .shell-bar .shell-mark.unobserved { border-style: dotted; }
-.shell-bar .shell-mark.latest { box-shadow: 0 0 0 2px var(--color-canvas), 0 0 0 4px var(--color-accent-soft); }
-.shell-bar .shell-mark.latest:active { box-shadow: inset 0 0 0 100vmax var(--color-pressed), 0 0 0 2px var(--color-canvas), 0 0 0 4px var(--color-accent-soft); }
-.shell-break, .shell-narrow-word { display: none; }
-.shell-held { color: var(--color-muted); }
-.shell-quiet { border-color: transparent; background: transparent; color: var(--color-muted); }
-.shell-quiet:hover { background: var(--color-hover); color: var(--color-ink); }
-.shell-link { min-height: 0; padding: 0 var(--space-1); border: 0; background: none; color: var(--color-accent-strong); font-weight: 400; text-decoration: underline; text-underline-offset: 2px; text-decoration-color: var(--color-accent-soft); }
-.shell-link:hover { background: none; text-decoration-color: currentColor; }
-.shell-interruption { flex: none; display: flex; align-items: center; gap: var(--space-4); min-height: var(--height-button); padding: var(--space-1) var(--space-5); border-bottom: 1px solid var(--color-divider); background: var(--color-amber-soft); font-size: var(--font-size-sm); }
+.shell-bar { display: flex; align-items: center; gap: 8px; flex: none; min-height: 38px; padding: 3px 16px; border-bottom: 1px solid var(--color-hairline); font-size: 12px; }
+.shell-bar button, .shell-source button, .shell-interruption button, .shell-digest button, .agent-column button { min-height: 28px; padding: 4px 8px; font-size: 12px; }
+.shell-break { flex: 1; }
+.shell-follow { background: transparent; border-color: var(--color-hairline); white-space: nowrap; }
+.shell-follow[aria-pressed=true] { background: var(--color-accent-soft); color: var(--color-accent); border-color: var(--color-accent); }
+.shell-quiet, .shell-link { border: 0; background: transparent; color: var(--color-muted); padding: 3px 6px; }
+.shell-link { color: var(--color-accent); }
+.shell-link:hover { text-decoration: underline; }
+.shell-agent { min-width: 0; max-width: 50%; border: 0; background: transparent; justify-content: flex-start; gap: 6px; }
+.shell-agent-who { color: var(--color-meta); }
+.shell-agent-object { min-width: 0; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.shell-agent-state { min-width: 0; color: var(--color-meta); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 400; }
+.shell-held, .shell-meta { color: var(--color-meta); }
+.shell-interruption { display: flex; align-items: center; gap: 10px; flex: none; padding: 10px 16px; background: var(--color-amber-soft); border-bottom: 1px solid var(--color-amber-line); font-size: 13px; }
 .shell-interruption-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
-.shell-digest { flex: none; padding: var(--space-2) var(--space-5) var(--space-3); border-bottom: 1px solid var(--color-divider); background: var(--color-surface); font-size: var(--font-size-sm); }
-.shell-digest header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); }
-.shell-digest ul { list-style: none; margin: var(--space-1) 0 0; padding: 0; }
-.shell-digest li { display: flex; align-items: baseline; gap: var(--space-4); min-width: 0; line-height: var(--line-height-md); }
-.shell-digest li > span { min-width: 0; color: var(--color-muted); overflow-wrap: anywhere; }
-.shell-evidence { flex: none; max-height: 34vh; overflow: auto; overscroll-behavior: contain; padding: var(--space-4) var(--space-6); border-bottom: 1px solid var(--color-divider); background: var(--color-well); font-size: var(--font-size-sm); }
-.shell-evidence ol { margin: var(--space-3) 0; padding: 0; list-style: none; }
-.shell-evidence li { display: flex; gap: var(--space-4); padding: var(--space-1) 0; overflow-wrap: anywhere; }
-.shell-evidence time { flex: none; color: var(--color-muted); font-variant-numeric: tabular-nums; }
-.shell-evidence code { font: var(--font-size-sm)/var(--line-height-sm) var(--font-mono); color: var(--color-muted); }
-.shell-evidence li.shell-evidence-day { padding-top: var(--space-4); color: var(--color-meta); font-weight: 600; }
-/* In the Agent's column a call takes two lines: when and who, then what. Words wrap whole. */
-.agent-record .shell-evidence li:not(.shell-evidence-day) { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0 var(--space-4); padding: var(--space-2) 0; overflow-wrap: break-word; }
-.agent-record .shell-evidence-what { grid-column: 2; color: var(--color-muted); }
-.shell-notes h3 { margin: 0 0 var(--space-2); font-size: var(--font-size-sm); font-weight: 600; }
-.shell-notes ul { margin: 0 0 var(--space-4); padding: 0; list-style: none; }
-.shell-notes li { display: block; padding: var(--space-2) 0; border-bottom: 1px solid var(--color-divider); }
-.shell-notes li p { margin: var(--space-1) 0 0; color: var(--color-muted); }
-.shell-evidence:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
-/* An artifact's line: produced by, verified by, the Agent's words, then the question. */
-/* One line in a pane: in a narrow pane the verification words shrink first, then the
-   producer, each ending in an ellipsis with the whole fact in its title (M2, M6). A phone
-   has no hover to read a title, so below 768 the line wraps and every fact stays whole. */
-.shell-source { flex: none; display: flex; align-items: center; gap: var(--space-1) var(--space-4); min-width: 0; min-height: var(--height-button); padding: var(--space-1) var(--space-5); border-bottom: 1px solid var(--color-divider); background: var(--color-surface); font-size: var(--font-size-sm); white-space: nowrap; }
-.shell-source > * { flex: none; }
-.shell-source .shell-producer { flex: 0 1 auto; min-width: 4em; border-color: transparent; background: transparent; padding: 0 var(--space-2); }
-.shell-source .shell-producer > span, .shell-source .shell-verified { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.shell-source .shell-verified { flex: 0 100 auto; min-width: 3em; }
-.shell-source .shell-producer:hover { background: var(--color-hover); }
-@media (max-width: 767px) {
-  .shell-source { flex-wrap: wrap; white-space: normal; }
-  .shell-source .shell-producer, .shell-source .shell-verified, .shell-source .shell-agent-words { flex: 0 1 auto; min-width: 0; }
-  .shell-source .shell-producer { padding: 0; text-align: left; white-space: normal; }
-  .shell-source .shell-producer > span, .shell-source .shell-verified, .shell-source .shell-agent-words { overflow: visible; text-overflow: clip; white-space: normal; }
-}
-.shell-state.completed { color: var(--color-ink); }
-.shell-state.failed { color: var(--color-failed); }
-.shell-state.unknown, .shell-state.unobserved { color: var(--color-muted); font-style: italic; }
-.shell-verified { color: var(--color-muted); }
-.shell-verified.verified { color: var(--color-verified-text); }
-.shell-meta { color: var(--color-muted); }
-.shell-agent-words { flex: 1 1 120px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--color-ink); font-style: italic; }
-/* With the bars above it the band stays under the 40% M2 budget at every viewport height. */
-.shell-question { flex: none; display: flex; align-items: safe center; min-height: var(--height-button); max-height: 25vh; overflow-y: auto; padding: var(--space-1) var(--space-5); border-bottom: 1px solid var(--color-divider); background: var(--color-surface); font-size: var(--font-size-sm); }
-.shell-question:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
-.shell-question:not(:has(.table-question > *)) { display: none; }
-.shell-question > .table-question { flex: 1; min-width: 0; }
-.shell-question .table-question { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); }
-.table-question-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-4); }
-.shell-question .table-question button, .table-question-actions button { min-height: var(--height-button-small); padding: 0 var(--space-4); border-radius: var(--radius-sm); font-size: var(--font-size-sm); font-weight: 400; }
-.shell-question .table-question button:focus-visible, .table-question-actions button:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 1px; }
-.table-question-toggle::after { content: ''; width: 5px; height: 5px; margin: 0 0 var(--space-2) var(--space-4); border: solid currentColor; border-width: 0 1.5px 1.5px 0; transform: rotate(45deg); }
-.table-question-toggle[aria-expanded="true"]::after { margin: var(--space-2) 0 0 var(--space-4); transform: rotate(-135deg); }
-.shell-question .table-question-compose, .shell-question .table-question-thread, .shell-question .table-question > [role="alert"] { flex: 1 1 100%; }
-.shell-question .table-question-thread { border-top: 1px solid var(--color-divider); padding: var(--space-3) 0; }
-.shell-question .table-question-thread p { margin: var(--space-2) 0; white-space: pre-wrap; }
-.shell-question .table-question-thread small, .shell-question .table-question-thread [role="status"], .shell-question .table-question-thread details { display: block; margin: var(--space-1) 0; color: var(--color-muted); font-size: var(--font-size-sm); }
-.shell-question .table-question-thread summary { cursor: pointer; }
-.shell-question .table-question-handoff button { font-weight: 600; }
-.shell-question .table-question-reply { margin-top: var(--space-3); padding: var(--space-3) var(--space-5); border-left: 2px solid var(--color-accent); }
-.shell-question .table-question-editor { height: 110px; margin: var(--space-3) 0; border: 1px solid var(--color-control-border); border-radius: var(--radius-sm); overflow: hidden; }
-.shell-question .table-question-compose > span { margin-left: var(--space-4); color: var(--color-muted); }
-.shell-question details summary { color: var(--color-muted); cursor: pointer; }
-.shell-run { flex: 1; min-height: 0; overflow: auto; padding: var(--space-7) var(--space-7); font-size: var(--font-size-md); }
-/* A run reads like a record card: its name, what Core observed and when, its files, then what checked them. */
-.shell-run-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: var(--space-4) var(--space-6); }
-.shell-run h2 { min-width: 0; margin: 0; font: 600 var(--font-size-xl)/var(--line-height-xl) var(--font-mono); overflow-wrap: anywhere; }
-.shell-run-actions { display: flex; flex-wrap: wrap; gap: var(--space-4); }
-.shell-run .shell-run-actions button { min-height: var(--height-button); padding: 0 var(--space-5); border: 1px solid var(--color-control-border); background: var(--color-surface); font-size: var(--font-size-md); font-weight: 600; }
-.shell-run .shell-run-actions button:hover { background: var(--color-hover); }
-.shell-run .shell-run-actions button[aria-expanded="true"] { background: var(--color-selected); }
-.shell-run .shell-run-status { margin-top: var(--space-3); color: var(--color-muted); }
-.shell-run .shell-run-status .shell-state { font-weight: 600; }
-.shell-run-clock { color: var(--color-muted); }
-.shell-run-elapsed { color: var(--color-accent-strong); font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-weight: 600; }
-.shell-run .shell-run-files { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: var(--space-4); margin: var(--space-6) 0 var(--space-5); padding: 0; list-style: none; }
-.shell-run-file { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 0 var(--space-4); min-height: 48px; padding: var(--space-4) var(--space-5); border: 1px solid var(--color-hairline); border-radius: var(--radius-md); background: var(--color-surface); color: var(--color-muted); }
-.shell-run-file.shell-not-yet { border-style: dashed; border-color: var(--color-accent); }
-.shell-run-file.missing { border-style: dashed; }
-.shell-run-file-name { min-width: 0; overflow: hidden; color: var(--color-ink); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
-.shell-run button.shell-run-file-name { justify-self: start; max-width: 100%; min-height: 0; padding: 0; border: 0; background: none; font-size: var(--font-size-md); text-decoration: underline; text-decoration-color: var(--color-hairline); text-underline-offset: 3px; }
-.shell-run button.shell-run-file-name:hover { background: none; text-decoration-color: currentColor; }
-.shell-run-file > svg { grid-row: span 2; color: var(--color-meta); }
-.shell-run-file-state { grid-column: 2; color: var(--color-meta); font-size: var(--font-size-sm); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.shell-run-checks { color: var(--color-meta); }
+.shell-interruption.problem { color: var(--color-failed); }
+.shell-digest { flex: none; max-height: 230px; overflow: auto; padding: 12px 20px; background: var(--color-well); border-bottom: 1px solid var(--color-hairline); font-size: 12px; }
+.shell-digest header { display: flex; justify-content: space-between; align-items: center; }
+.shell-digest ul { list-style: none; margin: 6px 0 0; padding: 0; }
+.shell-digest li { display: flex; flex-wrap: wrap; gap: 8px; padding: 3px 0; }
+.shell-source { display: flex; align-items: center; flex-wrap: wrap; gap: 5px 10px; flex: none; padding: 7px 12px; font-size: 11px; color: var(--color-meta); border-bottom: 1px solid var(--color-divider); }
+.shell-source button { min-height: 22px; padding: 1px 3px; font-size: 11px; }
+.shell-producer { border: 0; background: transparent; color: var(--color-muted); }
 .shell-run-id { font-family: var(--font-mono); }
-.shell-run p, .shell-run ul { margin: var(--space-3) 0; }
-.shell-run ul { padding-left: var(--space-6); }
-.shell-run-error { color: var(--color-failed); font-family: var(--font-mono); font-size: var(--font-size-sm); overflow-wrap: anywhere; }
-.shell-run-chain { display: flex; flex-wrap: wrap; gap: var(--space-3); }
-.shell-run .shell-chip { border: 1px solid var(--color-hairline); border-radius: var(--radius-pill); background: var(--color-surface); font: 400 var(--font-size-sm)/var(--line-height-sm) var(--font-mono); }
-.shell-run .shell-chip[aria-current] { border-color: var(--color-ink); color: var(--color-ink); opacity: 1; }
-.shell-run .shell-chip.failed { color: var(--color-failed); }
-.shell-run .shell-chip.failed.superseded { color: var(--color-muted); }
-.shell-run-repair .failed, .shell-run-repair .unknown { color: var(--color-failed); }
-.shell-run-fix { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-4); margin: var(--space-4) 0; }
-.shell-run-fix button.primary, .shell-run-fix button.shell-run-copy { min-height: var(--height-button); padding: 0 var(--space-5); font-size: var(--font-size-md); font-weight: 600; }
-.shell-run-fix button.shell-run-copy { border: 1px solid var(--color-control-border); background: var(--color-surface); color: var(--color-ink); }
-.shell-run-fix button.shell-run-copy:hover { background: var(--color-hover); }
-/* A failure a later run repaired stays readable but stops leading (audit 7, R7). */
-.shell-state.failed.superseded, .shell-run-error.superseded { color: var(--color-muted); }
-.shell-run-export { display: flex; flex-direction: column; gap: var(--space-4); max-width: 480px; margin: var(--space-5) 0; }
-.shell-run-export p { margin: 0; }
-.shell-run-output { margin-top: var(--space-5); }
-.shell-run-output h3 { margin: var(--space-5) 0 var(--space-2); font: 600 var(--font-size-sm)/var(--line-height-sm) var(--font-mono); }
-.shell-run-output pre { max-height: 240px; margin: 0; padding: var(--space-4); border: 1px solid var(--color-control-border); border-radius: var(--radius-sm); }
-.shell-run-output [data-rho-cut] { color: var(--color-meta); font-size: var(--font-size-sm); }
-.shell-action { flex: 1; min-height: 0; overflow: auto; padding: var(--space-7) var(--space-7); font-size: var(--font-size-md); }
-.shell-action h2 { margin: 0 0 var(--space-2); font: 600 var(--font-size-lg)/var(--line-height-lg) var(--font-ui); }
-.shell-action-identity { margin: 0 0 var(--space-6); color: var(--color-meta); overflow-wrap: anywhere; }
-.shell-action form { display: flex; flex-direction: column; gap: var(--space-5); max-width: 640px; }
-.shell-field { display: flex; flex-direction: column; gap: var(--space-2); }
-.shell-field.inline { flex-direction: row-reverse; justify-content: flex-end; align-items: center; gap: var(--space-4); }
-.shell-field label, .shell-field-name, .shell-field-group legend { font: 600 var(--font-size-sm)/var(--line-height-sm) var(--font-mono); }
-.shell-field-references { margin: 0; padding-left: var(--space-6); overflow-wrap: anywhere; }
-.shell-field input:not([type=checkbox]), .shell-field select, .shell-field textarea { width: 100%; }
-.shell-field textarea { min-height: 0; padding: var(--space-3) var(--space-5); border: 1px solid var(--color-control-border); border-radius: var(--radius-md); font: var(--font-size-sm)/var(--line-height-sm) var(--font-mono); resize: vertical; }
-.shell-field [aria-invalid=true] { border-color: var(--color-failed); }
-.shell-field-group { display: flex; flex-direction: column; gap: var(--space-4); margin: 0; padding: var(--space-4) var(--space-5) var(--space-5); border: 1px solid var(--color-control-border); border-radius: var(--radius-sm); }
-.shell-field-problem { margin: 0; color: var(--color-failed); font-size: var(--font-size-sm); overflow-wrap: anywhere; }
-.shell-action-submit { display: flex; align-items: center; gap: var(--space-4); }
-.shell-action-submit [role=status] { color: var(--color-meta); font-size: var(--font-size-sm); }
-@media (max-width: 1023px) {
-  .shell-span { display: none; }
-  .shell-wide-word { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-  .shell-narrow-word { display: inline; }
-}
-@media (max-width: 767px) {
-  .shell-stage { padding: 0; }
-  .shell-heading { padding: var(--space-5) var(--space-6) var(--space-2); }
-  .shell-group { border: 0; border-radius: 0; }
-  .shell-panel { padding: 0; }
-  .shell-bar { flex-wrap: wrap; gap: var(--space-1) var(--space-3); padding: var(--space-1) var(--space-4); border-top: 1px solid var(--color-hairline); }
-  .shell-bar .shell-agent { flex: 1 1 0; }
-  .shell-break { display: block; flex-basis: 100%; height: 0; }
-  .shell-bar .shell-agent-who { display: none; }
-  .shell-follow-word, .shell-wide-word { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-  .shell-narrow-word { display: inline; }
-  .shell-follow { padding: 0 var(--space-4); margin-left: auto; }
-  .shell-agent-words { display: none; }
-  /* Two rows: the Agent's object and the evidence, then the runs and the person's place. */
-  .shell-break { order: 1; }
-  .shell-timeline, .shell-held, .shell-follow, .shell-bar .shell-quiet:not(.shell-evidence-toggle) { order: 2; }
-  .shell-bar .shell-agent { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-}
-
-/* The Agent's column, from 1280: who, on what, the declared items, the person's questions. */
-.agent-column { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: var(--space-5); overflow: auto; overscroll-behavior: contain; font-size: var(--font-size-md); line-height: var(--line-height-md); }
-.agent-column:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
-.agent-card { flex: none; display: flex; flex-direction: column; gap: var(--space-4); padding: var(--space-5) var(--space-5) var(--space-5) var(--space-6); background: var(--color-surface); border: 1px solid var(--color-hairline); border-radius: var(--radius-xl); }
-.agent-card-head { display: flex; align-items: center; gap: var(--space-4); min-width: 0; }
-.agent-card-head strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.agent-card-meta { margin-left: auto; flex: none; color: var(--color-meta); font-size: var(--font-size-sm); line-height: var(--line-height-sm); font-weight: 400; }
-/* Below 1280 the column opens over the right of the work as an inspector; the stage keeps its
-   place and size, and the bar below stays in reach (audit 11). Full width on a phone. */
-.agent-slot:has(> .agent-column.drawer) { display: flex; position: absolute; top: 0; right: 0; bottom: 0; z-index: 4; width: var(--context-width); padding: var(--space-5); border-left: 1px solid var(--color-hairline); border-top-left-radius: var(--radius-lg); background: var(--color-canvas); box-shadow: var(--shadow-edge); }
-.agent-close { flex: none; margin: calc(var(--space-2) * -1) calc(var(--space-3) * -1) calc(var(--space-2) * -1) 0; }
-@media (max-width: 767px) {
-  .agent-slot:has(> .agent-column.drawer) { left: 0; width: auto; padding: var(--space-4); border-left: 0; border-radius: 0; }
-}
-.agent-dot { width: 10px; height: 10px; flex: none; border-radius: var(--radius-pill); border: 1.5px solid var(--color-meta); }
-.agent-dot.running { border-color: var(--color-accent); border-style: dashed; }
-.agent-column .shell-agent { width: 100%; min-height: var(--height-button); margin-inline: calc(var(--space-4) * -1); width: calc(100% + var(--space-4) * 2); }
-.agent-items ol { display: flex; flex-direction: column; gap: var(--space-1); margin: 0; padding: 0; list-style: none; }
-.agent-item { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-4); margin-inline: calc(var(--space-4) * -1); padding: var(--space-3) var(--space-4); border-radius: var(--radius-md); }
-.agent-item.current { background: var(--color-accent-soft); }
-/* The Agent's own state words: done is quiet, never the verified green. */
-.agent-item-mark { width: var(--space-6); height: var(--space-6); flex: none; border-radius: var(--radius-pill); border: 1.5px solid var(--color-control-border); }
-.agent-item-mark { position: relative; }
-.agent-item.done .agent-item-mark { border-color: var(--color-muted); }
-.agent-item.done .agent-item-mark::after { content: ''; position: absolute; left: 4.25px; top: 2px; width: 3px; height: 6px; border: solid var(--color-muted); border-width: 0 1.5px 1.5px 0; transform: rotate(45deg); }
-.agent-item.working .agent-item-mark { border-color: var(--color-accent); border-style: dashed; }
-.agent-item.waiting .agent-item-mark { border-color: var(--color-amber); }
-.agent-item.unknown .agent-item-mark { border-style: dotted; }
-.agent-item-title { flex: 1 1 0; min-width: 0; color: var(--color-ink); font-weight: 600; overflow-wrap: anywhere; text-align: left; }
-.agent-column button.agent-item-title { justify-content: flex-start; min-height: 0; padding: 0; border: 0; background: none; font-size: var(--font-size-md); font-weight: 600; white-space: normal; }
-.agent-column button.agent-item-title:hover { background: none; text-decoration: underline; text-underline-offset: 2px; }
-.agent-item-meta { flex: none; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--color-meta); font-size: var(--font-size-sm); line-height: var(--line-height-sm); }
-.agent-item-body { flex-basis: 100%; padding-left: calc(var(--space-6) + var(--space-4)); color: var(--color-muted); font-size: var(--font-size-sm); line-height: var(--line-height-sm); overflow-wrap: anywhere; }
-.agent-item-body p + p { margin-top: var(--space-2); }
-.agent-questions { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
-.agent-question { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2); padding: var(--space-4) 0; border-top: 1px solid var(--color-divider); }
-.agent-question:first-child { padding-top: 0; border-top: 0; }
+.shell-verified.verified .shell-integrity { color: var(--color-verified-text); }
+.shell-agent-words { max-width: 35ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.shell-state.failed { color: var(--color-failed); }
+.shell-state.active, .shell-state.running { color: var(--color-accent); }
+.shell-state.unknown, .shell-state.unobserved { color: var(--color-amber-text); }
+.shell-state.superseded { color: var(--color-muted); }
+.shell-question { flex: none; max-height: 230px; overflow: auto; font-size: 12px; }
+.shell-question:empty { display: none; }
+.shell-run, .shell-action { display: flex; flex-direction: column; gap: 16px; padding: 28px; overflow: auto; }
+.shell-run h2, .shell-action h2 { font-size: 21px; overflow-wrap: anywhere; }
+.shell-run-head { display: flex; flex-direction: column; gap: 16px; padding-right: 18px; }
+.shell-run-head h2 { font-family: var(--font-mono); font-size: 19px; }
+.shell-run-actions { display: flex; flex-wrap: wrap; gap: 7px; }
+.shell-run button { font-size: 12px; min-height: 30px; }
+.shell-run-status, .shell-run-clock, .shell-run-checks, .shell-action-identity { font-size: 12px; color: var(--color-meta); overflow-wrap: anywhere; }
+.shell-run-status .shell-state { font-weight: 600; }
+.shell-run-elapsed { font-size: 24px; font-variant-numeric: tabular-nums; color: var(--color-ink); }
+.shell-run-error { padding: 14px 16px; border-left: 3px solid var(--color-failed); background: #fdf1ef; color: var(--color-failed-strong); font-family: var(--font-mono); font-size: 12px; overflow-wrap: anywhere; }
+.shell-run-error.superseded { color: var(--color-meta); background: var(--color-well); border-color: var(--color-control-border); }
+.shell-run-files { list-style: none; padding: 0; margin: 0; }
+.shell-run-file { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--color-divider); font-size: 13px; }
+.shell-run-file svg { flex: none; color: var(--color-meta); }
+.shell-run-file-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+button.shell-run-file-name { justify-content: flex-start; text-align: left; border: 0; background: transparent; padding: 0; color: var(--color-accent); }
+.shell-run-file-state { font-size: 11px; color: var(--color-meta); }
+.shell-run-file.missing .shell-run-file-state { color: var(--color-failed); }
+.shell-run-fix, .shell-run-repair, .shell-run-chain { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 12px; }
+.shell-run-chain { padding-top: 14px; border-top: 1px solid var(--color-hairline); }
+.shell-run-output { background: var(--color-well); padding: 16px; border: 1px solid var(--color-hairline); border-radius: 8px; font-size: 12px; }
+.shell-run-output section + section { margin-top: 20px; }
+.shell-run-output pre { max-height: 300px; padding: 12px; background: white; }
+.shell-run-export { padding: 20px; border: 1px solid var(--color-hairline); border-radius: 8px; display: flex; flex-direction: column; gap: 14px; }
+.shell-run-export ul { padding-left: 16px; }
+.shell-action form { max-width: 720px; display: flex; flex-direction: column; gap: 20px; }
+.shell-field { display: flex; flex-direction: column; gap: 8px; font-size: 13px; }
+.shell-field.inline { flex-direction: row; align-items: center; }
+.shell-field.inline input { width: auto; }
+.shell-field-group { min-width: 0; border: 1px solid var(--color-hairline); border-radius: 8px; padding: 18px; display: flex; flex-direction: column; gap: 16px; }
+.shell-field-group legend { color: var(--color-meta); padding: 0 6px; font-size: 12px; }
+.shell-field-references { margin: 0; padding: 12px 14px; list-style: none; background: var(--color-well); border-radius: 6px; overflow-wrap: anywhere; }
+.shell-field-json { font-family: var(--font-mono); font-size: 12px; }
+.shell-field-problem { color: var(--color-failed); font-size: 12px; }
+.shell-action-submit { display: flex; align-items: center; gap: 12px; }
+.shell-action-submit button { background: var(--color-accent); color: white; border-color: var(--color-accent); padding-inline: 24px; }
+.agent-column { display: flex; flex-direction: column; outline: none; }
+.agent-card { padding: 20px; border-bottom: 1px solid var(--color-hairline); }
+.agent-card-head { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; font-size: 13px; }
+.agent-card-meta, .agent-card-sub { font-size: 11px; color: var(--color-meta); font-weight: 400; }
+.agent-card-meta { margin-left: auto; }
+.agent-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--color-control-border); }
+.agent-dot.running { background: var(--color-accent); }
+.agent-column .shell-agent { max-width: 100%; width: 100%; flex-wrap: wrap; padding: 6px 0; }
+.agent-items ol { list-style: none; padding: 0; margin: 0; }
+.agent-item { display: flex; align-items: flex-start; gap: 6px 10px; flex-wrap: wrap; padding: 14px 0; border-bottom: 1px solid var(--color-divider); }
+.agent-item:last-child { border-bottom: 0; }
+.agent-item-mark { flex: none; width: 6px; height: 6px; margin-top: 7px; border: 1px solid var(--color-meta); border-radius: 50%; }
+.agent-item.working .agent-item-mark { background: var(--color-accent); border-color: var(--color-accent); }
+.agent-item-title { flex: 1; min-width: 0; font-size: 13px; overflow-wrap: anywhere; }
+button.agent-item-title { justify-content: flex-start; text-align: left; padding: 0; border: 0; background: transparent; }
+.agent-item-meta { width: 100%; padding-left: 16px; font-size: 11px; color: var(--color-meta); }
+.agent-item-body { width: 100%; padding-left: 16px; font-size: 12px; color: var(--color-muted); }
+.agent-item-body p + p { margin-top: 6px; }
+.agent-card-count { margin-left: auto; color: var(--color-meta); }
+.agent-outputs ul, .agent-questions { list-style: none; margin: 0; padding: 0; }
+.agent-outputs li { display: flex; align-items: center; gap: 9px; padding: 8px 0; font-size: 12px; }
+.agent-output-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+button.agent-output-name { border: 0; background: transparent; padding: 0; justify-content: flex-start; text-align: left; }
+.agent-output-state { font-size: 11px; color: var(--color-meta); }
+.agent-output-check { color: var(--color-verified-text); }
+.agent-question { display: flex; flex-direction: column; align-items: flex-start; gap: 9px; padding: 12px 0; font-size: 13px; }
 .agent-question p { overflow-wrap: anywhere; }
-.agent-column button.agent-question-copy { margin-top: var(--space-2); border: 1px solid var(--color-control-border); background: var(--color-surface); color: var(--color-ink); font-weight: 600; }
-.agent-column button.agent-question-copy:hover { background: var(--color-hover); }
-.agent-question [role=alert] { color: var(--color-failed); font-size: var(--font-size-sm); }
-.agent-question-state { display: inline-flex; align-items: center; gap: var(--space-3); color: var(--color-meta); font-size: var(--font-size-sm); line-height: var(--line-height-sm); }
-.agent-question-state::before { content: ''; width: 7px; height: 7px; flex: none; border-radius: var(--radius-pill); border: 1.5px solid var(--color-amber); }
-.agent-question.fetched .agent-question-state::before { border-color: var(--color-accent); background: var(--color-accent); }
-.agent-question.responded .agent-question-state::before { border-color: var(--color-muted); background: var(--color-muted); }
-.agent-record { padding-block: var(--space-3); }
-.agent-column .agent-record-toggle { justify-content: space-between; width: calc(100% + var(--space-4) * 2); margin-inline: calc(var(--space-4) * -1); color: var(--color-ink); font-weight: 600; }
-.agent-record .shell-evidence { max-height: 50vh; margin: 0 calc(var(--space-6) * -1) calc(var(--space-3) * -1) calc(var(--space-6) * -1); padding: var(--space-3) var(--space-6); border-bottom: 0; background: var(--color-surface); }
-.media-controls { display: inline-flex; align-items: center; gap: var(--space-4); font-size: var(--font-size-sm); line-height: var(--line-height-sm); }
-.media-size { color: var(--color-meta); font-variant-numeric: tabular-nums; }
-.segmented { display: inline-flex; padding: var(--space-1); border-radius: var(--radius-md); background: var(--color-well); }
-.segmented button { min-height: 24px; padding: 0 var(--space-4); border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--color-muted); font-size: var(--font-size-sm); font-weight: 400; }
-.segmented button[aria-pressed="true"] { background: var(--color-surface); color: var(--color-ink); font-weight: 600; box-shadow: var(--shadow-raised); }
-.segmented button:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 1px; }
-.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.agent-question-state { font-size: 11px; color: var(--color-meta); }
+.agent-record-toggle { width: 100%; justify-content: space-between; font-weight: 500; }
+.shell-evidence { font-size: 11px; overflow-wrap: anywhere; }
+.shell-evidence ol, .shell-notes ul { list-style: none; padding: 0; margin: 8px 0; }
+.shell-evidence ol > li { display: grid; grid-template-columns: 62px 1fr; gap: 4px 8px; padding: 10px 0; border-bottom: 1px solid var(--color-divider); }
+.shell-evidence time { color: var(--color-meta); }
+.shell-evidence-what { grid-column: 1 / -1; color: var(--color-muted); }
+.shell-evidence > p { margin-top: 12px; color: var(--color-meta); }
+.shell-evidence-day { color: var(--color-meta); }
+.unavailable, .empty { display: flex; flex-direction: column; align-items: flex-start; gap: 16px; padding: 32px; overflow: auto; }
+.unavailable > p { color: var(--color-meta); max-width: 500px; }
+.unavailable-facts { display: flex; flex-direction: column; font-size: 12px; }
+.unavailable-facts > div, .view-reference dl > div { display: grid; grid-template-columns: 80px minmax(0,1fr); gap: 12px; }
+.unavailable-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.view-reference { flex-basis: 100%; font-size: 12px; color: var(--color-meta); }
+.view-reference dl { display: flex; flex-direction: column; margin-top: 12px; }
+.media-controls { display: inline-flex; align-items: center; gap: 8px; font-size: 11px; }
+.media-size { color: var(--color-meta); }
+.segmented { display: inline-flex; border: 1px solid var(--color-hairline); border-radius: 6px; padding: 2px; }
+.segmented button { min-height: 24px; padding: 2px 7px; font-size: 11px; background: transparent; border: 0; border-radius: 4px; }
+.segmented button[aria-pressed=true] { background: var(--color-selected); color: var(--color-accent-strong); }
+@media (max-width: 767px) {
+  .shell-stage { padding: 7px; }
+  .shell-tabbar { padding-inline: 4px; }
+  .shell-tabs button { max-width: 65vw; padding-inline: 10px; }
+  .shell-bar { flex-wrap: wrap; gap: 5px; padding: 6px 10px; }
+  .shell-agent { max-width: none; width: 100%; }
+  .shell-agent-state { margin-left: auto; }
+  .shell-bar .shell-break { display: none; }
+  .shell-bar > .shell-evidence-toggle { margin-left: auto; }
+  .shell-source { padding: 6px 9px; }
+  .shell-run, .shell-action { padding: 20px 14px; }
+  .shell-run h2 { font-size: 16px; }
+  .shell-interruption { flex-wrap: wrap; padding: 10px; }
+  .shell-interruption-text { flex-basis: 70%; }
+}

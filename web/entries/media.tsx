@@ -5,7 +5,7 @@ import type { UiContribution, UiViewProps } from '../../src/ui-contract.js';
 
 // The full form of registered media: the bytes of this exact version, read in bounded
 // chunks and shown. A produced figure becomes visible here; nothing is written. The
-// figure fits the card by default; its own size is one press away (R6, M1 below 768).
+// figure fits the card by default; its own size is one press away.
 function Media(props: UiViewProps) {
   const ref = props.view.bindings.data as { id?: string; version?: string } | undefined;
   const resource = props.snapshot.resources.find(r => r.id === ref?.id && r.version === ref?.version);

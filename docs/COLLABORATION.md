@@ -61,7 +61,7 @@ Selections carry exact document UTF-16 ranges or immutable table entity referenc
 They have independent conditional versions and receipts; one Agent's private
 selection never replaces the human's selection. Legacy `selection.set` is retained.
 The workspace shell links views of one table version through one shared channel,
-`linked:<id>@<version>`; see [plugin UI](PLUGIN-UI-HANDOFF.md#five-registered-entries).
+`linked:<id>@<version>`.
 
 ## Feedback and explicit response
 

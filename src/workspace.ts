@@ -13,7 +13,7 @@ import { Compositions, compositionLimits } from './composition.js';
 const ajv = new Ajv({ strict: false, allowUnionTypes: true });
 // The same timestamp check every published contract uses; an unknown format would be skipped silently.
 ajv.addFormat('date-time', { type: 'string', validate: isNativeTime });
-// Rho's own form for one action an Agent proposes (docs/WORKSPACE-PLAN.md decision 3). The
+// Rho's own form for one action an Agent proposes. The
 // action must be registered at that version; the input is the Agent's proposal, which the
 // person may edit and which the owner checks when it is submitted.
 export const actionFormComponent = { id: 'rho.action', version: '1' };

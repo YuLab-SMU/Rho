@@ -1,5 +1,5 @@
-// DOM-free reading of a composition as the regions the shell draws (docs/WORKSPACE-PLAN.md
-// W1). The owner's tree is the only layout source: split groups keep their axis and
+// DOM-free reading of a composition as the regions the shell draws. The owner's tree
+// is the only layout source: split groups keep their axis and
 // weights, tab groups keep their order. A split nested inside a tab group shows as that
 // group's tabs, as before. Views the live layout added outside the tree (an opened result,
 // an execution record) join the last tab group, in layout order.
@@ -64,7 +64,7 @@ export function selectionScope(view: { id: string; bindings?: Record<string, unk
   return typeof data?.id === 'string' && typeof data.version === 'string' ? { kind: 'shared', id: `linked:${part(data.id)}@${part(data.version)}` } : { kind: 'shared', id: view.id };
 }
 
-// Layout commands without dragging (docs/WORKSPACE-PLAN.md W5): each returns the owner tree
+// Layout commands without dragging: each returns the owner tree
 // after one change, or null when the change does not apply, so the shell can send it as one
 // conditional replacement. A tab group is the node directly under a split (or the root) that
 // holds a view's tabs; a pane left with one child collapses into it.

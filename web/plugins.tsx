@@ -91,7 +91,7 @@ export function PluginCatalog({ catalog, project, pluginId, onSelect: setPluginI
     const needs = p.dependencies ?? (selected.requires ?? []).map(pluginId => ({ pluginId, purpose: '' }));
     return <section className="page-section plugin-page plugin-detail">
       {/* Below 768 the sidebar is in the drawer, so the page offers its own way back. */}
-      {leave ? <button className="plugin-back" onClick={leave.run}>{leave.label}</button> : <button className="plugin-back narrow-only" onClick={() => setPluginId('')}>All plugins</button>}
+      {leave ? <button className="plugin-back" onClick={leave.run}>{leave.label}</button> : <button className="plugin-back" onClick={() => setPluginId('')}>All plugins</button>}
       <header className="plugin-detail-heading">
         <PluginSymbol plugin={selected} size="large" />
         <div className="plugin-detail-title">

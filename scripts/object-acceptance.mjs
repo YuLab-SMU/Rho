@@ -1,4 +1,4 @@
-// W5 exit check (docs/WORKSPACE-PLAN.md): object-level collaboration in the default shell.
+// Browser behavior: object-level collaboration in the default shell.
 // A table and a chart of one version select the same entities, through sort and filter; a
 // code selection reaches the Agent as an exact buffer range with its version and whether it
 // is saved, and a selection the buffer moved past is refused with a request to select again;
@@ -13,12 +13,12 @@ import { once } from 'node:events';
 import { createHash } from 'node:crypto';
 import { chromium } from '@playwright/test';
 import { RhoClient, native, packageRoot } from './support.mjs';
-import { rulers, profiles, firstUnit } from './rulers.mjs';
+import { inspectResponsive, firstUnit } from './browser-checks.mjs';
 import { selectionScope } from '../dist/shell-layout.js';
 const evidence = path.resolve(process.env.RHO_OBJECT_EVIDENCE ?? 'work/objects-' + Date.now());
 await fs.mkdir(evidence, { recursive: true, mode: 0o700 });
 const root = await fs.mkdtemp('/tmp/rho-objects-'), state = path.join(root, '.service');
-const report = { scenario: 'W5-objects', passed: false, checks: [], rulers: [] };
+const report = { scenario: 'object-collaboration', passed: false, checks: [], responsive: [] };
 const passed = (name, detail = {}) => { report.checks.push({ name, ...detail }); process.stdout.write(`ok · ${name}\n`); };
 const digestOf = text => createHash('sha256').update(text).digest('hex');
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -225,7 +225,7 @@ try {
   passed('closing the view left its run to finish', { execution: finished.execution });
 
   await tab('Results').click();
-  await rulers(page, { name: 'objects', profile: profiles.shell, first: () => firstUnit(owner('table'), 'table'), enforce: true, evidence, report });
+  await inspectResponsive(page, { name: 'objects', first: () => firstUnit(owner('table'), 'table'), evidence, report });
   assert.deepEqual(errors, []);
   report.passed = true;
 } catch (error) {

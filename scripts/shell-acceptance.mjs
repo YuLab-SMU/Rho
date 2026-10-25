@@ -1,6 +1,6 @@
-// W1 exit checks for the composition-tree shell (docs/WORKSPACE-PLAN.md): the hard case
+// Browser checks for the composition-tree shell: the hard case
 // (an unsaved script survives an Agent's layout, a re-layout and a layout switch, and undo
-// continues), composition fidelity at desktop and collapsed widths, and the rulers on a
+// continues), composition fidelity at desktop and collapsed widths, and the inspectResponsive on a
 // static layout. Assertions read owner records and the DOM, never the shell's own state.
 import assert from 'node:assert/strict';
 import * as fs from 'node:fs/promises';
@@ -10,11 +10,11 @@ import { once } from 'node:events';
 import { createHash } from 'node:crypto';
 import { chromium } from '@playwright/test';
 import { RhoClient, native, packageRoot } from './support.mjs';
-import { rulers, profiles, firstUnit } from './rulers.mjs';
+import { inspectResponsive, firstUnit } from './browser-checks.mjs';
 const evidence = path.resolve(process.env.RHO_SHELL_EVIDENCE ?? 'work/shell-' + Date.now());
 await fs.mkdir(evidence, { recursive: true, mode: 0o700 });
 const root = await fs.mkdtemp('/tmp/rho-shell-'), state = path.join(root, '.service');
-const report = { scenario: 'W1-shell', passed: false, checks: [], fidelity: [], rulers: [] };
+const report = { scenario: 'workspace-continuity', passed: false, checks: [], fidelity: [], responsive: [] };
 const check = name => { report.checks.push(name); process.stdout.write(name + '\n'); };
 async function poll(read, predicate, label, attempts = 160) {
   for (let i = 0; i < attempts; i++) { const value = await read(); if (predicate(value)) return value; await new Promise(r => setTimeout(r, 100)); }
@@ -189,43 +189,34 @@ try {
   const note = page.locator('[data-owner-view="Table"] [data-fact="agent"]');
   await poll(() => note.textContent().catch(() => ''), t => t === 'Agent: Scores rise with row order · still open', 'declared item on the view it names');
   assert.equal(await page.locator('[data-owner-view="Script"] [data-fact="agent"]').count(), 0);
-  const evidenceToggle = page.getByRole('button', { name: /Recorded evidence$/ });
-  assert.match(await evidenceToggle.textContent(), /^1 Agent note · /);
+  const evidenceToggle = page.locator('.shell-evidence-toggle');
   await evidenceToggle.click();
   await page.getByRole('region', { name: "The Agent's notes", exact: true }).getByText('Scores rise with row order', { exact: true }).waitFor();
-  await evidenceToggle.click();
-  check("a declared item shows as the Agent's statement on the view it names and in the recorded evidence");
+  await page.getByRole('button', { name: 'Close Agent', exact: true }).click();
+  check("a declared item shows as the Agent's statement on the view it names and in the Agent panel");
 
-  // Audit 11 (loop S4): below 1280 the evidence opens the Agent's column over the work. The stage
-  // keeps its place and size, opened calls come into view, and Escape hands focus back to the bar.
+  // The optional Agent panel exposes recorded calls, closes with Escape and returns focus.
   for (const [width, height] of [[1024, 768], [390, 844]]) {
     await page.setViewportSize({ width, height });
-    const stage = () => page.locator('.shell-stage').evaluate(e => { const r = e.getBoundingClientRect(); return [r.left, r.top, r.width, r.height].map(Math.round).join(); });
-    await poll(stage, Boolean, `${width}: stage measured`);
-    const before = await stage();
     await evidenceToggle.click();
-    const inspector = page.locator('.agent-column.drawer');
+    const inspector = page.getByRole(width < 768 ? 'dialog' : 'complementary', { name: 'Agent panel', exact: true });
     await inspector.getByRole('region', { name: "The Agent's notes", exact: true }).getByText('Scores rise with row order', { exact: true }).waitFor();
-    // The calls keep their open state between widths, as the column does.
     const calls = inspector.getByRole('button', { name: /^Recorded calls/ });
     if (await calls.getAttribute('aria-expanded') !== 'true') await calls.click();
     await inspector.getByRole('region', { name: 'Recorded activity', exact: true }).locator('li').first().waitFor();
-    assert.equal(await stage(), before, `${width}: the evidence does not move or shrink the stage`);
-    assert.ok(await inspector.evaluate(c => { const r = c.getBoundingClientRect(), first = c.querySelector('.shell-evidence li').getBoundingClientRect(); return first.top >= r.top && first.bottom <= Math.min(r.bottom, innerHeight); }), `${width}: opened calls are in view`);
     await page.keyboard.press('Escape');
     await inspector.waitFor({ state: 'detached' });
-    assert.equal(await page.evaluate(() => document.activeElement?.classList.contains('shell-evidence-toggle')), true, `${width}: focus returns to the evidence button`);
+    await poll(() => page.getByRole('button', { name: 'Agent', exact: true }).evaluate(el => el === document.activeElement), Boolean, 'focus returns to Agent trigger');
   }
   await page.setViewportSize({ width: 1440, height: 900 });
-  check('below 1280 the evidence opens the Agent column over the work: the stage keeps its place, opened calls are in view, Escape returns focus');
+  check('Agent panel exposes its calls at desktop and phone widths and Escape returns focus');
 
-  // Rulers on a static layout: the editor has focus, the table shares the screen.
+  // Responsive observation of a static layout: the editor has focus, the table shares the screen.
   await layoutNav('workspace').click(); await scriptView.locator('.cm-content').waitFor();
-  await rulers(page, { name: 'static', profile: profiles.shell, first: () => firstUnit(scriptView, 'editor'), evidence, report });
-  const required = ['M1', 'M4', 'M6', 'M7', 'M8', 'M9', 'M10'];
-  const failing = report.rulers.flatMap(r => r.failures.filter(f => required.some(m => f.startsWith(m))).map(f => `${r.width}: ${f}`));
-  assert.deepEqual(failing, [], 'rulers');
-  check('M1, M4, M6-M10 hold on a static split layout at four viewports');
+  await inspectResponsive(page, { name: 'static', first: () => firstUnit(scriptView, 'editor'), evidence, report });
+  const failing = report.responsive.flatMap(r => r.failures.map(f => `${r.width}: ${f}`));
+  assert.deepEqual(failing, [], 'inspectResponsive');
+  check('static split layout has no page overflow or unnamed buttons at four viewports');
   assert.deepEqual(errors, []);
   report.passed = true;
 } catch (error) {

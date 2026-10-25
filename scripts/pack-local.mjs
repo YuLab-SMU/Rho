@@ -39,7 +39,7 @@ const selected = values['select-plugins'] === undefined ? pluginIds : values['se
 if (new Set(selected).size !== selected.length || selected.some(id => !pluginIds.includes(id))) throw new Error('Select unique known plugin IDs.');
 process.env.RHO_UI_PLUGINS = selected.join(',');
 run('npm', ['run', 'build'], root);
-const application = await source(root, ['src', 'web', 'scripts', 'protocol', 'fixtures', 'package.json', 'package-lock.json', 'tsconfig.json', 'tsconfig.web.json', 'vite.config.ts', 'ui-entries.json', 'README.md', 'LICENSE', 'docs/HEADLESS.md', 'docs/COLLABORATION.md', 'docs/UI.md']);
+const application = await source(root, ['src', 'web', 'scripts', 'protocol', 'fixtures', 'package.json', 'package-lock.json', 'tsconfig.json', 'tsconfig.web.json', 'vite.config.ts', 'ui-entries.json', 'README.md', 'LICENSE', 'docs/HEADLESS.md', 'docs/COLLABORATION.md', 'docs/FRONTEND.md']);
 const plugins = await source(pluginRoot, ['packages/contracts', ...selected.map(id => 'plugins/' + id), 'scripts', 'package.json', 'package-lock.json', 'LICENSE']);
 // The descriptive inventory contains all reviewed owners, including owners
 // physically omitted from a reduced package. Freeze those inputs too.

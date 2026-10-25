@@ -10,7 +10,7 @@ import { BrowserClient } from '../dist/browser.js';
 import { runtime } from '../dist/runtime.js';
 import { digest } from '@rho-workspace/plugin-contracts';
 
-// W6 (docs/WORKSPACE-PLAN.md): a run exports as ordinary files with where they came from and
+// Export behavior: a run exports as ordinary files with where they came from and
 // what was checked. A declared file the run did not write, or that no longer matches the
 // inventory it wrote, is named and left out; unsaved script text leaves only by choice.
 async function poll(read, predicate, label, attempts = 300) {

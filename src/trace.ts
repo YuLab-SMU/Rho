@@ -2,7 +2,7 @@
 // projections. The records are the call activity Rho keeps for each bound Agent and the
 // owner records that name what those calls touched: document histories, operation
 // records, registered resources, the composition, the task map and contexts. DOM-free,
-// so the build script, the tests and the replay share it (docs/INTERACTION-PLAN.md S2).
+// shared by browser observation and deterministic tests.
 //
 // Nothing is filled in. An identity the records do not hold stays null and the screen
 // says "Not recorded"; every time is a recorded one. A call refused before it reached

@@ -29,7 +29,7 @@ test('one-use pairing grants a narrowed root, never operator/native/session auth
     assert.notEqual(grant.token, f.service.adminToken);
     assert.ok(grant.methods.every(m => !m.startsWith('session.') && !m.startsWith('requirements.')));
     // A person submits from an Agent's proposed form, reads bounded output, may stop a run (decisions 2, 3)
-    // and exports a run's files (W6); nothing else, and never a retry.
+    // and exports a run's files; nothing else, and never a retry.
     assert.deepEqual(grant.methods.filter(m => m.startsWith('action.')).sort(), ['action.cancel', 'action.export', 'action.output', 'action.submit']);
     const browser = new BrowserClient({ url: f.service.url, ...grant });
     const p = await browser.call('project.create', { name: 'project 中文' });

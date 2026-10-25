@@ -47,7 +47,7 @@ try {
     sessionStorage.setItem('rho.browser.project.v1', projectId);
   }, { code: pairing.code, projectId: project.id });
   await page.reload();
-  await page.locator('.app-rail').getByRole('button', { name: 'Plugins', exact: true }).click();
+  await page.locator('.project-nav').getByRole('button', { name: 'Plugins', exact: true }).click();
   await page.locator('.plugin-card').first().waitFor();
   assert.equal(await page.locator('.plugin-card').count(), catalog.plugins.length);
   const ordered = [...pluginGroups(catalog.plugins.filter(p => !absent.includes(p))).flatMap(group => group.plugins), ...absent];
@@ -84,7 +84,7 @@ try {
     await page.screenshot({ path: path.join(directory, 'detail-' + plugin.id + '-1600.png'), fullPage: false });
     await page.locator('.plugin-information').scrollIntoViewIfNeeded();
     await page.screenshot({ path: path.join(directory, 'detail-' + plugin.id + '-bottom-1600.png'), fullPage: false });
-    await page.getByRole('button', { name: 'All plugins', exact: true }).click();
+    await page.locator('main').getByRole('button', { name: 'All plugins', exact: true }).click();
     await card.waitFor(); assert.equal(await card.evaluate(element => element === document.activeElement), true);
     report.plugins.push({ id: plugin.id, version: plugin.version, displayName: p.displayName, prompts: p.examplePrompts.length });
   }
@@ -100,7 +100,7 @@ try {
     await page.screenshot({ path: path.join(directory, 'detail-' + width + '.png'), fullPage: false });
     await page.locator('.plugin-information').scrollIntoViewIfNeeded();
     await page.screenshot({ path: path.join(directory, 'detail-bottom-' + width + '.png'), fullPage: false });
-    await page.getByRole('button', { name: 'All plugins', exact: true }).click();
+    await page.locator('main').getByRole('button', { name: 'All plugins', exact: true }).click();
     report.widths.push({ width, noOverflow: true });
   }
   await page.setViewportSize({ width: 1280, height: 1200 });
@@ -108,7 +108,7 @@ try {
   await page.evaluate(() => { navigator.clipboard.writeText = async () => { throw new Error('Injected clipboard failure.'); }; });
   await page.getByRole('button', { name: 'Copy prompt 1', exact: true }).click();
   await page.getByText('Could not copy. Select and copy the prompt text instead.', { exact: true }).waitFor();
-  await page.getByRole('button', { name: 'All plugins', exact: true }).click();
+  await page.locator('main').getByRole('button', { name: 'All plugins', exact: true }).click();
   report.checks.push('clipboard-failure-keeps-selectable-owner-prompt');
   // Observe a genuinely missing selected executable, then restore it. Neither
   // catalog observation nor the R object's read path executes that program.
@@ -116,7 +116,7 @@ try {
     const configuredRscript = service.plugins.config.rscript;
     service.plugins.config.rscript = path.join(root, 'missing-Rscript');
     await page.reload();
-    await page.locator('.app-rail').getByRole('button', { name: 'Plugins', exact: true }).click();
+    await page.locator('.project-nav').getByRole('button', { name: 'Plugins', exact: true }).click();
     const rCard = page.locator('.plugin-card').filter({ has: page.getByText('R', { exact: true }) });
     await rCard.locator('.plugin-card-state').filter({ hasText: "Can't run scripts on this machine" }).waitFor();
     await rCard.click();
@@ -135,7 +135,7 @@ try {
     await route.fulfill({ response, json: body });
   });
   await page.reload();
-  await page.locator('.app-rail').getByRole('button', { name: 'Plugins', exact: true }).click();
+  await page.locator('.project-nav').getByRole('button', { name: 'Plugins', exact: true }).click();
   await page.locator('.plugin-card').first().waitFor();
   assert.deepEqual(await page.locator('.plugin-card strong').allTextContents(), [...catalog.plugins.filter(p => !absent.includes(p)), ...absent].map(p => p.id));
   assert.ok((await page.locator('.plugin-tagline').allTextContents()).every(t => t === ''));

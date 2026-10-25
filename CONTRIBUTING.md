@@ -3,7 +3,7 @@
 Rho is an application container for functional components. Start with
 [Architecture](docs/ARCHITECTURE.md), [Roadmap](docs/ROADMAP.md),
 [Status](docs/STATUS.md) and [Development](docs/DEVELOPMENT.md).
-The application implementation and accepted component composition are pending.
+The current implementation and verification scope are recorded in Status.
 
 ## Make a bounded contribution
 
@@ -19,7 +19,7 @@ silently change a task or native session. Verify behavior in the selected owner;
 a component check alone does not prove an application composition.
 
 For documents, check links and anchors, render the complete changed batch and
-inspect all pages. Interaction design follows [Design](docs/DESIGN.md).
+inspect all pages. Test UI changes in the actual application.
 Report only checks actually executed and retain material failures and limits.
 
 Routine Rho work is checked, committed and published directly on organization

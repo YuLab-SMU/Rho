@@ -4,7 +4,7 @@ import { executionWord } from '../../src/execution-facts.js';
 import type { Live } from './live.js';
 import { runObject } from './facts.js';
 
-// The form for one action an Agent proposed (docs/WORKSPACE-PLAN.md decision 3): its
+// The form for one action an Agent proposed: its
 // inputs as fields the person reads and edits, checked by the owner's own contract, and
 // submitted once under the operationId the Agent chose. That identity is what makes a
 // refresh or a second click safe: the owner answers it with the run it already accepted.

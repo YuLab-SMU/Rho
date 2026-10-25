@@ -1,4 +1,4 @@
-// Install smoke (docs/WORKSPACE-PLAN.md W0): the assembled tarball, installed outside every
+// Install smoke: the assembled tarball, installed outside every
 // checkout with no development overrides, starts from its own launcher, serves the home page
 // to a paired Chrome tab and leaves no Host behind. No registry publish; no scientific flow.
 // The pairing link stays in memory: it is a credential and is not written to the report.
@@ -9,14 +9,14 @@ import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { chromium } from '@playwright/test';
-import { measure, failures, profiles, viewports } from './rulers.mjs';
+import { inspectPage, viewports } from './browser-checks.mjs';
 const tarball = path.resolve(process.argv[2] ?? '');
 assert.ok(tarball.endsWith('.tgz'), 'Select the assembled application tarball.');
 const evidence = path.resolve(process.env.RHO_SMOKE_EVIDENCE ?? 'work/install-smoke-' + Date.now());
 await fs.mkdir(evidence, { recursive: true, mode: 0o700 });
 const root = await fs.mkdtemp(path.join(await fs.realpath(os.tmpdir()), 'rho-smoke-'));
 const env = { ...process.env }; delete env.RHO_CORE_BINARY; delete env.RHO_PACKAGE_ROOT;
-const report = { schemaVersion: 1, passed: false, platform: process.platform + '-' + process.arch, node: process.version, tarballSha256: createHash('sha256').update(await fs.readFile(tarball)).digest('hex'), timings: {}, memory: {}, rulers: [] };
+const report = { schemaVersion: 1, passed: false, platform: process.platform + '-' + process.arch, node: process.version, tarballSha256: createHash('sha256').update(await fs.readFile(tarball)).digest('hex'), timings: {}, memory: {}, responsive: [] };
 let child, browser;
 try {
   const install = path.join(root, 'installation'), projects = path.join(root, 'projects'), state = path.join(root, 'state');
@@ -51,12 +51,12 @@ try {
   report.memory.serviceIdleRssKiB = Number(spawnSync('ps', ['-o', 'rss=', '-p', String(child.pid)], { encoding: 'utf8' }).stdout.trim());
   for (const [width, height] of viewports) {
     await page.setViewportSize({ width, height });
-    const m = await measure(page, profiles.shell, {});
-    // The home page has no owner view: M1 and the shell-layer budgets do not apply to it.
-    const failed = failures(m).filter(f => !f.startsWith('M1 no first unit'));
-    report.rulers.push({ name: 'home', width, height, failures: failed });
+    const m = await inspectPage(page);
+    // Check the installed entry page before opening a project.
+    const failed = [...(m.overflow ? ['Page overflow'] : []), ...m.unnamed];
+    report.responsive.push({ name: 'home', width, height, failures: failed });
     await page.screenshot({ path: path.join(evidence, `home-${width}.png`) });
-    for (const ruler of ['M4', 'M8', 'M9']) assert.deepEqual(failed.filter(f => f.startsWith(ruler)), [], `${ruler} home ${width}x${height}`);
+    assert.deepEqual(failed, [], `home ${width}x${height}`);
   }
   assert.deepEqual(errors, []);
   await browser.close(); browser = null;

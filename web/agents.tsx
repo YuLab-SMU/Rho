@@ -41,3 +41,26 @@ export function AgentAccess({ snapshot }: { snapshot?: WorkspaceSnapshot | null 
     {problem && <li role="alert">{problem}</li>}
   </ul>;
 }
+
+// This installation uses an external Agent. Copying a request never claims delivery.
+export function AgentRequest({ snapshot, principalId }: { snapshot: WorkspaceSnapshot; principalId: string }) {
+  const key = `rho.request.v1:${principalId}:${snapshot.project.id}`;
+  const [text, setText] = useState(() => { try { return sessionStorage.getItem(key) ?? ''; } catch { return ''; } });
+  const [copied, setCopied] = useState(false), [problem, setProblem] = useState('');
+  async function copy() {
+    setProblem('');
+    try {
+      await navigator.clipboard.writeText(`In Rho project ${projectName(snapshot.project)} (${snapshot.project.id}):\n\n${text.trim()}\n\nUse the project's registered capabilities and keep results in this project.`);
+      setCopied(true);
+    } catch { setProblem('Clipboard unavailable. Select the request below and copy it.'); }
+  }
+  return <section className="agent-request">
+    <label htmlFor="agent-request">Work with your Agent</label>
+    <textarea id="agent-request" rows={4} value={text} placeholder="Describe what you want to explore or change…" onChange={e => { setText(e.target.value); setCopied(false);
+      try { sessionStorage.setItem(key, e.target.value); setProblem(''); }
+      catch { setProblem('This draft could not be stored. Copy it before closing this panel.'); } }} />
+    <div className="agent-request-actions"><span>Paste into your connected Agent.</span><button className="primary" disabled={!text.trim()} onClick={copy}>{copied ? 'Copied' : 'Copy request'}</button></div>
+    {copied && <p role="status">Copied. Paste it into your Agent to send.</p>}
+    {problem && <p role="alert">{problem}</p>}
+  </section>;
+}

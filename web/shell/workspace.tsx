@@ -15,10 +15,10 @@ import { Slot, Split, TabGroup, place, unplace, useTabOverflow, type TabRender }
 import './shell.css';
 
 type Tabs = Extract<Region, { kind: 'tabs' }>;
-// The workspace shell (docs/WORKSPACE-PLAN.md W1): the owner's composition tree drawn as
+// The workspace shell: the owner's composition tree drawn as
 // splits and tab groups, owner views mounted within the rendering budget, and a slot for
 // what Rho adds above the work. It decides nothing about attention; useLive does.
-export function Workspace({ composition: recorded, snapshot, client, onAbout, contextTarget, principalId, onShowContext, feedbackContextActive, openView, onCommands, agentTarget, footerTarget }: { onCommands?: (group: CommandGroup | null) => void; composition: CompositionSummary; snapshot: WorkspaceSnapshot; client: BrowserClient; onAbout: (pluginId: string) => void; contextTarget: HTMLElement | null; principalId?: string; onShowContext: () => void; feedbackContextActive: boolean; mapChipTarget?: HTMLElement | null; openView?: string; agentTarget?: HTMLElement | null; footerTarget?: HTMLElement | null }) {
+export function Workspace({ composition: recorded, snapshot, client, onAbout, contextTarget, principalId, onShowContext, feedbackContextActive, openView, onCommands, agentTarget, onShowAgent }: { onCommands?: (group: CommandGroup | null) => void; composition: CompositionSummary; snapshot: WorkspaceSnapshot; client: BrowserClient; onAbout: (pluginId: string) => void; contextTarget: HTMLElement | null; principalId?: string; onShowContext: () => void; feedbackContextActive: boolean; mapChipTarget?: HTMLElement | null; openView?: string; agentTarget?: HTMLElement | null; onShowAgent?: () => void }) {
   const live = useLive(snapshot, recorded, client, principalId), layout = live.layout;
   // A question sent from another browser session has no context in this one. Preparing it under
   // the question's own changeId (as the table's send does) keeps one context per question version.
@@ -31,14 +31,6 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
   const byId = useMemo(() => new Map(layout.views.map(v => [v.id, v])), [layout]);
   const [narrow, setNarrow] = useState(() => matchMedia('(max-width: 767px)').matches);
   useEffect(() => { const q = matchMedia('(max-width: 767px)'), change = () => setNarrow(q.matches); q.addEventListener('change', change); return () => q.removeEventListener('change', change); }, []);
-  // From 1280 the Agent has its own column beside the work; below, its notes and calls open
-  // over the top of the stage on request, as the evidence did.
-  const [wide, setWide] = useState(() => matchMedia('(min-width: 1280px)').matches);
-  useEffect(() => { const q = matchMedia('(min-width: 1280px)'), change = () => setWide(q.matches); q.addEventListener('change', change); return () => q.removeEventListener('change', change); }, []);
-  const column = wide && !!agentTarget;
-  // Below 1280 the same column opens over the right of the work as an inspector (audit 11):
-  // the stage keeps its place and size instead of being pushed under the evidence.
-  const [inspector, setInspector] = useState(false), drawer = !wide && inspector && !!agentTarget;
   // Which view each tab group shows, and which view has the person's (or the Agent's) focus.
   const [selected, setSelected] = useState<Record<string, string>>({});
   const [focus, setFocus] = useState(order[0] ?? '');
@@ -69,7 +61,7 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
   // Divider positions the person set in this tab, until the owner's layout changes.
   const [weights, setWeights] = useState<{ version: number; values: Record<string, number[]> }>({ version: layout.version, values: {} });
   const own = weights.version === layout.version ? weights.values : {};
-  // Layout commands given without dragging (docs/WORKSPACE-PLAN.md W5): one conditional
+  // Layout commands given without dragging: one conditional
   // replacement of the owner's tree, or the owner's own undo. The person's change is adopted
   // at once; a refusal (a protected view, a newer layout) is said, and nothing is retried.
   const [layoutProblem, setLayoutProblem] = useState('');
@@ -166,7 +158,7 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
     if (view.component === 'rho.action') return <ActionForm view={view} snapshot={snapshot} client={client} live={live} />;
     if (view.component === 'rho.execution') {
       const operationId = String(view.props.operationId ?? id);
-      return <RunView snapshot={snapshot} client={client} operationId={operationId} runs={live.runs} readRuns={live.readRuns} firstLine={runFirstLine(live, operationId)} opener={ref => () => openRef(ref)} onOpenRun={other => openRun(live, other)} chain={false} />;
+      return <RunView snapshot={snapshot} client={client} operationId={operationId} runs={live.runs} readRuns={live.readRuns} firstLine={runFirstLine(live, operationId)} opener={ref => () => openRef(ref)} onOpenRun={other => openRun(live, other)} chain />;
     }
     const resource = boundResource(view, snapshot.resources);
     const annotations = snapshot.catalog.plugins.find(p => p.id === 'annotations');
@@ -222,19 +214,13 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
     event.preventDefault(); show(order[next]); (event.currentTarget.children[next] as HTMLElement).focus();
   }
   const focusObject = live.screen?.views.find(v => v.id === focused)?.object ?? null;
-  const toggleEvidence = () => { setEvidence(v => !v); live.act({ kind: 'reveal', target: evidence ? null : live.screen?.agent?.object ?? 'workspace' }); };
-  const toggleInspector = () => { setInspector(v => !v); live.act({ kind: 'reveal', target: inspector ? null : live.screen?.agent?.object ?? 'workspace' }); };
-  const closeInspector = () => { setInspector(false); footerTarget?.querySelector<HTMLElement>('.shell-evidence-toggle')?.focus(); };
-  const inline = !column && !agentTarget;
-  const bar = <Bar live={live} evidence={inline || column ? evidence : drawer} held={items.length - unhidden.length} narrow={narrow} column={column} onEvidence={inline || column ? toggleEvidence : toggleInspector} />;
+  const toggleEvidence = () => { setEvidence(v => !v); onShowAgent?.(); live.act({ kind: 'reveal', target: evidence ? null : live.screen?.agent?.object ?? 'workspace' }); };
   return <section className="workspace shell" aria-label="Layout">
-    {/* The question the Agent declared is what this screen is about; without one, no slot. */}
-    {live.screen?.question && <header className="shell-heading"><h1>{live.screen.question}</h1></header>}
-    {footerTarget ? createPortal(bar, footerTarget) : bar}
-    {(column || drawer) && createPortal(<AgentColumn live={live} agents={snapshot.agents} contexts={snapshot.contexts} prepare={prepareQuestion} principalId={principalId} evidence={evidence} onEvidence={toggleEvidence} focusObject={focusObject} onClose={drawer ? closeInspector : undefined} />, agentTarget!)}
+    <Bar live={live} evidence={evidence} held={items.length - unhidden.length} onEvidence={toggleEvidence} />
+    {agentTarget && createPortal(<AgentColumn live={live} agents={snapshot.agents} contexts={snapshot.contexts} prepare={prepareQuestion} principalId={principalId} evidence={evidence} onEvidence={toggleEvidence} focusObject={focusObject} />, agentTarget)}
     <Interruption live={live} items={unhidden} onHide={key => setHidden(h => [...h, key])} />
     {layoutProblem && <div className="shell-interruption problem" data-rho-layer="transient" data-rho-interruption="" role="alert"><span className="shell-interruption-text">{layoutProblem}</span><button className="shell-quiet" onClick={() => setLayoutProblem('')}>Dismiss</button></div>}
-    {evidence && inline ? <Evidence live={live} principalId={principalId} /> : <Digest live={live} />}
+    <Digest live={live} />
     <div className="shell-stage" onPointerDownCapture={event => live.hold((event.target as HTMLElement).closest<HTMLElement>('[data-owner-view]')?.dataset.ownerView ?? focused)} onKeyDownCapture={() => live.hold(focused)} onCompositionStartCapture={() => live.hold(focused)}>
       {contextTarget && feedbackContextActive && feedbackSource && feedbackAllowed && feedbackEntry && snapshot.feedback?.draftDocumentId && createPortal(feedbackLimit ? <section className="unavailable" role="status"><h3>Close a view before opening feedback</h3><p>Existing views and input are kept within this layout's view limit.</p></section> : <feedbackEntry.View key={[snapshot.project.id, snapshot.feedback.taskId, feedbackSource, principalId].join(':')} viewId={'feedback:' + feedbackSource} view={{ id: 'feedback:' + feedbackSource, component: feedbackEntry.component, version: feedbackEntry.componentVersion, props: { title: 'Your question', taskId: snapshot.feedback.taskId, sourceSelectionScope: byId.get(feedbackSource) ? selectionScope(byId.get(feedbackSource)!) : { kind: 'shared', id: feedbackSource } }, bindings: { draft: { kind: 'live-document', documentId: snapshot.feedback.draftDocumentId } } }} projectId={snapshot.project.id} snapshot={snapshot} client={client} active principalId={principalId} contextTarget={null} feedbackConfiguration={{ ...snapshot.feedback, draftDocumentId: snapshot.feedback.draftDocumentId }} />, contextTarget)}
       {!root ? <div className="empty"><h2>No views in this layout</h2><p>The saved layout is empty. No view is created automatically.</p></div>

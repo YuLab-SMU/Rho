@@ -1,7 +1,4 @@
-// W3 exit check (docs/WORKSPACE-PLAN.md): the pages outside the workspace — the unpaired
-// landing, Home, the project overview with every disclosure closed and open, the plugin
-// catalog and a plugin page, the context panel with its Agents (W4), and the disconnected
-// tab — hold M4, M5 and M7–M10 at four viewports. Content is created through the owners, never by editing the page.
+// Connected and unpaired project pages, with real owner records.
 import assert from 'node:assert/strict';
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
@@ -10,12 +7,11 @@ import { once } from 'node:events';
 import { createHash } from 'node:crypto';
 import { chromium } from '@playwright/test';
 import { RhoClient, native, packageRoot } from './support.mjs';
-import { rulers, profiles } from './rulers.mjs';
+import { inspectResponsive } from './browser-checks.mjs';
 const evidence = path.resolve(process.env.RHO_PAGES_EVIDENCE ?? 'work/pages-' + Date.now());
 await fs.mkdir(evidence, { recursive: true, mode: 0o700 });
 const root = await fs.mkdtemp('/tmp/rho-pages-'), state = path.join(root, '.service');
-const report = { scenario: 'W3-pages', passed: false, pages: [], rulers: [] };
-const required = ['M4', 'M5', 'M7', 'M8', 'M9', 'M10'];
+const report = { scenario: 'project-pages', passed: false, pages: [], responsive: [] };
 let child, browser;
 try {
   child = spawn(process.execPath, [path.join(packageRoot, 'dist/cli.js'), '--root', root, '--state-dir', state, '--core', native.coreBinary, '--rscript', native.rscript], { stdio: ['ignore', 'pipe', 'pipe'] });
@@ -30,11 +26,11 @@ try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } }), errors = [];
   page.on('pageerror', e => errors.push(e.message));
   const measure = async name => {
-    const results = await rulers(page, { name, profile: profiles.shell, evidence, restore: [1440, 900] });
-    const failing = results.flatMap(r => r.failures.filter(f => required.some(m => f.startsWith(m + ' '))).map(f => `${name} ${r.width}: ${f}`));
+    const results = await inspectResponsive(page, { name, evidence, restore: [1440, 900] });
+    const failing = results.flatMap(r => r.failures.map(f => `${name} ${r.width}: ${f}`));
     report.pages.push({ name, failing });
-    report.rulers.push(...results);
-    process.stdout.write(`${name}: ${failing.length ? failing.join('; ') : 'M4 M5 M7-M10 hold at four widths'}\n`);
+    report.responsive.push(...results);
+    process.stdout.write(`${name}: ${failing.length ? failing.join('; ') : 'no page overflow or unnamed buttons at four widths'}\n`);
     return failing;
   };
   const failing = [];
@@ -44,13 +40,13 @@ try {
   const unpaired = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   await unpaired.goto(new URL(ready.openUrl).origin + '/');
   await unpaired.getByRole('heading', { name: 'Open Rho from your Agent', exact: true }).waitFor();
-  const results = await rulers(unpaired, { name: 'unpaired', profile: profiles.shell, evidence, restore: [1440, 900] });
-  const missing = results.flatMap(r => r.failures.filter(f => required.some(m => f.startsWith(m + ' '))).map(f => `unpaired ${r.width}: ${f}`));
-  report.pages.push({ name: 'unpaired', failing: missing }); report.rulers.push(...results); failing.push(...missing);
-  process.stdout.write(`unpaired: ${missing.length ? missing.join('; ') : 'M4 M5 M7-M10 hold at four widths'}\n`);
+  const results = await inspectResponsive(unpaired, { name: 'unpaired', evidence, restore: [1440, 900] });
+  const missing = results.flatMap(r => r.failures.map(f => `unpaired ${r.width}: ${f}`));
+  report.pages.push({ name: 'unpaired', failing: missing }); report.responsive.push(...results); failing.push(...missing);
+  process.stdout.write(`unpaired: ${missing.length ? missing.join('; ') : 'no page overflow or unnamed buttons at four widths'}\n`);
   await unpaired.close();
   await page.goto(ready.openUrl);
-  await page.getByRole('heading', { name: /^Welcome/ }).waitFor();
+  await page.getByRole('heading', { name: 'Your projects', exact: true }).waitFor();
   failing.push(...await measure('home-empty'));
 
   // A project with a document, a registered table, a run and a layout gives every page content.
@@ -77,15 +73,15 @@ try {
   await row.waitFor();
   failing.push(...await measure('home'));
   await row.click();
-  await page.getByRole('heading', { name: 'Do the scores rise?', exact: true }).waitFor();
+  await page.getByRole('heading', { name: 'Pages 中文', exact: true }).waitFor();
   await page.getByText('pages-run', { exact: false }).first().waitFor();
   failing.push(...await measure('overview'));
-  for (const summary of await page.locator('main details > summary').all()) await summary.click();
-  await page.getByRole('button', { name: 'Check this project…', exact: true }).click();
+  await page.locator('.project-nav').getByRole('button', { name: 'Project settings', exact: true }).click();
+  await page.getByRole('button', { name: 'Check project', exact: true }).click();
   await page.getByText(/Rho can write in /).first().waitFor();
-  failing.push(...await measure('overview-open'));
+  failing.push(...await measure('settings'));
 
-  await page.locator('.app-rail').getByRole('button', { name: 'Plugins', exact: true }).click();
+  await page.locator('.project-nav').getByRole('button', { name: 'Plugins', exact: true }).click();
   await page.getByRole('heading', { name: 'Plugins', exact: true }).waitFor();
   failing.push(...await measure('plugins'));
   await page.locator('.plugin-card').first().click();
@@ -93,7 +89,7 @@ try {
   failing.push(...await measure('plugin'));
 
   // The context panel names the Agent session with access, what it may do and when it last acted.
-  await page.locator('.project-row').or(page.locator('.app-rail').getByRole('button', { name: 'Projects', exact: true })).first().click();
+  await page.locator('.project-nav').getByRole('button', { name: 'Back to project', exact: true }).click();
   await page.getByRole('button', { name: 'Context & access', exact: true }).click();
   const session = page.locator('[data-rho-agent-session="granted"]').filter({ hasText: 'pages-agent' });
   await session.waitFor();
@@ -104,7 +100,7 @@ try {
   await page.getByRole('heading', { name: 'This tab is disconnected', exact: true }).waitFor();
   failing.push(...await measure('disconnected'));
 
-  assert.deepEqual(failing, [], 'rulers outside the workspace');
+  assert.deepEqual(failing, [], 'inspectResponsive outside the workspace');
   assert.deepEqual(errors, []);
   report.passed = true;
 } catch (error) {

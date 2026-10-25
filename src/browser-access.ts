@@ -20,10 +20,10 @@ export const browserMethods = ['protocol.describe', 'protocol.validate', 'projec
   // People see and steer the task map; only the Agent declares its items.
   'task.map.read', 'task.map.present', 'task.map.respond',
   // A person runs an action from the form an Agent proposed, reads a run's bounded output,
-  // and may stop a run of a project this pairing includes (docs/WORKSPACE-PLAN.md decisions 2, 3).
+  // and may stop a run of a project this pairing includes.
   'action.submit', 'action.output', 'action.cancel',
   // The person's own layout commands (split, move, close, divider, undo), conditional on the
-  // version they saw; protected views stay protected (docs/WORKSPACE-PLAN.md W5).
+  // version they saw; protected views stay protected.
   'composition.apply', 'composition.undo',
   // A chart's points: the same rows data.page already reads, bounded and read-only.
   'data.plot',

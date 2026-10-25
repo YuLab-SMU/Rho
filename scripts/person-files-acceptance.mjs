@@ -62,18 +62,17 @@ try {
   // The person's own path, through the buttons they actually press.
   await page.locator('.project-row').first().click();
   await page.waitForTimeout(2500);
-  // Documents and files wait behind their disclosure on the project page.
-  await page.locator('main summary').filter({ hasText: 'Documents and files' }).click();
-  await page.getByRole('button', { name: /Browse this folder/ }).click();
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.locator('.project-nav').getByRole('button', { name: 'Files', exact: true }).click();
   await page.waitForTimeout(1200);
-  const listed = await page.locator('.overview-section').filter({ hasText: 'Files' }).innerText();
+  const listed = await page.locator('.files-page').innerText();
   assert.match(listed, /notes\.md/);
   assert.match(listed, /R/);
   check('the Files section lists the real folder');
 
   await page.getByRole('button', { name: /^R$/ }).click();
   await page.waitForTimeout(1000);
-  assert.match(await page.locator('.overview-section').filter({ hasText: 'Files' }).innerText(), /plot\.R/);
+  assert.match(await page.locator('.files-page').innerText(), /plot\.R/);
   check('a subfolder can be opened from the list');
 
   await page.getByRole('button', { name: /plot\.R/ }).click();

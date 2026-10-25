@@ -16,7 +16,7 @@ const clientEpoch = crypto.randomUUID();
 type Binding = { documentId?: string; id?: string; version?: string | number };
 function bindings(view: ViewDescription) { return Object.entries(view.bindings ?? {}) as [string, Binding][]; }
 // A tab carries only the object: the run that produced its version is named once, on the
-// view's source line (R3).
+// view's source line.
 export function title(view: ViewDescription) {
   return String(view.props.title ?? view.props.label ?? view.component);
 }

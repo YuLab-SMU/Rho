@@ -45,7 +45,7 @@ and actions; selected native execution uses Core's public capability. An Agent
 component owns its model loop and context. Core remains independent of UI bundles
 and model interaction. Each repository delivers and verifies its own boundary.
 
-The [first release](WEBUI-FIRST.md) is an npm-distributed local service and browser
+The application is an npm-distributed local service and browser
 WebUI. The browser reaches scoped application operations through that service;
 it does not invoke Core or native tools directly. The service uses Core's public
 CLI. A later desktop client reuses these component and execution boundaries and
@@ -58,7 +58,7 @@ their concrete [operation contracts](../protocol/index.json), HTTP/SSE service a
 client. Plugins supplies independently packaged headless owners. Rho selects a
 finite allowlisted package list, checks versions/service requirements and injects
 typed ports. Missing packages report unavailable; they are not installed
-implicitly. UI entries remain unavailable.
+implicitly. Registered owner views are rendered by the browser application.
 [Headless backend](HEADLESS.md) records the actual boundary and persistence rules.
 Scripts, requirements, typed fields, keys, entity namespaces and two-input joins
 are explicit declarations. Retained records stay observable through the same
@@ -146,7 +146,7 @@ not establish authorization, resource freshness or scientific correctness.
 Independent HTML views can use isolated MCP Apps with a controlled message/tool
 bridge, validated origin/CSP and explicit teardown. UI isolation does not sandbox
 the OS authority of native tools; Core caller namespaces are not authenticated
-principals. See [Security](../SECURITY.md) and [Product design](DESIGN.md).
+principals. See [Security](../SECURITY.md).
 
 ## Resource limits
 

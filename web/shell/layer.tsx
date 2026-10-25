@@ -4,8 +4,9 @@ import type { DigestLine, ObjectState, QuestionState, RunObject, Screen } from '
 import { liveLimits } from '../../src/live-workspace.js';
 import { Icon } from '../icons.js';
 import type { Live } from './live.js';
+import { fileIcon } from './facts.js';
 
-// What Rho adds above the work (docs/WORKSPACE-PLAN.md §2): one persistent line, at most
+// What Rho adds above the work: one persistent line, at most
 // one interruption, a capped digest on return and the recorded evidence on request. Every
 // word comes from Screen and the owner records; nothing here decides what moves.
 export type Namer = (object: string) => string;
@@ -36,7 +37,7 @@ export function chainOf(screen: Screen, focus: string | null): RunObject[] {
 }
 
 // Whether a failed run is still the current state of its script: a later run of the same
-// script that completed replaced it, so it keeps its shape and steps back (R7).
+// script that completed replaced it, so it keeps its shape and steps back.
 function superseded(screen: Screen, run: RunObject) {
   return run.state === 'failed' && Object.values(screen.objects).some(o => o.kind === 'run' && o.source === run.source && o.run > run.run && o.state === 'completed');
 }
@@ -47,57 +48,7 @@ const sameDay = (a: string, b: string) => new Date(a).toDateString() === new Dat
 const minutes = (ms: number) => { const s = Math.max(0, Math.round(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 const when = (iso: string) => (sameDay(iso, new Date().toISOString()) ? '' : day(iso) + ' ') + clock(iso);
 const span = (a: string, b: string) => sameDay(a, b) ? when(a) + ' – ' + clock(b) : `${day(a)} ${clock(a)} – ${day(b)} ${clock(b)}`;
-// Time along the bar, with long quiet stretches cut short: a pause of more than two minutes
-// takes the room of two minutes and is drawn as a break, so hours of quiet never crush the work.
-const longest = 120000;
-function axis(times: number[]) {
-  const sorted = [...times].sort((a, b) => a - b), stops: Array<[number, number]> = [], breaks: number[] = [];
-  let at = 0;
-  sorted.forEach((t, i) => { if (i) { const gap = t - sorted[i - 1]; at += Math.min(gap, longest); if (gap > longest) breaks.push(at - longest / 2); } stops.push([t, at]); });
-  const total = Math.max(1, at);
-  const x = (t: number) => { let i = stops.findIndex(([time]) => time >= t); if (i < 0) i = stops.length - 1; return stops.length ? stops[i][1] / total : 0; };
-  return { x, breaks: breaks.map(b => b / total) };
-}
-// The recorded activity along time: one tick per recorded fact, a numbered mark where each
-// run was submitted. Ticks are the record, never a progress estimate.
-function Timeline({ live, narrow }: { live: Live; narrow: boolean }) {
-  const screen = live.screen!, state = live.state!, name = namer(live), act = live.act;
-  const facts = state.evidence.filter(f => f.at), place = axis(facts.map(f => Date.parse(f.at!)));
-  const runs = Object.values(screen.objects).filter((o): o is RunObject => o.kind === 'run').sort((a, b) => a.run - b.run);
-  const [width, setWidth] = useState(0), track = useRef<HTMLSpanElement>(null);
-  // The latest runs, as many as the bar has room for.
-  const shown = runs.slice(narrow ? -4 : -Math.min(12, width ? Math.max(1, Math.floor(width / 26) + 1) : 12));
-  const at = (run: RunObject) => { const f = state.evidence.find(f => f.object === run.id && f.at); return f ? place.x(Date.parse(f.at!)) : null; };
-  const kind = (actor: string) => state.trace.principals[actor]?.kind ?? 'operator';
-  useLayoutEffect(() => {
-    const el = track.current; if (!el || typeof ResizeObserver === 'undefined') return;
-    const observer = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width)); observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
-  // Marks keep their order and never overlap: each sits at its time or just after the one before,
-  // and when that runs past the end they close up from the right.
-  const gap = width ? Math.min(24 / width, 1 / Math.max(1, shown.length - 1)) : 0.035;
-  const xs = shown.map((run, i) => at(run) ?? (shown.length > 1 ? i / (shown.length - 1) : 1));
-  for (let i = 1; i < xs.length; i++) xs[i] = Math.max(xs[i], xs[i - 1] + gap);
-  for (let i = xs.length - 1; i >= 0; i--) xs[i] = Math.min(xs[i], i === xs.length - 1 ? 1 : xs[i + 1] - gap);
-  const marks = shown.map((run, i) => ({ run, x: Math.max(0, xs[i]) }));
-  // Pauses closer together than a mark is wide read as one break, not a pile of slashes.
-  const breaks = place.breaks.reduce<number[]>((kept, b) => kept.length && width && (b - kept.at(-1)!) * width < 20 ? kept : [...kept, b], []);
-  // When the marks stand shoulder to shoulder they are an ordered row, not times; the ticks
-  // and breaks under them would claim a scale the row no longer has.
-  const crowded = width > 0 && width < shown.length * 40;
-  const latest = runs.at(-1);
-  return <span ref={track} className={'shell-timeline' + (narrow ? ' inline' : '')} role="group" aria-label="Runs over time">
-    {!narrow && !crowded && facts.length > 0 && <span className="shell-ticks" aria-hidden="true">
-      {facts.map(f => <i key={f.seq} className={kind(f.actor)} style={{ left: (place.x(Date.parse(f.at!)) * 100).toFixed(2) + '%' }} />)}
-      {breaks.map(b => <b key={b} className="shell-gap" style={{ left: (b * 100).toFixed(2) + '%' }} />)}
-    </span>}
-    {marks.map(({ run, x }) => <button key={run.id} className={'shell-mark ' + run.state + (superseded(screen, run) ? ' superseded' : '') + (run === latest ? ' latest' : '')} style={narrow ? undefined : { left: `calc(${(x * 100).toFixed(2)}% - 10px)` }}
-      aria-label={`${name(run.id)} ${run.state}`} title={`${name(run.id)} · ${runWords[run.state] ?? run.state}${superseded(screen, run) ? ' · a later run completed' : ''}`} onClick={() => act({ kind: 'open', target: run.id })}>{run.run}</button>)}
-  </span>;
-}
-
-// The Agent's object and its state, one press from the object itself (E1).
+// The Agent's object and its state, one press from the object itself.
 function AgentMarker({ live, who = true }: { live: Live; who?: boolean }) {
   const screen = live.screen!, agent = screen.agent, name = namer(live);
   if (!agent) return null;
@@ -106,25 +57,17 @@ function AgentMarker({ live, who = true }: { live: Live; who?: boolean }) {
   </button>;
 }
 
-// The activity bar under the work: what was recorded and when, which runs it holds, and the
-// person's own place (following, working, away). Below 1280 it also names the Agent's object,
-// which the Agent column says above it.
-export function Bar({ live, evidence, onEvidence, held, narrow, column }: { live: Live; evidence: boolean; onEvidence: () => void; held: number; narrow: boolean; column: boolean }) {
+export function Bar({ live, evidence, onEvidence, held }: { live: Live; evidence: boolean; onEvidence: () => void; held: number }) {
   const { screen, act } = live;
-  if (!screen || !live.state) return <div className="shell-bar" data-rho-layer="persistent" role="status">Reading what the Agent did…</div>;
-  const following = screen.attention === 'following', notes = screen.items.length;
-  const times = live.state.evidence.filter(f => f.at).map(f => f.at!).sort((a, b) => Date.parse(a) - Date.parse(b));
-  return <div className="shell-bar" data-rho-layer="persistent" data-attention={screen.attention}>
-    {!narrow && times.length > 0 && <span className="shell-span"><strong>{live.state.evidence.length} actions</strong> {span(times[0], times.at(-1)!)}</span>}
-    {!column && <AgentMarker live={live} />}
-    <span className="shell-break" aria-hidden="true" />
-    <Timeline live={live} narrow={narrow} />
-    {held > 0 && <span className="shell-held" role="status">{held} waiting</span>}
-    <button className="shell-follow" aria-pressed={following} title={following ? 'The main area follows the Agent; any input of yours stops that' : 'Your views stay where you put them'} onClick={() => act({ kind: following ? 'unfollow' : 'follow' })}>
-      <span className="shell-switch" aria-hidden="true" /><span className="shell-follow-word">{following ? 'Following' : screen.attention === 'away' ? 'Away' : 'Working'}</span>
-    </button>
+  if (!screen || !live.state) return <div className="shell-bar" role="status">Reading workspace…</div>;
+  const following = screen.attention === 'following';
+  return <div className="shell-bar" data-attention={screen.attention}>
+    <AgentMarker live={live} />
+    <span className="shell-break" />
+    {held > 0 && <span className="shell-held" role="status">{held} updates</span>}
+    <button className="shell-follow" aria-pressed={following} title="Follow the Agent's current view. Your input stops following." onClick={() => act({ kind: following ? 'unfollow' : 'follow' })}><Icon name="eye" size={14} />{following ? 'Following Agent' : 'Follow Agent'}</button>
     <button className="shell-quiet" onClick={() => act({ kind: screen.attention === 'away' ? 'return' : 'leave' })}>{screen.attention === 'away' ? 'Return' : 'Step away'}</button>
-    <button className="shell-quiet shell-evidence-toggle" aria-expanded={evidence} onClick={onEvidence}>{notes > 0 && `${notes} Agent ${notes === 1 ? 'note' : 'notes'} · `}<span className="shell-wide-word">Recorded evidence</span><span className="shell-narrow-word" aria-hidden="true">Evidence</span></button>
+    <button className="shell-quiet shell-evidence-toggle" aria-expanded={evidence} onClick={onEvidence}>Activity</button>
   </div>;
 }
 
@@ -134,7 +77,7 @@ function roleOf(live: Live, id: string) {
   return item ? live.map!.vocabulary.states[item.state]?.role ?? '' : '';
 }
 const questionLong: Record<string, string> = { prepared: 'Prepared · not fetched by the Agent', fetched: 'Fetched by the Agent · no linked response yet', responded: 'Answered by the Agent' };
-// The Agent's column (1280 and wider): who is working and on what, the items it declared
+// The optional Agent panel: who is working and on what, the items it declared
 // in its own words, the person's questions and how far each got, and the recorded calls on
 // request. Every line is the Agent's statement or an owner record; nothing is estimated.
 // The Agent learns of a question only when the person hands it over: Rho cannot push into the
@@ -159,7 +102,7 @@ export function AgentColumn({ live, agents, contexts = [], prepare, principalId,
   useEffect(() => { if (onClose) column.current?.focus(); }, [!!onClose]);
   const screen = live.screen, state = live.state, name = namer(live);
   const running = Object.values(screen?.objects ?? {}).find(o => o.kind === 'run' && o.state === 'running');
-  const [now, setNow] = useState(Date.now());
+  const [now, setNow] = useState(Date.now()), [earlier, setEarlier] = useState(false);
   useEffect(() => { if (!running) return; const timer = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer); }, [!!running]);
   if (!screen || !state) return null;
   // Who: the label given to the Agent's session when it was granted, and its last call as the
@@ -173,6 +116,12 @@ export function AgentColumn({ live, agents, contexts = [], prepare, principalId,
   const questions = Object.values(screen.objects).filter((o): o is QuestionState => o.kind === 'question').reverse();
   // The item the person is looking at, or the one the Agent says it is working on, opens up.
   const current = screen.items.find(i => focusObject && (i.artifact?.object === focusObject)) ?? screen.items.find(i => roleOf(live, i.id) === 'working');
+  // The files the current item's run declared, as Core recorded them; a check only where Rho verified the bytes.
+  const producer = current?.artifact && Object.values(screen.objects).find((o): o is RunObject => o.kind === 'run' && o.run === current.artifact!.run);
+  const outputs = producer ? live.runs?.find(r => r.operationId === name(producer.id)) : undefined;
+  const referenceFor = (file: string) => outputs?.sourceKey ? Object.values(state.refs).find(ref => ref.artifact === outputs.sourceKey + '/' + file && ref.run === producer?.run) : undefined;
+  // The newest question leads; earlier ones fold behind it.
+  const shownQuestions = earlier ? questions : questions.slice(0, 1);
   return <aside ref={column} className={'agent-column' + (onClose ? ' drawer' : '')} aria-label={who} data-scroll-region="" tabIndex={0} onKeyDown={event => { if (onClose && event.key === 'Escape') { event.stopPropagation(); onClose(); } }}>
     <section className="agent-card">
       <header className="agent-card-head"><span className={'agent-dot' + (running ? ' running' : '')} aria-hidden="true" /><strong>{who}</strong>
@@ -196,9 +145,21 @@ export function AgentColumn({ live, agents, contexts = [], prepare, principalId,
         })}</ol>
       </section>}
     </section>
+    {outputs && outputs.declared.length > 0 && <section className="agent-card agent-outputs" aria-label={'Outputs of ' + outputs.operationId}>
+      <header className="agent-card-head"><strong>Outputs</strong><span className="agent-card-sub">{outputs.operationId}</span><span className="agent-card-count">{outputs.declared.length}</span></header>
+      <ul>{outputs.declared.map(file => {
+        const ref = referenceFor(file.path), object = ref ? 'artifact:' + ref.artifact : null;
+        const here = !!ref && object === focusObject && screen.views.find(v => v.id === live.active)?.version === ref.version;
+        return <li key={file.path} className={here ? 'current' : undefined}>
+          <Icon name={fileIcon(file.path)} size={15} stroke={1.8} />
+          {object && ref ? <button className="agent-output-name" aria-current={here || undefined} onClick={() => live.act({ kind: 'open', target: object, run: ref.run, version: ref.version })}>{file.path}</button> : <span className="agent-output-name">{file.path}</span>}
+          {outputs.integrity === 'verified' && file.present ? <span className="agent-output-check" title="Bytes verified"><Icon name="check" size={14} stroke={2} /></span> : !file.present ? <span className="agent-output-state">not on disk</span> : null}
+        </li>;
+      })}</ul>
+    </section>}
     {questions.length > 0 && <section className="agent-card" aria-label="Your questions">
-      <header className="agent-card-head"><strong>Your questions</strong></header>
-      <ul className="agent-questions">{questions.map(q => <li key={q.id} className={'agent-question ' + q.state}>
+      <header className="agent-card-head"><strong>Your questions</strong>{questions.length > 1 && <button className="shell-quiet agent-card-meta" aria-expanded={earlier} onClick={() => setEarlier(v => !v)}>{earlier ? 'Newest only' : `${questions.length - 1} earlier`}</button>}</header>
+      <ul className="agent-questions">{shownQuestions.map(q => <li key={q.id} className={'agent-question ' + q.state}>
         <p data-user-text="">{q.name}</p>
         <button className="shell-link" onClick={() => live.act({ kind: 'open', target: q.target })}>{name(q.target)}</button>
         {(() => {

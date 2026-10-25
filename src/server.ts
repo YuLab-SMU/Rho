@@ -102,7 +102,7 @@ function lifetime(run: { native?: unknown }) {
     endedAt: kind === 'ExitObserved' && typeof known?.observed_at === 'string' ? known.observed_at : null
   };
 }
-// One run as a context gives it to the Agent (docs/WORKSPACE-PLAN.md W4): the recorded
+// One run as a context gives it to the Agent: the recorded
 // facts and the end of the retained stderr, where R writes its error. `from` says where the
 // excerpt starts, so a cut is never mistaken for the whole stream.
 export const runContextLimits = { errorExcerptBytes: 8192 };
@@ -507,7 +507,7 @@ export class RhoService {
     // principal-only invalidation would hide reads from every browser subscriber.
     await this.emit(p, 'activity.changed', method);
   }
-  // What the project's Agents did, for the person's screen (docs/INTERACTION-PLAN.md S7):
+  // What the project's Agents did, for the person's screen:
   // only principals whose grant names this project, only the fields the activity record
   // keeps. A grant is the scope; an Agent need not have opened a binding.
   private async projectActivity(p: Project) {
