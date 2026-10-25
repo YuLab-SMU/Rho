@@ -1,7 +1,9 @@
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
-const root = new URL('../', import.meta.url), output = new URL('../dist/web/', import.meta.url);
+import { pathToFileURL } from 'node:url';
+import { selectedUiEntries } from './ui-selection.mjs';
+const root = new URL('../', import.meta.url), output = process.env.RHO_WEB_OUTPUT ? pathToFileURL(path.resolve(process.env.RHO_WEB_OUTPUT) + path.sep) : new URL('../dist/web/', import.meta.url);
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const inventory = [];
 async function walk(directory, prefix = '') {
@@ -16,15 +18,17 @@ async function walk(directory, prefix = '') {
 }
 await walk(output);
 const dependencies = [];
-const entries = JSON.parse(await fs.readFile(new URL('ui-entries.json', root), 'utf8'));
-const omitted = process.env.RHO_UI_OMIT?.split(',') ?? [];
-const chosen = entries.filter(e => e.package ? process.env.RHO_UI_PLUGINS === undefined || process.env.RHO_UI_PLUGINS.split(',').includes(e.plugin) : !omitted.includes(e.plugin));
+const chosen = selectedUiEntries();
 const optional = [...(chosen.some(e => e.plugin === 'documents') ? ['@codemirror/state', '@codemirror/view'] : []), ...(chosen.some(e => e.plugin === 'tables') ? ['ag-grid-community', 'ag-grid-react'] : [])];
 for (const name of [...optional, 'react', 'react-dom', 'scheduler', 'vite', 'typescript']) {
   const manifest = JSON.parse(await fs.readFile(new URL('node_modules/' + name + '/package.json', root), 'utf8'));
   dependencies.push({ name, version: manifest.version, license: manifest.license });
 }
 const ownerEntries = await Promise.all(chosen.map(async entry => {
+  if (entry.extension) {
+    const { source, directory, ...record } = entry;
+    return record;
+  }
   // A Rho-owned entry is built from this checkout's source at the application version.
   if (!entry.package) return { ...entry, package: JSON.parse(await fs.readFile(new URL('package.json', root), 'utf8')).name, packageVersion: JSON.parse(await fs.readFile(new URL('package.json', root), 'utf8')).version, entrySha256: hash(await fs.readFile(new URL(entry.source, root))) };
   const folder = new URL('node_modules/' + entry.package + '/', root);

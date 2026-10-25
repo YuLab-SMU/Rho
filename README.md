@@ -50,5 +50,9 @@ plans and visual rules. See [Frontend](docs/FRONTEND.md) for the current interfa
 [documentation index](docs/README.md) for backend and release information.
 npm registry publication has not been performed.
 
+For a new component view, start with [Plugin authoring](docs/PLUGIN-AUTHORING.md):
+generate a typed package, preview it independently and select its compiled entry
+through configuration without adding an application adapter.
+
 Contributions follow [Contributing](CONTRIBUTING.md); source is licensed under
 [AGPL-3.0](LICENSE).

@@ -132,11 +132,15 @@ typed properties and its action bindings live with the component in the componen
 owner's repository. Rho builds those views into the application at explicit
 component versions and supplies theme, commands, layout and interaction routing.
 Rho does not hold a second implementation of a component's behavior. The selected
-editor, table and plot UI components are not implemented yet; [Status](STATUS.md)
-records that boundary.
+editor, table and plot entries are implemented; [Status](STATUS.md) records their
+verification scope.
 
-Trusted first-party React views are built with the application at explicit
-component versions.
+Trusted React views are built with the application at explicit component versions.
+An external UI package may contribute a full view over an existing capability
+using a JSON manifest and an explicit pinned build selection. The same metadata
+registers its props/bindings with the service and its renderer with the browser.
+No UI module executes on the server. This adds no backend methods, package discovery
+or runtime code loading; [Plugin authoring](PLUGIN-AUTHORING.md) documents the path.
 An Agent describes a composition using a typed catalog of registered components,
 properties and scoped action/resource/selection references. The container validates
 that description, then routes actions to their actual owner.

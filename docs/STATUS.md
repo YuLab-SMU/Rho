@@ -2,6 +2,37 @@
 
 Updated: 2026-10-25.
 
+## UI extension authoring
+
+`rho-ui create`, `dev`, `check` and `build` provide a standalone author workflow.
+A generated typed React package reads an existing capability through the public
+UI contract. Its fixture preview supports state/width controls, props editing,
+visible errors, a bounded call list and automatic refresh after source changes.
+It receives no project credentials and starts no runtime.
+
+An explicit `RHO_UI_EXTENSIONS` JSON selection pins installed package versions or
+records local directory overrides. Rho generates the browser registry and registers
+the same component/props/bindings metadata with the existing capability owner.
+No application adapter or generated operation contract edit is needed. This path
+adds views, not backend methods or runtime module injection. The default selection
+is unchanged. [Plugin authoring](PLUGIN-AUTHORING.md) contains the executable guide.
+
+- Rho 174/174 unit checks passed: [verification ledger](VERIFICATION.json).
+- New tests cover scaffolding without overwrites, pinned identities, reserved names,
+  schema/path containment, real document bindings, unchanged grants and retained
+  content after removing an extension. Server discovery never executes UI code.
+- Chrome 155.0.8059.84 passed preview and installed-view checks at 1440, 1024, 768
+  and 390 CSS pixels. Loading/error/unbound states, props changes, Unicode and
+  source refresh passed. A separately packed and installed extension read the
+  shared document and survived splitting and reload, without starting a Host.
+- The default build and existing plugin presentation browser suite passed.
+- An unsigned application tarball was installed outside the checkouts. Its
+  production-only SDK generated, checked, built and previewed another author
+  package with source refresh. The installed application also passed launch,
+  pairing, four-width entry checks and shutdown with no Host left behind.
+- Browser, package and document evidence is recorded under `work/plugin-dx/`.
+  The tarball uses explicit local source overrides; it is not a signed release.
+
 ## Frontend reset
 
 The user stopped the prior frontend work and requested removal of all previous
@@ -25,7 +56,7 @@ writes keep their actual owners. The frontend does not invent Notebook capabilit
 ## Verification of this reconstruction
 
 - `npm run build`: passed.
-- Rho 171/171 unit checks passed: [verification ledger](VERIFICATION.json).
+- The frontend reset passed 171 unit checks; current source checks are recorded above.
 - Real Chrome 155.0.8059.84: project entry/creation, files, table, figure, layout,
   activity, settings, plugin catalog/detail and responsive dialogs passed at
   1440, 1024, 768 and 390 CSS pixels. The newer frontend, entry, pages, plugin,

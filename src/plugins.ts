@@ -8,6 +8,7 @@ import type { Tables, tableLimits } from '@rho-workspace/plugin-tables';
 import type { Charts, chartLimits } from '@rho-workspace/plugin-charts';
 import type { Media } from '@rho-workspace/plugin-media';
 import { ownerContracts } from './contracts/owners.generated.js';
+import { validateUiExtension, uiExtensionLimits, type InstalledUiEntry } from './ui-extension.js';
 const executionInputSchema = ownerContracts.selected.execution.input as Record<string, unknown>;
 import type { executionLimits, Objects } from '@rho-workspace/plugin-r';
 import type { Annotations, annotationLimits } from '@rho-workspace/plugin-annotations';
@@ -42,10 +43,23 @@ export interface PluginConfig {
 }
 const only = (defaults: object, values: object = {}) => Object.fromEntries(Object.entries(values).filter(([k, v]) => k in defaults && v !== undefined));
 export class Plugins {
-  installedUi: { plugin: string; component: string; version: string; packageVersion: string }[] = [];
+  installedUi: InstalledUiEntry[] = [];
   private modules: Partial<Modules> = {};
   private availability: any[] = [];
   constructor(public config: PluginConfig) {}
+  installUi(entries: InstalledUiEntry[], methods: string[]) {
+    const extensions = entries.filter(e => e.extension);
+    requireThat(extensions.length <= uiExtensionLimits.maxEntries, 'limit', 'UI extension count exceeds maxEntries.', { maximum: uiExtensionLimits.maxEntries });
+    const components = new Set(this.descriptors().flatMap(p => (p.components ?? []).map(c => c.id)));
+    for (const entry of extensions) {
+      const m = entry.extension!;
+      validateUiExtension(m);
+      requireThat(pluginIds.includes(m.plugin as PluginId) && !components.has(m.component), 'condition', 'UI extension must name an existing capability and a unique component.');
+      requireThat(m.requiredOperations.every(method => methods.includes(method)), 'condition', 'UI extension requires an unknown operation.');
+      components.add(m.component);
+    }
+    this.installedUi = entries;
+  }
   async load() {
     const inventory = await readJson<{ plugins: any[] }>(fileURLToPath(new URL('./plugin-inventory.json', import.meta.url)));
     const selected = this.config.plugins ?? pluginIds;
@@ -112,13 +126,15 @@ export class Plugins {
       ...p,
       packagePresent: p.packagePresent === true,
       dependenciesSatisfied: p.packagePresent === true && p.state === 'available' && !(p.missing?.length),
-      uiRenderable: p.state === 'available' && this.installedUi.some(entry => entry.plugin === p.id && entry.packageVersion === p.version)
-    })), operations: this.operationDeclarations(), actions, unavailableActions, components: descriptors.flatMap(p => (p.components ?? []).map(component => ({ ...component, pluginId: p.id }))), capabilities: [...descriptors.flatMap(p => p.capabilities), ...actions.flatMap(a => a.capabilities ?? [])], skills: descriptors.flatMap(p => p.skills ?? []), ...(this.modules.agent ? { agent: this.modules.agent.plugin.agent } : {}) };
+      uiRenderable: p.state === 'available' && this.installedUi.some(entry => entry.plugin === p.id && (entry.extension || entry.packageVersion === p.version))
+    })), operations: this.operationDeclarations(), actions, unavailableActions, components: [...descriptors.flatMap(p => (p.components ?? []).map(component => ({ ...component, pluginId: p.id }))),
+      ...this.installedUi.filter(e => e.extension && this.modules[e.plugin as PluginId]).map(e => ({ id: e.component, version: e.version, owner: e.package!, pluginId: e.plugin, ui: e.entrySha256!, bindings: e.extension!.bindings, propsSchema: e.extension!.propsSchema,
+        presentation: { displayName: e.extension!.displayName, description: e.extension!.description }, uiPackage: e.package, uiPackageVersion: e.packageVersion }))], capabilities: [...descriptors.flatMap(p => p.capabilities), ...actions.flatMap(a => a.capabilities ?? [])], skills: descriptors.flatMap(p => p.skills ?? []), ...(this.modules.agent ? { agent: this.modules.agent.plugin.agent } : {}) };
   }
   viewAvailability(component: string, version: string) {
     const declared = this.catalog.components.find(c => c.id === component && c.version === version);
     if (!declared) return { state: 'unavailable', reason: 'Component or requested version is not registered.' };
-    const installed = this.installedUi.some(entry => entry.component === component && entry.version === version && entry.packageVersion === this.descriptor(declared.pluginId)?.version);
+    const installed = this.installedUi.some(entry => entry.component === component && entry.version === version && (entry.extension || entry.packageVersion === this.descriptor(declared.pluginId)?.version));
     return installed ? { state: 'entry-installed', visibility: 'unobserved' } : { state: 'unavailable', reason: 'UI entry is not installed in this browser build.' };
   }
   descriptors() { return Object.values(this.modules).map(m => m.plugin as PluginDescriptor); }

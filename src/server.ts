@@ -346,7 +346,7 @@ export class RhoService {
   async start() {
     try {
     await this.plugins.load();
-    this.plugins.installedUi = await installedWebEntries(this.config.webRoot);
+    this.plugins.installUi(await installedWebEntries(this.config.webRoot), Object.keys(operations));
     await this.state.init();
     for (const project of this.state.projects) if (project.sources) this.plugins.sourceFolders.set(project.id, project.sources);
     this.adminToken = randomBytes(32).toString('hex');

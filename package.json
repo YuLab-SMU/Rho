@@ -8,7 +8,8 @@
     "node": ">=22.22.0 <23"
   },
   "bin": {
-    "rho": "./dist/cli.js"
+    "rho": "./dist/cli.js",
+    "rho-ui": "./scripts/ui-plugin.mjs"
   },
   "exports": {
     ".": "./dist/client.js",
@@ -39,7 +40,13 @@
     "scripts/person-files-acceptance.mjs",
     "scripts/interaction-acceptance.mjs",
     "scripts/browser-checks.mjs",
-    "scripts/frontend-acceptance.mjs"
+    "scripts/frontend-acceptance.mjs",
+    "scripts/ui-plugin.mjs",
+    "scripts/ui-selection.mjs",
+    "scripts/ui-toolchain.json",
+    "scripts/ui-preview",
+    "web/theme.css",
+    "docs/PLUGIN-AUTHORING.md"
   ],
   "scripts": {
     "build": "npm run build:service && npm run build:web",
@@ -90,7 +97,10 @@
     "acceptance:e2e": "node scripts/e2e-acceptance.mjs",
     "perf": "node scripts/performance.mjs",
     "acceptance:interaction:agent": "RHO_INTERACTION_MODEL=1 node scripts/interaction-acceptance.mjs",
-    "acceptance:frontend": "node scripts/frontend-acceptance.mjs"
+    "acceptance:frontend": "node scripts/frontend-acceptance.mjs",
+    "ui:create": "node scripts/ui-plugin.mjs create",
+    "ui:dev": "node scripts/ui-plugin.mjs dev",
+    "acceptance:plugin-dx": "node scripts/plugin-dx-acceptance.mjs"
   },
   "dependencies": {
     "@rho-workspace/plugin-agent": "file:../Rho-plugins/plugins/agent",

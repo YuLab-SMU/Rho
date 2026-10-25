@@ -2,6 +2,7 @@ import * as fs from 'node:fs/promises';
 import type { ServerResponse } from 'node:http';
 import { fileURLToPath } from 'node:url';
 import { confined, Fault, requireThat } from '@rho-workspace/plugin-contracts';
+import { validateUiExtension, type InstalledUiEntry } from './ui-extension.js';
 
 export const webRoot = fileURLToPath(new URL('./web/', import.meta.url));
 // Installed entries are build facts. Visibility still requires browser evidence.
@@ -12,7 +13,11 @@ export async function installedWebEntries(root = webRoot) {
     requireThat((await fs.stat(file)).size <= 1024 * 1024, 'limit', 'Browser manifest exceeds its 1 MiB budget.');
     const manifest = JSON.parse(await fs.readFile(file, 'utf8'));
     requireThat(manifest.format === 'rho.web-build/1' && Array.isArray(manifest.ownerEntries) && manifest.ownerEntries.length <= 128, 'condition', 'Invalid browser build manifest.');
-    return manifest.ownerEntries as { plugin: string; component: string; version: string; packageVersion: string }[];
+    for (const entry of manifest.ownerEntries) if (entry.extension) {
+      validateUiExtension(entry.extension);
+      requireThat(entry.plugin === entry.extension.plugin && entry.component === entry.extension.component && entry.version === entry.extension.version && typeof entry.package === 'string' && typeof entry.packageVersion === 'string' && /^[a-f0-9]{64}$/.test(entry.entrySha256), 'condition', 'UI extension identity does not match its build record.');
+    }
+    return manifest.ownerEntries as InstalledUiEntry[];
   } catch (e: any) { if (e.code === 'ENOENT') return []; throw e; }
 }
 const types: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.woff2': 'font/woff2', '.svg': 'image/svg+xml' };
