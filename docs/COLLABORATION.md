@@ -60,6 +60,8 @@ for structured compositions and releases only its rendering relationship.
 Selections carry exact document UTF-16 ranges or immutable table entity references.
 They have independent conditional versions and receipts; one Agent's private
 selection never replaces the human's selection. Legacy `selection.set` is retained.
+The workspace shell links views of one table version through one shared channel,
+`linked:<id>@<version>`; see [plugin UI](PLUGIN-UI-HANDOFF.md#five-registered-entries).
 
 ## Feedback and explicit response
 

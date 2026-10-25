@@ -2,7 +2,7 @@
 
 ## Workspace plan
 
-Updated: 2026-10-24. The user approved the [workspace plan](WORKSPACE-PLAN.md) W0–W7.
+Updated: 2026-10-25. The user approved the [workspace plan](WORKSPACE-PLAN.md) W0–W7.
 **W0 done:** the superseded-failure rule is in the model, engine and tests;
 `scripts/rulers.mjs` measures E1/E4 and M1–M10 from the page only and the S7 acceptance
 records them on the frozen workspace. That baseline fails M1 at 1024 and 390 in the
@@ -56,6 +56,25 @@ repair context with the real error, unknown after the Host is killed, M1–M10 o
 and run views. Found and fixed: a read said "running" while no Host answered. Not proven:
 the natural-language step with a real model (W7). Unit 165/165, replay 27/27; S7, UI,
 pages (now with the context panel), shell, U2 and plugin UI pass; initial gzip 91.3 KiB.
+**W5 done (2026-10-25):** views of one table version share one selection channel
+(`linked:<id>@<version>`), so the table and the new Charts scatter select the same
+entities, and sorting or filtering never changes which entities are selected. Layout
+commands need no dragging: Split right/down, Move to the next/previous group, Close view
+and Undo layout change sit in the palette's Layout group after View; each is one
+conditional `composition.apply` replacement or `composition.undo`, and a divider moved
+by keyboard is written back. The browser grant adds `composition.apply/undo` and
+`data.plot`. While the person works, an Agent's layout waits as "Open update"; a
+missing component keeps its reference and offers the nearest view beside it. The editor
+hands the Agent an exact buffer range with its version and whether it is saved; a range
+the buffer moved past is refused with "Select it again". `scripts/object-acceptance.mjs`
+passes all W5 exits on real Core: one channel through sort and filter; split, move,
+close, divider, undo and a layout switch keep the draft, undo and selection; legal
+compositions apply while malformed, stale and out-of-catalog ones are refused; closing a
+view leaves its run running; M1–M10 on the split layout. Found and fixed: a tab chosen
+before the live session started was dropped; a closed view stayed held; the chart drew
+letterboxed after a split. Unit 169/169, plugins 67/67, replay 27/27; S7, UI, pages,
+shell, U2, plugin UI and actions pass; initial gzip 91.3 KiB; total gzip 540 KiB, above
+the 525,061-byte gate W6 engages once the legacy shell is gone.
 
 Updated: 2026-10-24. S7 live expression and complete table-question feedback.
 `src/expression.ts` drives the replay and the real browser through `live-trace.ts` /

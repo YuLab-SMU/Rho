@@ -150,10 +150,16 @@ U1 permits protocol/Skills discovery, project selection/creation and source-fold
 snapshot/events, composition reads, document reads and bounded resource reads.
 U2 adds `document.edit`, `document.undoOwn`, `document.revert`,
 `document.history`, `document.change.read`, `data.page` and selection read/set.
+Later grants add document open and save, feedback and annotations, contexts
+naming one exact object, the task map and `project.runs`. The workspace shell adds
+`action.submit` (a form the Agent proposed, sent once under its operationId),
+`action.output`, `action.cancel` (any run of a project this pairing includes,
+recorded with its requester), `composition.apply`/`composition.undo` (the person's
+layout commands) and `data.plot`. `src/browser-access.ts` holds the reviewed list.
 Browser mutations require stable change identities and version conditions.
-`session.grant`, document open/save/abandon/global undo, composition writes, native
-actions, installation and archive writes remain excluded. Existing U1 sessions
-retain their original narrower grants; pair a new tab for U2 access.
+`session.grant`, global undo, `action.retry`, requirement preparation, installation
+and archive writes remain excluded. Existing sessions retain their original narrower
+grants; pair a new tab for newer access.
 
 Static routes serve only HTML and named build assets, not arbitrary project files.
 Responses enforce no-store, no-referrer, same-origin resource/opener policies and

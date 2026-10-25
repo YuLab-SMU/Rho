@@ -164,8 +164,8 @@ composition `availability`; registration does not imply renderability.
 ### Five registered entries
 
 All entries below have version **0.2.0**, require exactly the listed bindings and
-retain their component contracts. Documents and Tables have optional UI entries;
-the other three remain unavailable. Required props are closed schemas; extra props fail.
+retain their component contracts. Documents, Tables, Media and Charts have UI
+entries; R's `rho.object` remains unavailable. Required props are closed schemas; extra props fail.
 Rho validates the selected entry/version, props and binding roles before saving.
 
 | Component / owner package | Required props | Binding |
@@ -176,6 +176,17 @@ Rho validates the selected entry/version, props and binding roles before saving.
 | `rho.media` / Media | `title` | `data:{id,version}` of kind `media` |
 | `rho.scatter` / Charts | `title,x,y` | `data:{id,version}` of kind `table`, with key and numeric x/y columns |
 
+Rho's own `rho.action` (version `1`, no bindings) is the form for one action an
+Agent proposes: `{title, action, actionVersion, operationId, input, repairOf?}`.
+
+The shell gives each view a selection channel. Views bound to the same table
+version share `{kind:"shared", id:"linked:<id>@<version>"}`, so a table and a chart
+of that version select the same entities and a sort or filter in one never changes
+the other's selection; any other view keeps a channel of its own, and a new version
+is a new channel. A plugin view receives that channel as `selectionScope` and its
+last read value as `sharedSelection`, applies what another view wrote, and does not
+publish it again.
+
 A `composition.put` includes `compositionId`, `expectedVersion`, `views`, `layout`.
 Each view has `id`, `component`, `version`, `props`, `bindings`, optional entity
 `selection`. New compositions use `expectedVersion:0`; updates use the returned
@@ -183,8 +194,10 @@ integer version. Unknown/uninstalled entries remain unavailable references.
 The legacy `layout` object is opaque. The additive `composition.apply/undo` path
 uses validated group/view nodes, stable IDs, conditional versions and receipts;
 see [Collaboration](COLLABORATION.md#composition-and-selection).
-U1 incrementally observes view IDs as read-only tabs. Dockview geometry conversion,
-owner renderers and browser layout writes remain U2-U3 work.
+The workspace shell renders that tree as split panes and tab groups. A person's
+split, move, close, divider and undo commands are conditional `composition.apply`
+replacements or `composition.undo` on the version they saw; there is no pixel
+geometry to convert.
 Documents, resources and compositions have separate versions; there is no global
 scientific revision or atomic cross-owner snapshot.
 
@@ -226,10 +239,10 @@ owned Host. Keep `delivery`, `execution`, `native`, `integrity`, `domain` and
 | --- | --- |
 | Browser transport | Typed U2 SDK, bounded SSE and identified document retries exist; durable native intents remain separate |
 | UI bootstrap | Same-origin static build and scoped one-time pairing exist; no separate Vite-origin CORS support |
-| UI plugin runtime | Documents/Tables render in the shell; three other renderers and conditional geometry remain pending; no marketplace/dynamic loader |
+| UI plugin runtime | Documents, Tables, Media and Charts render in the shell; the R object renderer remains pending; no marketplace/dynamic loader |
 | Editing and files | Backend edit/undo/save works; redo, file watcher, language service, project file tree and upload/rename/delete routes are absent |
 | R/environment | Batch Rscript/exported objects only; no persistent interpreter/live variables/memory recovery, R installer or lockfile environment provisioning |
-| Data and visualization | Bounded whole-resource parsing, single scatter projection and equal-string comparison; no table-cell write, general query/mapping engine, other chart types, chart rendering/export, image/PDF decoding or annotations UI |
+| Data and visualization | Bounded whole-resource parsing, single scatter view and equal-string comparison; no table-cell write, general query/mapping engine, other chart types, chart export, image/PDF decoding or annotations UI |
 | Agent | Scoped MCP and explicit context fetch work; no embedded chat, proactive external-chat delivery, hosted model loop or conversation synchronization |
 | Product acceptance | U1 and U2 runners/evidence are separately scoped; physical IME, full accessibility/performance and U3/U4 closure remain pending |
 
