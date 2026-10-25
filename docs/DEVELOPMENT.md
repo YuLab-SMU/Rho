@@ -1,7 +1,8 @@
 # Developing Rho
 
 Start with [Status](STATUS.md), [Architecture](ARCHITECTURE.md),
-[Roadmap](ROADMAP.md), [Interaction guidance](INTERACTION.md) and
+[Roadmap](ROADMAP.md), [Interaction guidance](INTERACTION.md),
+[Frontend design guidance](FRONTEND-DESIGN.md) and
 [Technology stack](TECHSTACK.md). The local backend is
 implemented; its [build, check and assembly commands](HEADLESS.md#budgets-verification-and-assembly)
 exercise the actual headless composition. The browser implementation is described in [Frontend](FRONTEND.md).
@@ -71,6 +72,12 @@ result, context fetch and adopted conclusion need different evidence. Use existi
 authorization without another container approval; apply additional layout effects
 only within their own authorized scope and protection conditions.
 
+For frontend work, add the [design brief](FRONTEND-DESIGN.md#brief-and-sources):
+primary content and action, reading order, applicable component states, wording,
+content extremes and constrained/enlarged-text layouts. Use the selected visual
+baselines and explain task-specific deviations. Design the whole state sequence,
+including waiting, errors and return; mark missing owner capabilities explicitly.
+
 ## Documentation and UI verification
 
 Document changes require local link/anchor checks and rendering after a coherent
@@ -97,6 +104,13 @@ beliefs about state, focus loss, mistakes, help needed and recovery effort; keep
 the participant/task scope visible. Human usability is separate from browser,
 accessibility, scientific and installation checks. Numeric style rules and a
 pixel-perfect screenshot cannot substitute for those observations.
+
+Also review the actual presentation: hierarchy, alignment, density, readable
+research content, consistent controls and truthful feedback. Record concrete
+visual observations and fixes separately from functional checks and user studies,
+following the [design acceptance guidance](FRONTEND-DESIGN.md#acceptance).
+Generated screenshots, successful browser assertions and matching CSS tokens do
+not establish that the frontend design is complete.
 
 Use disposable projects and owned Hosts for execution checks. Inspect existing
 work before starting another Host on the same project. Preserve user sessions,

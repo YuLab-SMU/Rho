@@ -5,9 +5,10 @@ plans, visual specifications, Paper references and appearance rulers have been
 removed from the working repository. Git retains their history; they do not govern
 this implementation. This document describes the current application, not another
 prescriptive design system.
-The selected next direction is in [Interaction guidance](INTERACTION.md) and the
-[validation roadmap](ROADMAP.md#interaction-system-validation). Those constraints
-and experiments do not imply that every proposed interaction is implemented here.
+The selected next direction is in [Interaction guidance](INTERACTION.md), the new
+[Frontend design guidance](FRONTEND-DESIGN.md) and the
+[validation roadmap](ROADMAP.md#interaction-system-validation). These targets do
+not imply that the proposed designs or interactions are implemented here.
 
 ## Starting from the work
 
@@ -64,8 +65,10 @@ view change makes no new save claim.
 
 The palette and responsive dialogs use native dialog focus containment and Escape.
 Typography, color and layout are implemented in the three CSS files under `web/`.
-Their values are implementation choices, with no fixed scale or design-board gate.
-The shared CSS variable interface lets owner views use the application's colors.
+These are the current implementation values. Subsequent UI work follows the new
+design guidance's hierarchy, visual baselines and state rules; the current values
+are not an accepted design system. The shared CSS variable interface lets owner
+views use the application's colors.
 
 ## Verification
 
@@ -88,3 +91,6 @@ current evidence. Historical component and installed-package results do not acce
 this new frontend automatically. Native physical IME behavior and human usability
 require their own evidence. This change does not implement a Project Notebook owner,
 a built-in model conversation, native desktop windows or a registry release.
+The functional base-R/browser evidence does not establish visual acceptance.
+The new design guidance identifies repeated chrome, competing controls and
+misaligned comparisons as issues for subsequent implementation and visual review.

@@ -6,9 +6,10 @@ Read [Status](docs/STATUS.md), [Architecture](docs/ARCHITECTURE.md),
 Rho contains a versioned local backend, client and headless acceptance scripts.
 Read [Headless backend](docs/HEADLESS.md) and its
 [acceptance record](docs/BACKEND-ACCEPTANCE.md). The current browser implementation is described in [Frontend](docs/FRONTEND.md).
-For product and interaction work, read [Interaction guidance](docs/INTERACTION.md)
-and [Development](docs/DEVELOPMENT.md). They turn the current adaptive-workspace
-direction into episode briefs, owner constraints and observable checks.
+For product and interaction work, read [Interaction guidance](docs/INTERACTION.md),
+[Frontend design guidance](docs/FRONTEND-DESIGN.md) and
+[Development](docs/DEVELOPMENT.md). They define behavior, visual hierarchy,
+components, complete state sequences, owner constraints and observable checks.
 
 ## Source ownership
 
@@ -85,6 +86,10 @@ Use the current interaction experiments to select checks, and observe real users
 for usability claims. New guidance does not revive withdrawn designs or establish
 that proposed behavior is implemented. Reference principles guide judgment; copied
 visual styles and screenshot checklists do not establish product quality.
+Apply the new frontend design guidance to subsequent UI work. Inspect hierarchy,
+alignment, density, content, controls and feedback across the complete episode;
+record visual review separately from functional, accessibility and usability
+evidence. Its proposed designs are not claims about current implementation.
 
 Use disposable projects and owned Hosts for execution checks. Inspect existing
 work before starting another Host on the same project. Do not restart a user Host

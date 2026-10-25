@@ -11,6 +11,10 @@ Keep the environment stable. Let the workspace adapt. Keep the human in control.
 This guide turns the current product discussion into development constraints and
 experiments. It does not establish implementation or acceptance. [Status](STATUS.md)
 records those facts; [Frontend](FRONTEND.md) describes the current browser.
+The complementary [Frontend design guidance](FRONTEND-DESIGN.md) specifies visual
+hierarchy, layout, components and presentation across the complete episode. Read
+both: a correct interaction contract does not by itself produce a well-designed
+screen, and visual changes must preserve the contracts below.
 The withdrawn design boards, W7 plans and appearance rulers remain withdrawn.
 Examples involving genes, volcano plots or reports describe possible work; they
 do not select pages, permanent columns, fixed modes or base-catalog workflows.

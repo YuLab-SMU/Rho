@@ -3,12 +3,16 @@
 Start with [Status](STATUS.md) for the current implementation and verification.
 The previous frontend design documents and plans were withdrawn on 2026-10-25.
 [Frontend](FRONTEND.md) describes the rebuilt application and its actual capabilities.
-For new product work, follow [Interaction guidance](INTERACTION.md) and the
-[episode workflow](DEVELOPMENT.md#write-an-interaction-episode).
+For new product work, follow [Interaction guidance](INTERACTION.md), the newly
+selected [Frontend design guidance](FRONTEND-DESIGN.md) and the
+[episode workflow](DEVELOPMENT.md#write-an-interaction-episode). The design guidance
+sets targets for subsequent work; it does not accept the current frontend or
+restore the withdrawn designs.
 
 | Document | Purpose |
 | --- | --- |
 | [Frontend](FRONTEND.md) | Project navigation, workspaces, Agent handoff and browser checks |
+| [Frontend design guidance](FRONTEND-DESIGN.md) | Complete visual and interaction presentation guidance: hierarchy, layout, typography, color, components, Agent context, comparison, recovery, responsive behavior and separate design acceptance |
 | [Interaction guidance](INTERACTION.md) | Adaptive workspace, shared grammar, change rules, fact boundaries and experiments; source-informed design principles |
 | [Base-R episode](BASE-R-EPISODE.md) | Real selected-row question, external Agent edit, result comparison and browser recovery; executable evidence and limits |
 | [Plugin authoring](PLUGIN-AUTHORING.md) | Create, preview, check and select an independent UI extension |

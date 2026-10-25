@@ -18,6 +18,22 @@ evidence for this direction. It does not restore withdrawn designs or implement 
 new proposal/decision API. The six experiments retain their individual completion
 conditions; human usability remains unverified.
 
+## Frontend design guidance
+
+[Frontend design guidance](FRONTEND-DESIGN.md) now supplies the missing visual and
+presentation direction, with primary references to Nielsen, Karri Saarinen and
+Apple. It specifies hierarchy, layout, type/spacing/color baselines, components,
+Agent context, paired comparison, recovery, responsive behavior and accessibility.
+The development workflow requires distinct visual review alongside functional
+checks and user observation. These are new targets; the withdrawn designs remain
+withdrawn, and this documentation change implements no frontend behavior.
+
+The current frontend has not passed this design acceptance. Repeated chrome,
+competing controls and misaligned comparisons need correction. The first UI
+implementation priority is the complete airquality episode under this guidance,
+including constrained layouts, failure and return. Existing functional evidence
+below remains valid within its recorded scope.
+
 ## Base-R collaboration loop
 
 The [airquality episode](BASE-R-EPISODE.md) passed in an actual Chrome browser using
