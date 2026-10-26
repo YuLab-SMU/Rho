@@ -56,6 +56,24 @@
       "bytes": 51881,
       "sha256": "6387f0d1cb59c8210d8a2a292a8b0d8c39adbd1e29c2f14085fa969e53d216aa"
     },
+    "agent.activity.capture": {
+      "summary": "agent.activity.capture",
+      "path": "operations/agent.activity.capture.json",
+      "bytes": 1066,
+      "sha256": "99446fe6c6bf4361e9364d79f6267dd4d596d540ba9ed57642f5beb32dfed31d"
+    },
+    "agent.activity.outputs": {
+      "summary": "agent.activity.outputs",
+      "path": "operations/agent.activity.outputs.json",
+      "bytes": 1718,
+      "sha256": "b0b8c577f8d524c7ce56fc3ad5bc20e7b885f6552855e6a8efe8db31727043f4"
+    },
+    "agent.activity.read": {
+      "summary": "agent.activity.read",
+      "path": "operations/agent.activity.read.json",
+      "bytes": 3705,
+      "sha256": "64d31b4cefd29c0132bc82223775ada64f974df17216a06e8be5e7ff98461d1e"
+    },
     "annotation.create": {
       "summary": "annotation.create",
       "path": "operations/annotation.create.json",
@@ -455,8 +473,8 @@
     "session.grant": {
       "summary": "session.grant",
       "path": "operations/session.grant.json",
-      "bytes": 3851,
-      "sha256": "dbe2b69dcb68bfe3b80d579cdfde8933a98a054171ba7d1f8b92bd30b664933e"
+      "bytes": 3962,
+      "sha256": "10117e763b13cffe36ddb6817965a6fee39a49e3e23f00ad5664ce383aabbeb3"
     },
     "skill.list": {
       "summary": "List the application and enabled provider Skills shipped in the selected package. Skills guide discovery but do not grant authorization.",

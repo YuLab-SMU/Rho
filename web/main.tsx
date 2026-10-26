@@ -261,6 +261,7 @@ function App() {
   </>;
   const agentContents = <>
     <div className="drawer-heading"><h2>Agent</h2><button className="icon-button" aria-label="Close Agent" onClick={() => { setAgentOpen(false); agentTrigger.current?.focus(); }}><Icon name="close" size={18} /></button></div>
+    {project && <div className="context-section"><button onClick={() => { showSection('activity'); setAgentOpen(false); }}>View live activity</button></div>}
     {snapshot && (link ? <AgentRequest key={snapshot.project.id} snapshot={snapshot} principalId={connection.principalId ?? 'local'} />
       : <AgentConversation key={snapshot.project.id} snapshot={snapshot} client={client} />)}
     <div ref={setAgentSlot} className="agent-slot" />

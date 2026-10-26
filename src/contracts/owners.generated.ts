@@ -6603,6 +6603,274 @@ export const ownerContracts: OwnerContractSnapshot = {
     },
     "agent": {
       "operationContracts": {
+        "agent.activity.capture": {
+          "effect": "metadata",
+          "inputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "expectedDigest": {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              "path": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "path",
+              "expectedDigest"
+            ],
+            "type": "object"
+          },
+          "outputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              "kind": {
+                "type": "string"
+              },
+              "path": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "type": "string"
+              },
+              "version": {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "version",
+              "kind",
+              "path"
+            ],
+            "type": "object"
+          },
+          "requires": [
+            "files"
+          ]
+        },
+        "agent.activity.outputs": {
+          "effect": "read",
+          "inputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "directory": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "directory"
+            ],
+            "type": "object"
+          },
+          "outputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "files": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "bytes": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "kind_hint": {
+                      "type": "string"
+                    },
+                    "observed_at": {
+                      "type": "string"
+                    },
+                    "path": {
+                      "maxLength": 1024,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "producer_confirmed": {
+                      "const": false
+                    },
+                    "provenance": {
+                      "const": "current-filesystem-observation"
+                    },
+                    "sha256": {
+                      "pattern": "^[a-f0-9]{64}$",
+                      "type": "string"
+                    },
+                    "state": {
+                      "enum": [
+                        "observed",
+                        "symlink-skipped",
+                        "file-byte-limit"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "state"
+                  ],
+                  "type": "object"
+                },
+                "maxItems": 64,
+                "type": "array"
+              }
+            },
+            "required": [
+              "files"
+            ],
+            "type": "object"
+          },
+          "requires": []
+        },
+        "agent.activity.read": {
+          "effect": "read",
+          "inputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "after": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "streamId": {
+                "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+                "type": "string"
+              }
+            },
+            "required": [],
+            "type": "object"
+          },
+          "outputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "page": {
+                "anyOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "entries": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "cursor": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "event": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "data": {
+                                  "type": "object"
+                                },
+                                "kind": {
+                                  "type": "string"
+                                },
+                                "sequence": {
+                                  "minimum": 0,
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [
+                                "sequence",
+                                "kind",
+                                "data"
+                              ],
+                              "type": "object"
+                            },
+                            "received_at_ms": {
+                              "minimum": 0,
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "cursor",
+                            "received_at_ms",
+                            "event"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 128,
+                        "type": "array"
+                      },
+                      "gap": {
+                        "type": "boolean"
+                      },
+                      "more": {
+                        "type": "boolean"
+                      },
+                      "nextCursor": {
+                        "minimum": 0,
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "entries",
+                      "nextCursor",
+                      "more",
+                      "gap"
+                    ],
+                    "type": "object"
+                  }
+                ]
+              },
+              "streams": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "droppedEvents": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "id": {
+                      "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+                      "type": "string"
+                    },
+                    "nextCursor": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "producer": {
+                      "type": "string"
+                    },
+                    "retainedFrom": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "sessionId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "producer",
+                    "sessionId",
+                    "nextCursor",
+                    "retainedFrom",
+                    "droppedEvents"
+                  ],
+                  "type": "object"
+                },
+                "maxItems": 64,
+                "type": "array"
+              }
+            },
+            "required": [
+              "streams",
+              "page"
+            ],
+            "type": "object"
+          },
+          "requires": []
+        },
         "binding.activity": {
           "effect": "read",
           "inputSchema": {
@@ -16909,7 +17177,7 @@ export const ownerContracts: OwnerContractSnapshot = {
     },
     "tables": {
       "package": "@rho-workspace/plugin-tables",
-      "packageVersion": "0.4.2",
+      "packageVersion": "0.4.3",
       "entry": "./operations",
       "entryPath": "Projects/Rho-plugins/plugins/tables/dist/operations.js",
       "entrySha256": "79886357e11b67c2d0d53bbb3047bdb27fc7aeee0ef3197f364b12b8325e92be",
@@ -16939,17 +17207,17 @@ export const ownerContracts: OwnerContractSnapshot = {
     },
     "agent": {
       "package": "@rho-workspace/plugin-agent",
-      "packageVersion": "0.4.6",
+      "packageVersion": "0.4.7",
       "entry": "./operations",
       "entryPath": "Projects/Rho-plugins/plugins/agent/dist/operations.js",
-      "entrySha256": "87c5fe4dcf114ed865cacb7aa00245e58c850ee644cd7760264051d30d190b1c",
+      "entrySha256": "08bb1c852cb89a17a2e307831ed2df5d6d16cbccaaf2971ec251bb9a1a34261f",
       "exports": {
-        "operationContracts": "46022b622799c28cd7b23c0257f68c29528be87ddf44dbc01ee884b3bed2b259"
+        "operationContracts": "936721f451ba4910694bee6dde963afc6cad3f0c9013cb25326ad3676a0f3e9d"
       }
     },
     "agent-feedback": {
       "package": "@rho-workspace/plugin-agent",
-      "packageVersion": "0.4.6",
+      "packageVersion": "0.4.7",
       "entry": "./feedback-contract",
       "entryPath": "Projects/Rho-plugins/plugins/agent/dist/feedback-contract.js",
       "entrySha256": "ecb1561d92b5953d2b786d29cfb57f6f8085d214dc1dec76f6e7bd7a5257cb75",
@@ -16959,7 +17227,7 @@ export const ownerContracts: OwnerContractSnapshot = {
     },
     "agent-native": {
       "package": "@rho-workspace/plugin-agent",
-      "packageVersion": "0.4.6",
+      "packageVersion": "0.4.7",
       "entry": "./contract",
       "entryPath": "Projects/Rho-plugins/plugins/agent/dist/contract.js",
       "entrySha256": "9e926081cb755a98d2b00d2a8488d8f4c6d25b3d5f1ec526d334ade633fe8a65",
@@ -16990,7 +17258,7 @@ export const ownerContracts: OwnerContractSnapshot = {
     },
     "entry-tables": {
       "package": "@rho-workspace/plugin-tables",
-      "packageVersion": "0.4.2",
+      "packageVersion": "0.4.3",
       "entry": "./contract",
       "entryPath": "Projects/Rho-plugins/plugins/tables/dist/contract.js",
       "entrySha256": "fa014c3bf7aa36b550696fb312258b05eb734c1e8f660f3b1774fc2afeb7d55f",

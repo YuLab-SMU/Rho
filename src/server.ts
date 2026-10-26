@@ -388,7 +388,7 @@ export class RhoService {
     const state = await capabilities.state();
     // Listing the project folder is read-only and confined like document.read; an Agent
     // started in Rho has no file tools of its own to find what is there.
-    const available = Object.keys(operations).filter(m => !m.startsWith('session.') && !m.startsWith('conversation.') && (!m.startsWith('project.') || m === 'project.entries') && !m.startsWith('requirements.prepare') && !m.startsWith('workspace.restore') && !['task.routing.put', 'binding.activity.append', 'feedback.submit', 'view.observe', 'view.observations.read', 'task.map.respond'].includes(m));
+    const available = Object.keys(operations).filter(m => !m.startsWith('agent.activity.') && !m.startsWith('session.') && !m.startsWith('conversation.') && (!m.startsWith('project.') || m === 'project.entries') && !m.startsWith('requirements.prepare') && !m.startsWith('workspace.restore') && !['task.routing.put', 'binding.activity.append', 'feedback.submit', 'view.observe', 'view.observations.read', 'task.map.respond'].includes(m));
     const profileMethods = profile === 'layered-presentation' ? ['binding.open', 'capability.index', 'capability.resolve', 'workspace.observe', 'workspace.enhance'] : available.filter(m => !['workspace.observe', 'workspace.enhance'].includes(m));
     const selected = methods ?? (profile === 'layered-presentation' ? profileMethods : (await Promise.all(profileMethods.map(async method => [method, await capabilities.isAvailable(method, state)] as const))).filter(([, enabled]) => enabled).map(([method]) => method));
     requireThat(profile !== 'layered-presentation' || selected.every(m => profileMethods.includes(m)), 'scope', 'The selected role cannot receive broader methods.');
@@ -836,6 +836,30 @@ export class RhoService {
       const run = await requests.lookup(principal, b.operationId, true), files = owners.need('files');
       return exportRun(p, run, { destination: b.destination, unsaved: b.unsaved, documents: owners.documents, resources: await files.list(), maxFileBytes: files.limits.maxFileBytes,
         sourceFile: async relative => (await files.sourceFile(relative)).file, submittedBy: authorKind(run.principal), exit: exitWords(run.native?.status?.Finished?.exit), projectName: p.name ?? path.basename(p.root) });
+    }
+    if (method.startsWith('agent.activity.')) {
+      owners.need('agent');
+      const agent = this.plugins.need('agent');
+      if (method === 'agent.activity.read') {
+        const capability = await this.bridge.capability(p.root);
+        requireThat(capability.exitCode === 0 && capability.reply.value?.limits?.activity, 'unavailable', 'The project activity Host is unavailable or lacks the selected activity capability. Reconnect observes it without starting or restarting it.');
+        return agent.readAgentActivity(async (command, args) => {
+          const result = await this.bridge.call(p.root, command, 'rho-agent-observe', undefined, args);
+          requireThat(result.exitCode === 0 && result.reply.ok, 'unavailable', 'Activity could not be read. Preserve the original session and reconnect to its Host.');
+          return result.reply.value;
+        }, b.streamId, b.after);
+      }
+      if (method === 'agent.activity.outputs') return agent.activityOutputs(p.root, b.directory);
+      if (method === 'agent.activity.capture') {
+        const files = owners.need('files');
+        const capture = { restore: files.restore.bind(files), validateDeclaration: (declaration: Parameters<typeof files.validateDeclaration>[0]) => {
+          requireThat(selection.enabled.includes(declaration.kind === 'table' ? 'tables' : 'media'), 'unavailable', 'Enable the output type owner before opening this file.');
+          files.validateDeclaration(declaration);
+        } };
+        const result = await agent.captureActivityArtifact(p.root, p.id, b.path, b.expectedDigest, capture,
+          owners.tables ? this.plugins.need('tables').lexicalCsvDeclaration : undefined);
+        await this.emit(p, 'resource.changed', result.id); return result;
+      }
     }
     if (method === 'resource.register') {
       requireThat(!b.declaration.path.split('/').some((part: string) => ['.rho', '.git'].includes(part)), 'scope', 'Register a project file outside internal state.');

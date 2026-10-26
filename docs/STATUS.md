@@ -1,17 +1,14 @@
 # Rho status
 
-Updated: 2026-10-25.
+Updated: 2026-10-26.
 
 ## Current focus
 
-Work advances by stage, and each next step comes from reviewing a real result
-([Development](DEVELOPMENT.md#stages)). The focus is the base-R question-to-result
-episode. It runs end to end with a real Agent, but its screens do not yet show the
-answer. The [review](BASE-R-EPISODE.md#review-of-the-2026-10-25-run) traces most
-problems to one cause: the workspace is assembled from the available views rather
-than from the question, the Agent's change and the difference in results. The next
-run presents the episode around the question; then a person who did not build Rho
-tries it ([Roadmap](ROADMAP.md#how-the-roadmap-advances)).
+The current task is observing external Agents through the project Activity page.
+The [activity episode](AGENT-ACTIVITY.md) now connects Core's retained stream to
+live tool/error display and exact output snapshots. Both Claude Code and dsh
+completed the real browser flow. The base-R question-to-result episode remains
+an open usability question, with its earlier review and evidence retained below.
 
 | Part | Stage | Evidence | Next question |
 | --- | --- | --- | --- |
@@ -28,6 +25,33 @@ specification written earlier on 2026-10-25 were withdrawn the same day at the
 user's request. They fixed grammars, visual values, state sequences and acceptance
 criteria before the application or its plugins had produced results to learn from.
 Git retains them at `24d9998b`; they are not requirements or reference designs.
+
+## External Agent activity
+
+Activity shows Claude Code/dsh sessions, calls, refusals, process exits and output
+files. The Agent panel links to this page. Core pages are read every 1.5 seconds;
+connection failure keeps received actions, and Reconnect reads the same cursor.
+Opening a CSV or image captures its observed digest through Files and opens an
+existing owner view. Original and later file snapshots remain independent.
+
+- Real final runs: Claude Code 2.1.310 and dsh 0.2.1-rc.2 through WestlakeHPC.
+  Claude retained 7 pending / 10 final events; dsh retained 15 / 24. Each analysis
+  entered once, showed diagnostic exit 7, and repeat collection added zero events.
+- Chrome 155.0.8059.84 checked live pending, owned Host loss, reconnect, CSV/SVG
+  opening, 1440/390 widths and reload. Independent means matched 11/3 and 8/3.
+  The existing frontend regression passed all four of its widths.
+  A rebuilt browser continuation checked both retained sessions after the final
+  text-file wording/PDF refusal fix; repeated Open kept two views and one execution.
+- Rho 182/182 and Plugins 76/76 passed; [verification ledger](VERIFICATION.json).
+  The Rho suite ran sequentially after the known parallel MCP test timeout.
+- Evidence: `work/agent-activity/run-6/`, with exact binary/browser/input hashes
+  and explicit source overrides. Earlier failures and visual reviews remain in
+  the episode record. This demonstrates the flow, not human usability.
+- Source selection: Agent 0.4.7, Tables 0.4.3, unchanged Core at
+  `4f5bed8631e15acad44cc86b63ea4779ab8af342`. External sessions need an explicitly
+  selected collector; the UI does not discover or start every native session.
+  Native completion, producer attribution and scientific validity remain unknown
+  unless their own evidence supplies them. Activity is not archived by workspace export.
 
 ## Base-R collaboration loop
 
@@ -92,8 +116,7 @@ records how it runs, its limits and the reviews of five real runs.
   the plugin was unavailable, and so was `rho --grant`; with the descriptor left at
   0.4.5 while 0.4.6 was selected it was unavailable again, so the descriptor version
   moves with the package version.
-- Rho 181/181 unit checks and Plugins 74/74 passed in one ledger run:
-  [verification ledger](VERIFICATION.json). `test/mcp.test.mjs` "real stdio MCP v2
+- At that stage Rho 181/181 unit checks and Plugins 74/74 passed in one ledger run. `test/mcp.test.mjs` "real stdio MCP v2
   tools…" passed in it; that test has reached its 30 s limit in four of six earlier
   full runs on this machine and in one of two at the commit before, and alone it
   passes in 17.5 s. Rebuilding the 211 KB `capability.list` reply takes 430 MCP reads,

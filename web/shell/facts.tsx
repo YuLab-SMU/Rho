@@ -40,7 +40,7 @@ export function SourceLine({ live, snapshot, resource, viewId, onOpenRef, childr
   return <><div className="shell-source" data-rho-layer="persistent">
     {run ? <button className="shell-producer" data-rho-producer="" disabled={!object} title={object ? `Open ${run.operationId}, the run that produced this version` : 'This run is outside the retained records'} onClick={() => object && live.act({ kind: 'open', target: object })}>
       <span data-fact="observed" className={'shell-state ' + run.execution}><span className="shell-run-id">{run.operationId}</span> · {executionWord(run.execution)}</span>
-    </button> : runs && <span data-fact="observed" className="shell-meta">{(resource.provenance as { operationId?: string })?.operationId?.startsWith('registration:') ? 'Registered file' : 'No recorded run'}</span>}
+    </button> : runs && <span data-fact="observed" className="shell-meta">{(resource.provenance as { source?: string })?.source === 'current-filesystem-observation' ? 'Observed file snapshot · producer unconfirmed' : (resource.provenance as { operationId?: string })?.operationId?.startsWith('registration:') ? 'Registered file' : 'No recorded run'}</span>}
     {run && (() => { const integrity = run.declared.length ? integrityWord(run.integrity) : 'no declared file', checked = `${integrity} · ${domainWord(run)}`;
       // What Rho checked, then what nothing checked: only the first may carry the verified colour.
       return <span data-fact="verified" className={'shell-verified ' + run.integrity} title={checked}><span className="shell-integrity">{integrity}</span> · {domainWord(run)}</span>; })()}

@@ -2,19 +2,19 @@
   "schemaVersion": 1,
   "checks": {
     "rho-tests": {
-      "command": "node --test test/*.test.mjs",
-      "checkedAt": "2026-10-26T16:44:14.286Z",
+      "command": "node --test --test-concurrency=1 test/*.test.mjs",
+      "checkedAt": "2026-10-26T17:20:43.049794+00:00",
       "exitCode": 0,
-      "tests": 181,
-      "passing": 181,
+      "tests": 182,
+      "passing": 182,
       "passed": true
     },
     "plugin-tests": {
       "command": "node --test test/*.test.mjs",
-      "checkedAt": "2026-10-26T16:44:18.710Z",
+      "checkedAt": "2026-10-26T17:28:51.134747+00:00",
       "exitCode": 0,
-      "tests": 74,
-      "passing": 74,
+      "tests": 76,
+      "passing": 76,
       "passed": true
     }
   }

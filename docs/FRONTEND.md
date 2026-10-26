@@ -19,6 +19,9 @@ inspect what happened. The application gives those actions direct places:
 - **Overview** opens existing workspaces and recorded results, with recent runs.
 - **Files** opens documents, browses source folders and filters the current folder.
 - **Activity** opens actual execution records, output, repair context and exports.
+  It also shows the selected Core-backed Claude Code/dsh activity streams, native
+  errors and observed output files. The [activity episode](AGENT-ACTIVITY.md)
+  describes attachment, bounded polling, reconnect and exact output snapshots.
 - **Project settings** manages source folders and explicitly checks available tools.
 - **Workspaces** hold real owner views in tabs and splits. Arrange views exposes
   split, move, close and undo operations; the command palette offers the same actions.

@@ -1,0 +1,78 @@
+{
+  "method": "agent.activity.outputs",
+  "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "projectId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "directory": {
+        "maxLength": 1024,
+        "minLength": 1,
+        "type": "string"
+      }
+    },
+    "required": [
+      "projectId",
+      "directory"
+    ],
+    "type": "object"
+  },
+  "outputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "files": {
+        "items": {
+          "additionalProperties": false,
+          "properties": {
+            "bytes": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "kind_hint": {
+              "type": "string"
+            },
+            "observed_at": {
+              "type": "string"
+            },
+            "path": {
+              "maxLength": 1024,
+              "minLength": 1,
+              "type": "string"
+            },
+            "producer_confirmed": {
+              "const": false
+            },
+            "provenance": {
+              "const": "current-filesystem-observation"
+            },
+            "sha256": {
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
+            },
+            "state": {
+              "enum": [
+                "observed",
+                "symlink-skipped",
+                "file-byte-limit"
+              ]
+            }
+          },
+          "required": [
+            "path",
+            "state"
+          ],
+          "type": "object"
+        },
+        "maxItems": 64,
+        "type": "array"
+      }
+    },
+    "required": [
+      "files"
+    ],
+    "type": "object"
+  },
+  "description": null
+}

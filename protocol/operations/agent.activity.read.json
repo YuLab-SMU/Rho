@@ -1,0 +1,148 @@
+{
+  "method": "agent.activity.read",
+  "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "projectId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "after": {
+        "minimum": 0,
+        "type": "integer"
+      },
+      "streamId": {
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+        "type": "string"
+      }
+    },
+    "required": [
+      "projectId"
+    ],
+    "type": "object"
+  },
+  "outputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "page": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "entries": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "cursor": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "event": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "data": {
+                          "type": "object"
+                        },
+                        "kind": {
+                          "type": "string"
+                        },
+                        "sequence": {
+                          "minimum": 0,
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "sequence",
+                        "kind",
+                        "data"
+                      ],
+                      "type": "object"
+                    },
+                    "received_at_ms": {
+                      "minimum": 0,
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "cursor",
+                    "received_at_ms",
+                    "event"
+                  ],
+                  "type": "object"
+                },
+                "maxItems": 128,
+                "type": "array"
+              },
+              "gap": {
+                "type": "boolean"
+              },
+              "more": {
+                "type": "boolean"
+              },
+              "nextCursor": {
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "entries",
+              "nextCursor",
+              "more",
+              "gap"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "streams": {
+        "items": {
+          "additionalProperties": false,
+          "properties": {
+            "droppedEvents": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "id": {
+              "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+              "type": "string"
+            },
+            "nextCursor": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "producer": {
+              "type": "string"
+            },
+            "retainedFrom": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "sessionId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "producer",
+            "sessionId",
+            "nextCursor",
+            "retainedFrom",
+            "droppedEvents"
+          ],
+          "type": "object"
+        },
+        "maxItems": 64,
+        "type": "array"
+      }
+    },
+    "required": [
+      "streams",
+      "page"
+    ],
+    "type": "object"
+  },
+  "description": null
+}

@@ -31,7 +31,10 @@ export const browserMethods = ['protocol.describe', 'protocol.validate', 'projec
   'action.export',
   // The files a run declared, registered so a person can open them, and checked against the
   // inventory the run wrote. Both read bytes and record facts; neither runs anything.
-  'resource.list', 'artifact.check'];
+  'resource.list', 'artifact.check',
+  // Read the project's selected observation namespace; capture only the exact
+  // current file version chosen by the person. No Agent/Host lifecycle authority.
+  'agent.activity.read', 'agent.activity.outputs', 'agent.activity.capture'];
 // Only the person at this machine talks to a conversation Rho starts: it runs their own Claude
 // Code with their model credentials. A narrower, expiring link never receives these.
 export const conversationMethods = ['conversation.start', 'conversation.send', 'conversation.stop', 'conversation.read'];

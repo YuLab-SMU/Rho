@@ -1,0 +1,56 @@
+{
+  "method": "agent.activity.capture",
+  "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "projectId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "expectedDigest": {
+        "pattern": "^[a-f0-9]{64}$",
+        "type": "string"
+      },
+      "path": {
+        "maxLength": 1024,
+        "minLength": 1,
+        "type": "string"
+      }
+    },
+    "required": [
+      "projectId",
+      "path",
+      "expectedDigest"
+    ],
+    "type": "object"
+  },
+  "outputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "id": {
+        "pattern": "^[a-f0-9]{64}$",
+        "type": "string"
+      },
+      "kind": {
+        "type": "string"
+      },
+      "path": {
+        "maxLength": 1024,
+        "minLength": 1,
+        "type": "string"
+      },
+      "version": {
+        "pattern": "^[a-f0-9]{64}$",
+        "type": "string"
+      }
+    },
+    "required": [
+      "id",
+      "version",
+      "kind",
+      "path"
+    ],
+    "type": "object"
+  },
+  "description": null
+}

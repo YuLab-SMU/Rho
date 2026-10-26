@@ -6,6 +6,7 @@ import { projectName, SourceFolders, when } from './home.js';
 import { Icon } from './icons.js';
 import { availability, resourceIcon, size, type Entry, type Section } from './project.js';
 import { RunView } from './shell/facts.js';
+import { AgentActivity } from './agent-activity.js';
 
 interface Props {
   project: ProjectSummary; location: string; snapshot: WorkspaceSnapshot; client: BrowserClient; section: Section;
@@ -109,7 +110,7 @@ export function ProjectOverview({ project, location, snapshot, client, section, 
       </section>
       {snapshot.resources.length > 0 && <section className="project-section"><div className="section-heading"><h2>Registered results</h2></div>{resultList}</section>}
     </>}
-    {section === 'activity' && <section className="project-section">{error(runsProblem, readAgain)}{runs === null ? <p role="status">Reading activity…</p> : orderedRuns.length ? <div className="activity-list">{orderedRuns.map(runRow)}</div> : <div className="empty-state"><Icon name="run" size={28} /><h3>No runs yet</h3><p>Execution records will appear here when work starts.</p><button onClick={onAgent}>Work with Agent</button></div>}</section>}
+    {section === 'activity' && <><section className="project-section"><AgentActivity client={client} projectId={project.id} onOpened={(id, view) => { onOpened(id); onLayout(id, view); }} /></section><section className="project-section"><h3>Managed runs</h3>{error(runsProblem, readAgain)}{runs === null ? <p role="status">Reading runs…</p> : orderedRuns.length ? <div className="activity-list">{orderedRuns.map(runRow)}</div> : <p className="muted">No managed runs yet.</p>}</section></>}
     {section === 'settings' && <div className="settings-sections"><section className="project-section"><h2>Source folders</h2><SourceFolders folders={project.sources ?? [{ id: project.id, root: project.root, name: projectName(project) }]} busy={adding} onAdd={() => void add()} />{error(sourceError, () => void add())}</section>
       <section className="project-section"><div className="section-heading"><h2>Project health</h2><button disabled={diagnosing} onClick={() => void diagnose()}>{diagnosing ? 'Checking…' : 'Check project'}</button></div>{doctor ? <ul className="health-list">{doctor.map(c => <li key={c.id}><span className={'state ' + c.state}>{c.state === 'ok' ? 'Ready' : c.state === 'fail' ? 'Blocked' : 'Check'}</span><div><p>{c.detail}</p>{c.remedy && <small>{c.remedy}</small>}</div></li>)}</ul> : <p className="muted">Check the tools and capabilities available to this project.</p>}{error(doctorError, () => void diagnose())}</section></div>}
     {inspecting && <dialog ref={runDialog} className="run-dialog" aria-label={inspecting} onClose={() => setInspecting(null)} onClick={event => { if (event.target === event.currentTarget) event.currentTarget.close(); }}><button className="icon-button run-dialog-close" aria-label="Close" onClick={() => runDialog.current?.close()}><Icon name="close" size={18} /></button><RunView key={inspecting} snapshot={snapshot} client={client} operationId={inspecting} runs={runs} readRuns={readAgain} onOpenRun={setInspecting} opener={ref => { const place = places.get(ref.id + '@' + ref.version); return place ? () => onLayout(place.compositionId, place.viewId) : null; }} /></dialog>}

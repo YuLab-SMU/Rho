@@ -80,7 +80,7 @@ test('unavailable actions retain their own copy; grouped operations do not misla
   assert.equal(plugins.catalog.skills.some(s => s.id === 'documents.workspace'), false);
   const catalog = (await new Plugins({}).load()).catalog;
   const actions = pluginEntries(catalog, 'agent').actions;
-  assert.equal(actions.length, 4);
+  assert.equal(actions.length, 7);
   assert.equal(actions.find(a => a.displayName === catalog.operations.find(o => o.method === 'context.create').presentation.displayName).readOnly, false);
   const reads = actions.find(a => a.displayName === catalog.operations.find(o => o.method === 'binding.activity').presentation.displayName);
   // Native observation append is a metadata write in the existing Activity
