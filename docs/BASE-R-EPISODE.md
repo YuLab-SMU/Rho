@@ -1,10 +1,11 @@
 # Base-R collaboration episode
 
-This episode applies the [interaction guidance](INTERACTION.md) to an ordinary R
-project: select a result row, ask about its method, let a real external Agent edit
-and execute the analysis, compare both outputs, and return after connection loss.
-It uses the public owner contracts and installed Chrome. The person is automated;
-this is not a human usability study or scientific acceptance of the method.
+This episode exercises an ordinary R project: select a result row, ask about its
+method, let a real external Agent edit and execute the analysis, compare both
+outputs, and return after connection loss. It uses the public owner contracts and
+installed Chrome. The person is automated; this is not a human usability study or
+scientific acceptance of the method. Each run ends with a [review](#review-of-the-2026-10-25-run)
+that decides what the next run should show.
 
 ## Question and objects
 
@@ -82,6 +83,70 @@ the selected stable entity and frozen question remain exact. This record does no
 claim Host crash recovery, restoration of every local presentation setting or
 automatic resumption of an external model session. Those require separate episodes.
 
+## Review of the 2026-10-25 run
+
+The run asked whether a real external Agent can answer an anchored question through
+Rho's public owners, and whether the person keeps their place and work across the
+change and a disconnection. It takes this episode to the *runs* stage
+([stages](DEVELOPMENT.md#stages)). The observations come from the retained
+screenshots at 1440 × 900 (`01-point-ask`, `02-question-ack-lost`,
+`03-offline-during-run`, `05-compare-tables`, `07-linked-figure`) and at 390 px
+(`comparison-390`).
+
+**What works.** The Agent read the frozen context, changed only the inclusion rule
+and its comment, kept the person's Unicode note in the script, ran R once and linked
+both outputs. The selection, both versions and the unsaved notes survived; Reconnect
+observed the same request, and there were exactly two native submissions. The
+offline notice says what the person is looking at and offers Reconnect without
+covering the table. The one application gap the run exposed, a linked result that
+could not be arranged, is fixed.
+
+**What does not work yet.**
+
+1. *The answer is not on any screen.* May goes from n 24 to 26 and mean 24.125 to
+   23.615, August from 23 to 26 and 60.000 to 59.962, and the other months do not
+   change. To learn this, the person compares two tables cell by cell. The Agent's
+   explanation sits behind a button labelled "Explicit Agent response"; in place it
+   is one truncated line of raw Markdown (`Agent: "**为什么五月原来只有 24 条：** 原 a...`).
+2. *The comparison is two unrelated tables.* Their headers and first rows are 48 px
+   apart. The left is named by its rule ("Original · complete cases"), the right by
+   its file (`monthly-ozone.csv`). Nothing marks the changed cells, and one column
+   shows `60` beside `59.12`.
+3. *Implementation facts lead.* "Open linked result · b517bba0" and "Open linked
+   result · fcde896f" leave the person to guess which is the table and which the
+   figure. Each result view is subtitled "completed · bytes verified · no domain
+   check". After the lost acknowledgement, nine lines describe one question, the
+   word "retained" appears five times, and the first line is the raw browser error
+   "Failed to fetch".
+4. *Everything has the same weight.* Three stacked bars, tabs, four bordered buttons
+   and a status line come before the data. The first data row starts nearly 400 px
+   down a 900 px window, while about 300 px stay empty below five rows. "Step away"
+   does not say what it changes.
+5. *At 390 px the versions cannot be seen together.* They become separate tabs, so
+   comparing means remembering values across a switch: recall instead of
+   recognition.
+
+**Analysis.** Problems 1–4 share one cause at the concept level. The workspace is
+assembled from the views that exist, one tab per file and one button per link,
+rather than from the episode: a question, what the Agent changed, what changed in
+the results and the evidence behind it. Restyling would not fix that. Problem 2 also
+has a capability part: the Tables plugin offers a keyed
+[`data.compare`](../protocol/operations/data.compare.json), but no view presents its
+differences. The mixed precision in problem 2 belongs to the table view. The labels
+in problem 3 are each true, but they describe the implementation rather than the work.
+The question's labels and linked-result buttons come from the Annotations plugin's
+table-question view in Rho-plugins; the run subtitles come from Rho's shell. Problem
+5 is composition: below 768 px the shell shows one view at a time.
+
+**Next run.** Present the episode around the question: what was asked, the Agent's
+answer, the change between the two results by month key with the changed values
+marked, and the code change, with tables, figure and provenance one step away. Keep
+the project, prompt and failure injections so that the runs can be compared. The
+run succeeds if the change in May and August and its reason can be read from one
+screen at 1440 px and reached at 390 px; then a person who did not build Rho tries
+to say what changed and why. If the person still has to compare tables to find the
+change, the presentation is wrong, not merely unpolished.
+
 ## Reproduce
 
 From a configured source checkout, after building the selected plugin packages:
@@ -140,4 +205,4 @@ The layout regression checks cover two explicit bindings, id collision refusal,
 unchanged sibling weights, movement and removal. The existing frontend acceptance
 also exercises saved views, keyboard navigation, Unicode/undo, handoff and reload.
 Human observation, a DESeq2 episode, external-write conflicts and broader unknown
-outcomes remain separate work in the [validation roadmap](ROADMAP.md#interaction-system-validation).
+outcomes remain separate work in the [roadmap](ROADMAP.md#how-the-roadmap-advances).

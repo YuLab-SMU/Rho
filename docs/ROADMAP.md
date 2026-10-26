@@ -1,16 +1,12 @@
 # Rho product direction
 
-Rho is an adaptive research workspace: people and external Agents collaborate on
-the same projects, documents and scientific artifacts while views adapt within
-predictable rules. Functional capabilities stay in Rho-plugins; managed execution
-stays in Rho-core. The application connects them while preserving the person's
-attention, control and continuity.
+Rho is a research workspace in which people and external Agents work on the same
+projects, documents and scientific results. Functional capabilities stay in
+Rho-plugins; managed execution stays in Rho-core. The application connects them so
+that a person can see what was done, understand it and decide what happens next.
 
-The previous frontend milestone plans and designs were withdrawn on 2026-10-25.
-They are not requirements for subsequent implementation. [Status](STATUS.md) records
-current behavior and executed checks; [Frontend](FRONTEND.md) describes the rebuilt UI.
-The current [interaction guidance](INTERACTION.md) selects shared objects,
-constrained workspace changes and continuous episodes as the development direction.
+[Status](STATUS.md) records current behavior, checks and the stage of each part;
+[Frontend](FRONTEND.md) describes the browser application as it is.
 
 ## First integrated flow
 
@@ -24,34 +20,48 @@ run. When a reply is lost, the original request remains the one to observe. Clos
 views, returning to a project or reconnecting must preserve acknowledged work and
 must not silently rerun it. Exports contain actual artifacts and provenance.
 
-Current code and behavioral tests implement this flow. A new frontend must establish
-its own browser evidence against these real capabilities; old screenshots, numeric
-style rules and prototype review do not provide that evidence.
+Current code and behavioral tests implement this flow, and the
+[base-R episode](BASE-R-EPISODE.md) has run it with a real Agent. Whether people can
+follow it from the screens is the open question below.
 
-## Interaction system validation
+## How the roadmap advances
 
-Progress through the smallest useful episode, extending existing contracts when
-an observed gap requires it. These are work priorities and completion conditions,
-not claims that the new direction has passed. Reuse the current composition tree,
-owner views, expression rules and exact collaboration receipts; do not reinstate
-withdrawn W7 plans or add another layout/Agent engine.
+The roadmap is a sequence of questions, each answered by a real result. The next
+question is chosen from the review of the last result, so the order below is
+expected to change. [Development](DEVELOPMENT.md#stages) describes how results are
+produced, analyzed and acted on. The roadmap does not specify screens, interaction
+vocabularies or visual values ahead of those results.
 
-| Step | Deliverable | Completion condition |
-| --- | --- | --- |
-| A: shared grammar | Map Point, Inspect, Ask, Propose, Act, Compare, Decide and Return onto actual owner contracts. | Each selected transition names real inputs, conditions, evidence and missing capability; no invented API is presented as implemented. |
-| B: constrained views | Exercise suggestions, local extension, protection, focus and version following through existing layout writes. | Related views can be accepted/dismissed without disrupting current input or protected content; stale/unavailable changes explain their outcome. |
-| C: real collaboration | Complete the base-R table/figure episode with an external Agent, anchored question, conditional edit, new run and linked result. | The person and Agent use the same references; owner facts prove the modification, reply and versions. Fixtures cannot stand in for a real Agent. |
-| D: failure and return | Add external-write conflict, unconsumed feedback, lost replies, disconnect and unknown execution. | Preserve acknowledged work and original identities; recover the workspace separately from observing execution. |
-| E: domain pressure | Repeat with a real DESeq2 project, multiple views/versions and independent domain checks. | The same interaction rules hold without domain branches in the Shell; biological claims retain their own limits. |
-| F: user observation | Have target researchers independently complete the episode and recover from a selected failure. | Record completion, misinterpretations, focus loss, assistance and recovery effort; revise from observed problems. |
+### Now: can a person read the answer?
 
-B and C should develop together where their evidence depends on each other.
-Begin F with the first usable episode and repeat it as the work grows. A and B
-do not justify postponing real use until a complete interface system exists.
-The [six experiments](INTERACTION.md#experiments-and-acceptance-evidence) supply
-concrete checks; [Development](DEVELOPMENT.md#write-an-interaction-episode) defines
-the brief and evidence record. Current results and remaining gaps belong only in
-[Status](STATUS.md), rather than a second progress ledger here.
+The [2026-10-25 base-R run](BASE-R-EPISODE.md#review-of-the-2026-10-25-run) showed
+that a real Agent can answer an anchored question, change the analysis, run it and
+link the new results, and that the person's place and work survive a disconnection.
+It also showed that the screens do not present the answer. The change between the
+results has to be found by comparing two tables, and implementation facts stand
+where the question and its answer should be.
+
+The next run presents the same episode around the question: what was asked, what
+the Agent changed and what changed in the results, with tables, figure, code and
+provenance one step away. It is judged on its retained screens first, then by a
+person who did not build it.
+
+### Then, provisionally in this order
+
+1. **Can someone else do it?** A researcher who did not build Rho asks the question,
+   follows the Agent's work and says what changed and why, without help. Test in
+   [small, repeated rounds](https://www.nngroup.com/articles/why-you-only-need-to-test-with-5-users/):
+   a few people, fixes, then another round.
+2. **Do failures stay understandable?** Run the episode with failures it has not yet
+   exercised: an outside edit to the script while the Agent edits it, a lost save
+   acknowledgement, a reply that never arrives and a result that arrives in part.
+3. **What carries over to real analysis?** Repeat with a DESeq2 project, several
+   results and its own domain checks. Presentation moves into shared owners only
+   where both episodes need it; the scientific method stays in the project and
+   plugins.
+4. **When should the Agent change the workspace?** Suggested and followed views,
+   protected views and the person's place, explored once an episode needs the Agent
+   to rearrange what the person sees.
 
 ## Remaining product work
 

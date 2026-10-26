@@ -2,41 +2,31 @@
 
 Updated: 2026-10-25.
 
-## Current development direction
+## Current focus
 
-The current discussion selects an adaptive research workspace: shared real objects,
-stable interaction rules, constrained view changes and continuous human/Agent work.
-[Interaction guidance](INTERACTION.md) defines eight interaction verbs, four levels
-of workspace effect and separate operation/workspace/review evidence. It applies
-Nielsen, Saarinen, Apple and SpaceX references as documented Rho design choices.
-[Development](DEVELOPMENT.md) now uses episode briefs; the
-[roadmap](ROADMAP.md#interaction-system-validation) prioritizes grammar, constrained
-views, a base-R collaboration loop, recovery, domain validation and user observation.
+Work advances by stage, and each next step comes from reviewing a real result
+([Development](DEVELOPMENT.md#stages)). The focus is the base-R question-to-result
+episode. It runs end to end with a real Agent, but its screens do not yet show the
+answer. The [review](BASE-R-EPISODE.md#review-of-the-2026-10-25-run) traces most
+problems to one cause: the workspace is assembled from the available views rather
+than from the question, the Agent's change and the difference in results. The next
+run presents the episode around the question; then a person who did not build Rho
+tries it ([Roadmap](ROADMAP.md#how-the-roadmap-advances)).
 
-The first base-R episode below now supplies concrete browser and external-Agent
-evidence for this direction. It does not restore withdrawn designs or implement a
-new proposal/decision API. The six experiments retain their individual completion
-conditions; human usability remains unverified.
+| Part | Stage | Evidence | Next question |
+| --- | --- | --- | --- |
+| Execution identity, recovery and Documents buffers | Hardened | Owner and acceptance suites below | None in the current focus |
+| Question → Agent → linked result | Runs; not yet usable from the screens | [Base-R episode](BASE-R-EPISODE.md) | Can the answer be read from one screen? |
+| Comparing two results | Runs | Two views split by hand | Can the differences be read by key? |
+| Project shell and navigation | Runs | Frontend browser suite below | Does it hold up around the reworked episode? |
+| Plugin UI extensions | Runs | Authoring checks below | Does a view built with it serve a real episode? |
+| Domain episode (DESeq2) | Not started | — | What carries over from base-R? |
 
-## Frontend design guidance
-
-[Frontend design guidance](FRONTEND-DESIGN.md) v1.1 integrates the supplied UI/UX
-direction with primary Nielsen/NNGroup, Saarinen/Linear and Apple references. It
-distinguishes mandatory contracts, selected visual defaults and product hypotheses;
-specifies application scopes, light/dark semantics, focus, human/Agent handover,
-fact-based feedback, comparison, history and scoped completion criteria.
-The [airquality interaction specification](design/AIRQUALITY-INTERACTION.md) maps
-the full episode and failure branches to actual owners and presentation gaps.
-Visual review remains separate from functional checks and user observation;
-prototype completion cannot stand in for implemented behavior. These documents
-add no frontend behavior or new application acceptance; withdrawn designs remain
-withdrawn.
-
-The current frontend has not passed this design acceptance. Repeated chrome,
-competing controls and misaligned comparisons need correction. The first UI
-implementation priority is the complete airquality episode under this guidance,
-including constrained layouts, failure and return. Existing functional evidence
-below remains valid within its recorded scope.
+The interaction guidance, frontend design guidance and airquality interaction
+specification written earlier on 2026-10-25 were withdrawn the same day at the
+user's request. They fixed grammars, visual values, state sequences and acceptance
+criteria before the application or its plugins had produced results to learn from.
+Git retains them at `24d9998b`; they are not requirements or reference designs.
 
 ## Base-R collaboration loop
 
@@ -67,10 +57,11 @@ execution semantics and the existing Plugins table-style override are unchanged.
   and browser-only continuations remain separate. The source composition and its
   local override are recorded, without a new binary or signed-release claim.
 
-Next work remains external-write conflicts and broader unknown outcomes, a domain
-episode, and researcher observation. This run does not establish Host crash
-recovery, external model-session resumption or scientific validity. Sort/filter
-controls keep their existing reload defaults; exact entity/version anchors persist.
+These checks show that the path works, not that a person can follow it; the
+[review](BASE-R-EPISODE.md#review-of-the-2026-10-25-run) records where the screens
+fall short and sets the next run. This run does not establish Host crash recovery,
+external model-session resumption or scientific validity. Sort/filter controls
+keep their existing reload defaults; exact entity/version anchors persist.
 
 ## UI extension authoring
 

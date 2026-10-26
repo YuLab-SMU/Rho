@@ -1,29 +1,24 @@
 # Rho documentation
 
-Start with [Status](STATUS.md) for the current implementation and verification.
-The previous frontend design documents and plans were withdrawn on 2026-10-25.
+Start with [Status](STATUS.md) for the current implementation, verification and the
+stage of each part. [Development](DEVELOPMENT.md) describes how work advances: each
+stage produces a real result, and the next step comes from reviewing it.
 [Frontend](FRONTEND.md) describes the rebuilt application and its actual capabilities.
-For new product work, follow [Interaction guidance](INTERACTION.md), the newly
-selected [Frontend design guidance](FRONTEND-DESIGN.md) and the
-[episode workflow](DEVELOPMENT.md#write-an-interaction-episode). The design guidance
-sets targets for subsequent work; it does not accept the current frontend or
-restore the withdrawn designs.
+Frontend plans, designs and guidance written before there were results to learn from
+were withdrawn on 2026-10-25; Git keeps their history.
 
 | Document | Purpose |
 | --- | --- |
 | [Frontend](FRONTEND.md) | Project navigation, workspaces, Agent handoff and browser checks |
-| [Frontend design guidance](FRONTEND-DESIGN.md) | UI/UX v1.1: application structure, visual baselines, light/dark semantics, human/Agent continuity, owner boundaries and scoped design acceptance |
-| [Airquality interaction specification](design/AIRQUALITY-INTERACTION.md) | Concrete UI states, failure branches, owner mapping and review criteria for the first complete episode; targets, not new acceptance evidence |
-| [Interaction guidance](INTERACTION.md) | Adaptive workspace, shared grammar, change rules, fact boundaries and experiments; source-informed design principles |
-| [Base-R episode](BASE-R-EPISODE.md) | Real selected-row question, external Agent edit, result comparison and browser recovery; executable evidence and limits |
+| [Base-R episode](BASE-R-EPISODE.md) | Real selected-row question, external Agent edit, result comparison and browser recovery; evidence, limits and the review that sets the next run |
 | [Plugin authoring](PLUGIN-AUTHORING.md) | Create, preview, check and select an independent UI extension |
 | [Architecture](ARCHITECTURE.md) | Source ownership, state and lifecycle boundaries |
 | [Technology stack](TECHSTACK.md) | Libraries and runtimes used by the current implementation |
-| [Roadmap](ROADMAP.md) | Product direction and remaining delivery scope |
+| [Roadmap](ROADMAP.md) | Product direction and the questions being worked on |
 | [Headless backend](HEADLESS.md) | Installation, HTTP/SSE, Agent adapters, persistence and resource budgets |
 | [Execution bridge](EXECUTION.md) | Core request identity, exit codes and Host lifetime |
 | [Collaboration](COLLABORATION.md) | Conditional compositions, selections, feedback and recovery |
-| [Development](DEVELOPMENT.md) | Owner workflow and verification |
+| [Development](DEVELOPMENT.md) | Stages, iterations, analyzing results, owner workflow and checks |
 | [Release](RELEASE.md) | Source publication and distribution |
 
 The following records retain their historical backend or component scope. They do

@@ -6,8 +6,6 @@ resources to a shared workspace. Rho-core provides the execution foundation.
 
 This document defines the design boundary. [Status](STATUS.md) records
 implementation; [Technology stack](TECHSTACK.md) records the selected libraries.
-[Interaction guidance](INTERACTION.md) defines how the adaptive workspace should
-preserve shared objects, user control and continuity across view changes.
 
 ## Source owners
 
@@ -105,20 +103,6 @@ client extends this to native windows. Saving checks external writes;
 disk files and Git history do not substitute for the current buffer. Versions and
 provenance belong to individual resources, with no global scientific revision.
 
-### Operation, workspace and review facts
-
-Treat these as separate kinds of evidence over existing owners. Operation facts
-come from execution, document and resource owners. Workspace facts describe
-composition, bindings, protection, selection and observed rendering. Review facts
-name authored feedback, explicit replies and decisions with their exact basis.
-An accepted layout does not prove visibility; a fetch does not prove understanding;
-an adopted result does not prove scientific correctness.
-
-This distinction adds no storage subsystem or global revision. Existing document
-and annotation owners can hold review content where their contracts suffice.
-A structured decision or durable focus entity needs a concrete consumer and an
-explicit owner before the interface can claim it is retained.
-
 ## Execution continuity
 
 A resident Host is held independently of observing windows and renderers. Closing
@@ -161,7 +145,6 @@ An Agent describes a composition using a typed catalog of registered components,
 properties and scoped action/resource/selection references. The container validates
 that description, then routes actions to their actual owner.
 
-Workspace changes follow the [effect rules](INTERACTION.md#rules-for-workspace-changes).
 Agent proposals carry intent and exact references; they do not grant execution or
 layout authority. Use existing conditional composition operations and protection.
 Current input, protected bindings and historical versions retain their identities;

@@ -4,11 +4,10 @@ Updated 2026-10-25. The frontend was reset at the user's request. Previous front
 plans, visual specifications, Paper references and appearance rulers have been
 removed from the working repository. Git retains their history; they do not govern
 this implementation. This document describes the current application, not another
-prescriptive design system.
-The selected next direction is in [Interaction guidance](INTERACTION.md), the new
-[Frontend design guidance](FRONTEND-DESIGN.md) and the
-[validation roadmap](ROADMAP.md#interaction-system-validation). These targets do
-not imply that the proposed designs or interactions are implemented here.
+prescriptive design system. How it changes next is decided by reviewing real runs
+([Development](DEVELOPMENT.md#stages)); the current
+[base-R review](BASE-R-EPISODE.md#review-of-the-2026-10-25-run) records what the
+screens do not yet show.
 
 ## Starting from the work
 
@@ -65,9 +64,8 @@ view change makes no new save claim.
 
 The palette and responsive dialogs use native dialog focus containment and Escape.
 Typography, color and layout are implemented in the three CSS files under `web/`.
-These are the current implementation values. Subsequent UI work follows the new
-design guidance's hierarchy, visual baselines and state rules; the current values
-are not an accepted design system. The shared CSS variable interface lets owner
+These are current implementation values, not an accepted design system; they change
+when a reviewed result calls for it. The shared CSS variable interface lets owner
 views use the application's colors.
 
 ## Verification
@@ -91,6 +89,6 @@ current evidence. Historical component and installed-package results do not acce
 this new frontend automatically. Native physical IME behavior and human usability
 require their own evidence. This change does not implement a Project Notebook owner,
 a built-in model conversation, native desktop windows or a registry release.
-The functional base-R/browser evidence does not establish visual acceptance.
-The new design guidance identifies repeated chrome, competing controls and
-misaligned comparisons as issues for subsequent implementation and visual review.
+Functional browser evidence shows that paths work, not that the screens can be read;
+the [base-R review](BASE-R-EPISODE.md#review-of-the-2026-10-25-run) records where
+they cannot.

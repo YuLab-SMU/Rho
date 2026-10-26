@@ -6,10 +6,9 @@ Read [Status](docs/STATUS.md), [Architecture](docs/ARCHITECTURE.md),
 Rho contains a versioned local backend, client and headless acceptance scripts.
 Read [Headless backend](docs/HEADLESS.md) and its
 [acceptance record](docs/BACKEND-ACCEPTANCE.md). The current browser implementation is described in [Frontend](docs/FRONTEND.md).
-For product and interaction work, read [Interaction guidance](docs/INTERACTION.md),
-[Frontend design guidance](docs/FRONTEND-DESIGN.md) and
-[Development](docs/DEVELOPMENT.md). They define behavior, visual hierarchy,
-components, complete state sequences, owner constraints and observable checks.
+For product, interface and plugin work, read [Development](docs/DEVELOPMENT.md):
+work advances in stages, and each next step comes from analyzing the result of the
+last one.
 
 ## Source ownership
 
@@ -53,12 +52,14 @@ consumer. Extend public boundaries for a concrete requirement.
 
 ## Work and verification
 
-Develop a complete interaction episode: real context, trigger, allowed change,
-invariants, failure/return and completion evidence. Reuse shared objects and the
-existing composition/owner contracts. Keep operation, workspace and review facts
-separate. Agent suggestions must preserve reading/input, protected views and exact
-versions; layout effects require their own applicable authority, without adding
-approval to already authorized scientific work.
+Advance one real episode at a time: run it on real resources, look at the actual
+result, write down what you observe, find the cause in its owner, make the smallest
+change that addresses it and run the same episode again. Record observations,
+decisions and their evidence in the episode record and Status. Match rigor to the
+stage: explore quickly while a question is open, and harden with tests and written
+guidance only what results have confirmed. Do not write specifications, design
+values or acceptance criteria for screens or plugins that have not been built and
+observed.
 
 Inspect Git status before editing and preserve unrelated work and local user data.
 Routine Rho work stays on `main`. Use temporary worktrees for independent tasks
@@ -77,19 +78,15 @@ limits. [Status](docs/STATUS.md) is the single current summary, under 300 lines;
 update it when behavior, verification, focus or unresolved work changes.
 
 The previous frontend plans, design boards and visual acceptance rulers were withdrawn
-at the user's request on 2026-10-25. They are not requirements or reference designs.
+at the user's request on 2026-10-25, as was the interaction and frontend design
+guidance written the same day. None of them are requirements or reference designs.
 Work from the user's current task and the actual capabilities of the application.
-Check usable flows in a real browser, including failure, input and recovery behavior.
-Do not infer product quality from a stylesheet checklist. Product text is English;
-user content retains its original Unicode.
-Use the current interaction experiments to select checks, and observe real users
-for usability claims. New guidance does not revive withdrawn designs or establish
-that proposed behavior is implemented. Reference principles guide judgment; copied
-visual styles and screenshot checklists do not establish product quality.
-Apply the new frontend design guidance to subsequent UI work. Inspect hierarchy,
-alignment, density, content, controls and feedback across the complete episode;
-record visual review separately from functional, accessibility and usability
-evidence. Its proposed designs are not claims about current implementation.
+Check usable flows in a real browser, including failure, input and recovery behavior,
+and read the screenshots yourself: passing assertions show that a path works, not
+that a person can follow it. Usability claims need observed users. Reference
+principles inform judgment; they are not checklists, and copied visual styles do
+not establish product quality. Product text is English; user content retains its
+original Unicode.
 
 Use disposable projects and owned Hosts for execution checks. Inspect existing
 work before starting another Host on the same project. Do not restart a user Host
