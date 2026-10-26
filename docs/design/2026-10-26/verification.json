@@ -1,27 +1,29 @@
 {
   "date": "2026-10-26",
-  "scope": "User-requested design proposal; documentation only. No application behavior or new SDK contract.",
-  "basisCommit": "161a16ff776f0dc709fc44c07017b651b713252c",
+  "revision": "v2",
+  "scope": "From-scratch product design requirements and designer commission. Documentation only; no application behavior changes.",
+  "supersedesCommit": "433f5aa7d27691b06b8de9b4cd856a9b9d7219b3",
+  "designBasis": "The user clarified that current implementation must not become the design target. Separate application and project navigation, Studio, panoramic Graph, dynamic Agent experience, dedicated conversation, and common plugin standards with professional differences define the commission.",
   "artifacts": [
     {
       "path": "docs/design/2026-10-26/build.py",
-      "sha256": "376f3e21114dbc4ceafc3c127b4d263e6902e292dc5b7b014be2bdec58822472",
-      "bytes": 71507
+      "sha256": "48f5ed36c6dc6079418b9ccda0937ab451faadd54ed0909ea3f43e9d2e987031",
+      "bytes": 48282
     },
     {
       "path": "docs/design/2026-10-26/index.html",
-      "sha256": "c61df38cb35c5b20682cfcb9a2a79dec1f04c03205ea966817b2375cd8e74b78",
-      "bytes": 86538
+      "sha256": "cbb99faf2ba24fe04d89794a45815d44d8ad49a54375f317580f1f1c51fb81c9",
+      "bytes": 60416
     },
     {
       "path": "output/pdf/rho-design-handoff-2026-10-26.pdf",
-      "sha256": "8d4b1274d1f6bf610f83c261cee9c1a3695358f1304ff05d2dc1bedae45ee04b",
-      "bytes": 3717861
+      "sha256": "a29d223f6bd70112ba533aa9e38ab719d1b79240d6933dcbf7df86de4517e551",
+      "bytes": 2659300
     },
     {
       "path": "output/design/rho-shell-preview.png",
-      "sha256": "7b53933288d65b2718cb081fddc34da810bac9ea050ddb330b110f4dc622afb8",
-      "bytes": 195697
+      "sha256": "ebfc262b859c2c51580be12e5fd4c205d00f2bac00d81671398171aa3f8059f9",
+      "bytes": 143789
     }
   ],
   "verification": {
@@ -48,21 +50,27 @@
       19,
       20
     ],
-    "rendering": "Headless Chrome 155; PDF independently rasterized with Poppler",
+    "rendering": "Headless Chrome; final PDF independently rasterized with Poppler and every page visually reviewed.",
+    "pdfTextAndPageNumbers": "passed",
     "browserErrors": 0,
     "clippedOrFooterOverlappingPages": 0,
-    "navigation": "Page selector to storyboard A and hash state passed",
-    "sourceLinksAtBasisCommit": 8,
+    "tableCellTextOverflow": 0,
+    "navigation": {
+      "hash": "#p15",
+      "selection": "p15"
+    },
+    "htmlIdsUnique": true,
+    "htmlInternalLinksChecked": 2,
+    "brokenHtmlInternalLinks": 0,
     "localMarkdownLinksChecked": 210,
     "brokenLocalLinksOrAnchors": 0,
-    "modifiedMarkdownRenderScreenshotsReviewed": 8,
-    "numericExamples": "All five before/after counts, means and deltas match retained base-R comparison; 3 decimal display"
+    "modifiedMarkdownRenderScreenshotsReviewed": 8
   },
   "review": {
-    "observedProblems": "Answer hidden behind explicit reply; compared rows misaligned; ambiguous linked-output titles.",
-    "designDecision": "Show answer and keyed differences together; keep professional plugin interaction inside a shared view frame.",
-    "corrections": "Removed main-view clipping and footer overlap; made image-region selection visible; retained English product text and original Unicode content.",
-    "remaining": "Static mockups, not executable application flows. Human usability, product accessibility and the proposed comparison/conflict/context views remain unverified."
+    "correction": "Replaced the implementation-led handoff with a design commission. Diagrams describe scope and relationships; current menus, SDK gaps, geometry and visual style are not targets.",
+    "coverage": "Two shells; three modes; dynamic Agent entry and task surface; dedicated conversation variants; application components; shared plugin standards and reusable brief; Code, Data, Figure and Notes examples; three cross-mode scenarios; designer deliverables and review questions.",
+    "visibleFixes": "Corrected Studio schematic clipping and footer overlap on storyboards B and C before final full-page review.",
+    "remaining": "Human designers still need to explore alternatives, produce the visual system and clickable flows, and observe people using them. This brief does not implement those interfaces or establish product usability."
   },
-  "evidenceDirectory": "work/design-handoff-20261026/"
+  "evidenceDirectory": "work/design-brief-v2-20261026/"
 }

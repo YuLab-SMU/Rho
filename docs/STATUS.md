@@ -4,12 +4,12 @@ Updated: 2026-10-26.
 
 ## Current focus
 
-The current deliverable is a user-requested [design handoff](design/2026-10-26/index.html)
-for the shell, shared components, plugin design template and scenario storyboards.
-It is a new proposal, separate from implemented behavior and withdrawn designs.
-The [activity episode](AGENT-ACTIVITY.md) connects Core's retained stream to live
-tool/error display and exact output snapshots; Claude Code and dsh completed that
-real browser flow. The base-R question-to-result usability question remains open.
+The current deliverable is a [from-scratch product design brief](design/2026-10-26/index.html).
+The user clarified that current implementation must not become the design target.
+The brief requires separate application and project navigation, Studio, panoramic
+Graph, a dynamic Agent experience, a dedicated conversation component and a shared
+plugin design standard with professional differences. Implementation records below
+remain capability evidence, not the target interface or design acceptance criteria.
 
 | Part | Stage | Evidence | Next question |
 | --- | --- | --- | --- |
@@ -27,25 +27,25 @@ user's request. They fixed grammars, visual values, state sequences and acceptan
 criteria before the application or its plugins had produced results to learn from.
 Git retains them at `24d9998b`; they are not requirements or reference designs.
 
-## Design handoff (proposal)
+## From-scratch design requirements
 
-The 2026-10-26 user request explicitly asks for a shell design, main application
-components, a plugin template, distinct plugin examples and interaction storyboards.
-The new [20-page handoff](design/2026-10-26/index.html) and
-[PDF](../output/pdf/rho-design-handoff-2026-10-26.pdf) cover those items, four scenarios
-and narrow-screen comparison. Its [builder](design/2026-10-26/build.py) keeps the
-content and visual components editable without changing application code.
+The user's 2026-10-26 clarification supersedes the first handoff at `433f5aa7`.
+The rewritten [20-page brief](design/2026-10-26/index.html) and
+[PDF](../output/pdf/rho-design-handoff-2026-10-26.pdf) commission a new product design;
+current menus, layouts and SDK gaps are not design constraints or implementation
+targets. Diagrams express requirements and relationships, not a finished visual design.
+The [builder](design/2026-10-26/build.py) retains editable content and diagrams.
 
-All 20 PDF pages were rendered and visually reviewed; clipping and footer overlap
-found during review were corrected. Document navigation and local links/anchors
-were checked. This is document verification, not application or human usability
-acceptance; the evidence is in `work/design-handoff-20261026/`.
+The brief covers two navigation scopes, three project work modes, the dynamic Agent
+entry and task surface, dedicated conversation variants, shared application
+components, a plugin requirements card, four professional plugin examples and three
+cross-mode storyboards. Designers supply alternative directions, detailed flows,
+components, visual language and prototypes; implementers identify and build gaps.
 
-The proposal uses the observed base-R and Agent activity episodes. It identifies
-existing capabilities separately from the proposed answer, comparison, conflict
-and context presentations. It creates no new SDK contract or runtime behavior.
-The next product question is whether the base-R answer and May/August differences
-can be read together, then understood by a person who did not build the application.
+Document verification is recorded in [verification](design/2026-10-26/verification.json)
+with local evidence in `work/design-brief-v2-20261026/`. It does not establish product
+usability or change application behavior. The existing execution and content safety
+boundaries remain; they do not prescribe the new interface's shape.
 
 ## External Agent activity
 
