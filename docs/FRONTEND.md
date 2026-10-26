@@ -1,22 +1,27 @@
 # Browser application
 
-Updated 2026-10-25. The frontend was reset at the user's request. Previous frontend
+Updated 2026-10-27. The frontend was reset at the user's request. Previous frontend
 plans, visual specifications, Paper references and appearance rulers have been
 removed from the working repository. Git retains their history; they do not govern
 this implementation. This document describes the current application, not another
 prescriptive design system. How it changes next is decided by reviewing real runs
 ([Development](DEVELOPMENT.md#stages)); the current
 [base-R review](BASE-R-EPISODE.md#review-of-the-2026-10-25-run) records what the
-screens do not yet show.
+screens do not yet show. Avoid unnecessary secondary labels and descriptions: let the
+layout do the explaining.
 
 ## Starting from the work
 
 A person needs to find a project, work on its contents, ask an Agent for help and
 inspect what happened. The application gives those actions direct places:
 
-- **Projects** lists and searches available projects, opens folders and creates a
-  named project from selected source folders.
-- **Overview** opens existing workspaces and recorded results, with recent runs.
+- **Projects** lists and searches available projects, names the folder each one works
+  in, opens folders and creates a named project from selected source folders. It
+  opens as one list with one primary action, and with no projects it shows what can
+  be started instead of an empty page.
+- **Overview** opens existing workspaces and recorded results, with recent runs when
+  there are any. A project with nothing recorded yet shows its two next steps —
+  work with the Agent or browse its files — rather than empty sections.
 - **Files** opens documents, browses source folders and filters the current folder.
 - **Activity** opens actual execution records, output, repair context and exports.
   It also shows the selected Core-backed Claude Code/dsh activity streams, native
@@ -33,8 +38,14 @@ inspect what happened. The application gives those actions direct places:
   opened from a narrower link keeps a request draft for an external Agent: copying a
   request is not sending it or receiving a reply.
 
-The sidebar and optional inspector adapt to available space. Narrow screens show
-one workspace view at a time. Closing a panel does not cancel work.
+The topbar names the way back — the projects list, then the project, then the open
+workspace — and keeps only the current place below 768 CSS px. Project settings and
+Plugins sit together at the foot of the project sidebar. The sidebar and optional
+inspector adapt to available space. Narrow screens show one workspace view at a time.
+Closing a panel does not cancel work.
+
+The [home and project episode](HOME-PROJECT-EPISODE.md) records the 2026-10-27 pass
+over these screens, its checks and the listing gap it left open.
 
 ## State and code
 

@@ -28,6 +28,5 @@ export function ProjectNavigation({ snapshot, overview, section, compositionId, 
     {layouts.length > 0 && <div className="nav-workspaces"><span className="section-label" id="nav-layouts">Workspaces</span><div role="group" aria-labelledby="nav-layouts" className="nav-group">
       {layouts.map(c => <button key={c.compositionId} className="nav-row" aria-current={!overview && compositionId === c.compositionId ? 'page' : undefined} onClick={() => onLayout(c.compositionId)}><Icon name="layout" size={17} /><span className="nav-row-name">{c.compositionId}</span><span className="nav-row-count" title={views(c)}>{c.views.length}</span></button>)}
     </div></div>}
-    <div className="nav-settings">{row('settings', 'Project settings', 'context')}</div>
   </nav>;
 }

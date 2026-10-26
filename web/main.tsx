@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { lazy, Fragment, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserClient, type BrowserConnection, type ProjectSummary, type WorkspaceSnapshot } from '../src/browser.js';
 import { Home, located, projectName as name, trapTab } from './home.js';
@@ -255,6 +255,7 @@ function App() {
           onOverview={pick(showOverview)} onLayout={id => pick(() => layout(id))()} onSection={next => pick(() => showSection(next))()} />}
     </>}
     <div className="navigation-footer">
+      {project && <button className="nav-row" aria-current={screen === 'project' && overview && section === 'settings' ? 'page' : undefined} onClick={pick(() => showSection('settings'))}><Icon name="context" size={17} /><span>Project settings</span></button>}
       {project && <button className="nav-row" aria-current={screen === 'plugins' ? 'page' : undefined} onClick={pick(plugins)}><Icon name="plugins" size={17} /><span>Plugins</span></button>}
       <button className="nav-row" onClick={() => { setNavigation(false); setFeedbackContext(false); setContext(true); }}><Icon name="context" size={17} /><span>Connection & access</span></button>
     </div>
@@ -267,7 +268,12 @@ function App() {
     <div ref={setAgentSlot} className="agent-slot" />
     {!composition && <section className="context-section"><h3>{link ? 'Sessions' : 'Sessions started elsewhere'}</h3><AgentAccess snapshot={snapshot} outside={!link} /></section>}
   </>;
-  const currentTitle = screen === 'home' ? 'Projects' : screen === 'plugins' ? pluginTitle || 'Plugins' : composition?.compositionId ?? ({ overview: 'Overview', files: 'Files', documents: 'Files', activity: 'Activity', settings: 'Project settings' }[section]);
+  // Where this tab is: the projects list, then the project, then the open workspace. The page
+  // heading names the section itself, so the trail carries only the path back.
+  const crumbs: Array<{ label: string; run?: () => void }> = !project || screen === 'home' ? [{ label: 'Projects' }]
+    : screen === 'plugins' ? [{ label: 'Projects', run: goHome }, { label: name(project), run: showOverview }, { label: pluginTitle || 'Plugins' }]
+    : composition ? [{ label: 'Projects', run: goHome }, { label: name(project), run: showOverview }, { label: composition.compositionId }]
+    : [{ label: 'Projects', run: goHome }, { label: name(project) }];
   return <div className="application">
     <a className="skip-link" href="#main">Skip to workspace</a>
     <div className="app-body">
@@ -275,7 +281,14 @@ function App() {
       <div className="app-content">
         <header className="topbar">
           <button ref={navigationTrigger} className="icon-button" aria-label={navigation ? 'Hide navigation' : 'Open navigation'} aria-expanded={navigation} onClick={() => setNavigation(v => !v)}><Icon name="sidebar" size={19} /></button>
-          <div className="location"><span className="location-name">{currentTitle}</span>{!edits && <span className="read-only"><Icon name="lock" size={12} />Read-only</span>}</div>
+          <nav className="location" aria-label="Location">
+            {crumbs.map((crumb, index) => <Fragment key={crumb.label + index}>
+              {index > 0 && <span className="crumb-sep" aria-hidden="true">/</span>}
+              {index === crumbs.length - 1 ? <span className="location-name" aria-current="page">{crumb.label}</span>
+                : <button className="crumb" onClick={crumb.run}>{crumb.label}</button>}
+            </Fragment>)}
+            {!edits && <span className="read-only"><Icon name="lock" size={12} />Read-only</span>}
+          </nav>
           <div className="topbar-actions">
             <button ref={commandTrigger} className="command-trigger" aria-label="Commands · Type a command" aria-keyshortcuts="Meta+K Control+K" onClick={() => setCommands(true)}><Icon name="search" size={16} /><span>Commands</span><kbd>{shortcut}</kbd></button>
             <span className={'connection ' + phase} role="status" title={connectionNote}><span className="status-dot" /><span className="connection-label">{phase === 'live' ? 'Connected' : phase === 'offline' ? 'Offline' : 'Connecting'}</span></span>
@@ -296,7 +309,7 @@ function App() {
                   {layoutCommands && <details className="view-menu"><summary><Icon name="layout" size={15} />Arrange views</summary><div>{layoutCommands.commands.map(c => <button key={c.id} onClick={e => { c.run(); e.currentTarget.closest('details')?.removeAttribute('open'); }}><Icon name={c.icon} size={15} />{c.label}</button>)}</div></details>}
                 </div>
                 <Suspense fallback={<Loading text="Opening workspace…" />}><Workspace key={snapshot.project.id + composition.compositionId} composition={composition} snapshot={snapshot} client={client!} onAbout={about} contextTarget={context ? contextSlot : null} principalId={connection.principalId} feedbackContextActive={feedbackContext} onShowContext={() => { setFeedbackContext(true); setContext(true); setAgentOpen(false); }} openView={openView} onCommands={setLayoutCommands} agentTarget={agentOpen ? agentSlot : null} onShowAgent={() => setAgentOpen(true)} /></Suspense>
-              </> : <Suspense fallback={<Loading text="Opening project…" />}><ProjectOverview key={project.id} section={section} onSection={showSection} onAgent={() => setAgentOpen(true)} client={client!} onProjectChanged={next => { setProject(next); setProjects(list => list.map(p => p.id === next.id ? next : p)); }} project={project} location={located(project, folder)} snapshot={snapshot} onLayout={layout} onOpened={id => { layout(id); reread(); }} /></Suspense>}
+              </> : <Suspense fallback={<Loading text="Opening project…" />}><ProjectOverview key={project.id} section={section} onSection={showSection} onAgent={() => setAgentOpen(true)} client={client!} onProjectChanged={next => { setProject(next); setProjects(list => list.map(p => p.id === next.id ? next : p)); }} project={project} snapshot={snapshot} onLayout={layout} onOpened={id => { layout(id); reread(); }} /></Suspense>}
           </main>
           {projectVisible && agentOpen && !narrow && <aside className="inspector-pane" aria-label="Agent panel">{agentContents}</aside>}
           {context && !narrow && <aside id="project-context" className="context-drawer inspector-pane" aria-label={feedbackContext ? 'Your question' : 'Context and access'}><div className="drawer-heading"><h2>{feedbackContext ? 'Your question' : 'Connection & access'}</h2><button className="icon-button" aria-label="Close context" onClick={() => { setContext(false); contextTrigger.current?.focus(); }}><Icon name="close" size={18} /></button></div>{contextSections}</aside>}

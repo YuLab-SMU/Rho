@@ -15,6 +15,29 @@ export function when(iso: string, now = new Date()) {
     : at.toLocaleDateString('en-US', { month: 'short', day: 'numeric', ...(at.getFullYear() === now.getFullYear() ? {} : { year: 'numeric' }) });
   return { text, full: at.toLocaleString('en-US', { dateStyle: 'full', timeStyle: 'short' }) };
 }
+// The folder a project's work comes from, said the way a person names it: the home
+// directory as ~, the last segments only, and every source folder counted rather than
+// listed. A final segment that only repeats the project's name is dropped. The complete
+// paths stay in the tooltip.
+export function place(project: ProjectSummary) {
+  const sources = project.sources ?? [];
+  if (sources.length > 1) return { text: sources.length + ' source folders', full: sources.map(s => s.root).join('\n') };
+  const full = sources[0]?.root ?? project.root;
+  const short = full.replace(/^\/(?:Users|home)\/[^/]+(?=\/|$)/, '~');
+  const home = short.startsWith('~'), parts = short.split(/[\\/]/).filter(Boolean), rest = home ? parts.slice(1) : parts;
+  // A folder named after its project says nothing beside the title, so it comes off.
+  if (rest.length > 1 && rest.at(-1)?.toLocaleLowerCase() === projectName(project).toLocaleLowerCase()) rest.pop();
+  const tail = rest.length > 2 ? rest.slice(-2) : rest;
+  const text = home ? '~/' + tail.join('/') : (short.startsWith('/') ? (rest.length > 2 ? '…/' : '/') : '') + tail.join('/');
+  return { text: text || short, full };
+}
+// A project keeps one hue wherever it is listed, so the eye can follow it across screens.
+const hues = ['moss', 'iris', 'sky', 'clay', 'rose'];
+export function projectHue(seed: string) {
+  let total = 0;
+  for (let index = 0; index < seed.length; index++) total = (total * 33 + seed.charCodeAt(index)) % 9973;
+  return hues[total % hues.length];
+}
 // Keyboard focus stays inside an open sheet; Escape and the backdrop close it.
 export function trapTab(event: { key: string; shiftKey: boolean; preventDefault(): void; currentTarget: EventTarget | null }) {
   if (event.key !== 'Tab' || !(event.currentTarget instanceof HTMLElement)) return;
@@ -70,41 +93,36 @@ export function Home({ client, projects, folder, focusRequest, onFocused, onOpen
       from?.focus();
     } finally { refocus.current = from; setPicking(false); }
   }
-  const entries = <>
-    <button ref={openButton} disabled={picking} onClick={e => void pickFolder(e.currentTarget)}>Open folder…</button>
-    <button className="primary" disabled={picking} onClick={e => { trigger.current = e.currentTarget; setSheet(true); }}><Icon name="plus" size={14} stroke={1.6} />New project</button>
-  </>;
+  const openFolder = <button ref={openButton} disabled={picking} onClick={e => void pickFolder(e.currentTarget)}><Icon name="folder" size={16} stroke={1.6} />Open folder…</button>;
+  const newProject = <button className="primary" disabled={picking} onClick={e => { trigger.current = e.currentTarget; setSheet(true); }}><Icon name="plus" size={15} stroke={1.7} />New project</button>;
   return <section className="home">
     <div className="home-column">
       <header className="home-header">
-        <div className="home-title"><h1>Your projects</h1>
-          <p>{projects.length ? 'Pick up where you left off.' : 'A place for your code, data and ideas.'}</p></div>
-        {projects.length > 0 && <div className="home-actions">{entries}</div>}
+        <h1>Your projects</h1>
+        {projects.length > 0 && <div className="home-actions">{openFolder}{newProject}</div>}
       </header>
-      {projects.length > 0 && <label className="search-field project-search"><Icon name="search" size={18} /><input aria-label="Find a project" placeholder="Find a project…" value={query} onChange={e => setQuery(e.target.value)} /></label>}
-      {projects.length ? <div className="project-list" role="group" aria-labelledby="project-list-label">
-        <div className="project-list-heading"><span id="project-list-label">Projects</span><span aria-hidden="true">Added</span></div>
+      {projects.length > 0 && <div className="home-toolbar">
+        <div className="search-field project-search"><Icon name="search" size={17} stroke={1.7} /><input aria-label="Find a project" placeholder="Find a project…" value={query} onChange={e => setQuery(e.target.value)} /></div>
+      </div>}
+      {projects.length ? <div className="project-list" role="group" aria-label="Projects">
         {!sorted.length && <div className="empty-state compact"><p>No projects match “{query}”.</p><button onClick={() => setQuery('')}>Clear search</button></div>}
-        {sorted.map((p, index) => {
-          const added = when(p.openedAt);
-          return <button ref={index === 0 ? firstRow : undefined} className="project-row" key={p.id} onClick={() => onChoose(p)}>
-            <span className="project-icon"><Icon name="folder" size={18} stroke={1.7} /></span>
-            <span className="project-row-name"><strong>{projectName(p)}</strong><small>{located(p, folder)}</small></span>
-            <span className="project-row-time" title={added.full}>{added.text && <span className="visually-hidden">Added </span>}{added.text}</span>
+        {sorted.map((project, index) => {
+          const opened = when(project.openedAt), where = place(project);
+          return <button ref={index === 0 ? firstRow : undefined} className="project-row" key={project.id} onClick={() => onChoose(project)}>
+            <span className={'project-symbol ' + projectHue(project.id + projectName(project))}><Icon name="folder" size={20} stroke={1.6} /></span>
+            <span className="project-row-name"><strong>{projectName(project)}</strong><small title={where.full}>{where.text}</small></span>
+            <span className="project-row-time" title={opened.full}>{opened.text && <span className="visually-hidden">Opened </span>}{opened.text}</span>
             <span className="project-row-chevron"><Icon name="chevron" size={16} stroke={1.5} /></span>
           </button>;
         })}
       </div> : <div className="home-empty">
-        <div className="home-empty-text">
-          <span className="home-empty-icon"><Icon name="folder-plus" size={22} /></span>
-          <h2>No projects yet</h2>
-          <p>A project brings your folders together. Create one with the folders you need, or open a folder to get started.</p>
-        </div>
-        <div className="home-actions">{entries}</div>
+        <span className="empty-symbol"><Icon name="folder-plus" size={26} stroke={1.5} /></span>
+        <h2>No projects yet</h2>
+        <p>A project gathers the folders you work in.</p>
+        <div className="home-actions">{newProject}{openFolder}</div>
       </div>}
       {picking && <p className="home-note" role="status">Choose a folder in the system window. Cancel to return here.</p>}
       {failure && <p className="home-note" role="alert">{failure}</p>}
-
     </div>
     {sheet && <ProjectSheet client={client} folder={folder} onOpened={onOpened} onAccessEnded={onAccessEnded} onClose={() => { setSheet(false); trigger.current?.focus(); }} />}
   </section>;
@@ -123,6 +141,7 @@ function ProjectSheet({ client, onClose, onOpened, onAccessEnded }: {
   const name = value.trim();
   const check: Problem | null = name.length > 80 ? { text: 'Use a name of 80 characters or fewer.', blocks: true } : null;
   const problem = check ?? failure;
+  const blocked = problem?.blocks || failure ? '' : !name ? 'Name the project to continue.' : !folders.length ? 'Add a folder to continue.' : '';
   function change(text: string) { setValue(text); setFailure(null); }
   async function attempt(work: () => Promise<ProjectSummary>, explain: (kind: string, message: string) => Problem) {
     setBusy(true); setFailure(null);
@@ -154,11 +173,14 @@ function ProjectSheet({ client, onClose, onOpened, onAccessEnded }: {
     onCancel={e => { if (busy) e.preventDefault(); }} onClose={onClose}
     onClick={e => { if (e.target === e.currentTarget && !busy) e.currentTarget.close(); }}>
     <form onSubmit={submit}>
-      <div className="sheet-body">
+      <div className="sheet-head">
         <h2 id="sheet-title">Create project</h2>
+        <button type="button" className="icon-button" aria-label="Close" disabled={busy} onClick={() => dialog.current?.close()}><Icon name="close" size={18} /></button>
+      </div>
+      <div className="sheet-body">
         <div className={'field' + (problem ? ' invalid' : '')}>
           <label htmlFor="sheet-input">Project name</label>
-          <input id="sheet-input" ref={input} placeholder="Project name" value={value} onChange={e => change(e.target.value)} autoComplete="off" spellCheck={false} aria-invalid={!!check} />
+          <input id="sheet-input" ref={input} placeholder="e.g. Airquality study" value={value} onChange={e => change(e.target.value)} autoComplete="off" spellCheck={false} aria-invalid={!!check} />
         </div>
         <div className="field"><span id="source-folders-label">Source folders</span>
           <SourceFolders folders={folders} busy={busy} onAdd={from => void addFolder(from)} onRemove={id => setFolders(previous => previous.filter(f => f.id !== id))} />
@@ -166,6 +188,7 @@ function ProjectSheet({ client, onClose, onOpened, onAccessEnded }: {
         {problem && <p className="field-hint project-problem" role="alert">{problem.text}</p>}
       </div>
       <div className="sheet-footer">
+        <p className="sheet-hint" role="status">{blocked}</p>
         <button type="button" disabled={busy} onClick={() => dialog.current?.close()}>Cancel</button>
         <button type="submit" className="primary" disabled={busy || !name || !folders.length || !!problem?.blocks}>Create project</button>
       </div>
@@ -177,8 +200,8 @@ export function SourceFolders({ folders, busy, onAdd, onRemove }: { folders: Sou
   return <div className="source-folders" role="group" aria-label="Source folders">
     {folders.length ? <ul>{folders.map(folder => <li key={folder.id}>
       <Icon name="folder" size={18} /><span className="source-folder-name"><strong>{folder.name}</strong><small>{folder.root}</small></span>
-      {onRemove && <button type="button" className="icon-button" disabled={busy} aria-label={'Remove ' + folder.name} onClick={() => onRemove(folder.id)}>×</button>}
-    </li>)}</ul> : <p>Add a folder on this computer</p>}
-    <button type="button" disabled={busy} onClick={e => onAdd(e.currentTarget)}><Icon name="folder-plus" size={16} />{busy ? 'Choosing folder…' : 'Add folder…'}</button>
+      {onRemove && <button type="button" className="icon-button" disabled={busy} aria-label={'Remove ' + folder.name} onClick={() => onRemove(folder.id)}><Icon name="close" size={16} /></button>}
+    </li>)}</ul> : <p className="source-empty"><Icon name="folder" size={18} stroke={1.6} /><span>No folder chosen</span></p>}
+    <button type="button" className="source-add" disabled={busy} onClick={e => onAdd(e.currentTarget)}><Icon name="folder-plus" size={16} stroke={1.6} />{busy ? 'Choosing folder…' : 'Add folder…'}</button>
   </div>;
 }

@@ -1,15 +1,19 @@
 # Rho status
 
-Updated: 2026-10-26.
+Updated: 2026-10-27.
 
 ## Current focus
 
-The current deliverable is a [from-scratch product design brief](design/2026-10-26/index.html).
-The user clarified that current implementation must not become the design target.
-The brief requires separate application and project navigation, Studio, panoramic
-Graph, a dynamic Agent experience, a dedicated conversation component and a shared
-plugin design standard with professional differences. Implementation records below
-remain capability evidence, not the target interface or design acceptance criteria.
+The user asked for an optimization of the home, projects and empty-project screens
+on 2026-10-27, supplying three reference screens for layout weight and hierarchy.
+That pass is recorded in the [home and project episode](HOME-PROJECT-EPISODE.md) and
+summarized in [Home, projects and empty project](#home-projects-and-empty-project).
+The user's earlier clarification still stands: current implementation is not the
+design target. The [from-scratch product design brief](design/2026-10-26/index.html)
+still describes the larger product: separate application and project navigation,
+Studio, panoramic Graph, a dynamic Agent experience, a dedicated conversation
+component and a shared plugin design standard. Implementation records below remain
+capability evidence, not the target interface or design acceptance criteria.
 
 | Part | Stage | Evidence | Next question |
 | --- | --- | --- | --- |
@@ -26,6 +30,40 @@ specification written earlier on 2026-10-25 were withdrawn the same day at the
 user's request. They fixed grammars, visual values, state sequences and acceptance
 criteria before the application or its plugins had produced results to learn from.
 Git retains them at `24d9998b`; they are not requirements or reference designs.
+
+## Home, projects and empty project
+
+The home, projects and empty-project screens were reworked against what the
+application actually records; the [episode record](HOME-PROJECT-EPISODE.md) keeps
+the setup, the observations before and after, and the limits.
+
+- Home is one heading, one primary action and one list. Each row names the folder the
+  work lives in (source folders counted when there are several, exact path in the
+  tooltip) and when it was last opened, instead of printing an absolute path. With
+  no projects it opens a centred prompt with the two real starting actions.
+- The create-project sheet gained a close control, the chosen folders as rows and one
+  line naming what is still missing; the page behind is dimmed and blurred.
+- A project with nothing recorded now opens a centred empty state with "Work with
+  Agent" and "Browse files" instead of empty sections, and the activity column
+  appears only when there are runs. The header names the folder the work comes from.
+- The topbar names the way back (`Projects / project / workspace`, the current place
+  only below 768 px); Project settings and Plugins sit together at the sidebar foot.
+
+Evidence: `npm run build`; Rho 182/182 unit checks; `acceptance:frontend` passed its
+11 checks; `acceptance:pages` passed at four widths with no overflow or unnamed
+buttons; `acceptance:shell` and `acceptance:person` passed; six targeted interaction
+checks passed (abbreviated locations with exact tooltips, clearable empty search,
+palette focus landing on the first row, sheet focus and Escape return, a new
+project's two next steps, breadcrumb return). Screenshots and scripts are in
+`work/ui-review-20261027/`; no browser page errors. This shows the paths work and
+that the screens read as intended to the builder; it is not evidence that another
+person can follow them.
+
+Observed and not fixed: a project created from source folders cannot list them —
+`project.entries` reads the project root, which for those projects is an internal
+workspace folder — so Files says the folder is empty while the sources hold the
+files. That is a listing capability, not these screens; the empty state leads with
+the Agent until it is addressed.
 
 ## From-scratch design requirements
 
@@ -55,14 +93,11 @@ connection failure keeps received actions, and Reconnect reads the same cursor.
 Opening a CSV or image captures its observed digest through Files and opens an
 existing owner view. Original and later file snapshots remain independent.
 
-- Real final runs: Claude Code 2.1.310 and dsh 0.2.1-rc.2 through WestlakeHPC.
-  Claude retained 7 pending / 10 final events; dsh retained 15 / 24. Each analysis
-  entered once, showed diagnostic exit 7, and repeat collection added zero events.
-- Chrome 155.0.8059.84 checked live pending, owned Host loss, reconnect, CSV/SVG
-  opening, 1440/390 widths and reload. Independent means matched 11/3 and 8/3.
-  The existing frontend regression passed all four of its widths.
-  A rebuilt browser continuation checked both retained sessions after the final
-  text-file wording/PDF refusal fix; repeated Open kept two views and one execution.
+- Real final runs: Claude Code 2.1.310 and dsh 0.2.1-rc.2 through WestlakeHPC, with
+  7 pending / 10 final and 15 / 24 events retained; each analysis entered once,
+  showed diagnostic exit 7, and repeat collection added none. Chrome 155.0.8059.84
+  checked live pending, owned Host loss, reconnect, CSV/SVG opening, 1440/390 widths,
+  reload and both retained sessions after the text-file wording/PDF refusal fix.
 - Rho 182/182 and Plugins 76/76 passed; [verification ledger](VERIFICATION.json).
   The Rho suite ran sequentially after the known parallel MCP test timeout.
 - Evidence: `work/agent-activity/run-6/`, with exact binary/browser/input hashes
@@ -88,20 +123,17 @@ split or move that exact view through one conditional composition write. The old
 version and selection remain; the saved comparison survives reload. Owner APIs,
 execution semantics and the existing Plugins table-style override are unchanged.
 
-- `npm run build` passed; 19 targeted layout/live-workspace checks passed.
-- `npm run acceptance:frontend` passed its existing browser regression.
-- `npm run acceptance:base-r` passed from a fresh disposable project. The external
-  Agent completed 46 turns in 223 seconds, within the 48-turn/ten-minute limits.
-- Lost question acknowledgement plus reload/retry retained one exact question.
-  Browser disconnection during execution plus explicit Reconnect retained the
-  request digest, Core identity and native operation identity. Exactly two native
-  submissions occurred: baseline and requested change.
-- Chrome 155.0.8059.84 checked 1440, 1024, 768 and 390 CSS-pixel widths, including
-  horizontal access to compared values, separate version selections, both PNGs,
-  source lines and recovery of acknowledged unsaved notes. No browser exceptions.
-- Final evidence is in `work/base-r-episode-20261025/accepted/`; diagnostic failures
-  and browser-only continuations remain separate. The source composition and its
-  local override are recorded, without a new binary or signed-release claim.
+- `npm run build` and 19 targeted layout/live-workspace checks passed;
+  `acceptance:frontend` passed its browser regression.
+- `npm run acceptance:base-r` passed from a fresh disposable project: 46 Agent turns
+  in 223 s within the 48-turn/ten-minute limits, exactly two native submissions
+  (baseline and requested change). Lost acknowledgement plus reload/retry retained
+  one exact question; disconnection plus Reconnect retained the request digest, Core
+  identity and native operation identity.
+- Chrome 155.0.8059.84 checked 1440, 1024, 768 and 390 CSS pixels, including
+  compared values, separate version selections, both PNGs, source lines and
+  acknowledged unsaved notes, with no browser exceptions. Evidence is in
+  `work/base-r-episode-20261025/accepted/`, without a new binary or signed release.
 
 These checks show that the path works, not that a person can follow it; the
 [review](BASE-R-EPISODE.md#review-of-the-2026-10-25-run) records where the screens
@@ -121,35 +153,26 @@ them and says where to continue. The [conversation episode](CONVERSATION-EPISODE
 records how it runs, its limits and the reviews of five real runs.
 
 - Real runs used Claude Code 2.1.310 and Chrome 155.0.8059.84 at 1440 and 390 CSS
-  pixels: four messages, a reload, a service restart, a conditional save checked
-  on disk and a Stop confirmed by the process exit.
-- The first question, "What is in this project?", went unanswered after 40 model
-  turns because Agent grants left out every `project.*` operation. They now include
-  the read-only `project.entries`, for sessions started outside Rho as well; the
-  same question was then answered in 13 turns and 96 s. The root listing's empty
-  `path` now matches its published contract.
-- A resumed message goes straight to work. Each message is a new process, so the
-  complete contracts a message resolved are kept beside the conversation's private
-  connection and restored for the next one; the service still rechecks the current
-  contract before a call and drops a superseded one. Message 2 fell from 5 model
-  turns, 73 s and US$1.38 with a refused first call to 2 turns, 20 s and US$0.56.
-- Rho selects the Agent plugin 0.4.6 that the Plugins checkout carries. With 0.4.4
-  the plugin was unavailable, and so was `rho --grant`; with the descriptor left at
-  0.4.5 while 0.4.6 was selected it was unavailable again, so the descriptor version
-  moves with the package version.
-- At that stage Rho 181/181 unit checks and Plugins 74/74 passed in one ledger run. `test/mcp.test.mjs` "real stdio MCP v2
-  tools…" passed in it; that test has reached its 30 s limit in four of six earlier
-  full runs on this machine and in one of two at the commit before, and alone it
-  passes in 17.5 s. Rebuilding the 211 KB `capability.list` reply takes 430 MCP reads,
-  the same number at both commits.
-- Browser suites: `acceptance:frontend` passed once its local-tab Agent step became
-  an unsent conversation message, with the clipboard handoff now checked in a real
-  link tab; `acceptance:shell`, `acceptance:pages` and `acceptance:person` passed.
-  `acceptance:ui` waits for a heading, "This link has already been used", that the
-  application does not have at the previous commit either.
+  pixels: four messages, a reload, a service restart, a conditional save checked on
+  disk and a Stop confirmed by the process exit. The first question went unanswered
+  for 40 model turns because Agent grants left out every `project.*` operation; with
+  the read-only `project.entries` included it was answered in 13 turns and 96 s.
+- A resumed message goes straight to work: each message is a new process, so the
+  contracts it resolved are kept beside the conversation's private connection and
+  restored for the next one, while the service still rechecks the current contract
+  before a call. Message 2 fell from 5 model turns, 73 s and US$1.38 to 2 turns, 20 s
+  and US$0.56. Rho selects the Agent plugin 0.4.6 the Plugins checkout carries, and
+  the descriptor version moves with the package version.
+- At that stage Rho 181/181 unit checks and Plugins 74/74 passed in one ledger run.
+  `test/mcp.test.mjs` has reached its 30 s limit in several earlier full runs and
+  passes alone in 17.5 s; rebuilding the 211 KB `capability.list` reply takes 430 MCP
+  reads. Browser suites: `acceptance:frontend`, `acceptance:shell`,
+  `acceptance:pages` and `acceptance:person` passed. `acceptance:ui` waits for a
+  heading, "This link has already been used", that the application does not have at
+  the previous commit either.
 - Open: Agent text is shown as raw Markdown; each message costs more than the last
-  because it resumes the whole session; the default Agent grant now has 64 methods,
-  the layered limit, so the next Agent-visible operation would refuse every default
+  because it resumes the whole session; the default Agent grant has 64 methods, the
+  layered limit, so the next Agent-visible operation would refuse every default
   grant. No person other than the builder has used it.
 
 ## UI extension authoring
@@ -167,44 +190,33 @@ No application adapter or generated operation contract edit is needed. This path
 adds views, not backend methods or runtime module injection. The default selection
 is unchanged. [Plugin authoring](PLUGIN-AUTHORING.md) contains the executable guide.
 
-- Rho 174/174 unit checks passed at that time.
-- New tests cover scaffolding without overwrites, pinned identities, reserved names,
-  schema/path containment, real document bindings, unchanged grants and retained
-  content after removing an extension. Server discovery never executes UI code.
-- Chrome 155.0.8059.84 passed preview and installed-view checks at 1440, 1024, 768
-  and 390 CSS pixels. Loading/error/unbound states, props changes, Unicode and
-  source refresh passed. A separately packed and installed extension read the
-  shared document and survived splitting and reload, without starting a Host.
-- The default build and existing plugin presentation browser suite passed.
-- An unsigned application tarball was installed outside the checkouts. Its
-  production-only SDK generated, checked, built and previewed another author
-  package with source refresh. The installed application also passed launch,
-  four-width entry checks and shutdown with no Host left behind.
+- Then-current checks: Rho 174/174 unit tests, covering scaffolding without
+  overwrites, pinned identities, reserved names, schema/path containment, real
+  document bindings, unchanged grants and retained content after removal; server
+  discovery never executes UI code. Chrome 155.0.8059.84 passed preview and
+  installed-view checks at four widths, including loading/error/unbound states,
+  props changes, Unicode, source refresh, splitting and reload, without starting a
+  Host. An unsigned tarball installed outside the checkouts generated, built and
+  previewed another package and launched with no Host left behind.
 - Browser, package and document evidence is recorded under `work/plugin-dx/`.
   The tarball uses explicit local source overrides; it is not a signed release.
 
 ## Frontend reset
 
-The user stopped the prior frontend work and requested removal of all previous
-frontend documents, rules and designs, followed by a reconstruction from the work
-people need to do. The old plans and visual specifications are removed, including
-the UI/UX Notebook plan, visual replay prototype and E/M/R appearance rulers.
-AGENTS.md and the documentation index no longer direct work through those plans.
-The locally preserved pre-reset copy under `work/frontend-reset/before/` was
-removed with the other superseded `work/` evidence on 2026-10-26 at the user's
-request; it was never a requirement or a reference design.
+The user stopped the prior frontend work on 2026-10-25, removed all previous frontend
+documents, rules and designs, and asked for a reconstruction from the work people
+need to do. AGENTS.md and the documentation index no longer direct work through those
+plans, and the superseded `work/` evidence is gone; Git retains their history.
 
 The browser now has one project sidebar, dedicated Overview/Files/Activity/settings
 sections, searchable projects and files, direct workspace controls and an optional
-Agent inspector. The visual layer is rewritten across the app, workspace and plugin
-catalog. There is no permanent Agent column or compressed run timeline. Existing
+Agent inspector. There is no permanent Agent column or compressed run timeline;
 execution records remain reachable from Activity and exact artifact provenance.
-
 In a tab opened from a narrower link, the Agent request field uses an explicit
-clipboard handoff to the external Agent; a tab on this machine holds conversations
-started in Rho instead. The draft survives panel closure within this tab, scoped by
-principal/project. Copying never claims delivery. Documents, selections, run identity and conditional
-writes keep their actual owners. The frontend does not invent Notebook capabilities.
+clipboard handoff to the external Agent, while a tab on this machine holds
+conversations started in Rho; the draft survives panel closure, scoped by
+principal/project, and copying never claims delivery. Documents, selections, run
+identity and conditional writes keep their actual owners.
 
 ## Direct browser access
 
@@ -215,12 +227,11 @@ cross-site marking are still checked on every request. A credential that is pres
 still be valid, so a stale or forged one is refused rather than silently widening to
 local access, and the machine's own identity is not a revocable session.
 
-`rho --pair` still mints a one-time, five-minute link for a tab that must be narrower —
-one folder below the service root — or must expire. That path, its single-use redemption
-and its expiry are unchanged. The browser no longer starts on a gate asking for a link: a
-link that cannot be used leaves the page working as this machine and says so, and
-switching from a link to this machine forgets only the credential, keeping open projects,
-unsaved edits and running work.
+`rho --pair` still mints a one-time, five-minute link for a narrower or expiring tab,
+with single-use redemption and expiry unchanged. The browser no longer starts on a gate
+asking for a link: a link that cannot be used leaves the page working as this machine and
+says so, and switching from a link to this machine forgets only the credential, keeping
+open projects, unsaved edits and running work.
 
 The tradeoff is explicit: any process running as this user can call the loopback API
 without a credential, which the readable operator connection file already allowed. This
@@ -235,18 +246,16 @@ change was not verified against human usability, physical IME behaviour or distr
   1440, 1024, 768 and 390 CSS pixels. The newer frontend, entry, pages, plugin,
   shell, actions, objects, continuity, document and person-files suites passed.
 - Native browser input: real clipboard, Unicode, Chrome CDP IME composition,
-  keyboard commands, modal focus containment and focus return passed. A portalled
-  Agent panel focus escape found during this work was fixed and rechecked.
-- Real R execution: edited action input, one dispatch after a lost reply, stop
+  keyboard commands, modal focus containment and focus return passed. Real R
+  execution: edited action input, one dispatch after a lost reply, stop
   confirmation, failure/repair, unknown outcomes, exact artifact provenance,
   explicit linked answers and partial exports passed through the rebuilt UI.
 - Recovery: unsaved text and own undo survive tab/layout changes; shared selections
   survive re-layout; confirmed documents, layouts and contexts survive normal and
-  sudden service exits. Reconnection reads without resubmitting work.
-- An unsigned local development tarball passed installation and Chrome launch outside
-  the source repositories, with no development runtime overrides and no Host left
-  behind. Its composition records the selected Core and local source overrides;
-  this is separate from a signed release or registry publication.
+  sudden service exits, and reconnection reads without resubmitting work.
+- An unsigned local development tarball installed and launched outside the source
+  repositories with no development runtime overrides and no Host left behind,
+  separate from a signed release or registry publication.
 - Screenshots and detailed reports are retained locally under
   `work/frontend-reset/`; document rendering and link checks are recorded there.
   Previous frontend appearance acceptance is not inherited.
@@ -273,16 +282,16 @@ The unit result for Plugins in the ledger remains historical, with its original 
 
 [Headless backend](HEADLESS.md), [Collaboration](COLLABORATION.md) and the historical
 backend acceptance records retain their technical scope and immutable candidates.
-The three source repositories remain independently owned. No Core behavior or
-functional component API was changed by the frontend reconstruction.
+The three source repositories remain independently owned; the frontend work changed
+no Core behavior and no functional component API.
 
 ## Delivery scope and limits
 
 The current source targets the local browser application on macOS arm64. Source
 checks, accepted package composition, installation and official distribution are
-separate evidence. npm registry publication, native desktop windows, official
-signed distribution, additional platforms and physical IME usability are not
-established by this frontend change. Human usability has not yet been evidenced.
+separate evidence. npm registry publication, native desktop windows, signed
+distribution, other platforms and physical IME usability are not established by this
+frontend change, and human usability has not been evidenced.
 
 [Frontend](FRONTEND.md) describes the current implementation. [Release](RELEASE.md)
 describes source publication and the separate future distribution milestone.
