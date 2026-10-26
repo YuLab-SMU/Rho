@@ -9,6 +9,7 @@ were withdrawn on 2026-10-25; Git keeps their history.
 
 | Document | Purpose |
 | --- | --- |
+| [Design handoff · proposal](design/2026-10-26/index.html) / [PDF](../output/pdf/rho-design-handoff-2026-10-26.pdf) | User-requested shell, shared components, plugin design template, examples and four interaction storyboards; distinguishes existing capability from proposed UI |
 | [Frontend](FRONTEND.md) | Project navigation, workspaces, Agent conversations and handoff, browser checks |
 | [Agent activity](AGENT-ACTIVITY.md) | Live Claude Code/dsh observations, errors, captured outputs, recovery and real-run evidence |
 | [Conversation episode](CONVERSATION-EPISODE.md) | Conversations with Claude Code started in Rho, who holds a session's input, limits, real runs and their reviews |

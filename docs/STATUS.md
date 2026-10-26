@@ -4,11 +4,12 @@ Updated: 2026-10-26.
 
 ## Current focus
 
-The current task is observing external Agents through the project Activity page.
-The [activity episode](AGENT-ACTIVITY.md) now connects Core's retained stream to
-live tool/error display and exact output snapshots. Both Claude Code and dsh
-completed the real browser flow. The base-R question-to-result episode remains
-an open usability question, with its earlier review and evidence retained below.
+The current deliverable is a user-requested [design handoff](design/2026-10-26/index.html)
+for the shell, shared components, plugin design template and scenario storyboards.
+It is a new proposal, separate from implemented behavior and withdrawn designs.
+The [activity episode](AGENT-ACTIVITY.md) connects Core's retained stream to live
+tool/error display and exact output snapshots; Claude Code and dsh completed that
+real browser flow. The base-R question-to-result usability question remains open.
 
 | Part | Stage | Evidence | Next question |
 | --- | --- | --- | --- |
@@ -25,6 +26,26 @@ specification written earlier on 2026-10-25 were withdrawn the same day at the
 user's request. They fixed grammars, visual values, state sequences and acceptance
 criteria before the application or its plugins had produced results to learn from.
 Git retains them at `24d9998b`; they are not requirements or reference designs.
+
+## Design handoff (proposal)
+
+The 2026-10-26 user request explicitly asks for a shell design, main application
+components, a plugin template, distinct plugin examples and interaction storyboards.
+The new [20-page handoff](design/2026-10-26/index.html) and
+[PDF](../output/pdf/rho-design-handoff-2026-10-26.pdf) cover those items, four scenarios
+and narrow-screen comparison. Its [builder](design/2026-10-26/build.py) keeps the
+content and visual components editable without changing application code.
+
+All 20 PDF pages were rendered and visually reviewed; clipping and footer overlap
+found during review were corrected. Document navigation and local links/anchors
+were checked. This is document verification, not application or human usability
+acceptance; the evidence is in `work/design-handoff-20261026/`.
+
+The proposal uses the observed base-R and Agent activity episodes. It identifies
+existing capabilities separately from the proposed answer, comparison, conflict
+and context presentations. It creates no new SDK contract or runtime behavior.
+The next product question is whether the base-R answer and May/August differences
+can be read together, then understood by a person who did not build the application.
 
 ## External Agent activity
 

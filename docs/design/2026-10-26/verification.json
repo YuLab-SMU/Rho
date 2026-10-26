@@ -1,0 +1,68 @@
+{
+  "date": "2026-10-26",
+  "scope": "User-requested design proposal; documentation only. No application behavior or new SDK contract.",
+  "basisCommit": "161a16ff776f0dc709fc44c07017b651b713252c",
+  "artifacts": [
+    {
+      "path": "docs/design/2026-10-26/build.py",
+      "sha256": "376f3e21114dbc4ceafc3c127b4d263e6902e292dc5b7b014be2bdec58822472",
+      "bytes": 71507
+    },
+    {
+      "path": "docs/design/2026-10-26/index.html",
+      "sha256": "c61df38cb35c5b20682cfcb9a2a79dec1f04c03205ea966817b2375cd8e74b78",
+      "bytes": 86538
+    },
+    {
+      "path": "output/pdf/rho-design-handoff-2026-10-26.pdf",
+      "sha256": "8d4b1274d1f6bf610f83c261cee9c1a3695358f1304ff05d2dc1bedae45ee04b",
+      "bytes": 3717861
+    },
+    {
+      "path": "output/design/rho-shell-preview.png",
+      "sha256": "7b53933288d65b2718cb081fddc34da810bac9ea050ddb330b110f4dc622afb8",
+      "bytes": 195697
+    }
+  ],
+  "verification": {
+    "pdfPages": 20,
+    "pdfPagesVisuallyReviewed": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20
+    ],
+    "rendering": "Headless Chrome 155; PDF independently rasterized with Poppler",
+    "browserErrors": 0,
+    "clippedOrFooterOverlappingPages": 0,
+    "navigation": "Page selector to storyboard A and hash state passed",
+    "sourceLinksAtBasisCommit": 8,
+    "localMarkdownLinksChecked": 210,
+    "brokenLocalLinksOrAnchors": 0,
+    "modifiedMarkdownRenderScreenshotsReviewed": 8,
+    "numericExamples": "All five before/after counts, means and deltas match retained base-R comparison; 3 decimal display"
+  },
+  "review": {
+    "observedProblems": "Answer hidden behind explicit reply; compared rows misaligned; ambiguous linked-output titles.",
+    "designDecision": "Show answer and keyed differences together; keep professional plugin interaction inside a shared view frame.",
+    "corrections": "Removed main-view clipping and footer overlap; made image-region selection visible; retained English product text and original Unicode content.",
+    "remaining": "Static mockups, not executable application flows. Human usability, product accessibility and the proposed comparison/conflict/context views remain unverified."
+  },
+  "evidenceDirectory": "work/design-handoff-20261026/"
+}
