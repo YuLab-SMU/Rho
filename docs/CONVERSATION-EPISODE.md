@@ -35,6 +35,13 @@ project grant like the one `rho --grant` gives (`--tools ''`, `--strict-mcp-conf
 tool step with its operation and outcome, provider errors and the ending. Hidden
 reasoning is not kept.
 
+Because each message is its own process, the MCP server that message talks to is new
+too. The complete contracts and guidance it resolved are kept beside the conversation's
+private connection and restored when the next message starts, so a resumed message
+works from what it already resolved instead of being refused once. Only immutable
+bodies verified by their own digest are kept, the service still rechecks the current
+contract before every call, and a superseded contract is dropped rather than reused.
+
 A message has its own identity. Repeating it returns the original, and changed words
 under the same identity are refused. Rho writes the message before starting Claude
 Code. If Rho stops observing a message, for example because the service died, the
@@ -180,21 +187,82 @@ used a fresh copy of the same project and only the first message
 
 **Decision.** Keep the change. The first message now answers the question asked.
 
-**Next run.** The top remaining problem is the resumed message's refused first call.
+## Review of run 5 (2026-10-26, 12:34–12:38 EDT)
+
+The run asked whether a resumed message goes straight to work. It used the full
+episode above, unchanged, and the same Chrome, Claude Code and project fixture.
+
+**Cause, found before spending a model run.** A conversation runs one MCP server per
+message, and the layered MCP kept resolved contracts in memory only, so the next
+message's server was empty while the model remembered resolving them. The first call
+was refused by the cache check, not by authorization or scope:
 
 ```text
-Question:       Does a resumed message go straight to work?
-Setup:          the full episode above, unchanged
-Change:         keep resolved contracts across messages of one conversation, in the
-                layered MCP or in Rho's transport; choose after reading how the MCP
-                keeps them
-Look at:        the first tool call and the text of messages 2 and 3, their turns
-Change course:  if the model re-resolves by choice rather than after a refusal,
-                its instructions are the owner, not the transport
+Resolve this complete selected contract first; summary, stale references and partial
+pages cannot authorize execution.
 ```
 
-Raw Markdown follows as its own run, together with the base-R reply, which needs the
-same change.
+`work/conversation-episode/resume-contract.mjs` runs that boundary with no model: one
+MCP process resolves and calls `project.entries`, then a second process under the same
+connection calls it straight away. Before the change the second call was refused
+(`condition`); after it, `ok`.
+
+**Change, in the owner that keeps the cache.** Resolved bodies are now kept beside the
+private connection, one file per content-addressed reference under
+`mcp-knowledge-<project and native session>`, bounded by the cache's own entry and byte
+budgets, newest kept. Each body is re-verified on load and only bodies the cache
+actually retained are kept. Authorization is untouched: the service still rechecks the
+current contract reference on every call, a superseded contract is dropped from the
+kept set rather than reused, and another connection starts empty. The Agent plugin
+moves to 0.4.6, so Rho selects 0.4.6; the owner contract snapshot changes only in its
+three `packageVersion` fields, and the contract digests are unchanged.
+
+An earlier attempt (kept as `run5-attempt1-plugin-unavailable`) failed at the first
+message: the plugin descriptor still declared 0.4.5 while Rho selected 0.4.6, so Rho
+reported the Agent plugin unavailable. The descriptor version moves with the package
+version; nothing reached a model in that attempt.
+
+| Message | Ending | Model turns | Time | Cost | First call |
+| --- | --- | ---: | ---: | ---: | --- |
+| 1 · overview | Completed | 13 | 94 s | US$0.48 | `rho_index` returned |
+| 2 · missing values | Completed | 2 | 20 s | US$0.56 | `document.read` returned |
+| 3 · edit notes.md (after reload and restart) | Completed; saved | 5 | 68 s | US$0.83 | `rho_resolve` returned |
+| 4 · long description | Stopped after 1.1 s | — | — | — | `document.read` returned |
+
+Against run 3, message 2 fell from 5 model turns, 73 s and US$1.38 with a refused first
+call to 2 turns, 20 s and US$0.56 with no refusal; message 1 fell from 40 turns, 197 s
+and US$1.04 to 13 turns, 94 s and US$0.48.
+
+**What works.** Message 2 opened with "I'll re-read the file's current buffer first, in
+case it changed since I opened it" and called `document.read` once; its answer is correct
+against the fixture, and it closed with "I checked the current file before counting".
+No message explains internal mechanics any more. Message 3 after the page reload and the
+service restart resolved only the edit and save contracts it had never held, then read,
+edited and saved `notes.md`; the file on disk matches its reply. Stop still ends the
+process (exit 143) in 1.1 s with "Stopped. Steps already taken stay done." and its steps
+kept. The outside session's listing still returns both files.
+
+**What does not work yet.** Agent text is still raw Markdown (`**`, backticks, `>`),
+visible in messages 1 and 3. Each message still costs more than the last in absolute
+terms because every message resumes the whole session; the fix removed the re-resolve
+turns but not that growth. The 64-method grant limit still needs a decision. One
+browser console error is Chrome's request for `/favicon.ico`; the other is the expected
+`ERR_CONNECTION_REFUSED` while the service restarts.
+
+**Decision.** Keep the change. Resumed messages now go straight to work.
+
+**Next run.** The top remaining problem is the Agent's raw Markdown, which the base-R
+reply shares.
+
+```text
+Question:       Is an Agent reply readable as the Agent meant it in the panel?
+Setup:          the full episode above, unchanged; also the base-R episode's reply
+Change:         render the reply's Markdown in the panel and in the base-R reply, in
+                whatever owner draws both
+Look at:        messages 1 and 3 in the panel, and the base-R episode's reply
+Change course:  if the panels differ in what they can show, the two replies need
+                different owners rather than one renderer
+```
 
 Before another operation becomes visible to Agents, the 64-method limit needs a
 decision: a higher limit, a narrower default grant, or grants chosen per task.
@@ -208,6 +276,12 @@ decision: a higher limit, a narrower default grant, or grants chosen per task.
   the grant has no conversation or session methods, lists the project folder and
   is refused `project.open`.
 - The full Rho suite is in [Status](STATUS.md#conversations-started-in-rho).
+- `node --test test/layered-mcp.test.mjs` covers the knowledge a connection keeps: a
+  new process under the same connection calls what it resolved last message, another
+  connection starts empty, a superseded contract is not kept, and a body the cache
+  cannot retain never becomes an executable proof.
+- `work/conversation-episode/resume-contract.mjs` reproduces the message boundary with
+  no model: two MCP processes under one connection, one resolve, then a direct call.
 - The real runs above are the end-to-end evidence. No human has used the panel.
 
 ## Evidence

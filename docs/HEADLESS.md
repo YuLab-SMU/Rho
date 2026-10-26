@@ -684,9 +684,12 @@ The static `protocol/index.json` is an index of hashed operation files.
 
 Known references are omitted only for currently selected/available immutable
 bodies. The MCP adapter advertises only references it actually retained complete.
-After model context loss, omit missing knownRefs to get their bodies again; after
-MCP process loss, the empty cache forces refetch even if the caller advertises
-old references. Availability/configuration/role changes invalidate catalog and
+After model context loss, omit missing knownRefs to get their bodies again. A new MCP
+process under the same private connection keeps the bodies that connection retained,
+so the next message of one conversation begins with them rather than refetching;
+another connection, an evicted body, a body over the budget and a superseded contract
+all force refetch, and the service rechecks the current contract reference on every
+call. Availability/configuration/role changes invalidate catalog and
 continuation state. Cached content never restarts a task or native session.
 Actual native `rho_call` feedback.read results now carry the same exact fetch
 attribution as the compatibility tool; other operations/prose cannot assert it.

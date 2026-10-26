@@ -16,7 +16,7 @@ const {StdioClientTransport}=await import(pathToFileURL(require.resolve('@modelc
 async function connect(file,measures=[]){const client=new Client({name:'layered-acceptance',version:'1.0'}),transport=new StdioClientTransport({command:process.execPath,args:[fileURLToPath(import.meta.resolve('@rho-workspace/plugin-agent/mcp'))],env:{PATH:process.env.PATH,RHO_AGENT_CONNECTION:file},stderr:'pipe'});transport.stderr.resume();await client.connect(transport);const original=client.callTool.bind(client);client.callTool=async(...args)=>{const reply=await original(...args);measures.push({tool:args[0].name,requestBytes:Buffer.byteLength(JSON.stringify(args[0].arguments)),textBytes:Buffer.byteLength(reply.content[0].text),isError:!!reply.isError,structuredCopy:'structuredContent' in reply});return reply;};return client;}
 async function call(client,name,input){const reply=await client.callTool({name,arguments:input});assert.equal('structuredContent' in reply,false);assert.equal(reply.content.length,1);return JSON.parse(reply.content[0].text);}
 const query={after:0,cursor:null,limit:100,maxBytes:65536};
-test('default progressive MCP pages whole contracts, reuses knownRefs, refetches after context/process loss and rejects stale authorization',async()=>{
+test('default progressive MCP pages whole contracts, reuses knownRefs, keeps resolved knowledge across messages of one connection and rejects stale authorization',async()=>{
  const root=await fs.mkdtemp(path.join(os.tmpdir(),'rho-layered-')),service=await new RhoService({root,stateDir:path.join(root,'state'),coreBinary:'/missing',rscript:'/missing',plugins:['documents','files','tables','agent']}).start();let client; const measures=[];
  try{
  const admin=new RhoClient({url:service.url,token:service.adminToken}),p=await admin.call('project.create',{name:'project'}),doc=await admin.call('document.open',{projectId:p.id,path:'notes.md'});
@@ -51,12 +51,19 @@ test('default progressive MCP pages whole contracts, reuses knownRefs, refetches
  assert.equal((await call(client,'rho_call',{...invoke,input:{documentId:doc.id,projectId:'other'}})).error.kind,'invalid');
  await admin.call('capability.configure',{projectId:p.id,expectedVersion:0,changeId:'off',enabled:['files','tables','agent']});
  assert.equal((await call(client,'rho_call',invoke)).error.kind,'stale');assert.equal(calls.filter(c=>c.method==='document.read').length,2);
+ // A superseded contract is not kept for the next message either: the next process must
+ // resolve the one the composition now offers instead of reusing what it held before.
+ await client.close();client=await connect(file,measures);assert.equal((await call(client,'rho_call',invoke)).error.kind,'condition');
  await admin.call('capability.configure',{projectId:p.id,expectedVersion:1,changeId:'on',enabled:['documents','files','tables','agent']});
  assert.equal((await call(client,'rho_resolve',{catalogRef:index.value.catalogRef,selected:['document.read'],knownRefs:[...objects.keys()],cursor:null,maxBytes:65536})).error.kind,'stale');
  index=await call(client,'rho_index',{owner:'documents',cursor:null,maxBytes:16384});assert.notEqual(index.value.authorizationRef,oldAuthorization);assert.equal(index.value.entries[0].contractRef,entry.contractRef);
  const restored=await call(client,'rho_resolve',{catalogRef:index.value.catalogRef,selected:['document.read'],knownRefs:[...objects.keys()],cursor:null,maxBytes:65536});assert.deepEqual(restored.value.items.map(o=>o.kind),['contract']);assert.equal((await call(client,'rho_call',invoke)).ok,true);
- await client.close();client=await connect(file,measures);assert.equal((await call(client,'rho_call',invoke)).error.kind,'condition');
- const afterRestart=await call(client,'rho_resolve',{catalogRef:index.value.catalogRef,selected:['document.read'],knownRefs:[...objects.keys()],cursor:null,maxBytes:65536});assert.equal(afterRestart.value.items.length,objects.size);assert.equal((await call(client,'rho_call',invoke)).ok,true);
+ await client.close();client=await connect(file,measures);
+ assert.equal((await call(client,'rho_call',invoke)).ok,true);
+ const afterRestart=await call(client,'rho_resolve',{catalogRef:index.value.catalogRef,selected:['document.read'],knownRefs:[...objects.keys()],cursor:null,maxBytes:65536});assert.equal(afterRestart.value.items.length,0);assert.equal(afterRestart.value.omittedKnownRefs.length,objects.size);
+ // Kept knowledge belongs to the connection that resolved it: another session starts empty.
+ const other=path.join(root,'other.private.json');await service.agentConnection(p.id,'other-session',other,['document.read']);
+ const otherClient=await connect(other);assert.equal((await call(otherClient,'rho_call',invoke)).error.kind,'condition');await otherClient.close();
  assert.equal(calls.some(c=>['protocol.describe','capability.list'].includes(c.method)),false);assert.equal(service.bridge.owned.size,0);
  console.log('PHASE4_MCP_METRICS '+JSON.stringify({toolsListBytes:Buffer.byteLength(JSON.stringify(tools)),toolCalls:measures.length,modelCalls:0,inputTokens:0,outputTokens:0,requests:calls,measures}));
  }finally{if(client)await client.close();await service.close();await fs.rm(root,{recursive:true,force:true});}

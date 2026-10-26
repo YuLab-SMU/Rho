@@ -73,7 +73,7 @@ reload or a service restart. Rho holds the input and the record and runs the
 person's Claude Code for each message under a project grant like `rho --grant`.
 Sessions started outside Rho keep their input in their own window; the panel lists
 them and says where to continue. The [conversation episode](CONVERSATION-EPISODE.md)
-records how it runs, its limits and the reviews of two real runs.
+records how it runs, its limits and the reviews of five real runs.
 
 - Real runs used Claude Code 2.1.310 and Chrome 155.0.8059.84 at 1440 and 390 CSS
   pixels: four messages, a reload, a service restart, a conditional save checked
@@ -83,22 +83,29 @@ records how it runs, its limits and the reviews of two real runs.
   the read-only `project.entries`, for sessions started outside Rho as well; the
   same question was then answered in 13 turns and 96 s. The root listing's empty
   `path` now matches its published contract.
-- Rho selects the Agent plugin 0.4.5 that the Plugins checkout carries. With 0.4.4
-  the plugin was unavailable, and so was `rho --grant`.
-- Rho 181/181 unit checks passed: [verification ledger](VERIFICATION.json). In that
-  run `test/mcp.test.mjs` "real stdio MCP v2 tools…" took 29.9 s of its 30 s limit.
-  It timed out in four of six full runs on this machine, and in one of two at the
-  previous commit: rebuilding the 211 KB `capability.list` reply takes 430 MCP reads,
-  the same number at both commits. Alone it passes in 17.5 s.
+- A resumed message goes straight to work. Each message is a new process, so the
+  complete contracts a message resolved are kept beside the conversation's private
+  connection and restored for the next one; the service still rechecks the current
+  contract before a call and drops a superseded one. Message 2 fell from 5 model
+  turns, 73 s and US$1.38 with a refused first call to 2 turns, 20 s and US$0.56.
+- Rho selects the Agent plugin 0.4.6 that the Plugins checkout carries. With 0.4.4
+  the plugin was unavailable, and so was `rho --grant`; with the descriptor left at
+  0.4.5 while 0.4.6 was selected it was unavailable again, so the descriptor version
+  moves with the package version.
+- Rho 181/181 unit checks and Plugins 74/74 passed in one ledger run:
+  [verification ledger](VERIFICATION.json). `test/mcp.test.mjs` "real stdio MCP v2
+  tools…" passed in it; that test has reached its 30 s limit in four of six earlier
+  full runs on this machine and in one of two at the commit before, and alone it
+  passes in 17.5 s. Rebuilding the 211 KB `capability.list` reply takes 430 MCP reads,
+  the same number at both commits.
 - Browser suites: `acceptance:frontend` passed once its local-tab Agent step became
   an unsent conversation message, with the clipboard handoff now checked in a real
   link tab; `acceptance:shell`, `acceptance:pages` and `acceptance:person` passed.
   `acceptance:ui` waits for a heading, "This link has already been used", that the
   application does not have at the previous commit either.
-- Open: a resumed message starts with a refused call, because resolved contracts
-  do not outlive one message's process; Agent text is shown as raw Markdown; each
-  message costs more than the last; the default Agent grant now has 64 methods, the
-  layered limit, so the next Agent-visible operation would refuse every default
+- Open: Agent text is shown as raw Markdown; each message costs more than the last
+  because it resumes the whole session; the default Agent grant now has 64 methods,
+  the layered limit, so the next Agent-visible operation would refuse every default
   grant. No person other than the builder has used it.
 
 ## UI extension authoring
