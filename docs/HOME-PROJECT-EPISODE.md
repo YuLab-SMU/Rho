@@ -65,9 +65,9 @@ create-project flow ran through the real UI. Scripts and screenshots live under
   the primary button can be used. The page behind is dimmed and blurred.
 - **Project page** — a header that names the project and the folder its work comes
   from. A project with nothing recorded opens a centred empty state with "Work with
-  Agent" and "Browse files" instead of empty sections. The activity column appears
-  only when there are runs to report; the shortcuts that repeated the sidebar are
-  gone.
+  Agent" and "Browse files" instead of empty sections; which of the two leads is
+  decided by the listing repair below. The activity column appears only when there
+  are runs to report; the shortcuts that repeated the sidebar are gone.
 - **Shell** — the topbar names the way back (`Projects / project / workspace`,
   collapsing to the current place below 768 px) and the sidebar keeps Project
   settings and Plugins together at its foot.
@@ -96,16 +96,60 @@ These checks show that the paths work and that the screens read as intended to m
 They are not evidence that another person can follow them, and the visual judgments
 are mine.
 
+## The listing defect and its repair
+
+The first pass recorded that a project made from source folders could not list them:
+`project.entries` read the project's own directory, which for those projects is an
+internal workspace folder, so a person who created a project from a folder of CSV
+files saw "This folder is empty." The user asked for that capability defect to be
+fixed, so this pass changed the owner rather than the screens.
+
+- **Listing.** `project.entries` now lists the project's own directory together with
+  one `@<sourceId>` folder entry per source folder, and descends into them under the
+  same reference the file and document owners already resolve. A source that moved or
+  disappeared is reported as `scope` instead of followed to whatever is there now; a
+  folder that is not part of the project is refused. Nothing is unioned, copied or
+  linked into the workspace directory. The method and capability descriptions now say
+  this, and `project.openFile` names the reference it accepts.
+- **The second defect this uncovered.** Opening a folder from this machine had been
+  refused as `unauthorized` after the person had chosen it: `State.openSelected`
+  demanded `Date.parse(expiresAt) > Date.now()`, while this machine's own access
+  carries no expiry — the rule `liveBrowser` and the request authenticator already
+  use. `project.pick` is how "Open folder…" works, so the primary entry on Home was
+  broken for the person at this machine and worked only in a narrowed link tab. The
+  check was corrected to match the documented rule.
+- **Screens.** The Files page names a source folder by its own name rather than its
+  `@<sourceId>` alias, and descends and returns the same way. An empty project now
+  reads its root once (one bounded listing) and leads with "Browse files" when that
+  listing has anything in it, "Work with Agent" when it has nothing; a failed read
+  keeps the Agent first rather than claiming an empty folder.
+
+### Checks for the repair
+
+- Rho 185/185 unit checks passed (182 before this pass). New tests cover: a project
+  made from a source folder listing that folder, descending into it and its
+  subfolders, opening a file from it by the reference `project.openFile` accepts,
+  refusing an alias that is not part of the project and parent/absolute traversal, a
+  moved or missing source being reported while the project still lists it, and this
+  machine's own tab opening a folder with the native dialog and reading it. The last
+  one fails on the previous commit and passes here.
+- `acceptance:frontend`, `acceptance:pages`, `acceptance:shell` and
+  `acceptance:person` passed.
+- `work/ui-review-20261027/check-sources.mjs` in real Chrome: a project created from
+  a folder of CSV/R files lists that folder in Files and leads with "Browse files";
+  the folder descends, nests into `scripts` and returns to the project root by its own
+  name; a file inside it opens in the editor with its bytes; a project made from an
+  empty folder still lists that folder; a folder opened directly with nothing in it
+  leads with "Work with Agent". Screenshots are in `work/ui-review-20261027/sources/`.
+
 ## Limits and next questions
 
-- **A created project's Files page is empty.** `project.entries` lists the project
-  root only, which for a project made from "New project" is an internal workspace
-  folder; its source folders (`@<sourceId>/…`) are readable by the documents and
-  files owners but are not listed by this call. A person who created a project from
-  a folder of CSV files sees "This folder is empty." The cause is in the listing
-  capability, not in these screens, so this pass only made the empty state lead with
-  the Agent rather than with Files. Next: show source folders in the listing, then
-  revisit what the empty state should offer first.
+- Listing a source folder still reads one level per call: a person who wants to know
+  whether a project has *files* deeper inside must descend. The empty state therefore
+  counts what the root lists (including the source folders), not every file.
+- A folder opened with "Open folder…" that is also a source folder of another project
+  opens as its own project, because a chosen folder is a project. That is the existing
+  identity rule, not a listing rule, and it can surprise.
 - Project colour is derived from the project identity and carries no meaning; it
   only helps the eye follow a project between the list and the sidebar.
 - Nothing here establishes dark mode, print, or a second person's reading of the

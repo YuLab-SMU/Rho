@@ -38,32 +38,34 @@ application actually records; the [episode record](HOME-PROJECT-EPISODE.md) keep
 the setup, the observations before and after, and the limits.
 
 - Home is one heading, one primary action and one list. Each row names the folder the
-  work lives in (source folders counted when there are several, exact path in the
-  tooltip) and when it was last opened, instead of printing an absolute path. With
-  no projects it opens a centred prompt with the two real starting actions.
-- The create-project sheet gained a close control, the chosen folders as rows and one
+  work lives in (source folders counted, exact path in the tooltip) and when it was
+  last opened, instead of printing an absolute path. With no projects it opens a
+  centred prompt with the two real starting actions.
+- The create-project sheet gained a close control, the chosen folders as rows and a
   line naming what is still missing; the page behind is dimmed and blurred.
-- A project with nothing recorded now opens a centred empty state with "Work with
-  Agent" and "Browse files" instead of empty sections, and the activity column
-  appears only when there are runs. The header names the folder the work comes from.
+- A project with nothing recorded opens a centred empty state with "Work with
+  Agent" and "Browse files" instead of empty sections; the listing below decides
+  which leads. The activity column appears only when there are runs, and the header
+  names the folder the work comes from.
 - The topbar names the way back (`Projects / project / workspace`, the current place
-  only below 768 px); Project settings and Plugins sit together at the sidebar foot.
+  only below 768 px); Project settings and Plugins sit at the sidebar foot.
 
-Evidence: `npm run build`; Rho 182/182 unit checks; `acceptance:frontend` passed its
-11 checks; `acceptance:pages` passed at four widths with no overflow or unnamed
-buttons; `acceptance:shell` and `acceptance:person` passed; six targeted interaction
-checks passed (abbreviated locations with exact tooltips, clearable empty search,
-palette focus landing on the first row, sheet focus and Escape return, a new
-project's two next steps, breadcrumb return). Screenshots and scripts are in
-`work/ui-review-20261027/`; no browser page errors. This shows the paths work and
-that the screens read as intended to the builder; it is not evidence that another
-person can follow them.
+The first pass recorded that a project made from source folders could not list them,
+so `project.entries` now lists the project's folder together with an `@<sourceId>`
+entry per source folder and descends into them under the reference the file owners
+resolve; a moved or missing source is reported instead of followed. Fixing it
+surfaced a blocking defect: `State.openSelected` demanded an expiry, so "Open
+folder…" was refused as `unauthorized` for the person at this machine, whose access
+does not expire. It now uses the same rule as the other checks.
 
-Observed and not fixed: a project created from source folders cannot list them —
-`project.entries` reads the project root, which for those projects is an internal
-workspace folder — so Files says the folder is empty while the sources hold the
-files. That is a listing capability, not these screens; the empty state leads with
-the Agent until it is addressed.
+Evidence: `npm run build`; Rho 185/185 unit checks, including a project made from
+source folders and this machine's own tab picking a folder — the latter fails on the
+previous commit; `acceptance:frontend` passed its 11 checks; `acceptance:pages`,
+`acceptance:shell` and `acceptance:person` passed; six interaction and five
+source-folder checks passed in real Chrome, with no browser page errors. Screenshots
+and scripts are in `work/ui-review-20261027/`. This shows the paths work and that the
+screens read as intended to the builder; it is not evidence that another person can
+follow them.
 
 ## From-scratch design requirements
 
@@ -227,15 +229,15 @@ cross-site marking are still checked on every request. A credential that is pres
 still be valid, so a stale or forged one is refused rather than silently widening to
 local access, and the machine's own identity is not a revocable session.
 
-`rho --pair` still mints a one-time, five-minute link for a narrower or expiring tab,
-with single-use redemption and expiry unchanged. The browser no longer starts on a gate
-asking for a link: a link that cannot be used leaves the page working as this machine and
-says so, and switching from a link to this machine forgets only the credential, keeping
-open projects, unsaved edits and running work.
+`rho --pair` still mints a one-time, five-minute link for a narrower or expiring tab.
+The browser no longer starts on a gate asking for a link: a link that cannot be used
+leaves the page working as this machine and says so, and switching from a link to this
+machine forgets only the credential, keeping open projects, unsaved edits and running
+work.
 
 The tradeoff is explicit: any process running as this user can call the loopback API
-without a credential, which the readable operator connection file already allowed. This
-change was not verified against human usability, physical IME behaviour or distribution.
+without a credential, which the readable operator connection file already allowed. Human
+usability, physical IME behaviour and distribution are not verified here.
 
 ## Verification of this reconstruction
 

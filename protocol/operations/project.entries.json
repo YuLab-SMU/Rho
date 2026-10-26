@@ -86,5 +86,5 @@
     ],
     "additionalProperties": true
   },
-  "description": "List one level of a folder in this project: ordinary files and folders, bounded and confined to the project root, excluding owner state. Listing reads no file contents and starts no runtime."
+  "description": "List one level of a folder in this project: ordinary files and folders, bounded and confined to that folder, excluding owner state. The project folder lists the source folders it works in as @<sourceId> entries, which descend like any other folder. Listing reads no file contents and starts no runtime."
 }

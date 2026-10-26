@@ -75,6 +75,29 @@ test('opening a file shows it once and keeps the person confined to their projec
   } finally { await f.cleanup(); }
 });
 
+test('the person at this machine opens a folder with the native dialog and reads it', async () => {
+  const f = await fixture();
+  const outside = await fs.mkdtemp(path.join(tmpdir(), 'rho-entries-local-'));
+  try {
+    const chosen = await fs.realpath(await fs.mkdtemp(path.join(outside, 'picked-')));
+    await fs.writeFile(path.join(chosen, 'table.csv'), 'id,value\na,1\n');
+    // No credential: the tab is this machine's own person, whose access does not expire.
+    const local = new BrowserClient({ url: f.service.url });
+    assert.ok(f.service.state.principals.some(p => p.id === 'browser:local' && !p.expiresAt));
+    f.service.folderPicker.choose = async () => chosen;
+    const picked = await local.call('project.pick', {});
+    assert.equal(picked.cancelled, false);
+    assert.equal(picked.project.root, chosen);
+    // The folder the person chose is the folder they can list and open from.
+    assert.deepEqual((await local.call('project.entries', { projectId: picked.project.id })).entries.map(entry => entry.name), ['table.csv']);
+    const opened = await local.call('project.openFile', { projectId: picked.project.id, path: 'table.csv', compositionId: 'workspace', expectedVersion: 0, changeId: 'open-picked' });
+    assert.equal(opened.document.content, 'id,value\na,1\n');
+    // Cancelling still changes nothing.
+    f.service.folderPicker.choose = async () => null;
+    assert.deepEqual(await local.call('project.pick', {}), { cancelled: true, project: null });
+  } finally { await f.cleanup(); await fs.rm(outside, { recursive: true, force: true }); }
+});
+
 test('entries and openFile stay inside the folder this tab was granted', async () => {
   const f = await fixture();
   try {
@@ -89,5 +112,83 @@ test('entries and openFile stay inside the folder this tab was granted', async (
     assert.equal(mine.id, f.p.id);
     await assert.rejects(tab.call('project.entries', { projectId: otherProject.id }), e => ['scope', 'unauthorized', 'not_found'].includes(e.error.kind));
     await assert.rejects(tab.call('project.openFile', { projectId: otherProject.id, path: 'secret.txt', compositionId: 'workspace', expectedVersion: 0, changeId: 'cross' }), e => ['scope', 'unauthorized', 'not_found'].includes(e.error.kind));
+  } finally { await f.cleanup(); }
+});
+
+// A project made from source folders keeps its own (internal) directory; the folders a
+// person chose are the work. They are listed through the project, never merged into it.
+async function workspaceFixture() {
+  const f = await fixture();
+  const outside = await fs.mkdtemp(path.join(tmpdir(), 'rho-entries-source-'));
+  return {
+    ...f, outside,
+    cleanup: async () => { await f.cleanup(); await fs.rm(outside, { recursive: true, force: true }); },
+  };
+}
+
+test('a project made from source folders lists them, descends into them and opens their files', async () => {
+  const f = await workspaceFixture();
+  try {
+    const folder = await fs.realpath(await fs.mkdtemp(path.join(f.outside, 'airquality-')));
+    await fs.writeFile(path.join(folder, 'readings.csv'), 'month,ozone\n5,24.1\n');
+    await fs.writeFile(path.join(folder, 'readings.R'), 'd <- read.csv("readings.csv")\n');
+    await fs.mkdir(path.join(folder, 'scripts'));
+    await fs.writeFile(path.join(folder, 'scripts', 'clean.R'), '# clean\n');
+    f.service.folderPicker.choose = async () => folder;
+    const { selection } = await f.browser.call('project.source.pick', {});
+    const project = await f.browser.call('project.createWorkspace', { name: 'Airquality study', selectionIds: [selection.selectionId], changeId: 'create-source' });
+    const call = (method, input = {}) => f.browser.call(method, { projectId: project.id, ...input });
+    // A source keeps the stable ID its root digest gives it, not the one-time selection receipt.
+    const [source] = project.sources;
+    assert.equal(source.root, folder);
+    // The project's own folder is empty; the chosen folder appears beside its contents.
+    const root = await call('project.entries');
+    assert.deepEqual(root.entries.map(entry => [entry.name, entry.kind]), [[source.name, 'folder']]);
+    const listed = root.entries.find(entry => entry.kind === 'folder');
+    assert.equal(listed.path, '@' + source.id);
+    assert.equal(listed.bytes, 0);
+    assert.equal(root.path, '');
+    // Descending through the alias lists the folder itself, under the same addressing
+    // project.openFile accepts.
+    const inside = await call('project.entries', { path: listed.path });
+    assert.deepEqual(inside.entries.map(entry => entry.name).sort(), ['readings.R', 'readings.csv', 'scripts']);
+    assert.ok(inside.entries.every(entry => entry.path.startsWith(listed.path + '/')));
+    assert.equal(inside.path, listed.path);
+    const nested = await call('project.entries', { path: listed.path + '/scripts' });
+    assert.deepEqual(nested.entries.map(entry => entry.path), [listed.path + '/scripts/clean.R']);
+    // Opening a file from the source folder places one editor view for it.
+    const opened = await call('project.openFile', { path: listed.path + '/readings.R', compositionId: 'workspace', expectedVersion: 0, changeId: 'open-source' });
+    assert.equal(opened.document.path, listed.path + '/readings.R');
+    assert.equal(opened.document.content, 'd <- read.csv("readings.csv")\n');
+    assert.equal(opened.composition.views.length, 1);
+    // A folder that is not part of this project, a parent step and an absolute path stay refused.
+    await assert.rejects(call('project.entries', { path: '@not-a-source' }), e => e.error.kind === 'scope');
+    await assert.rejects(call('project.entries', { path: listed.path + '/../..' }), e => ['scope', 'invalid', 'not_found'].includes(e.error.kind));
+    await assert.rejects(call('project.entries', { path: '/etc' }), e => ['scope', 'invalid', 'not_found'].includes(e.error.kind));
+    // Internal state of the project never appears, and listing opens nothing.
+    assert.ok(!inside.entries.some(entry => entry.path.includes('.rho')));
+    assert.deepEqual((await call('observation.snapshot')).documents.map(document => document.path), [listed.path + '/readings.R']);
+  } finally { await f.cleanup(); }
+});
+
+test('a source folder that moved is reported instead of followed to whatever is there now', async () => {
+  const f = await workspaceFixture();
+  try {
+    const folder = await fs.realpath(await fs.mkdtemp(path.join(f.outside, 'moved-')));
+    await fs.writeFile(path.join(folder, 'notes.md'), '# notes\n');
+    f.service.folderPicker.choose = async () => folder;
+    const { selection } = await f.browser.call('project.source.pick', {});
+    const project = await f.browser.call('project.createWorkspace', { name: 'Moved study', selectionIds: [selection.selectionId], changeId: 'create-moved' });
+    const alias = '@' + project.sources[0].id;
+    assert.deepEqual((await f.browser.call('project.entries', { projectId: project.id, path: alias })).entries.map(entry => entry.name), ['notes.md']);
+    const moved = folder + '-elsewhere';
+    await fs.rename(folder, moved).catch(() => {});
+    await fs.symlink(moved, folder).catch(() => {});
+    await assert.rejects(f.browser.call('project.entries', { projectId: project.id, path: alias }), e => e.error.kind === 'scope');
+    await fs.unlink(folder).catch(() => {});
+    await assert.rejects(f.browser.call('project.entries', { projectId: project.id, path: alias }), e => e.error.kind === 'scope');
+    // The project still lists the folder it was made from; only reading it is refused.
+    const listed = await f.browser.call('project.entries', { projectId: project.id });
+    assert.deepEqual(listed.entries.map(entry => entry.path), [alias]);
   } finally { await f.cleanup(); }
 });

@@ -125,11 +125,16 @@ original managed operations retain their identities and behavior.
 Source entries have stable IDs and canonical roots. Files resolves references
 `@<sourceId>/<relative-path>` inside the chosen folders; Documents uses that port
 for its existing buffers and actual write conditions. Saved R script snapshots
-can use the same resolver. Plain relative paths and generated outputs belong to
-the workspace directory; no implicit union, file copying, symlinks or change of
-native working directory is performed. Callers must choose explicit sources and
-inputs. The existing macOS socket-path bound still applies to an actual execution.
-Native folder selection is platform-specific; source references do not expand scope.
+can use the same resolver. `project.entries` lists the project's own directory
+together with those source folders as `@<sourceId>` entries, so a project made from
+source folders is not an empty listing; descending one of them lists that folder
+under the same reference, and `project.openFile` accepts it. A source that moved or
+disappeared is reported instead of followed. Plain relative paths and generated
+outputs belong to the workspace directory; no implicit union, file copying, symlinks
+or change of native working directory is performed. Callers must choose explicit
+sources and inputs. The existing macOS socket-path bound still applies to an actual
+execution. Native folder selection is platform-specific; source references do not
+expand scope.
 
 ## Public contract and client
 

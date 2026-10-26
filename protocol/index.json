@@ -363,10 +363,10 @@
       "sha256": "51dd63ca5ca48167522a1037c07ed0a312240e4a956636939c1b0129cb19e6a2"
     },
     "project.entries": {
-      "summary": "List one level of a folder in this project: ordinary files and folders, bounded and confined to the project root, excluding owner state. Listing reads no file contents and starts no runtime.",
+      "summary": "List one level of a folder in this project: ordinary files and folders, bounded and confined to that folder, excluding owner state. The project folder lists the source folders it works in as @<sourceId> entries, which descend like any other folder. Listing reads no file contents and starts no runtime.",
       "path": "operations/project.entries.json",
-      "bytes": 1965,
-      "sha256": "10b781999f6856eb8eb77e4050069cb6a89b5e7d6b8ad17c5563fb951255bd2a"
+      "bytes": 2077,
+      "sha256": "30416e8df18659b1a1ef65b5c3cca30398046799128eb2aab2e3d82876088635"
     },
     "project.list": {
       "summary": "project.list",
@@ -381,10 +381,10 @@
       "sha256": "01cf93b7726f092752a260c8b6fb564654f1f3892e84f539869ac8aa54b47433"
     },
     "project.openFile": {
-      "summary": "Open one text file from the selected project as a document and place it in the person's own layout in one conditional step, so a person can see and edit their own source files without an Agent. Confined to the project root; it executes nothing.",
+      "summary": "Open one text file from the selected project as a document and place it in the person's own layout in one conditional step, so a person can see and edit their own source files without an Agent. Accepts a project-relative path or the @<sourceId>/<path> reference the listing returns; it executes nothing.",
       "path": "operations/project.openFile.json",
-      "bytes": 39310,
-      "sha256": "e1cee69b2262b6f999f312f611ed3e1473a3a95c74531fe25cdecc390fd8b0b5"
+      "bytes": 39369,
+      "sha256": "f995dc4e4355fa368f65933486be1a8b4830aa39e95578be0ec5fa797ebc77ec"
     },
     "project.pick": {
       "summary": "project.pick",

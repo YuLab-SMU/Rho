@@ -21,8 +21,11 @@ inspect what happened. The application gives those actions direct places:
   be started instead of an empty page.
 - **Overview** opens existing workspaces and recorded results, with recent runs when
   there are any. A project with nothing recorded yet shows its two next steps —
-  work with the Agent or browse its files — rather than empty sections.
-- **Files** opens documents, browses source folders and filters the current folder.
+  work with the Agent or browse its files — rather than empty sections, leading with
+  whichever one the project's listing says has something behind it.
+- **Files** opens documents, browses the project's folder and the source folders it
+  works in, and filters the current folder. A source folder is named as the person
+  named it and opens one level at a time, the same way any other folder does.
 - **Activity** opens actual execution records, output, repair context and exports.
   It also shows the selected Core-backed Claude Code/dsh activity streams, native
   errors and observed output files. The [activity episode](AGENT-ACTIVITY.md)

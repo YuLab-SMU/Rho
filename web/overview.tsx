@@ -3,11 +3,17 @@ import type { BrowserClient, ProjectSummary, WorkspaceSnapshot } from '../src/br
 import { executionWord, integrityWord, results, shortPath, type RunFacts } from '../src/execution-facts.js';
 import { useRuns } from './executions.js';
 import { projectName, place, SourceFolders, when } from './home.js';
-import { Icon } from './icons.js';
+import { Icon, type IconName } from './icons.js';
 import { availability, resourceIcon, size, type Entry, type Section } from './project.js';
 import { RunView } from './shell/facts.js';
 import { AgentActivity } from './agent-activity.js';
 
+function shownPath(at: string, project: ProjectSummary) {
+  if (!at) return projectName(project);
+  const [head, ...rest] = at.split('/');
+  const source = head.startsWith('@') ? project.sources?.find(entry => '@' + entry.id === head) : undefined;
+  return [source ? source.name : head, ...rest].join('/');
+}
 interface Props {
   project: ProjectSummary; snapshot: WorkspaceSnapshot; client: BrowserClient; section: Section;
   onSection: (section: Section) => void; onAgent: () => void;
@@ -20,6 +26,9 @@ export function ProjectOverview({ project, snapshot, client, section, onSection,
   const [reading, setReading] = useState(false), [opening, setOpening] = useState(''), [fileError, setFileError] = useState(''), [query, setQuery] = useState('');
   const [adding, setAdding] = useState(false), [sourceError, setSourceError] = useState(''), [doctorError, setDoctorError] = useState('');
   const [doctor, setDoctor] = useState<Array<{ id: string; state: string; detail: string; remedy: string }> | null>(null), [diagnosing, setDiagnosing] = useState(false);
+  // Whether the project's own folder holds anything: one bounded listing, read only while the
+  // project has nothing recorded, so an empty project can lead with the step that has content.
+  const [rootEntries, setRootEntries] = useState<number | null>(null);
   const readSequence = useRef(0), runDialog = useRef<HTMLDialogElement>(null);
   const isFiles = section === 'files' || section === 'documents';
   const places = new Map<string, { compositionId: string; viewId: string }>();
@@ -35,10 +44,18 @@ export function ProjectOverview({ project, snapshot, client, section, onSection,
   // separately, so an unread run list is not reported as an empty one, and nothing is painted
   // over an otherwise empty project until that read settles.
   const clean = !snapshot.compositions.length && !artifacts.length && !snapshot.taskMap?.question && !snapshot.taskMap?.items.length;
-  const settled = !clean || runs !== null || !!runsProblem;
-  const emptyProject = section === 'overview' && clean && runs !== null && runs.length === 0;
+  const settled = !clean || ((runs !== null || !!runsProblem) && rootEntries !== null);
+  const emptyProject = section === 'overview' && clean && runs !== null && runs.length === 0 && rootEntries !== null;
   // The activity column earns its place only when it has something to report.
   const recent = !!runsProblem || (runs?.length ?? 0) > 0;
+  // An empty project leads with the step that has something behind it, and never with a claim
+  // that could not be read: a failed listing keeps the Agent first.
+  const browseLeads = (rootEntries ?? 0) > 0;
+  const nextSteps = ([
+    { key: 'files', label: 'Browse files', icon: 'folder', run: () => onSection('files'), primary: browseLeads },
+    { key: 'agent', label: 'Work with Agent', icon: 'prompt', run: onAgent, primary: !browseLeads },
+  ] satisfies Array<{ key: string; label: string; icon: IconName; run: () => void; primary: boolean }>)
+    .sort((left, right) => Number(right.primary) - Number(left.primary));
   async function listFolder(at = '') {
     const sequence = ++readSequence.current;
     setReading(true); setFileError('');
@@ -49,6 +66,14 @@ export function ProjectOverview({ project, snapshot, client, section, onSection,
     finally { if (sequence === readSequence.current) setReading(false); }
   }
   useEffect(() => { if (isFiles && !folder && !reading) void listFolder(); }, [isFiles]);
+  // A failed read is not an empty folder; -1 keeps the Agent as the first step either way.
+  useEffect(() => {
+    if (section !== 'overview' || !clean) return;
+    let live = true;
+    client.call('project.entries', { projectId: project.id })
+      .then(list => { if (live) setRootEntries(list.entries.length); }, () => { if (live) setRootEntries(-1); });
+    return () => { live = false; };
+  }, [client, project.id, section, clean]);
   useEffect(() => () => { readSequence.current++; }, []);
   useEffect(() => { if (inspecting && !runDialog.current?.open) runDialog.current?.showModal(); }, [inspecting]);
   async function open(entry: Pick<Entry, 'path'>) {
@@ -95,10 +120,7 @@ export function ProjectOverview({ project, snapshot, client, section, onSection,
     {emptyProject && <div className="empty-project">
       <span className="empty-symbol"><Icon name="grid" size={26} stroke={1.5} /></span>
       <h2>No work yet</h2>
-      <div className="empty-actions">
-        <button className="primary" onClick={onAgent}><Icon name="prompt" size={17} /><span>Work with Agent</span></button>
-        <button onClick={() => onSection('files')}><Icon name="folder" size={17} stroke={1.6} /><span>Browse files</span></button>
-      </div>
+      <div className="empty-actions">{nextSteps.map(step => <button key={step.key} className={step.primary ? 'primary' : undefined} onClick={step.run}><Icon name={step.icon} size={17} stroke={1.6} /><span>{step.label}</span></button>)}</div>
     </div>}
     {section === 'overview' && !emptyProject && settled && <>
       {snapshot.taskMap?.question && <div className="project-question"><Icon name="prompt" size={18} /><h2>{snapshot.taskMap.question}</h2></div>}
@@ -118,7 +140,7 @@ export function ProjectOverview({ project, snapshot, client, section, onSection,
     {isFiles && <>
       {snapshot.documents.length > 0 && <section className="project-section"><div className="section-heading"><h2>Open documents</h2></div><div className="document-list">{snapshot.documents.map(d => { const spot = documents.get(d.id); return <button key={d.id} className="document-link" disabled={!!opening} onClick={() => spot ? onLayout(spot.compositionId, spot.viewId) : void open(d)}><Icon name="document" size={18} /><span>{shortPath(d.path)}</span>{d.dirty && <span className="unsaved-dot" title="Unsaved changes" aria-label="Unsaved changes" />}</button>; })}</div></section>}
       <section className="project-section" aria-label="Project files">
-        <div className="file-toolbar"><div className="folder-location">{folder?.path && <button className="icon-button" aria-label="Up one folder" onClick={() => void listFolder(folder.path.split('/').slice(0, -1).join('/'))}><Icon name="chevron" size={16} /></button>}<strong>{folder?.path || projectName(project)}</strong></div><div className="search-field"><Icon name="search" size={17} stroke={1.7} /><input aria-label="Filter files" placeholder="Filter files…" value={query} onChange={e => setQuery(e.target.value)} /></div></div>
+        <div className="file-toolbar"><div className="folder-location">{folder?.path && <button className="icon-button" aria-label="Up one folder" onClick={() => void listFolder(folder.path.split('/').slice(0, -1).join('/'))}><Icon name="chevron" size={16} /></button>}<strong>{shownPath(folder?.path ?? '', project)}</strong></div><div className="search-field"><Icon name="search" size={17} stroke={1.7} /><input aria-label="Filter files" placeholder="Filter files…" value={query} onChange={e => setQuery(e.target.value)} /></div></div>
         {error(fileError, () => void listFolder(folder?.path))}
         {reading && <p className="loading-inline" role="status">Reading folder…</p>}
         {folder && (visible.length ? <div className="file-table-wrap" aria-busy={reading}><table className="file-table"><thead><tr><th>Name</th><th>Type</th><th>Size</th></tr></thead><tbody>{visible.map(entry => <tr key={entry.path}><td><button className="file-open" disabled={!!opening || reading} onClick={() => void (entry.kind === 'folder' ? listFolder(entry.path) : open(entry))}><Icon name={entry.kind === 'folder' ? 'folder' : 'file'} size={19} stroke={1.6} />{entry.name}{opening === entry.path && <span role="status">Opening…</span>}</button></td><td>{entry.kind === 'folder' ? 'Folder' : entry.name.split('.').at(-1)?.toUpperCase() || 'File'}</td><td>{entry.kind === 'folder' ? '—' : size(entry.bytes)}</td></tr>)}</tbody></table>

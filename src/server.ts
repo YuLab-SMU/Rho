@@ -700,28 +700,47 @@ export class RhoService {
     }
     if (method === 'project.entries') {
       const limit = this.config.nativeFolders?.maxEntries ?? 500;
-      // Confined to the project root: a requested subfolder is resolved, never escaped.
+      const sources = p.sources ?? [];
       const requested: string = b.path ?? '.';
+      // A source folder is addressed as @<sourceId>/<path>, the same reference the file and
+      // document owners resolve, so what this lists is what opening will accept. The project
+      // directory keeps plain relative paths; nothing is unioned or copied into it.
+      const alias = /^@([^/]+)(?:\/(.*))?$/.exec(requested);
+      const source = alias ? sources.find(entry => entry.id === alias[1]) : undefined;
+      requireThat(!alias || source, 'scope', 'This source folder is not part of the project.');
+      if (source) {
+        // A folder that moved is reported, never silently followed to whatever is there now.
+        const current = await fs.realpath(source.root).catch(() => null);
+        requireThat(current === source.root, 'scope', current
+          ? 'A source folder changed location. Add its current location before listing it.'
+          : 'A source folder is missing. Add its current location before listing it.');
+      }
+      const base = source?.root ?? p.root, within = source ? 'Only folders inside this source folder can be listed.' : 'Only folders inside this project can be listed.';
+      const at = (relative: string) => source ? '@' + source.id + (relative ? '/' + relative : '') : relative;
       let directory: string;
-      try { directory = await confined(p.root, requested); }
-      catch { requireThat(false, 'scope', 'Only folders inside this project can be listed.'); }
+      try { directory = await confined(base, alias ? (alias[2] ?? '.') || '.' : requested); }
+      catch { requireThat(false, 'scope', within); }
       const canonical = await fs.realpath(directory);
-      requireThat(canonical === p.root || canonical.startsWith(p.root + path.sep), 'scope', 'Only folders inside this project can be listed.');
+      requireThat(canonical === base || canonical.startsWith(base + path.sep), 'scope', within);
       requireThat((await fs.lstat(canonical)).isDirectory(), 'invalid', 'That entry is a file, not a folder.');
-      const relative = path.relative(p.root, canonical).split(path.sep).join('/');
+      const relative = path.relative(base, canonical).split(path.sep).join('/');
       let names: string[] = [];
       try { names = await fs.readdir(canonical); } catch (e: any) { if (e.code !== 'ENOENT') throw e; }
       const entries: Array<{ path: string; name: string; kind: 'file' | 'folder'; bytes: number; hidden: boolean }> = [];
-      for (const name of names.sort((a, c) => a.localeCompare(c))) {
+      for (const name of names) {
         if (['.rho', '.git', '.DS_Store'].includes(name)) continue;
         const stat = await fs.lstat(path.join(canonical, name)).catch(() => null);
         if (!stat || stat.isSymbolicLink()) continue;
         const kind = stat.isDirectory() ? 'folder' as const : stat.isFile() ? 'file' as const : null;
         if (!kind) continue;
-        const entryPath = (relative ? relative + '/' : '') + name;
+        const entryPath = at((relative ? relative + '/' : '') + name);
         entries.push({ path: entryPath, name, kind, bytes: kind === 'file' ? stat.size : 0, hidden: name.startsWith('.') });
       }
-      return { entries: entries.slice(0, limit), total: entries.length, truncated: entries.length > limit, roots: [relative || '.'], path: relative };
+      // The project's own folder opens with the folders it works in beside its contents, so a
+      // project made from source folders does not read as empty.
+      if (!alias) for (const entry of sources) entries.push({ path: '@' + entry.id, name: entry.name, kind: 'folder', bytes: 0, hidden: false });
+      entries.sort((a, c) => a.name.localeCompare(c.name) || a.path.localeCompare(c.path));
+      return { entries: entries.slice(0, limit), total: entries.length, truncated: entries.length > limit, roots: [at(relative) || '.'], path: at(relative) };
     }
     if (method === 'project.openFile') {
       const document = await owners.need('documents').open(b.path, principal.id);

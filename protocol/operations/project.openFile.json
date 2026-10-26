@@ -1220,5 +1220,5 @@
     ],
     "additionalProperties": true
   },
-  "description": "Open one text file from the selected project as a document and place it in the person's own layout in one conditional step, so a person can see and edit their own source files without an Agent. Confined to the project root; it executes nothing."
+  "description": "Open one text file from the selected project as a document and place it in the person's own layout in one conditional step, so a person can see and edit their own source files without an Agent. Accepts a project-relative path or the @<sourceId>/<path> reference the listing returns; it executes nothing."
 }

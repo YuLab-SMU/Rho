@@ -142,7 +142,9 @@ export class State {
   }
   // Trusted native-dialog result only; never called with an HTTP-supplied path.
   async openSelected(root: string, principal: Principal, maxProjects: number) {
-    requireThat(this.principals.includes(principal) && principal.kind === 'browser' && principal.methods.includes('project.pick') && Date.parse(principal.expiresAt ?? '') > Date.now(), 'unauthorized', 'This tab no longer has access. No selected folder was opened.');
+    // The local person's access does not expire; a linked tab's does. Demanding an expiry here
+    // refused every folder this machine's own tab picked, after the person had chosen it.
+    requireThat(this.principals.includes(principal) && principal.kind === 'browser' && principal.methods.includes('project.pick') && (!principal.expiresAt || Date.parse(principal.expiresAt) > Date.now()), 'unauthorized', 'This tab no longer has access. No selected folder was opened.');
     const selected = principal.selectedProjects ?? [];
     const canonical = await fs.realpath(root), id = digest(canonical).slice(0, 32);
     requireThat(selected.includes(id) || selected.length < maxProjects, 'limit', 'This tab has reached its selected-project limit. Existing projects remain available.', { limit: 'nativeFolders.maxProjects', maximum: maxProjects });
