@@ -20,14 +20,18 @@ function abilities(agent: Agent, snapshot: WorkspaceSnapshot) {
   const words = [reads && 'read', changes && 'change', runs && 'run code'].filter(Boolean) as string[];
   return words.length ? 'Can ' + (words.length > 1 ? words.slice(0, -1).join(', ') + ' and ' + words.at(-1) : words[0]) : 'No calls granted';
 }
-export function AgentAccess({ snapshot }: { snapshot?: WorkspaceSnapshot | null }) {
-  const agents = snapshot?.agents ?? [], [copied, setCopied] = useState(''), [problem, setProblem] = useState('');
+// A session's input stays where it was started. One started in Rho continues in the Agent panel;
+// one started in another window, such as Claude Code in a terminal, continues there, and this
+// page shows its work without offering a second place to talk to it.
+export function AgentAccess({ snapshot, outside = false }: { snapshot?: WorkspaceSnapshot | null; outside?: boolean }) {
+  const all = snapshot?.agents ?? [], agents = outside ? all.filter(agent => !agent.conversationId) : all;
+  const [copied, setCopied] = useState(''), [problem, setProblem] = useState('');
   async function copy(agent: Agent, request: string) {
     setProblem(''); setCopied('');
     try { await navigator.clipboard.writeText(request); setCopied(agent.principal); } catch { setProblem('Could not copy. Select and copy the request text instead.'); }
   }
   if (!snapshot) return <p className="context-agents">Claude Code and other Agents get access from whoever runs Rho on this machine, not from this page.</p>;
-  if (!agents.length) return <p className="context-agents">No Agent has access to {projectName(snapshot.project)}. Access comes from whoever runs Rho on this machine, not from this page.</p>;
+  if (!agents.length) return <p className="context-agents">{outside ? `No session started outside Rho has access to ${projectName(snapshot.project)}.` : `No Agent has access to ${projectName(snapshot.project)}. Access comes from whoever runs Rho on this machine, not from this page.`}</p>;
   return <ul className="context-agent-list">{agents.map(agent => {
     const lastRun = agent.last?.operationId;
     const request = `Continue in the Rho project ${projectName(snapshot.project)} (${snapshot.project.id})${lastRun ? `; read run ${lastRun} by its operationId` : ''}.`;
@@ -35,6 +39,7 @@ export function AgentAccess({ snapshot }: { snapshot?: WorkspaceSnapshot | null 
       <strong>{agent.label ?? 'Agent session'}</strong>
       <span>{agent.ended ? `Access ended${agent.expiresAt ? ' at ' + clock(agent.expiresAt) : ''}` : abilities(agent, snapshot)}</span>
       <span className="context-agent-last">{agent.last ? `Last active ${clock(agent.last.at)}${agent.last.outcome === 'rejected' ? ' · last call refused' : ''}${lastRun ? ' · ' + lastRun : ''}` : 'No calls yet'}</span>
+      {!agent.ended && <span className="context-agent-where">{agent.conversationId ? 'Started in Rho. Continue it in the Agent panel.' : 'Continue this session in the window where it was started. Rho shows its work here.'}</span>}
       {agent.ended && <button className="small-button" onClick={() => copy(agent, request)}>{copied === agent.principal ? 'Copied' : 'Copy request for a new session'}</button>}
     </li>;
   })}

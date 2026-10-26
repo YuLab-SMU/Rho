@@ -22,9 +22,13 @@ inspect what happened. The application gives those actions direct places:
 - **Project settings** manages source folders and explicitly checks available tools.
 - **Workspaces** hold real owner views in tabs and splits. Arrange views exposes
   split, move, close and undo operations; the command palette offers the same actions.
-- **Agent** opens on request. It contains a request draft, sessions and, in an open
-  workspace, the Agent's recorded work and linked questions. The current integration
-  uses an external Agent: copying a request is not sending it or receiving a reply.
+- **Agent** opens on request. In a tab on this machine it holds conversations with
+  Claude Code started in Rho: start one, follow its steps and replies, reply, stop it
+  and return to it after a reload ([conversation episode](CONVERSATION-EPISODE.md)).
+  Sessions started elsewhere are listed with where to continue them. In an open
+  workspace it also shows the Agent's recorded work and linked questions. A tab
+  opened from a narrower link keeps a request draft for an external Agent: copying a
+  request is not sending it or receiving a reply.
 
 The sidebar and optional inspector adapt to available space. Narrow screens show
 one workspace view at a time. Closing a panel does not cancel work.
@@ -34,7 +38,8 @@ one workspace view at a time. Closing a panel does not cancel work.
 `web/main.tsx` owns navigation and session observation. `web/home.tsx` handles project
 entry, `web/overview.tsx` the project sections, and `web/plugins.tsx` the installed
 capability catalog. `web/shell/` renders the persisted composition tree and embeds
-registered owner views. `web/agents.tsx` handles the explicit external-Agent handoff.
+registered owner views. `web/agents.tsx` handles the explicit external-Agent handoff and the session list;
+`web/conversation.tsx` shows a conversation started in Rho.
 
 The browser calls the existing `BrowserClient` contract. Document content, undo,
 conditional save, execution identity, output and versions remain with their existing
@@ -62,6 +67,12 @@ message. Using this machine's access instead of a link forgets only that link's
 credential. The existing Documents editor owns acknowledged document recovery; a
 view change makes no new save claim.
 
+A conversation's messages, steps and endings belong to the service's record, not to
+the tab. The tab keeps only an unsent message per conversation and the identity of
+a message being sent. When the reply to a send is lost, Retry sends that same message
+once; when the service refuses it, the words go back into the box. A session started
+elsewhere has no message box in Rho: its input stays in its own window.
+
 The palette and responsive dialogs use native dialog focus containment and Escape.
 Typography, color and layout are implemented in the three CSS files under `web/`.
 These are current implementation values, not an accepted design system; they change
@@ -73,7 +84,8 @@ views use the application's colors.
 `npm run acceptance:frontend` exercises the application using disposable projects,
 real R output and the installed Chrome executable. It records screenshots of the
 project entry, overview, files, table, figure, activity, settings, plugins and Agent
-panel. Its assertions cover navigation, editing and undo, clipboard handoff,
+panel. Its assertions cover navigation, editing and undo, an unsent conversation message,
+the clipboard handoff in a link tab,
 conditional layout changes, reload, keyboard input, responsive overflow and accessible
 control names. The report and images go to `work/frontend-reset/browser/` by default.
 
@@ -87,8 +99,12 @@ Action, object, shell, document and continuity suites exercise the existing owne
 behavior through the rebuilt UI. Only executed checks in [Status](STATUS.md) are
 current evidence. Historical component and installed-package results do not accept
 this new frontend automatically. Native physical IME behavior and human usability
-require their own evidence. This change does not implement a Project Notebook owner,
-a built-in model conversation, native desktop windows or a registry release.
+require their own evidence. The frontend reset did not implement a Project Notebook
+owner, native desktop windows or a registry release.
 Functional browser evidence shows that paths work, not that the screens can be read;
 the [base-R review](BASE-R-EPISODE.md#review-of-the-2026-10-25-run) records where
 they cannot.
+
+`node scripts/conversation-episode.mjs` drives the conversation episode with the
+configured Claude Code. It stops only when a step cannot be performed; the reviews
+in its [record](CONVERSATION-EPISODE.md) judge what its screenshots show.

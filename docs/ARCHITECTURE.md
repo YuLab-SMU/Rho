@@ -95,13 +95,22 @@ a resident Core Host alone does not establish a live R session.
 | Selection/filter meaning | Participating component; Rho routes the explicit context |
 | Window arrangement, active view and component availability | Rho |
 | Cursor, scrolling and rendering resources | Individual view as appropriate |
-| Agent session and model context | Agent component |
+| Agent session and model context | The Agent client and Agent component; Rho keeps only the ID of a session it started |
+| A session's input and conversation record | Whoever started the session: its own window, or Rho |
 
 Multiple views of a document share one logical unsaved-buffer owner. Switching
 tabs or moving a view between splits preserves content and undo; the later desktop
 client extends this to native windows. Saving checks external writes;
 disk files and Git history do not substitute for the current buffer. Versions and
 provenance belong to individual resources, with no global scientific revision.
+
+Each Agent session has one input, held by whoever started it (the user's decision of
+2026-10-25). A session started outside Rho keeps its input in its own window; Rho
+shows its work and accepts one-way feedback. A conversation started in Rho is held
+by Rho: the Agent panel is its input, and the conversation outlives the panel, a
+reload and a service restart. A message whose outcome Rho did not observe stays
+unknown and is not sent again. The Agent in that conversation works only through
+Rho's project grant.
 
 ## Execution continuity
 

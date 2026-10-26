@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { BrowserClient, type BrowserConnection, type ProjectSummary, type WorkspaceSnapshot } from '../src/browser.js';
 import { Home, located, projectName as name, trapTab } from './home.js';
 import { AgentAccess, AgentRequest } from './agents.js';
+import { AgentConversation } from './conversation.js';
 import { ProjectNavigation, type Section } from './project.js';
 import { Icon } from './icons.js';
 import { CommandPalette, type Command, type CommandGroup } from './commands.js';
@@ -260,9 +261,10 @@ function App() {
   </>;
   const agentContents = <>
     <div className="drawer-heading"><h2>Agent</h2><button className="icon-button" aria-label="Close Agent" onClick={() => { setAgentOpen(false); agentTrigger.current?.focus(); }}><Icon name="close" size={18} /></button></div>
-    {snapshot && <AgentRequest key={snapshot.project.id} snapshot={snapshot} principalId={connection.principalId ?? 'local'} />}
+    {snapshot && (link ? <AgentRequest key={snapshot.project.id} snapshot={snapshot} principalId={connection.principalId ?? 'local'} />
+      : <AgentConversation key={snapshot.project.id} snapshot={snapshot} client={client} />)}
     <div ref={setAgentSlot} className="agent-slot" />
-    {!composition && <section className="context-section"><h3>Sessions</h3><AgentAccess snapshot={snapshot} /></section>}
+    {!composition && <section className="context-section"><h3>{link ? 'Sessions' : 'Sessions started elsewhere'}</h3><AgentAccess snapshot={snapshot} outside={!link} /></section>}
   </>;
   const currentTitle = screen === 'home' ? 'Projects' : screen === 'plugins' ? pluginTitle || 'Plugins' : composition?.compositionId ?? ({ overview: 'Overview', files: 'Files', documents: 'Files', activity: 'Activity', settings: 'Project settings' }[section]);
   return <div className="application">

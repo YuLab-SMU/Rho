@@ -4,8 +4,8 @@
   "schemaVersion": 2,
   "shared": {
     "path": "operations/shared.json",
-    "bytes": 75246,
-    "sha256": "683c009a3abfab8df939ce1cf0fc3d5d099ae6b3bfbfc2d2b6e9c2135fb5c4bb"
+    "bytes": 75274,
+    "sha256": "7a3fba45e0ef21b76ebdfa969b4934393f74fdfca81a10df2ff23cf359196f40"
   },
   "operations": {
     "action.cancel": {
@@ -176,6 +176,30 @@
       "bytes": 7719,
       "sha256": "f3ca05f37c9dc2d272abe2a2f8afbc6445aee8f3f086d7a88a15dbf95290cf3b"
     },
+    "conversation.read": {
+      "summary": "Read a conversation started in Rho: the person's messages, the Agent's visible text and tool steps, and how each message ended. Reading starts and resumes nothing.",
+      "path": "operations/conversation.read.json",
+      "bytes": 11405,
+      "sha256": "219654edc1d877ccc2b69d03587c555608396475b0de4c75cb473a3e856479d1"
+    },
+    "conversation.send": {
+      "summary": "Person at this machine only: send the next message to a conversation started in Rho, which resumes the same Claude Code session. Refused while the previous message is being answered. A repeated changeId with the same text returns the original message.",
+      "path": "operations/conversation.send.json",
+      "bytes": 10781,
+      "sha256": "9769c69bc062ae990be059bdfa8c62907728087a4271f31a36a5bee7e282e7d5"
+    },
+    "conversation.start": {
+      "summary": "Person at this machine only: start a conversation with Claude Code in this project. Rho runs the local Claude Code CLI with this project's Agent grant and records the message before it starts. A repeated changeId with the same text returns the original conversation and starts nothing.",
+      "path": "operations/conversation.start.json",
+      "bytes": 10684,
+      "sha256": "3c0ad520cafc68fb5cdf066d809afe815d8a8b714ea81dee5df1bdaa8379ee10"
+    },
+    "conversation.stop": {
+      "summary": "Person at this machine only: ask Claude Code to stop answering one message. The stop is confirmed when the process is seen to end; steps already taken stay done.",
+      "path": "operations/conversation.stop.json",
+      "bytes": 10571,
+      "sha256": "da83cf8f78861a8c4de3a9aa3fa556c2c33143eb0ed7c810961e833f70f9d08a"
+    },
     "data.compare": {
       "summary": "Join two explicit table versions using declared keys, namespaces, fields and join policy. Scientific comparability remains the project responsibility.",
       "path": "operations/data.compare.json",
@@ -299,8 +323,8 @@
     "observation.snapshot": {
       "summary": "observation.snapshot",
       "path": "operations/observation.snapshot.json",
-      "bytes": 157416,
-      "sha256": "3a49897dfb200ed481018726803c94f50b2eafc093fa1e40a33a3b752ce00640"
+      "bytes": 159473,
+      "sha256": "3370441c207a37b00f4f79510e79cddd7de0cdeae71a21f6eef73af956de48a9"
     },
     "project.create": {
       "summary": "project.create",
@@ -321,10 +345,10 @@
       "sha256": "51dd63ca5ca48167522a1037c07ed0a312240e4a956636939c1b0129cb19e6a2"
     },
     "project.entries": {
-      "summary": "List one level of the selected project folder for the person who opened it: ordinary files and folders, bounded and confined to the project root, excluding owner state. Listing reads no file contents and starts no runtime.",
+      "summary": "List one level of a folder in this project: ordinary files and folders, bounded and confined to the project root, excluding owner state. Listing reads no file contents and starts no runtime.",
       "path": "operations/project.entries.json",
-      "bytes": 1994,
-      "sha256": "c91500fc835a6b1241984678a3b388508e226eab91bbc1a56bdfb5382f5c3c85"
+      "bytes": 1965,
+      "sha256": "10b781999f6856eb8eb77e4050069cb6a89b5e7d6b8ad17c5563fb951255bd2a"
     },
     "project.list": {
       "summary": "project.list",
@@ -431,8 +455,8 @@
     "session.grant": {
       "summary": "session.grant",
       "path": "operations/session.grant.json",
-      "bytes": 3820,
-      "sha256": "d56542ed0ec4edafc80f3d326023964a28e16e75cc5cd747afa4ba7ad285a33b"
+      "bytes": 3851,
+      "sha256": "dbe2b69dcb68bfe3b80d579cdfde8933a98a054171ba7d1f8b92bd30b664933e"
     },
     "skill.list": {
       "summary": "List the application and enabled provider Skills shipped in the selected package. Skills guide discovery but do not grant authorization.",

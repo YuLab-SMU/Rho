@@ -7,7 +7,7 @@ import { atomicJson, confined, digest, readJson, requireThat, stateDirectory } f
 export interface SourceFolder { id: string; root: string; name: string }
 export interface FolderSelection extends SourceFolder { principalId: string; expiresAt: number }
 export interface Project { id: string; root: string; openedAt: string; nativeSelected?: true; name?: string; sources?: SourceFolder[]; workspace?: true; visibilityRoot?: string; creation?: { id: string; digest: string; author: string } }
-export interface Principal { id: string; tokenHash: string; projectId?: string; methods: string[]; kind?: 'browser'; profile?: 'layered-business' | 'layered-presentation'; pluginFilter?: string[]; projectRoot?: string; selectedProjects?: string[]; expiresAt?: string; label?: string }
+export interface Principal { id: string; tokenHash: string; projectId?: string; methods: string[]; kind?: 'browser'; profile?: 'layered-business' | 'layered-presentation'; pluginFilter?: string[]; projectRoot?: string; selectedProjects?: string[]; expiresAt?: string; label?: string; conversationId?: string }
 export async function lease(directory: string) {
   // Best effort: say who holds it when the platform can tell us. Never a failure.
   const holder = (file: string) => {

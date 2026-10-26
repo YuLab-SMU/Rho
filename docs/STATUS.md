@@ -18,6 +18,7 @@ tries it ([Roadmap](ROADMAP.md#how-the-roadmap-advances)).
 | Execution identity, recovery and Documents buffers | Hardened | Owner and acceptance suites below | None in the current focus |
 | Question → Agent → linked result | Runs; not yet usable from the screens | [Base-R episode](BASE-R-EPISODE.md) | Can the answer be read from one screen? |
 | Comparing two results | Runs | Two views split by hand | Can the differences be read by key? |
+| Conversation started in Rho | Runs | [Conversation episode](CONVERSATION-EPISODE.md) | Does a resumed message go straight to work? |
 | Project shell and navigation | Runs | Frontend browser suite below | Does it hold up around the reworked episode? |
 | Plugin UI extensions | Runs | Authoring checks below | Does a view built with it serve a real episode? |
 | Domain episode (DESeq2) | Not started | — | What carries over from base-R? |
@@ -63,6 +64,43 @@ fall short and sets the next run. This run does not establish Host crash recover
 external model-session resumption or scientific validity. Sort/filter controls
 keep their existing reload defaults; exact entity/version anchors persist.
 
+## Conversations started in Rho
+
+The user decided on 2026-10-25 that whoever holds a session's input provides its
+conversation entry. A person can now start a conversation with Claude Code in the
+Agent panel, follow its steps and replies, reply, stop it, and return to it after a
+reload or a service restart. Rho holds the input and the record and runs the
+person's Claude Code for each message under a project grant like `rho --grant`.
+Sessions started outside Rho keep their input in their own window; the panel lists
+them and says where to continue. The [conversation episode](CONVERSATION-EPISODE.md)
+records how it runs, its limits and the reviews of two real runs.
+
+- Real runs used Claude Code 2.1.310 and Chrome 155.0.8059.84 at 1440 and 390 CSS
+  pixels: four messages, a reload, a service restart, a conditional save checked
+  on disk and a Stop confirmed by the process exit.
+- The first question, "What is in this project?", went unanswered after 40 model
+  turns because Agent grants left out every `project.*` operation. They now include
+  the read-only `project.entries`, for sessions started outside Rho as well; the
+  same question was then answered in 13 turns and 96 s. The root listing's empty
+  `path` now matches its published contract.
+- Rho selects the Agent plugin 0.4.5 that the Plugins checkout carries. With 0.4.4
+  the plugin was unavailable, and so was `rho --grant`.
+- Rho 181/181 unit checks passed: [verification ledger](VERIFICATION.json). In that
+  run `test/mcp.test.mjs` "real stdio MCP v2 tools…" took 29.9 s of its 30 s limit.
+  It timed out in four of six full runs on this machine, and in one of two at the
+  previous commit: rebuilding the 211 KB `capability.list` reply takes 430 MCP reads,
+  the same number at both commits. Alone it passes in 17.5 s.
+- Browser suites: `acceptance:frontend` passed once its local-tab Agent step became
+  an unsent conversation message, with the clipboard handoff now checked in a real
+  link tab; `acceptance:shell`, `acceptance:pages` and `acceptance:person` passed.
+  `acceptance:ui` waits for a heading, "This link has already been used", that the
+  application does not have at the previous commit either.
+- Open: a resumed message starts with a refused call, because resolved contracts
+  do not outlive one message's process; Agent text is shown as raw Markdown; each
+  message costs more than the last; the default Agent grant now has 64 methods, the
+  layered limit, so the next Agent-visible operation would refuse every default
+  grant. No person other than the builder has used it.
+
 ## UI extension authoring
 
 `rho-ui create`, `dev`, `check` and `build` provide a standalone author workflow.
@@ -78,7 +116,7 @@ No application adapter or generated operation contract edit is needed. This path
 adds views, not backend methods or runtime module injection. The default selection
 is unchanged. [Plugin authoring](PLUGIN-AUTHORING.md) contains the executable guide.
 
-- Rho 174/174 unit checks passed: [verification ledger](VERIFICATION.json).
+- Rho 174/174 unit checks passed at that time.
 - New tests cover scaffolding without overwrites, pinned identities, reserved names,
   schema/path containment, real document bindings, unchanged grants and retained
   content after removing an extension. Server discovery never executes UI code.
@@ -109,9 +147,10 @@ Agent inspector. The visual layer is rewritten across the app, workspace and plu
 catalog. There is no permanent Agent column or compressed run timeline. Existing
 execution records remain reachable from Activity and exact artifact provenance.
 
-The Agent request field uses an explicit clipboard handoff to the external Agent.
-Its draft survives panel closure within this tab, scoped by principal/project.
-Copying never claims delivery. Documents, selections, run identity and conditional
+In a tab opened from a narrower link, the Agent request field uses an explicit
+clipboard handoff to the external Agent; a tab on this machine holds conversations
+started in Rho instead. The draft survives panel closure within this tab, scoped by
+principal/project. Copying never claims delivery. Documents, selections, run identity and conditional
 writes keep their actual owners. The frontend does not invent Notebook capabilities.
 
 ## Direct browser access
@@ -175,8 +214,9 @@ The unit result for Plugins in the ledger remains historical, with its original 
 - Real R execution through the public Core CLI, original request identity, retained
   output, cancellation facts, partial/unknown outcomes, explicit repair and export.
 - Separate execution completion, artifact integrity, domain checks and Agent claims.
-- External Claude Code integration and scoped capability discovery; no built-in model
-  conversation. Explicit linked replies remain distinct from a context fetch.
+- External Claude Code integration and scoped capability discovery, and conversations
+  with Claude Code that the person starts and holds in Rho. Explicit linked replies
+  remain distinct from a context fetch.
 
 [Headless backend](HEADLESS.md), [Collaboration](COLLABORATION.md) and the historical
 backend acceptance records retain their technical scope and immutable candidates.

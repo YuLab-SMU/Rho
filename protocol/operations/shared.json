@@ -2485,7 +2485,8 @@
     "feedback.changed",
     "task.map.changed",
     "activity.changed",
-    "resource.changed"
+    "resource.changed",
+    "conversation.changed"
   ],
   "compatibility": "Major API path changes for incompatible fields/semantics; additive optional fields allowed. Per-resource versions are independent.",
   "apiVersion": "2.0",

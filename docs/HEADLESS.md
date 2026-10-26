@@ -106,7 +106,10 @@ file, the number of granted methods (the server default), an `mcp` entry
 (`name`, `command`, `args`) for an MCP configuration file, and the equivalent
 `claude mcp add rho-<folder> -- … --mcp <file>` command. `rho --mcp FILE` serves
 that grant on stdio with the four tools `rho_index`, `rho_resolve`, `rho_call` and
-`rho_read`; nothing else writes to stdout in that mode. Every connection file is a
+`rho_read`; nothing else writes to stdout in that mode. A conversation started in
+the browser's Agent panel gets the same kind of grant: Rho runs the person's
+`claude` for each message with only these four tools (`--claude PATH` or
+`RHO_CLAUDE` selects another executable). Every connection file is a
 credential. `rho --help` prints the usage; an unknown option exits 2 with it.
 
 ## Named workspaces and selected source folders
@@ -161,11 +164,12 @@ const check = await rho.call('requirements.check', {
 | `data.page/plot/compare`, `selection.set` | Explicit table types/null encodings, string entity keys/namespaces, numeric chart fields and two-input keyed joins. |
 | `media.describe`, `object.read` | Original media reference and declared dimensions/pages; bounded exported JSON object snapshots. Neither starts R or decodes an interactive view. |
 | `context.create/read` | Exact buffer/version/range, declared selected entities, a media rectangle with page and pixels/points, or one run (`run: {operationId}`): its state, exit, stop, the last 8 KiB of retained stderr with its byte offset and Core's truncation flag, the script reference, args and declared files. |
-| `session.grant`, `binding.open/close/list/activity` | Operator-selected method grant, external binding metadata and bounded tool receipts. |
+| `session.grant`, `binding.open/close/list/activity` | Operator-selected method grant, external binding metadata and bounded tool receipts. Agent grants include the read-only `project.entries` and no other `project.*` method. |
+| `conversation.start/send/stop/read` | Only the browser on this machine. A conversation started in Rho: one Claude Code session, one process per message, the original message identity, recorded text, tool steps and endings; a message Rho did not observe to its end reads `unknown` and is not sent again. Limits are in `conversationLimits` and `--limits`. |
 | `composition.put/read/apply/undo`, `view.close` | Registered entry/version, props and binding checks; `apply`/`undo` are conditional tree transactions with receipts ([Collaboration](COLLABORATION.md#composition-and-selection)). Uninstalled UI is explicitly unavailable. `rho.action` (version `1`, no bindings) is Rho's own form for one proposed action: props `{title, action, actionVersion, operationId, input, repairOf?}`, and the action must be registered at that version. |
 | `workspace.save/export/restore` | Drafts/undo, bytes/provenance, selections and composition intent; native execution is not replayed. |
 | `action.export` | One run as ordinary files in a new project folder (default `exports/<operationId>`): `script/` holds the code that ran, from the run's own record; `outputs/` holds each declared file as the run left it; `provenance.json` and `PROVENANCE.md` give the run, script digest, arguments, inputs, each file's SHA-256 and whether it matches the inventory the run wrote. A declared file that was not written, or no longer matches that inventory, is named and left out, and the export says `partial`. When the script has unsaved changes the call must say `unsaved: "include"` (written as `<name>.unsaved.<ext>`, marked as never run) or `"leave"`. Runs nothing; never writes into an existing folder. |
-| `observation.snapshot`, `GET /api/v2/events` | Current facts and finite event cursors. Gaps require a new snapshot. `activity` holds the recorded calls of Agents granted on the project (method, time, outcome, refusal kind, recorded ids; no inputs), and each recorded call emits `activity.changed`, including reads and requests the schema refused. `agents` lists the Agent sessions with access (label, granted methods, expiry, latest recorded call); no token. `project.runs` adds `stop` (`requested`, `signalled`, `stopped`, `finished-first`, `unconfirmed`, with who asked and Core's exit) and `repairOf`. |
+| `observation.snapshot`, `GET /api/v2/events` | Current facts and finite event cursors. Gaps require a new snapshot. `activity` holds the recorded calls of Agents granted on the project (method, time, outcome, refusal kind, recorded ids; no inputs), and each recorded call emits `activity.changed`, including reads and requests the schema refused. `agents` lists the Agent sessions with access (label, granted methods, expiry, latest recorded call); no token. `conversations` lists the conversations started in Rho, for the browser on this machine only. `project.runs` adds `stop` (`requested`, `signalled`, `stopped`, `finished-first`, `unconfirmed`, with who asked and Core's exit) and `repairOf`. |
 
 ## Execute an explicit project
 
@@ -594,7 +598,8 @@ The selected Agent source candidate is 0.4.3; Documents/Tables/Annotations keep
 `agentConnection(..., pluginFilter, profile)` explicitly chooses
 `layered-business` or `layered-presentation`. Existing descriptors without a
 profile retain compatibility behavior. A layered descriptor has at most 64
-methods. Its authenticated principal retains the profile and plugin filter;
+methods, and a default business grant that would exceed this is refused. In the
+current composition the default business grant has exactly 64. Its authenticated principal retains the profile and plugin filter;
 changing a model argument or local tool request cannot widen that grant.
 
 A presentation grant supplies only index/resolve, `workspace.observe/enhance`

@@ -4457,6 +4457,17 @@
             "ended": {
               "type": "boolean"
             },
+            "conversationId": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "last": {
               "anyOf": [
                 {
@@ -4502,6 +4513,81 @@
             "expiresAt",
             "ended",
             "last"
+          ],
+          "additionalProperties": true
+        }
+      },
+      "conversations": {
+        "type": "array",
+        "maxItems": 64,
+        "items": {
+          "type": "object",
+          "properties": {
+            "conversationId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "title": {
+              "type": "string",
+              "minLength": 1
+            },
+            "client": {
+              "type": "string",
+              "minLength": 1
+            },
+            "principal": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "createdAt": {
+              "type": "string",
+              "minLength": 1
+            },
+            "updatedAt": {
+              "type": "string",
+              "minLength": 1
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "turns": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "state": {
+              "enum": [
+                "idle",
+                "running",
+                "completed",
+                "failed",
+                "stopped",
+                "unknown"
+              ]
+            },
+            "lastAt": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "conversationId",
+            "title",
+            "client",
+            "principal",
+            "createdAt",
+            "updatedAt",
+            "version",
+            "turns",
+            "state",
+            "lastAt"
           ],
           "additionalProperties": true
         }

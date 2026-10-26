@@ -32,6 +32,9 @@ export const browserMethods = ['protocol.describe', 'protocol.validate', 'projec
   // The files a run declared, registered so a person can open them, and checked against the
   // inventory the run wrote. Both read bytes and record facts; neither runs anything.
   'resource.list', 'artifact.check'];
+// Only the person at this machine talks to a conversation Rho starts: it runs their own Claude
+// Code with their model credentials. A narrower, expiring link never receives these.
+export const conversationMethods = ['conversation.start', 'conversation.send', 'conversation.stop', 'conversation.read'];
 // The person at this machine. A tab this service served is authorized by the request itself:
 // same origin, loopback only, no link, no code and no expiry. `--pair` stays an explicit,
 // narrower grant for a shared or subfolder-scoped tab.
@@ -39,7 +42,7 @@ export const localBrowserId = 'browser:local';
 export function localBrowserPrincipal(root: string): Principal {
   // The empty token hash can never match a request digest, so no header impersonates this
   // identity: it is chosen because the request carried no credential at all.
-  return { id: localBrowserId, kind: 'browser', tokenHash: '', projectRoot: root, methods: [...browserMethods] };
+  return { id: localBrowserId, kind: 'browser', tokenHash: '', projectRoot: root, methods: [...browserMethods, ...conversationMethods] };
 }
 interface Pairing { hash: string; root: string; methods: string[]; expires: number; selectedProjects: string[] }
 export class BrowserAccess {

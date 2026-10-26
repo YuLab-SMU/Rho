@@ -74,7 +74,7 @@
       },
       "path": {
         "type": "string",
-        "minLength": 1
+        "maxLength": 1024
       }
     },
     "required": [
@@ -86,5 +86,5 @@
     ],
     "additionalProperties": true
   },
-  "description": "List one level of the selected project folder for the person who opened it: ordinary files and folders, bounded and confined to the project root, excluding owner state. Listing reads no file contents and starts no runtime."
+  "description": "List one level of a folder in this project: ordinary files and folders, bounded and confined to the project root, excluding owner state. Listing reads no file contents and starts no runtime."
 }

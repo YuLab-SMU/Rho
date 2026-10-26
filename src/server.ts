@@ -30,6 +30,7 @@ import { exitWords, stopState } from './execution-facts.js';
 import { exportRun } from './run-export.js';
 import type { nativeActivityLimits, agentDeliveryLimits, RunContext } from '@rho-workspace/plugin-agent';
 import { ownerContracts } from './contracts/owners.generated.js';
+import { Conversations, conversationLimits } from './conversations.js';
 export interface FeedbackTransport { accept(envelope: any): Promise<any>; lookup(envelope: any): Promise<any> }
 export interface NativeAdapterRegistration {
   projectId: string; taskId: string; registrationId: string; principal: string; adapterPrincipal: string;
@@ -37,7 +38,7 @@ export interface NativeAdapterRegistration {
   proof: { kind: 'claude-code-init'; sessionId: string; clientVersion: string };
 }
 export const serviceLimits = { maxRequestBytes: 1024 * 1024, maxEventBytes: 65536, eventRetention: 256, maxSubscriptions: 8, maxQueue: 32, maxContexts: 128, maxBindings: 64, maxActivities: 256, maxContextBytes: 1024 * 1024, maxRetainedMetadataBytes: 32 * 1024 * 1024 };
-export interface ServiceConfig extends Partial<typeof serviceLimits>, Partial<typeof requestLimits>, PluginConfig { root: string; stateDir: string; coreBinary: string; rscript: string; port?: number; nativeFolders?: Partial<typeof nativeFolderLimits>; workspace?: Partial<typeof workspaceLimits>; interactions?: Partial<typeof interactionLimits>; taskMap?: Partial<typeof taskMapLimits>; browser?: Partial<typeof browserLimits>; webRoot?: string; agentNativeActivity?: Partial<typeof nativeActivityLimits>; presentationWitness?: Partial<typeof presentationWitnessLimits>; visibility?: Partial<typeof visibilityLimits>; agentDelivery?: Partial<typeof agentDeliveryLimits>; deliveryTransportTimeoutMs?: number }
+export interface ServiceConfig extends Partial<typeof serviceLimits>, Partial<typeof requestLimits>, PluginConfig { root: string; stateDir: string; coreBinary: string; rscript: string; port?: number; nativeFolders?: Partial<typeof nativeFolderLimits>; workspace?: Partial<typeof workspaceLimits>; interactions?: Partial<typeof interactionLimits>; taskMap?: Partial<typeof taskMapLimits>; browser?: Partial<typeof browserLimits>; webRoot?: string; agentNativeActivity?: Partial<typeof nativeActivityLimits>; presentationWitness?: Partial<typeof presentationWitnessLimits>; visibility?: Partial<typeof visibilityLimits>; agentDelivery?: Partial<typeof agentDeliveryLimits>; deliveryTransportTimeoutMs?: number; claude?: string; conversations?: Partial<typeof conversationLimits> }
 const ajv = new Ajv({ allErrors: true, strict: false, allowUnionTypes: true });
 // The same timestamp check every published contract uses; an unknown format would be skipped silently.
 ajv.addFormat('date-time', { type: 'string', validate: isNativeTime });
@@ -180,6 +181,8 @@ export class RhoService {
   private nativeAdapters = new Map<string, NativeAdapterRegistration>();
   private closing = false;
   private feedbackTransports = new Map<string, FeedbackTransport>();
+  // Conversations the local person starts here; Rho holds their input and runs Claude Code.
+  conversations: Conversations;
   private feedback(project: Project, owners = this.plugins.project(project.root, project.id)) {
     const agent = owners.need('agent');
     return new (this.plugins.need('agent').FeedbackDelivery)(project.root, project.id, { agent, annotations: owners.annotations, binding: async (id: string) => (await readJson<any[]>(path.join(await this.dataDir(project), 'bindings.json'), [])).find(b => b.id === id) }, this.config.agentDelivery);
@@ -333,12 +336,24 @@ export class RhoService {
       return facts;
   }
   constructor(public config: ServiceConfig) {
-    for (const [key, value] of Object.entries({ ...serviceLimits, ...requestLimits, ...config.documents, ...config.resources, ...config.workspace, ...config.interactions, ...config.annotations, ...config.capabilityLimits, ...config.r, ...config.browser, ...config.nativeFolders, ...config.agentNativeActivity, ...config.agentDelivery, ...config.presentationWitness, ...config.visibility, ...config })) {
+    for (const [key, value] of Object.entries({ ...serviceLimits, ...requestLimits, ...config.documents, ...config.resources, ...config.workspace, ...config.interactions, ...config.annotations, ...config.capabilityLimits, ...config.r, ...config.browser, ...config.nativeFolders, ...config.agentNativeActivity, ...config.agentDelivery, ...config.presentationWitness, ...config.visibility, ...config.conversations, ...config })) {
       if (typeof value === 'number') requireThat(Number.isSafeInteger(value) && (key === 'port' ? value >= 0 && value <= 65535 : value > 0), 'invalid', 'Invalid service budget.', { field: key });
     }
     this.plugins = new Plugins(config);
     this.state = new State(config.root, config.stateDir); this.bridge = new CoreBridge(config.coreBinary, config.rscript);
     this.browser = new BrowserAccess(this.state, config.browser);
+    this.conversations = new Conversations({
+      // The same project grant `rho --grant` gives, under this conversation's own principal.
+      grant: async (project, conversation) => {
+        const session = 'rho:' + conversation.id, file = path.join(this.state.directory, 'agent-' + digest(project.id + ':' + session) + '.json');
+        await this.agentConnection(project.id, session, file, undefined, undefined, 'layered-business', { label: 'Claude Code in Rho', conversationId: conversation.id });
+        return { file, principal: 'agent:' + digest(project.id + ':' + session).slice(0, 32) };
+      },
+      directory: project => this.dataDir(project),
+      // Queued behind the project's own writes; it never waits for them, so a write that
+      // started a conversation is not held up by its own notification.
+      changed: async (project, conversationId) => { void this.serial(project.id, () => this.emit(project, 'conversation.changed', conversationId, localBrowserId)).catch(() => {}); }
+    }, config.claude, config.conversations);
     this.folderPicker = new NativeFolderPicker({ ...nativeFolderLimits, ...config.nativeFolders });
     this.server = http.createServer((req, res) => void this.handle(req, res));
     this.server.requestTimeout = 15000; this.server.headersTimeout = 10000;
@@ -365,24 +380,26 @@ export class RhoService {
       await this.state.close(); throw e;
     }
   }
-  async agentConnection(projectId: string, externalSessionId: string, file: string, methods?: string[], pluginFilter?: string[], profile: 'layered-business' | 'layered-presentation' = 'layered-business') {
+  async agentConnection(projectId: string, externalSessionId: string, file: string, methods?: string[], pluginFilter?: string[], profile: 'layered-business' | 'layered-presentation' = 'layered-business', who: { label?: string; conversationId?: string } = {}) {
     requireThat(profile === undefined || ['layered-business', 'layered-presentation'].includes(profile), 'invalid', 'Choose an explicitly supported layered profile.');
     const project = await this.state.project(projectId, this.state.principals.find(p => p.id === 'operator')!);
     this.plugins.need('agent');
     const capabilities = new Capabilities(this.plugins, project);
     const state = await capabilities.state();
-    const available = Object.keys(operations).filter(m => !m.startsWith('session.') && !m.startsWith('project.') && !m.startsWith('requirements.prepare') && !m.startsWith('workspace.restore') && !['task.routing.put', 'binding.activity.append', 'feedback.submit', 'view.observe', 'view.observations.read', 'task.map.respond'].includes(m));
+    // Listing the project folder is read-only and confined like document.read; an Agent
+    // started in Rho has no file tools of its own to find what is there.
+    const available = Object.keys(operations).filter(m => !m.startsWith('session.') && !m.startsWith('conversation.') && (!m.startsWith('project.') || m === 'project.entries') && !m.startsWith('requirements.prepare') && !m.startsWith('workspace.restore') && !['task.routing.put', 'binding.activity.append', 'feedback.submit', 'view.observe', 'view.observations.read', 'task.map.respond'].includes(m));
     const profileMethods = profile === 'layered-presentation' ? ['binding.open', 'capability.index', 'capability.resolve', 'workspace.observe', 'workspace.enhance'] : available.filter(m => !['workspace.observe', 'workspace.enhance'].includes(m));
     const selected = methods ?? (profile === 'layered-presentation' ? profileMethods : (await Promise.all(profileMethods.map(async method => [method, await capabilities.isAvailable(method, state)] as const))).filter(([, enabled]) => enabled).map(([method]) => method));
     requireThat(profile !== 'layered-presentation' || selected.every(m => profileMethods.includes(m)), 'scope', 'The selected role cannot receive broader methods.');
-    requireThat(selected.every(m => !!operations[m] && !m.startsWith('session.') && !m.startsWith('project.') && m !== 'task.routing.put'), 'invalid', 'Unknown or operator-only Agent capability.');
+    requireThat(selected.every(m => !!operations[m] && !m.startsWith('session.') && !m.startsWith('conversation.') && (!m.startsWith('project.') || m === 'project.entries') && m !== 'task.routing.put'), 'invalid', 'Unknown or operator-only Agent capability.');
     requireThat(await Promise.all(selected.map(method => capabilities.isAvailable(method, state))).then(values => values.every(Boolean)), 'unavailable', 'A requested Agent operation has no selected provider.');
     requireThat(!profile || new Set(['capability.index', 'capability.resolve', ...selected]).size <= 64, 'limit', 'Layered connection methods exceed the selected 64-method profile; choose an explicit narrower grant.');
     const token = randomBytes(32).toString('hex');
     const id = 'agent:' + digest(projectId + ':' + externalSessionId).slice(0, 32);
     this.state.principals = this.state.principals.filter(p => p.id !== id);
     requireThat(!pluginFilter || pluginFilter.every(id => this.plugins.isKnown(id)), 'invalid', 'Unknown MCP plugin filter.');
-    await this.state.addPrincipal({ id, tokenHash: digest(token), projectId, label: externalSessionId, methods: [...new Set([...(profile ? ['capability.index', 'capability.resolve'] : ['protocol.describe', 'capability.list']), ...selected])], ...(profile ? { profile } : {}), ...(pluginFilter ? { pluginFilter } : {}) });
+    await this.state.addPrincipal({ id, tokenHash: digest(token), projectId, label: who.label ?? externalSessionId, ...(who.conversationId ? { conversationId: who.conversationId } : {}), methods: [...new Set([...(profile ? ['capability.index', 'capability.resolve'] : ['protocol.describe', 'capability.list']), ...selected])], ...(profile ? { profile } : {}), ...(pluginFilter ? { pluginFilter } : {}) });
     const connection = { url: this.url, token, projectId, externalSessionId, methods: [...new Set([...(profile ? ['capability.index', 'capability.resolve'] : []), ...selected])], ...(profile ? { profile } : {}), ...(pluginFilter ? { pluginFilter } : {}), apiVersion: '2.0' as const };
     await atomicJson(file, connection); return connection;
   }
@@ -535,7 +552,7 @@ export class RhoService {
     const activity = await this.projectActivity(p);
     return this.state.principals.filter(x => x.projectId === p.id && x.kind !== 'browser' && x.id !== 'operator').map(x => {
       const last = activity.entries.filter((e: any) => e.principal === x.id).at(-1);
-      return { principal: x.id, label: x.label ?? null, profile: x.profile ?? null, methods: x.methods, expiresAt: x.expiresAt ?? null, ended: !!x.expiresAt && Date.parse(x.expiresAt) <= Date.now(),
+      return { principal: x.id, label: x.label ?? null, profile: x.profile ?? null, methods: x.methods, expiresAt: x.expiresAt ?? null, ended: !!x.expiresAt && Date.parse(x.expiresAt) <= Date.now(), conversationId: x.conversationId ?? null,
         last: last ? { at: String(last.at), method: String(last.method), outcome: last.outcome === 'rejected' ? 'rejected' as const : 'returned' as const, ...(last.operationId ? { operationId: String(last.operationId) } : {}) } : null };
     });
   }
@@ -740,6 +757,16 @@ export class RhoService {
       const file = path.join(this.state.directory, 'agent-' + digest(p.id + ':' + b.externalSessionId) + '.json');
       const connection = await this.agentConnection(p.id, b.externalSessionId, file, b.methods, undefined, b.profile);
       return { profile: connection.profile, connectionFile: file, projectId: p.id, methods: connection.methods, transport: 'stdio-mcp', externalSessionId: b.externalSessionId };
+    }
+    // The person at this machine talks to a conversation Rho started; Agents and narrower links
+    // cannot start one, and an Agent started this way cannot start another.
+    if (method.startsWith('conversation.')) {
+      requireThat(principal.id === localBrowserId, 'unauthorized', 'Conversations started in Rho belong to the person at this machine. Open Rho in a browser on this machine.');
+      if (method === 'conversation.read') return this.conversations.read(p, b);
+      if (method === 'conversation.stop') return this.conversations.stop(p, principal.id, b);
+      this.plugins.need('agent');
+      if (method === 'conversation.start') return this.conversations.start(p, principal.id, b);
+      if (method === 'conversation.send') return this.conversations.send(p, principal.id, b);
     }
     const capabilities = new Capabilities(this.plugins, p);
     if (method === 'capability.index' || method === 'capability.resolve' || contractRef) {
@@ -948,7 +975,7 @@ export class RhoService {
       }
       const result = await owners.need('agent').readContext(b.contextId, principal.id); await this.emit(p, 'context.changed', result.contextId, principal.id); if (result.principal !== principal.id) await this.emit(p, 'context.changed', result.contextId, result.principal); return result;
     }
-    if (method === 'observation.snapshot') return { project: p, catalog: await capabilities.catalog(principal), documents: await owners.documentSummaries(), operations: (await requests.list(principal)).map(publicOperation), resources: (await owners.retainedResources()).map(publicResource), compositions: await workspace.compositions(), feedback: await routing.feedbackConfiguration().then(async configuration => { const route = await routing.read(); return configuration ? { taskId: route.taskId, compositionId: route.compositionId, taskVersion: route.version, targetBindingId: route.feedbackOwnerBindingId, draftDocumentId: configuration.draftDocumentId, relatedDocumentId: configuration.relatedDocumentId } : null; }), presentation: await routing.read().then(async route => route ? { taskId: route.taskId, pending: (await new Presentation(p, workspace, this.config.presentationWitness, this.config.visibility).state()).pending ?? null, witnesses: await new Presentation(p, workspace, this.config.presentationWitness, this.config.visibility).witnesses() } : null), interactions: await interactions.list(principal.id), taskMap: await new TaskMap(p, this.config.taskMap).read(), annotations: await owners.retainedAnnotations(), contexts: await owners.agent?.contextStates(principal.id) ?? [], activity: await this.projectActivity(p), agents: await this.agentSummaries(p), selection: await readJson(path.join(await this.dataDir(p), 'selection.json'), null), bindings: (await readJson<any[]>(path.join(await this.dataDir(p), 'bindings.json'), [])).filter(x => x.principal === principal.id), cursor: (await this.events(p)).cursor, host: await this.bridge.capability(p.root), limits: { ...serviceLimits, ...requestLimits, documents: owners.documents?.limits ?? {}, r: this.plugins.optional('r') ? { ...this.plugins.need('r').executionLimits, ...this.config.r } : {}, resources: { ...owners.files?.limits, ...owners.tables?.limits, ...owners.charts?.limits }, ...Object.fromEntries(Object.entries(this.config).filter(([, v]) => typeof v === 'number')) } };
+    if (method === 'observation.snapshot') return { project: p, catalog: await capabilities.catalog(principal), documents: await owners.documentSummaries(), operations: (await requests.list(principal)).map(publicOperation), resources: (await owners.retainedResources()).map(publicResource), compositions: await workspace.compositions(), feedback: await routing.feedbackConfiguration().then(async configuration => { const route = await routing.read(); return configuration ? { taskId: route.taskId, compositionId: route.compositionId, taskVersion: route.version, targetBindingId: route.feedbackOwnerBindingId, draftDocumentId: configuration.draftDocumentId, relatedDocumentId: configuration.relatedDocumentId } : null; }), presentation: await routing.read().then(async route => route ? { taskId: route.taskId, pending: (await new Presentation(p, workspace, this.config.presentationWitness, this.config.visibility).state()).pending ?? null, witnesses: await new Presentation(p, workspace, this.config.presentationWitness, this.config.visibility).witnesses() } : null), interactions: await interactions.list(principal.id), taskMap: await new TaskMap(p, this.config.taskMap).read(), annotations: await owners.retainedAnnotations(), contexts: await owners.agent?.contextStates(principal.id) ?? [], activity: await this.projectActivity(p), agents: await this.agentSummaries(p), conversations: principal.id === localBrowserId ? await this.conversations.list(p) : [], selection: await readJson(path.join(await this.dataDir(p), 'selection.json'), null), bindings: (await readJson<any[]>(path.join(await this.dataDir(p), 'bindings.json'), [])).filter(x => x.principal === principal.id), cursor: (await this.events(p)).cursor, host: await this.bridge.capability(p.root), limits: { ...serviceLimits, ...requestLimits, documents: owners.documents?.limits ?? {}, r: this.plugins.optional('r') ? { ...this.plugins.need('r').executionLimits, ...this.config.r } : {}, resources: { ...owners.files?.limits, ...owners.tables?.limits, ...owners.charts?.limits }, ...Object.fromEntries(Object.entries(this.config).filter(([, v]) => typeof v === 'number')) } };
     throw new Fault('unavailable', 'This catalog operation has not been installed.', { operation: method });
   }
   private async events(p: Project) { return readJson<any>(path.join(await this.dataDir(p), 'events.json'), { cursor: 0, events: [] }); }
@@ -1008,6 +1035,9 @@ export class RhoService {
     const closed = new Promise<void>(resolve => this.server.close(() => resolve()));
     const idle = setInterval(() => this.server.closeIdleConnections(), 25);
     await closed; clearInterval(idle);
+    // A message being answered is stopped and recorded as stopped; the conversation continues
+    // after the next start, and nothing is sent again on its behalf.
+    await this.conversations.close();
     const shutdown = await this.bridge.close(); await this.state.close(); return shutdown;
   }
 }

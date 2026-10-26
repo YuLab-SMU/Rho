@@ -9,7 +9,8 @@ were withdrawn on 2026-10-25; Git keeps their history.
 
 | Document | Purpose |
 | --- | --- |
-| [Frontend](FRONTEND.md) | Project navigation, workspaces, Agent handoff and browser checks |
+| [Frontend](FRONTEND.md) | Project navigation, workspaces, Agent conversations and handoff, browser checks |
+| [Conversation episode](CONVERSATION-EPISODE.md) | Conversations with Claude Code started in Rho, who holds a session's input, limits, real runs and their reviews |
 | [Base-R episode](BASE-R-EPISODE.md) | Real selected-row question, external Agent edit, result comparison and browser recovery; evidence, limits and the review that sets the next run |
 | [Plugin authoring](PLUGIN-AUTHORING.md) | Create, preview, check and select an independent UI extension |
 | [Architecture](ARCHITECTURE.md) | Source ownership, state and lifecycle boundaries |

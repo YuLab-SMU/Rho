@@ -65,6 +65,7 @@
             "media.describe",
             "object.read",
             "observation.snapshot",
+            "project.entries",
             "protocol.describe",
             "protocol.validate",
             "requirements.check",

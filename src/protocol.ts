@@ -74,7 +74,12 @@ export const operations: Record<string, any> = { ...base.operations,
   'skill.read': obj({ ...project, skillId: text, expectedDigest: { anyOf: [ref.properties.version, { type: 'null' }] } }, ['projectId', 'skillId']),
   'data.plot': obj({ ...project, resource: ref, x: text, y: text, maxPoints: positive }, ['projectId', 'resource', 'x', 'y']),
   'data.compare': obj({ ...project, left: ref, right: ref, options: obj({ leftKey: text, rightKey: text, leftNamespace: text, rightNamespace: text, mapping: { const: 'equal-string' }, leftField: text, rightField: text, join: { enum: ['left', 'inner', 'full'] } }) }),
-  'media.describe': obj({ ...project, resource: ref })
+  'media.describe': obj({ ...project, resource: ref }),
+  // A conversation the person starts in Rho: their words, under a request identity they hold.
+  'conversation.start': obj({ ...project, changeId, text: { type: 'string', minLength: 1, maxLength: 16384 } }),
+  'conversation.send': obj({ ...project, conversationId: changeId, changeId, text: { type: 'string', minLength: 1, maxLength: 16384 } }),
+  'conversation.stop': obj({ ...project, conversationId: changeId, turnId: changeId }),
+  'conversation.read': obj({ ...project, conversationId: changeId, before: integer, limit: { type: 'integer', minimum: 1, maximum: 200 } }, ['projectId', 'conversationId'])
 };
 
 // Every owner-declared operation and response comes from the snapshot, scoped once.
@@ -137,7 +142,7 @@ operations['view.observations.read'] = presentationSchemas.VisibilityReadInput;
 for (const [method, schema] of Object.entries({ 'workspace.observe': enhancementSchemas.PresentationReadInput, 'workspace.enhance': enhancementSchemas.EnhanceInput, 'capability.index': discoverySchemas.IndexInput, 'capability.resolve': discoverySchemas.ResolveInput })) operations[method] = schema;
 operations['task.routing.put'] = { ...routeSchemas.RouteInput };
 operations['session.grant'].properties.profile = { enum: ['layered-business', 'layered-presentation'] };
-operations['session.grant'].properties.methods.items = { enum: Object.keys(operations).filter(m => !m.startsWith('session.') && !m.startsWith('project.')).sort() };
+operations['session.grant'].properties.methods.items = { enum: Object.keys(operations).filter(m => !m.startsWith('session.') && !m.startsWith('conversation.') && (!m.startsWith('project.') || m === 'project.entries')).sort() };
 
 const documentSchema = ownerSchema('documents', 'documentSchema');
 const documentSummarySchema = ownerSchema('documents', 'documentSummarySchema');
@@ -177,6 +182,16 @@ for (const [method, ownerContract] of Object.entries(ownerOperations)) ownerResp
 for (const [method, schema] of Object.entries(ownerSchemaRecord('annotations', 'outputs'))) ownerResponses[method] = schema;
 
 const catalog = { ...contract.capabilityCatalogSchema };
+// A conversation started in Rho and one of its messages: the person's words, the Agent's visible
+// text and tool steps in order, and how the message ended. Hidden reasoning is never kept.
+const conversationSummary = response({ conversationId: text, title: text, client: text, principal: { anyOf: [text, { type: 'null' }] }, createdAt: text, updatedAt: text, version: integer, turns: integer, state: { enum: ['idle', 'running', 'completed', 'failed', 'stopped', 'unknown'] }, lastAt: text });
+const conversationStep = response({ kind: { enum: ['text', 'tool', 'error'] }, at: text, text: { type: 'string' }, cut: { type: 'boolean' }, id: text, tool: text, operation: text, outcome: { enum: ['requested', 'returned', 'rejected', 'unknown'] } }, ['kind', 'at']);
+const conversationTurn = response({ id: text, by: text, text: { type: 'string' }, sentAt: text, state: { enum: ['running', 'completed', 'failed', 'stopped', 'unknown'] }, startedAt: { anyOf: [text, { type: 'null' }] }, endedAt: { anyOf: [text, { type: 'null' }] }, model: { anyOf: [text, { type: 'null' }] },
+  stop: { anyOf: [response({ requestedAt: text, by: text, reason: { enum: ['person', 'closing', 'wall-limit', 'output-limit', 'line-limit', 'identity'] } }), { type: 'null' }] },
+  steps: array(conversationStep), omitted: integer,
+  retry: { anyOf: [response({ attempt: { anyOf: [integer, { type: 'null' }] }, of: { anyOf: [integer, { type: 'null' }] }, status: { anyOf: [integer, { type: 'null' }] }, at: text }), { type: 'null' }] },
+  result: { anyOf: [response({ isError: { type: 'boolean' }, kind: { anyOf: [text, { type: 'null' }] }, reason: { anyOf: [text, { type: 'null' }] }, steps: { anyOf: [integer, { type: 'null' }] }, durationMs: { anyOf: [{ type: 'number' }, { type: 'null' }] }, costUsd: { anyOf: [{ type: 'number' }, { type: 'null' }] }, message: { anyOf: [{ type: 'string' }, { type: 'null' }] } }), { type: 'null' }] },
+  problem: { anyOf: [{ type: 'string' }, { type: 'null' }] } }, ['id', 'by', 'text', 'sentAt', 'state', 'steps', 'omitted', 'problem']);
 const observationSnapshot = response({
   project: contract.projectRecordSchema,
   catalog,
@@ -194,7 +209,11 @@ const observationSnapshot = response({
   activity: obj({ cursor: integer, retainedFrom: positive, entries: { type: 'array', maxItems: 256, items: { type: 'object', additionalProperties: true, properties: { cursor: positive, principal: text, method: text, at: text, outcome: { enum: ['returned', 'rejected'] } }, required: ['cursor', 'principal', 'method', 'at', 'outcome'] } } }, ['cursor', 'retainedFrom', 'entries']),
   // The Agent sessions with access to this project: no token, only who, what and when.
   agents: { type: 'array', maxItems: 64, items: response({ principal: text, label: { anyOf: [text, { type: 'null' }] }, profile: { anyOf: [text, { type: 'null' }] }, methods: array(text), expiresAt: { anyOf: [text, { type: 'null' }] }, ended: { type: 'boolean' },
+    // A session started in Rho names its conversation; one started elsewhere has none here.
+    conversationId: { anyOf: [text, { type: 'null' }] },
     last: { anyOf: [{ type: 'null' }, response({ at: text, method: text, outcome: { enum: ['returned', 'rejected'] }, operationId: text }, ['at', 'method', 'outcome'])] } }, ['principal', 'label', 'profile', 'methods', 'expiresAt', 'ended', 'last']) },
+  // Conversations started in Rho, for the person at this machine; empty for anyone else.
+  conversations: { type: 'array', maxItems: 64, items: conversationSummary },
   selection: { anyOf: [selection, { type: 'null' }] },
   bindings: array(contract.bindingSchema),
   cursor: integer,
@@ -202,7 +221,7 @@ const observationSnapshot = response({
   limits: contract.limitReportSchema
 });
 // Retained snapshots from before the Agents summary are read through this same contract.
-observationSnapshot.required = observationSnapshot.required.filter(key => key !== 'agents');
+observationSnapshot.required = observationSnapshot.required.filter(key => key !== 'agents' && key !== 'conversations');
 
 const structuredComposition = contract.structuredCompositionSchema;
 const composition = { anyOf: [contract.legacyCompositionSchema, structuredComposition] };
@@ -247,9 +266,13 @@ export const responses: Record<string, any> = { ...base.responses, ...ownerRespo
   'protocol.validate': response({ method: text, valid: { type: 'boolean' }, problems: array(response({ path: text, keyword: text, message: text, fix: text })), requires: array(text) }),
   // A passing check carries no remedy, so the remedy is a possibly-empty string.
   'project.doctor': response({ ok: { type: 'boolean' }, checks: array(response({ id: text, state: { enum: ['ok', 'warn', 'fail'] }, detail: text, remedy: { type: 'string' } })), intent: { anyOf: [response({ id: text, methods: array(text), missing: array(text), ready: { type: 'boolean' } }), { type: 'null' }] } }),
-  'project.entries': response({ entries: array(response({ path: text, name: text, kind: { enum: ['file', 'folder'] }, bytes: integer, hidden: { type: 'boolean' } })), total: integer, truncated: { type: 'boolean' }, roots: array(text), path: text }),
+  'project.entries': response({ entries: array(response({ path: text, name: text, kind: { enum: ['file', 'folder'] }, bytes: integer, hidden: { type: 'boolean' } })), total: integer, truncated: { type: 'boolean' }, roots: array(text), path: { type: 'string', maxLength: 1024 } }),
   'session.browser.pair': response({ code: text, expiresAt: text }),
   'session.browser.revoke': response({ sessionId: text, revoked: { type: 'boolean' } }),
+  'conversation.start': response({ conversation: conversationSummary, turn: conversationTurn }),
+  'conversation.send': response({ conversation: conversationSummary, turn: conversationTurn }),
+  'conversation.stop': response({ conversation: conversationSummary, turn: conversationTurn }),
+  'conversation.read': response({ conversation: conversationSummary, first: integer, turns: array(conversationTurn) }),
   'protocol.describe': response({ apiVersion: { const: '2.0' }, schemaVersion: { const: 2 }, revision: digest, entries: array(response({ method: text, summary: text })), next: { type: ['string', 'null'] }, complete: { type: 'boolean' }, contract: response({ method: text, inputSchema: { type: 'object' }, outputSchema: { type: 'object' }, definitions: { type: 'object' }, description: text }) }, ['apiVersion', 'schemaVersion', 'revision', 'entries', 'next', 'complete']),
   'capability.list': { ...catalog, properties: { ...catalog.properties, host: contract.cliSchema }, required: [...(catalog.required ?? []), 'host'] },
   'capability.configure': response({ version: positive, enabled: array(text), receipt: response({ changeId: text, author: text, version: positive, enabled: array(text), at: text }) }),
@@ -309,11 +332,15 @@ export const descriptions = {
   'action.submit': 'Execute the explicitly selected project R script snapshot and requirements. Persist operationId before delivery; identical retries retain the original Core identity. Output directory is the first R argument, followed by explicit args or frozen resource paths. Artifact paths are output-relative; completion is run-directory-relative, returned as plan.completion, so an inventory can remain beside immutable producer artifacts.',
   'binding.activity.append': 'Registered native adapter only: retain original CLI tool and artifact-ready observations. This does not execute, validate, or present artifacts.',
   'task.routing.put': 'Control plane only: conditionally assign one task and business binding to this project without starting a native session.',
+  'conversation.start': 'Person at this machine only: start a conversation with Claude Code in this project. Rho runs the local Claude Code CLI with this project\'s Agent grant and records the message before it starts. A repeated changeId with the same text returns the original conversation and starts nothing.',
+  'conversation.send': 'Person at this machine only: send the next message to a conversation started in Rho, which resumes the same Claude Code session. Refused while the previous message is being answered. A repeated changeId with the same text returns the original message.',
+  'conversation.stop': 'Person at this machine only: ask Claude Code to stop answering one message. The stop is confirmed when the process is seen to end; steps already taken stay done.',
+  'conversation.read': 'Read a conversation started in Rho: the person\'s messages, the Agent\'s visible text and tool steps, and how each message ended. Reading starts and resumes nothing.',
   'resource.register': 'Declare scoped existing bytes and their type/schema at the supplied digest. This read and registration starts no runtime.',
   'project.runs': 'Report what this project has run and what it is running: one bounded summary per operation with its execution state, accepted time, author kind, the artifact paths its plan declared, whether each of those files is on disk now, whether the producer wrote a completion inventory, and the recorded integrity and domain states. A declaration, a file on disk and a verified artifact are separate facts. It carries no request body, no code and no output text, and starts nothing.',
   'protocol.validate': 'Check one operation body against its versioned schema without executing it: the same checks the server applies, reported with the edit each problem needs. Use it before a write whose shape is uncertain; it changes nothing and starts nothing.',
   'project.doctor': 'Report whether this project can actually do work right now: Core binary, Rscript, write access to the project and state folders, plugin selection, Host socket and unfinished runs. Each check carries the next action when it does not pass. It starts no Host and changes nothing.',
-  'project.entries': 'List one level of the selected project folder for the person who opened it: ordinary files and folders, bounded and confined to the project root, excluding owner state. Listing reads no file contents and starts no runtime.',
+  'project.entries': 'List one level of a folder in this project: ordinary files and folders, bounded and confined to the project root, excluding owner state. Listing reads no file contents and starts no runtime.',
   'project.openFile': 'Open one text file from the selected project as a document and place it in the person\'s own layout in one conditional step, so a person can see and edit their own source files without an Agent. Confined to the project root; it executes nothing.',
   'requirements.check': 'Probe only the explicitly declared R packages with bounded base R; no Core Host or project script starts.',
   'data.compare': 'Join two explicit table versions using declared keys, namespaces, fields and join policy. Scientific comparability remains the project responsibility.',
@@ -331,4 +358,4 @@ export const errorKinds = base.errorKinds;
 export const errorSchema = base.definitions.error;
 export const errorEnvelope = obj({ apiVersion: { const: '2.0' }, ok: { const: false }, error: errorSchema });
 export const responseEnvelope = (method: string) => obj({ apiVersion: { const: '2.0' }, ok: { const: true }, value: responses[method] });
-export const protocol = { ...base, apiVersion: '2.0', schemaVersion: 2, transport: 'HTTP JSON POST /api/v2/{operation}; GET /api/v2/events', eventTypes: [...new Set([...base.eventTypes, 'project.sources.changed', 'capability.changed', 'view.closed', 'interaction.selection.changed', 'annotation.changed', 'context.changed', 'workspace.restored', 'task.routing.changed', 'binding.native.changed', 'feedback.changed', 'task.map.changed', 'feedback.changed', 'activity.changed', 'resource.changed'])], operations, responses, descriptions: orderedDescriptions, definitions, errorEnvelope, status: 'One versioned contract. Retained operations stay observable through the current API; requests this contract does not accept receive a typed refusal rather than a second dialect.' };
+export const protocol = { ...base, apiVersion: '2.0', schemaVersion: 2, transport: 'HTTP JSON POST /api/v2/{operation}; GET /api/v2/events', eventTypes: [...new Set([...base.eventTypes, 'project.sources.changed', 'capability.changed', 'view.closed', 'interaction.selection.changed', 'annotation.changed', 'context.changed', 'workspace.restored', 'task.routing.changed', 'binding.native.changed', 'feedback.changed', 'task.map.changed', 'feedback.changed', 'activity.changed', 'resource.changed', 'conversation.changed'])], operations, responses, descriptions: orderedDescriptions, definitions, errorEnvelope, status: 'One versioned contract. Retained operations stay observable through the current API; requests this contract does not accept receive a typed refusal rather than a second dialect.' };

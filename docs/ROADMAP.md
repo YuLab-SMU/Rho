@@ -67,8 +67,10 @@ person who did not build it.
 
 Future changes should follow a concrete user need. Project Notebook would need a
 real content/structure owner and stable page identities before its interface can
-claim those capabilities. A native Agent conversation needs an actual transport
-and session owner. Neither is supplied by a frontend text field.
+claim those capabilities; a frontend text field does not supply that owner. A
+conversation started in Rho has one: Rho holds its input and runs Claude Code for
+each message ([episode](CONVERSATION-EPISODE.md)), while sessions started elsewhere
+keep their own input.
 
 The current delivery is an unsigned local npm package and WebUI. Registry publication
 requires an explicit release selection. Native desktop windows, cross-window movement,
