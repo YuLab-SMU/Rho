@@ -139,7 +139,9 @@ frontend documents, rules and designs, followed by a reconstruction from the wor
 people need to do. The old plans and visual specifications are removed, including
 the UI/UX Notebook plan, visual replay prototype and E/M/R appearance rulers.
 AGENTS.md and the documentation index no longer direct work through those plans.
-Uncommitted pre-reset work is preserved locally in `work/frontend-reset/before/`.
+The locally preserved pre-reset copy under `work/frontend-reset/before/` was
+removed with the other superseded `work/` evidence on 2026-10-26 at the user's
+request; it was never a requirement or a reference design.
 
 The browser now has one project sidebar, dedicated Overview/Files/Activity/settings
 sections, searchable projects and files, direct workspace controls and an optional

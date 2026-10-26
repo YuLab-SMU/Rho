@@ -128,11 +128,13 @@ counted as passes or represented as realistic network-load evidence.
 
 ## Local evidence and reproduction
 
-Ignored `work/collaboration-candidate-*` directories retain the fixed tarballs and
-composition inventories. `work/collaboration-install-locations.json` locates the
-external installations and their `trial-deterministic/report.json` and
-`trial-agent/report.json`. Source test logs and installed-run logs use the
-`work/collaboration-` prefix. The published JSON contains sanitized projections
+Ignored `work/collaboration-candidate-*` directories held the fixed tarballs and
+composition inventories; that superseded evidence was removed on 2026-10-26 at the
+user's request, and the surviving `work/collaboration-install-locations.json` still
+records the external install roots those trials observed. Re-running the packaged
+driver below produces the `trial-deterministic/report.json` and
+`trial-agent/report.json` records again. Source test logs and installed-run logs use
+the `work/collaboration-` prefix. The published JSON contains sanitized projections
 and hashes; private connection files, credentials and raw model transcripts stay
 local and are not published.
 
