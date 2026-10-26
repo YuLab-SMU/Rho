@@ -20,13 +20,17 @@ conditions; human usability remains unverified.
 
 ## Frontend design guidance
 
-[Frontend design guidance](FRONTEND-DESIGN.md) now supplies the missing visual and
-presentation direction, with primary references to Nielsen, Karri Saarinen and
-Apple. It specifies hierarchy, layout, type/spacing/color baselines, components,
-Agent context, paired comparison, recovery, responsive behavior and accessibility.
-The development workflow requires distinct visual review alongside functional
-checks and user observation. These are new targets; the withdrawn designs remain
-withdrawn, and this documentation change implements no frontend behavior.
+[Frontend design guidance](FRONTEND-DESIGN.md) v1.1 integrates the supplied UI/UX
+direction with primary Nielsen/NNGroup, Saarinen/Linear and Apple references. It
+distinguishes mandatory contracts, selected visual defaults and product hypotheses;
+specifies application scopes, light/dark semantics, focus, human/Agent handover,
+fact-based feedback, comparison, history and scoped completion criteria.
+The [airquality interaction specification](design/AIRQUALITY-INTERACTION.md) maps
+the full episode and failure branches to actual owners and presentation gaps.
+Visual review remains separate from functional checks and user observation;
+prototype completion cannot stand in for implemented behavior. These documents
+add no frontend behavior or new application acceptance; withdrawn designs remain
+withdrawn.
 
 The current frontend has not passed this design acceptance. Repeated chrome,
 competing controls and misaligned comparisons need correction. The first UI

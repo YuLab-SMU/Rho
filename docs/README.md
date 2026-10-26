@@ -12,7 +12,8 @@ restore the withdrawn designs.
 | Document | Purpose |
 | --- | --- |
 | [Frontend](FRONTEND.md) | Project navigation, workspaces, Agent handoff and browser checks |
-| [Frontend design guidance](FRONTEND-DESIGN.md) | Complete visual and interaction presentation guidance: hierarchy, layout, typography, color, components, Agent context, comparison, recovery, responsive behavior and separate design acceptance |
+| [Frontend design guidance](FRONTEND-DESIGN.md) | UI/UX v1.1: application structure, visual baselines, light/dark semantics, human/Agent continuity, owner boundaries and scoped design acceptance |
+| [Airquality interaction specification](design/AIRQUALITY-INTERACTION.md) | Concrete UI states, failure branches, owner mapping and review criteria for the first complete episode; targets, not new acceptance evidence |
 | [Interaction guidance](INTERACTION.md) | Adaptive workspace, shared grammar, change rules, fact boundaries and experiments; source-informed design principles |
 | [Base-R episode](BASE-R-EPISODE.md) | Real selected-row question, external Agent edit, result comparison and browser recovery; executable evidence and limits |
 | [Plugin authoring](PLUGIN-AUTHORING.md) | Create, preview, check and select an independent UI extension |

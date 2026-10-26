@@ -77,6 +77,11 @@ primary content and action, reading order, applicable component states, wording,
 content extremes and constrained/enlarged-text layouts. Use the selected visual
 baselines and explain task-specific deviations. Design the whole state sequence,
 including waiting, errors and return; mark missing owner capabilities explicitly.
+Use the [airquality interaction specification](design/AIRQUALITY-INTERACTION.md)
+as the first worked example. Keep fact sources and observation limits explicit;
+prepared, fetched, replied and reviewed are independent evidence, not a timed
+progress sequence. State whether the deliverable is guidance, a prototype or an
+implementation; simulated capabilities cannot count as completed implementation.
 
 ## Documentation and UI verification
 
