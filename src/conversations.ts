@@ -1,6 +1,6 @@
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
-import type { AgentConversation, AgentPermission, ConversationStep, ConversationEvent, ClaudeAcpOptions } from '@rho-workspace/plugin-agent/conversation';
+import type { AgentConversation, AgentPermission, ConversationStep, ConversationEvent, ClaudeAcpOptions, SessionObservation } from '@rho-workspace/plugin-agent/conversation';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { atomicJson, canonical, digest, Fault, now, readJson, requireThat } from '@rho-workspace/plugin-contracts';
@@ -17,6 +17,9 @@ export const conversationLimits = {
   maxMessageBytes: 16384,
   // One conversation record on disk; past it, new messages are refused.
   maxRecordBytes: 8388608,
+  // One session projection, independent of turn retention; an oversized update
+  // closes observation and preserves the last retained projection.
+  maxObservationBytes: 524288,
   // Text and tool steps kept for one message; later ones are counted, not kept.
   maxTurnBytes: 262144,
   // One kept text block; a longer one keeps its start and says it was cut.
@@ -39,7 +42,7 @@ export const conversationLimits = {
 type StopReason = 'person' | 'closing' | 'wall-limit' | 'output-limit' | 'line-limit' | 'identity';
 type Step = ConversationStep;
 interface Permission extends AgentPermission { state: 'pending' | 'selected' | 'cancelled'; selected?: string }
-export interface ConversationConfig { backend?: 'claude-acp' | 'claude-cli'; claudeAcp?: Omit<ClaudeAcpOptions, 'cwd' | 'mcpServers' | 'limits' | 'sessionId' | 'claude'> }
+export interface ConversationConfig { backend?: 'claude-acp' | 'claude-cli'; claudeAcp?: Omit<ClaudeAcpOptions, 'cwd' | 'mcpServers' | 'limits' | 'sessionId' | 'claude' | 'observation' | 'observe'> }
 interface Turn {
   id: string; changeId: string; requestDigest: string; by: string; text: string; sentAt: string;
   state: 'running' | 'completed' | 'failed' | 'stopped' | 'unknown'; startedAt: string | null; endedAt: string | null; pid: number | null; model: string | null;
@@ -51,6 +54,7 @@ interface Turn {
 interface Conversation {
   format: 1 | 2; backend?: 'claude-acp' | 'claude-cli'; acpSessionId?: string; adapter?: { name: string; version?: string }; protocolVersion?: number; id: string; changeId: string; requestDigest: string; createdAt: string; createdBy: string; updatedAt: string; version: number;
   client: 'claude-code'; nativeSessionId: string | null; confirmed: boolean; principal: string | null; title: string; turns: Turn[];
+  observation?: SessionObservation;
 }
 interface Summary { conversationId: string; changeId: string; requestDigest: string; title: string; client: string; principal: string | null; createdAt: string; updatedAt: string; version: number; turns: number; state: string; lastAt: string }
 interface Live { project: Project; conversation: Conversation; turn: Turn; controller: AbortController; stop(reason: StopReason, by: string): void; done: Promise<void> }
@@ -74,7 +78,7 @@ export class Conversations {
   private queues = new Map<string, Promise<unknown>>();
   private flushes = new Map<string, ReturnType<typeof setTimeout>>();
   private closing = false;
-  private drivers = new Map<string, { driver: AgentConversation; timer?: ReturnType<typeof setTimeout> }>();
+  private drivers = new Map<string, { driver: AgentConversation; project: Project; conversation: Conversation; timer?: ReturnType<typeof setTimeout> }>();
   private permissions = new Map<string, { permission: Permission; resolve(choice: string | null): void }>();
   constructor(private ports: ConversationPorts, public binary = 'claude', limits: Partial<typeof conversationLimits> = {}, private config: ConversationConfig = {}) {
     this.limits = { ...conversationLimits, ...limits };
@@ -96,6 +100,8 @@ export class Conversations {
   private async load(project: Project, id: string): Promise<Conversation> {
     requireThat(identity.test(id), 'not_found', 'No conversation has that identity in this project.');
     for (const live of this.live.values()) if (live.project.id === project.id && live.conversation.id === id) return live.conversation;
+    const retained = this.drivers.get(project.id + '/' + id);
+    if (retained) return retained.conversation;
     const file = path.join(await this.folder(project), id + '.json');
     const stat = await fs.stat(file).catch((e: any) => { if (e.code === 'ENOENT') throw new Fault('not_found', 'No conversation has that identity in this project.'); throw e; });
     requireThat(stat.size <= this.limits.maxRecordBytes + 1048576, 'limit', 'This conversation record is larger than Rho reads; it is kept as it is.', { limit: 'maxRecordBytes' });
@@ -155,7 +161,18 @@ export class Conversations {
   async read(project: Project, input: { conversationId: string; before?: number; limit?: number }) {
     const c = await this.load(project, input.conversationId);
     const end = Math.min(input.before ?? c.turns.length, c.turns.length), start = Math.max(0, end - (input.limit ?? 50));
-    return { conversation: this.listed(project, this.summary(c)), first: start, turns: c.turns.slice(start, end).map(t => this.view(project, c, t)) };
+    return { conversation: this.listed(project, this.summary(c)), observation: this.sessionObservation(project, c), first: start, turns: c.turns.slice(start, end).map(t => this.view(project, c, t)) };
+  }
+  private sessionObservation(project: Project, c: Conversation): SessionObservation | null {
+    return c.observation ? { ...c.observation, connected: !!this.drivers.get(project.id + '/' + c.id)?.driver.connected } : null;
+  }
+  async work(project: Project, limit = 8) {
+    const list = await this.list(project), sessions = [];
+    for (const summary of list.slice(0, limit)) {
+      const c = await this.load(project, summary.conversationId);
+      sessions.push({ ...this.listed(project, this.summary(c)), backend: c.backend ?? 'claude-cli', sessionId: c.acpSessionId ?? c.nativeSessionId, observation: this.sessionObservation(project, c) });
+    }
+    return { sessions, omitted: Math.max(0, list.length - sessions.length) };
   }
   // The caller holds the request identity: a repeat with the same words returns the original
   // conversation or message and starts nothing; changed words under that identity are refused.
@@ -194,7 +211,7 @@ export class Conversations {
         requireThat(!alive, 'conflict', `Claude Code from before Rho restarted may still be answering (process ${last.pid}). End that process before sending another message.`);
       }
       requireThat(c.turns.length < this.limits.maxTurns, 'limit', `A conversation keeps at most ${this.limits.maxTurns} messages. Start a new conversation.`, { limit: 'maxTurns', maximum: this.limits.maxTurns });
-      requireThat(Buffer.byteLength(JSON.stringify(c)) + this.limits.maxTurnBytes + this.limits.maxMessageBytes <= this.limits.maxRecordBytes, 'limit', 'This conversation has reached the size Rho keeps. Start a new conversation.', { limit: 'maxRecordBytes', maximum: this.limits.maxRecordBytes });
+      requireThat(Buffer.byteLength(JSON.stringify({ ...c, observation: undefined })) + this.limits.maxObservationBytes + this.limits.maxTurnBytes + this.limits.maxMessageBytes <= this.limits.maxRecordBytes, 'limit', 'This conversation has reached the size Rho keeps. Start a new conversation.', { limit: 'maxRecordBytes', maximum: this.limits.maxRecordBytes });
       this.capacity();
       for (const old of c.turns) if (old.state === 'running') Object.assign(old, this.view(project, c, old));
       const turn = this.turn(input.changeId, requestDigest, by, text, c.turns.length + 1);
@@ -237,9 +254,19 @@ export class Conversations {
     this.closing = true;
     for (const live of this.live.values()) live.stop('closing', 'rho');
     await Promise.all([...this.live.values()].map(live => live.done));
-    for (const entry of this.drivers.values()) { if (entry.timer) clearTimeout(entry.timer); await entry.driver.close(); }
-    this.drivers.clear();
+    for (const key of [...this.drivers.keys()]) await this.retire(key);
     await Promise.all([...this.queues.values()].map(task => task.catch(() => {})));
+  }
+  private async retire(key: string) {
+    const entry = this.drivers.get(key); if (!entry) return;
+    if (entry.timer) clearTimeout(entry.timer);
+    await entry.driver.close();
+    const timer = this.flushes.get(key);
+    if (timer) { clearTimeout(timer); this.flushes.delete(key); }
+    // Keep the cached object through the final idle/disconnect write, so a next
+    // turn cannot load an older object and later be overwritten by its flush.
+    await this.serial(entry.project.id, () => this.write(entry.project, entry.conversation));
+    if (this.drivers.get(key) === entry) this.drivers.delete(key);
   }
   private cancelPermissions(project: Project, c: Conversation) {
     const prefix = project.id + '/' + c.id + '/';
@@ -268,7 +295,7 @@ export class Conversations {
         const entry = this.drivers.get(project.id + '/' + c.id);
         if (entry) { entry.timer = setTimeout(() => void this.serial('driver-pool', async () => {
           if ([...this.live.values()].some(x => x.project.id === project.id && x.conversation.id === c.id)) return;
-          if (this.drivers.get(project.id + '/' + c.id) === entry) { await entry.driver.close(); this.drivers.delete(project.id + '/' + c.id); }
+          if (this.drivers.get(project.id + '/' + c.id) === entry) await this.retire(project.id + '/' + c.id);
         }).catch(() => {}), this.limits.idleMs); entry.timer.unref(); }
       });
   }
@@ -277,19 +304,24 @@ export class Conversations {
       const key = project.id + '/' + c.id, old = this.drivers.get(key);
       if (old?.timer) clearTimeout(old.timer);
       if (old?.driver.connected) return old.driver;
-      if (old) { await old.driver.close(); this.drivers.delete(key); }
+      if (old) await this.retire(key);
       if (this.drivers.size >= this.limits.maxConnections) {
         const idle = [...this.drivers].find(([k]) => ![...this.live.values()].some(x => x.project.id + '/' + x.conversation.id === k));
         requireThat(idle, 'limit', 'All Agent connections are busy. Wait for one to finish.', { limit: 'maxConnections' });
-        if (idle[1].timer) clearTimeout(idle[1].timer); await idle[1].driver.close(); this.drivers.delete(idle[0]);
+        await this.retire(idle[0]);
       }
       const grant = await this.ports.grant(project, c); c.principal = grant.principal;
       const mcpServers = [{ name: 'rho', command: process.execPath, args: [fileURLToPath(import.meta.resolve('@rho-workspace/plugin-agent/mcp'))], env: [{ name: 'RHO_AGENT_CONNECTION', value: grant.file }] }];
       const { ClaudeAcpConversation, ClaudeCliConversation } = await import('@rho-workspace/plugin-agent/conversation');
       const driver = (c.backend ?? 'claude-cli') === 'claude-acp'
-        ? new ClaudeAcpConversation({ ...this.config.claudeAcp, cwd: project.root, mcpServers, limits: this.limits, sessionId: c.acpSessionId, claude: this.binary })
+        ? new ClaudeAcpConversation({ ...this.config.claudeAcp, cwd: project.root, mcpServers, limits: this.limits, sessionId: c.acpSessionId, claude: this.binary,
+          observation: c.observation, observe: observation => {
+            requireThat(observation.sessionId === c.acpSessionId, 'conflict', 'The observed Agent session differs from the retained identity.');
+            requireThat(Buffer.byteLength(JSON.stringify(observation)) <= this.limits.maxObservationBytes, 'limit', 'The session projection exceeded maxObservationBytes; prior observations were kept.');
+            c.observation = observation; this.schedule(project, c);
+          } })
         : new ClaudeCliConversation({ cwd: project.root, binary: this.binary, sessionId: c.nativeSessionId!, confirmed: c.confirmed, projectName: project.name ?? path.basename(project.root), mcpServers, limits: this.limits });
-      this.drivers.set(key, { driver }); return driver;
+      this.drivers.set(key, { driver, project, conversation: c }); return driver;
     });
   }
   private observe(live: Live, event: ConversationEvent) {

@@ -203,8 +203,8 @@
     "conversation.read": {
       "summary": "Read a conversation started in Rho: the person's messages, the Agent's visible text and tool steps, and how each message ended. Reading starts and resumes nothing.",
       "path": "operations/conversation.read.json",
-      "bytes": 13475,
-      "sha256": "709d30b4ee3a3b8debdcfe1278e84f4236f875ce22f3bb7f5dcb5bdec8018867"
+      "bytes": 22577,
+      "sha256": "5568d734784a573abc0e9ca4074389e5e9e5010595efbb16b1d7a7387f86d77b"
     },
     "conversation.send": {
       "summary": "Person at this machine only: send the next message to a conversation started in Rho, which resumes the same Claude Code session. Refused while the previous message is being answered. A repeated changeId with the same text returns the original message.",
@@ -415,6 +415,12 @@
       "path": "operations/project.source.pick.json",
       "bytes": 1217,
       "sha256": "f63fe97f1b723bcbc78726ebe3e4ad4988ce677172bca0642364c74f3db6de43"
+    },
+    "project.work.read": {
+      "summary": "Person at this machine only: read linked Agent sessions, retained native activity identities, current referenced files and the shared notes document. Source cursors and resource versions remain independent. Does not start an Agent, collector or Host.",
+      "path": "operations/project.work.read.json",
+      "bytes": 17216,
+      "sha256": "08de2224d62a3f0a0105385b301615f0793aa4d797177e908b329e5309ee6263"
     },
     "protocol.describe": {
       "summary": "protocol.describe",

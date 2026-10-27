@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { BrowserApiError, type BrowserClient, type WorkspaceSnapshot } from '../src/browser.js';
 import type { RhoOutput } from '../src/contract.generated.js';
 import { projectName } from './home.js';
+import { SessionProgress } from '@rho-workspace/plugin-agent/ui';
 
 // A conversation the person starts here. Rho holds its input, so this panel is where it
 // continues: the person's messages, the Agent's replies and the steps it took, and how each
@@ -72,7 +73,7 @@ function TurnView({ turn, running, choose, choosing }: { turn: Turn; running: bo
   </li>;
 }
 
-export function AgentConversation({ snapshot, client }: { snapshot: WorkspaceSnapshot; client: BrowserClient }) {
+export function AgentConversation({ snapshot, client, selectedId, onSelected }: { snapshot: WorkspaceSnapshot; client: BrowserClient; selectedId?: string | null; onSelected?: () => void }) {
   const projectId = snapshot.project.id, openKey = 'rho.conversation.open.v1:' + projectId;
   const [openId, setOpenId] = useState<string | null>(() => stored(openKey));
   const draftKey = 'rho.conversation.draft.v1:' + projectId + ':' + (openId ?? 'new'), pendingKey = 'rho.conversation.pending.v1:' + projectId;
@@ -84,6 +85,7 @@ export function AgentConversation({ snapshot, client }: { snapshot: WorkspaceSna
   const summary = list.find(c => c.conversationId === openId);
   const end = useRef<HTMLDivElement>(null), input = useRef<HTMLTextAreaElement>(null);
   useEffect(() => { setDraft(stored(draftKey) ?? ''); }, [draftKey]);
+  useEffect(() => { if (selectedId) { open(selectedId); onSelected?.(); } }, [selectedId]);
   // The open conversation is read again whenever its recorded version changes.
   useEffect(() => {
     if (!openId) { setRead(null); return; }
@@ -149,6 +151,7 @@ export function AgentConversation({ snapshot, client }: { snapshot: WorkspaceSna
         <button onClick={() => open(c.conversationId)}><strong>{c.title}</strong><span>{c.state === 'running' ? 'Answering now' : c.state === 'unknown' ? 'Last message: outcome unknown' : clock(c.lastAt)} · {c.turns} {c.turns === 1 ? 'message' : 'messages'}</span></button>
       </li>)}</ul>}
     </div>}
+    {openId && read?.observation && <details className="conversation-progress"><summary>Session plan & usage</summary><SessionProgress observation={read.observation} /></details>}
     <div className="conversation-composer">
       {waiting && unconfirmed && <p role="alert">Your message was not confirmed. Retry sends the same message once.<button className="small-button" disabled={busy} onClick={() => void deliver(waiting)}>Retry</button></p>}
       {problem && <p role="alert">{problem}</p>}

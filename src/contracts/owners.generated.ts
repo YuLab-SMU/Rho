@@ -14186,6 +14186,296 @@ export const ownerContracts: OwnerContractSnapshot = {
         }
       }
     },
+    "agent-session": {
+      "sessionObservationSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "at": {
+            "type": "string"
+          },
+          "connected": {
+            "type": "boolean"
+          },
+          "historyUpdates": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "info": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "at": {
+                    "type": "string"
+                  },
+                  "origin": {
+                    "enum": [
+                      "initial",
+                      "history",
+                      "live"
+                    ]
+                  },
+                  "title": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "updatedAt": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "at",
+                  "origin"
+                ],
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "omitted": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "plan": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "at": {
+                    "type": "string"
+                  },
+                  "entries": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "content": {
+                          "type": "string"
+                        },
+                        "priority": {
+                          "enum": [
+                            "high",
+                            "medium",
+                            "low"
+                          ]
+                        },
+                        "status": {
+                          "enum": [
+                            "pending",
+                            "in_progress",
+                            "completed"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "content",
+                        "status",
+                        "priority"
+                      ],
+                      "type": "object"
+                    },
+                    "maxItems": 64,
+                    "type": "array"
+                  },
+                  "omitted": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "origin": {
+                    "enum": [
+                      "initial",
+                      "history",
+                      "live"
+                    ]
+                  }
+                },
+                "required": [
+                  "at",
+                  "origin",
+                  "entries",
+                  "omitted"
+                ],
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sequence": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sessionId": {
+            "type": "string"
+          },
+          "source": {
+            "const": "acp"
+          },
+          "tools": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "at": {
+                  "type": "string"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "locations": {
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "line": {
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "path": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "path"
+                    ],
+                    "type": "object"
+                  },
+                  "maxItems": 16,
+                  "type": "array"
+                },
+                "operation": {
+                  "type": "string"
+                },
+                "origin": {
+                  "enum": [
+                    "initial",
+                    "history",
+                    "live"
+                  ]
+                },
+                "outcome": {
+                  "enum": [
+                    "requested",
+                    "returned",
+                    "rejected",
+                    "unknown"
+                  ]
+                },
+                "tool": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "at",
+                "origin",
+                "id",
+                "locations"
+              ],
+              "type": "object"
+            },
+            "maxItems": 64,
+            "type": "array"
+          },
+          "unrepresented": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "updates": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "usage": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "at": {
+                    "type": "string"
+                  },
+                  "cost": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "amount": {
+                            "type": "number"
+                          },
+                          "currency": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "amount",
+                          "currency"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "origin": {
+                    "enum": [
+                      "initial",
+                      "history",
+                      "live"
+                    ]
+                  },
+                  "size": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "used": {
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "at",
+                  "origin",
+                  "used",
+                  "size"
+                ],
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "source",
+          "sessionId",
+          "sequence",
+          "at",
+          "connected",
+          "updates",
+          "historyUpdates",
+          "omitted",
+          "unrepresented",
+          "plan",
+          "usage",
+          "info",
+          "tools"
+        ],
+        "type": "object"
+      }
+    },
     "annotations": {
       "inputs": {
         "annotation.create": {
@@ -17207,7 +17497,7 @@ export const ownerContracts: OwnerContractSnapshot = {
     },
     "agent": {
       "package": "@rho-workspace/plugin-agent",
-      "packageVersion": "0.4.8",
+      "packageVersion": "0.4.9",
       "entry": "./operations",
       "entryPath": "Projects/Rho-plugins/plugins/agent/dist/operations.js",
       "entrySha256": "08bb1c852cb89a17a2e307831ed2df5d6d16cbccaaf2971ec251bb9a1a34261f",
@@ -17217,7 +17507,7 @@ export const ownerContracts: OwnerContractSnapshot = {
     },
     "agent-feedback": {
       "package": "@rho-workspace/plugin-agent",
-      "packageVersion": "0.4.8",
+      "packageVersion": "0.4.9",
       "entry": "./feedback-contract",
       "entryPath": "Projects/Rho-plugins/plugins/agent/dist/feedback-contract.js",
       "entrySha256": "ecb1561d92b5953d2b786d29cfb57f6f8085d214dc1dec76f6e7bd7a5257cb75",
@@ -17227,12 +17517,22 @@ export const ownerContracts: OwnerContractSnapshot = {
     },
     "agent-native": {
       "package": "@rho-workspace/plugin-agent",
-      "packageVersion": "0.4.8",
+      "packageVersion": "0.4.9",
       "entry": "./contract",
       "entryPath": "Projects/Rho-plugins/plugins/agent/dist/contract.js",
       "entrySha256": "9e926081cb755a98d2b00d2a8488d8f4c6d25b3d5f1ec526d334ade633fe8a65",
       "exports": {
         "nativeSchemas": "8e57ac011e0590250cd0e31747f5dd01f585965aae99fd8a7efee549633b9acf"
+      }
+    },
+    "agent-session": {
+      "package": "@rho-workspace/plugin-agent",
+      "packageVersion": "0.4.9",
+      "entry": "./session-contract",
+      "entryPath": "Projects/Rho-plugins/plugins/agent/dist/session-contract.js",
+      "entrySha256": "24df51711a6062cbb984125c90092fa2df847d6a18ecf9380821a430b15110c4",
+      "exports": {
+        "sessionObservationSchema": "4f4dbd72916a41505c631c8abdc5adac89e643e98c89aa8dcedcf7a0652490f2"
       }
     },
     "annotations": {

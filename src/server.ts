@@ -31,6 +31,7 @@ import { exportRun } from './run-export.js';
 import type { nativeActivityLimits, agentDeliveryLimits, RunContext } from '@rho-workspace/plugin-agent';
 import { ownerContracts } from './contracts/owners.generated.js';
 import { Conversations, conversationLimits, type ConversationConfig } from './conversations.js';
+import { projectWork } from './project-work.js';
 export interface FeedbackTransport { accept(envelope: any): Promise<any>; lookup(envelope: any): Promise<any> }
 export interface NativeAdapterRegistration {
   projectId: string; taskId: string; registrationId: string; principal: string; adapterPrincipal: string;
@@ -778,6 +779,24 @@ export class RhoService {
     }
     // The person at this machine talks to a conversation Rho started; Agents and narrower links
     // cannot start one, and an Agent started this way cannot start another.
+    if (method === 'project.work.read') {
+      requireThat(principal.id === localBrowserId, 'scope', 'Project work is available to the person at this machine.');
+      const agent = (await new Capabilities(this.plugins, p).state()).enabled.includes('agent') ? this.plugins.optional('agent') : null;
+      let native: Awaited<ReturnType<NonNullable<typeof agent>['readAgentActivity']>> | null = null;
+      if (agent) {
+        const capability = await this.bridge.capability(p.root);
+        if (capability.exitCode === 0 && capability.reply.value?.limits?.activity) {
+          native = await agent.readAgentActivity(async (command, args) => {
+            const result = await this.bridge.call(p.root, command, 'rho-agent-observe', undefined, args);
+            requireThat(result.exitCode === 0 && result.reply.ok, 'unavailable', 'Native activity is unavailable.');
+            return result.reply.value;
+          }).catch(() => null);
+        }
+      }
+      return projectWork({ project: p, cursor: (await this.events(p)).cursor, conversations: await this.conversations.work(p, b.limit),
+        documents: await owners.documentSummaries(), activity: (await this.projectActivity(p)).entries,
+        native, inspect: agent?.observeSessionFiles });
+    }
     if (method.startsWith('conversation.')) {
       requireThat(principal.id === localBrowserId, 'unauthorized', 'Conversations started in Rho belong to the person at this machine. Open Rho in a browser on this machine.');
       if (method === 'conversation.read') return this.conversations.read(p, b);

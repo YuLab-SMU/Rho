@@ -101,6 +101,301 @@
         ],
         "additionalProperties": true
       },
+      "observation": {
+        "anyOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "at": {
+                "type": "string"
+              },
+              "connected": {
+                "type": "boolean"
+              },
+              "historyUpdates": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "info": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "at": {
+                        "type": "string"
+                      },
+                      "origin": {
+                        "enum": [
+                          "initial",
+                          "history",
+                          "live"
+                        ]
+                      },
+                      "title": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "updatedAt": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "required": [
+                      "at",
+                      "origin"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "omitted": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "plan": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "at": {
+                        "type": "string"
+                      },
+                      "entries": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "content": {
+                              "type": "string"
+                            },
+                            "priority": {
+                              "enum": [
+                                "high",
+                                "medium",
+                                "low"
+                              ]
+                            },
+                            "status": {
+                              "enum": [
+                                "pending",
+                                "in_progress",
+                                "completed"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "content",
+                            "status",
+                            "priority"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 64,
+                        "type": "array"
+                      },
+                      "omitted": {
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "origin": {
+                        "enum": [
+                          "initial",
+                          "history",
+                          "live"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "at",
+                      "origin",
+                      "entries",
+                      "omitted"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "sequence": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "sessionId": {
+                "type": "string"
+              },
+              "source": {
+                "const": "acp"
+              },
+              "tools": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "at": {
+                      "type": "string"
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "locations": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "line": {
+                            "minimum": 0,
+                            "type": "integer"
+                          },
+                          "path": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "path"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 16,
+                      "type": "array"
+                    },
+                    "operation": {
+                      "type": "string"
+                    },
+                    "origin": {
+                      "enum": [
+                        "initial",
+                        "history",
+                        "live"
+                      ]
+                    },
+                    "outcome": {
+                      "enum": [
+                        "requested",
+                        "returned",
+                        "rejected",
+                        "unknown"
+                      ]
+                    },
+                    "tool": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "at",
+                    "origin",
+                    "id",
+                    "locations"
+                  ],
+                  "type": "object"
+                },
+                "maxItems": 64,
+                "type": "array"
+              },
+              "unrepresented": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "updates": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "usage": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "at": {
+                        "type": "string"
+                      },
+                      "cost": {
+                        "anyOf": [
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "amount": {
+                                "type": "number"
+                              },
+                              "currency": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "amount",
+                              "currency"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "origin": {
+                        "enum": [
+                          "initial",
+                          "history",
+                          "live"
+                        ]
+                      },
+                      "size": {
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "used": {
+                        "minimum": 0,
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "at",
+                      "origin",
+                      "used",
+                      "size"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "source",
+              "sessionId",
+              "sequence",
+              "at",
+              "connected",
+              "updates",
+              "historyUpdates",
+              "omitted",
+              "unrepresented",
+              "plan",
+              "usage",
+              "info",
+              "tools"
+            ],
+            "type": "object"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
       "first": {
         "type": "integer",
         "minimum": 0

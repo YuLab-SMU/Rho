@@ -13,7 +13,7 @@ import { chromium } from '@playwright/test';
 
 // The harness and Chrome stay in the checkout; installed mode must load every
 // application entry, browser asset and Agent dependency from the selected package.
-const { values } = parseArgs({ options: { 'package-root': { type: 'string' } } });
+const { values } = parseArgs({ options: { 'package-root': { type: 'string' }, work: { type: 'boolean', default: false } } });
 const checkout = fileURLToPath(new URL('..', import.meta.url));
 const packageRoot = await fs.realpath(values['package-root'] ?? checkout);
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -119,7 +119,7 @@ print(name+' completed once')
   // Deliver the first message but lose its HTTP acknowledgement. Retry must reuse it.
   let lostAck;
   await page.route('**/api/v2/conversation.start', async route => { const response = await route.fetch(); lostAck = await response.json(); await route.abort('failed'); }, { times: 1 });
-  await say('Call rho_index once to inspect shared Rho capabilities, then use Read to read input.txt. Tell me alpha plus beta. Remember the phrase violet river 你好 for the next message. Do not change files. Answer briefly.');
+  await say((values.work ? 'First use native planning tools (TodoWrite or TaskCreate/TaskUpdate) to report a two-step plan: inspect project capabilities, then read input and calculate. Update the plan as you finish. ' : '') + 'Call rho_index once to inspect shared Rho capabilities, then use Read to read input.txt. Tell me alpha plus beta. Remember the phrase violet river 你好 for the next message. Do not change files. Answer briefly.');
   await panel().getByRole('button', { name: 'Retry', exact: true }).waitFor(); await snap('lost-ack');
   conversationId = lostAck.value.conversation.conversationId;
   await panel().getByRole('button', { name: 'Retry', exact: true }).click();
@@ -172,8 +172,51 @@ print(name+' completed once')
   assert.match(restarted.steps.filter(s => s.kind === 'text').map(s => s.text).join(''), /violet river/);
   assert.equal((await record()).acpSessionId, original.acpSessionId);
   report.checks.push('service restart read existing messages without execution, then loaded the original session for a deliberate next message');
+  if (values.work) {
+    await panel().getByRole('button', { name: 'Close Agent', exact: true }).click();
+    await page.getByRole('region', { name: 'Project work', exact: true }).waitFor();
+    let work = await call('project.work.read');
+    const session = work.sessions.find(s => s.conversationId === conversationId);
+    assert.ok(session.observation.plan?.entries.length, 'real native plan is represented');
+    assert.ok(session.observation.usage, 'real ACP context usage is represented');
+    assert.ok(session.observation.historyUpdates > 0, 'loaded history is distinguished');
+    assert.ok(work.files.some(f => f.path === 'notes.txt' && f.state === 'observed'), 'native file locations link to independent file observation');
+    assert.equal(await page.getByText('No work yet', { exact: true }).count(), 0);
+    await snap('project-work-before-notes');
+    await page.getByRole('button', { name: 'Open shared notes', exact: true }).click();
+    const editor = page.locator('.cm-content:visible'); await editor.waitFor();
+    await editor.click(); await page.keyboard.insertText('Human decision: use the label teal river 你好 and the value 18.\n');
+    const save = page.getByRole('button', { name: 'Save document', exact: true });
+    await until(() => save.isEnabled(), Boolean, 'shared notes acknowledged'); await save.click();
+    await until(() => fs.readFile(path.join(project.root, 'project-notes.md'), 'utf8').catch(() => ''), s => s.includes('teal river 你好'), 'shared notes saved');
+    await snap('shared-notes-saved');
+    await page.getByRole('button', { name: 'Overview', exact: true }).click();
+    await page.getByRole('button', { name: 'Continue conversation', exact: true }).click();
+    await panel().locator('#conversation-input').waitFor();
+    await say('The human saved project-notes.md. Read that file now. Use native planning tools to report a two-step plan: read the human decision, then create work-result.txt. Write work-result.txt containing exactly the human-selected label and value from the notes, then mark both plan entries complete. Do not edit project-notes.md.');
+    assert.equal((await ended(8, 'human-notes-applied')).state, 'completed');
+    const result = await fs.readFile(path.join(project.root, 'work-result.txt'), 'utf8');
+    assert.match(result, /teal river 你好/); assert.match(result, /18/);
+    work = await call('project.work.read');
+    const actual = work.files.find(f => f.path === 'work-result.txt');
+    assert.equal(actual?.sha256, sha(await fs.readFile(path.join(project.root, 'work-result.txt'))));
+    assert.ok(work.notes.documentId); assert.equal(work.notes.dirty, false);
+    assert.equal((await call('observation.snapshot')).documents.filter(d => d.path === 'project-notes.md').length, 1);
+    report.work = work;
+    await panel().getByRole('button', { name: 'Close Agent', exact: true }).click();
+    await until(() => page.locator('.work-files').innerText().catch(() => ''), s => s.includes('work-result.txt'), 'result reference visible');
+    for (const width of [1440, 768, 390]) {
+      await page.setViewportSize({ width, height: 900 }); await snap('project-work-' + width);
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+    }
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.locator('.work-files').getByRole('button', { name: 'work-result.txt', exact: true }).click();
+    await page.getByRole('tab', { name: 'work-result.txt', exact: true, selected: true }).waitFor();
+    await until(() => page.locator('.cm-content:visible').innerText(), text => text.trim() === result.trim(), 'referenced result contents'); await snap('referenced-result-opened');
+    report.checks.push('real ACP plan, usage and replay projection; human saved shared notes in Documents; the same Claude session read the decision and wrote verified file bytes; project view rendered at three widths and navigation selected the result');
+  }
   await page.setViewportSize({ width: 390, height: 844 }); await page.reload(); await openPanel();
-  await panel().locator('.turn').nth(6).waitFor(); await snap('phone-recovered');
+  await panel().locator('.turn').nth(values.work ? 7 : 6).waitFor(); await snap('phone-recovered');
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
   assert.deepEqual(report.browserErrors, []);
   await assert.rejects(fs.stat(path.join(project.root, '.rho/host.sock')), { code: 'ENOENT' });
