@@ -22,7 +22,8 @@
   "files": [
     "dist",
     "protocol",
-    "fixtures",
+    "fixtures/states.json",
+    "fixtures/README.md",
     "vendor",
     "LICENSE",
     "scripts/acceptance.mjs",
@@ -39,7 +40,6 @@
     "scripts/execution-acceptance.mjs",
     "scripts/person-files-acceptance.mjs",
     "scripts/interaction-acceptance.mjs",
-    "scripts/base-r-episode.mjs",
     "scripts/browser-checks.mjs",
     "scripts/frontend-acceptance.mjs",
     "scripts/ui-plugin.mjs",

@@ -24,3 +24,9 @@ credentials are omitted. They do not establish browser input, layout or renderin
 acceptance. A new capture must select retained actual experiment records
 explicitly with `scripts/capture-fixtures.mjs`; builds do not regenerate evidence
 or overwrite the retained capture.
+
+The application package includes only `states.json` and this README from this
+directory. The neighboring `base-r-airquality/` project and its
+`scripts/base-r-episode.mjs` driver are source-checkout acceptance inputs. They
+remain available in the repository and are excluded from the application package,
+whose no-project-recipe check stays in effect.

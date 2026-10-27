@@ -19,7 +19,7 @@ try {
   const selected = composition.plugins.selected;
   assert.ok([['documents', 'files'], ['files', 'r']].some(ids => JSON.stringify(ids) === JSON.stringify(selected)), 'Unsupported reduced composition.');
   assert.deepEqual((await fs.readdir(path.join(pkg, 'node_modules/@rho-workspace'))).sort(), ['plugin-contracts', ...selected.map(id => 'plugin-' + id)].sort());
-  for (const optional of ['csv-parse', '@modelcontextprotocol/sdk']) await assert.rejects(fs.stat(path.join(pkg, 'node_modules', optional)), { code: 'ENOENT' });
+  for (const optional of ['csv-parse', '@modelcontextprotocol/sdk', '@agentclientprotocol/sdk', '@agentclientprotocol/claude-agent-acp', '@anthropic-ai/claude-agent-sdk']) await assert.rejects(fs.stat(path.join(pkg, 'node_modules', optional)), { code: 'ENOENT' });
   const script = `import assert from 'node:assert/strict';
 import path from 'node:path';
 import * as fs from 'node:fs/promises';
@@ -62,7 +62,7 @@ try {
   const file = path.join(root, 'check.mjs'); await fs.writeFile(file, script);
   const checked = spawnSync(process.execPath, [file], { cwd: root, encoding: 'utf8', timeout: 30000 });
   assert.equal(checked.status, 0, checked.stderr);
-  report.checks.push('Only contracts/' + selected.join('/') + ' installed; no CSV parser, MCP SDK, unselected plugin or aggregate package.');
+  report.checks.push('Only contracts/' + selected.join('/') + ' installed; no CSV parser, MCP/ACP/Claude SDK, Claude ACP adapter, unselected plugin or aggregate package.');
   report.checks.push(selected.includes('documents')
     ? 'Missing optional packages report unavailable; Unicode draft/edit/export and observations work without R or Host startup.'
     : 'Exported object reads/export work without Documents, requirements or R; execution is unavailable and no request or Host is created.');

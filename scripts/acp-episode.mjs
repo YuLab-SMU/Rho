@@ -7,10 +7,38 @@ import path from 'node:path';
 import os from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { parseArgs } from 'node:util';
 import { chromium } from '@playwright/test';
-import { RhoService } from '../dist/server.js';
-import { RhoClient } from '../dist/client.js';
-import { BrowserClient } from '../dist/browser.js';
+
+// The harness and Chrome stay in the checkout; installed mode must load every
+// application entry, browser asset and Agent dependency from the selected package.
+const { values } = parseArgs({ options: { 'package-root': { type: 'string' } } });
+const checkout = fileURLToPath(new URL('..', import.meta.url));
+const packageRoot = await fs.realpath(values['package-root'] ?? checkout);
+const sha = bytes => createHash('sha256').update(bytes).digest('hex');
+const runtime = { mode: values['package-root'] ? 'installed' : 'source', packageRoot, entries: {}, dependencies: {} };
+if (values['package-root']) {
+  for (const directory of [checkout, path.resolve(checkout, '../Rho-plugins'), path.resolve(checkout, '../Rho-core')]) {
+    assert.ok(!packageRoot.startsWith(await fs.realpath(directory) + path.sep), 'Installed acceptance must run outside all source checkouts');
+    assert.notEqual(packageRoot, await fs.realpath(directory));
+  }
+  runtime.composition = JSON.parse(await fs.readFile(path.join(packageRoot, 'vendor/composition.json'), 'utf8'));
+  assert.equal(runtime.composition.platform, process.platform + '-' + process.arch);
+  for (const name of ['@rho-workspace/plugin-agent', '@agentclientprotocol/sdk', '@agentclientprotocol/claude-agent-acp', '@anthropic-ai/claude-agent-sdk', '@modelcontextprotocol/sdk']) {
+    const directory = await fs.realpath(path.join(packageRoot, 'node_modules', name));
+    assert.ok(directory.startsWith(packageRoot + path.sep), 'Installed dependency escaped the package: ' + name);
+    runtime.dependencies[name] = JSON.parse(await fs.readFile(path.join(directory, 'package.json'), 'utf8')).version;
+  }
+  assert.equal(sha(await fs.readFile(path.join(packageRoot, 'vendor/rho-core'))), runtime.composition.core.artifactSha256);
+}
+for (const name of ['server', 'client', 'browser']) {
+  const file = await fs.realpath(path.join(packageRoot, 'dist', name + '.js'));
+  assert.ok(file.startsWith(packageRoot + path.sep)); runtime.entries[name] = { path: file, sha256: sha(await fs.readFile(file)) };
+}
+const { RhoService } = await import(pathToFileURL(runtime.entries.server.path).href);
+const { RhoClient } = await import(pathToFileURL(runtime.entries.client.path).href);
+const { BrowserClient } = await import(pathToFileURL(runtime.entries.browser.path).href);
 
 const evidence = path.resolve(process.env.RHO_ACP_EVIDENCE ?? 'work/acp-episode/' + new Date().toISOString().replace(/[:.]/g, '-'));
 await fs.mkdir(evidence, { recursive: true, mode: 0o700 });
@@ -21,13 +49,13 @@ const model = 'westlakehpc/deepseek-v4.1-flash';
 const env = { CLAUDE_CONFIG_DIR: configDir, CLAUDE_CODE_DISABLE_AUTO_MEMORY: '1', CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION: 'false', ANTHROPIC_MODEL: model };
 for (const k of ['ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_API_KEY', 'ANTHROPIC_BASE_URL']) if (auth[k]) env[k] = auth[k];
 const claude = process.env.RHO_CLAUDE ?? path.join(os.homedir(), '.local/bin/claude');
-const options = { root, stateDir: path.join(root, '.service'), coreBinary: path.resolve('../Rho-core/target/debug/rho-core'), rscript: 'Rscript', claude,
+const options = { root, stateDir: path.join(root, '.service'), coreBinary: values['package-root'] ? path.join(packageRoot, 'vendor/rho-core') : path.resolve(checkout, '../Rho-core/target/debug/rho-core'), rscript: 'Rscript', claude,
+  webRoot: path.join(packageRoot, 'dist/web'),
   claudeAcp: { env, model, settingSources: [], allowedTools: ['Read'] }, conversations: { maxAgentTurns: 16, turnWallMs: 180000, stopGraceMs: 15000 } };
-const sha = bytes => createHash('sha256').update(bytes).digest('hex');
 const report = { passed: false, root, provider: 'Westlake HPC', model, startedAt: new Date().toISOString(), checks: [], screenshots: [], browserErrors: [],
   claudeVersion: spawnSync(claude, ['--version'], { encoding: 'utf8' }).stdout.trim(), node: process.version,
-  sources: Object.fromEntries(['.', '../Rho-plugins', '../Rho-core'].map(dir => [dir, { commit: spawnSync('git', ['-C', dir, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).stdout.trim(), dirty: !!spawnSync('git', ['-C', dir, 'status', '--porcelain', '--untracked-files=no'], { encoding: 'utf8' }).stdout.trim() }])),
-  web: JSON.parse(await fs.readFile('dist/web/composition.json', 'utf8')), scriptSha256: sha(await fs.readFile(new URL(import.meta.url))) };
+  sources: Object.fromEntries(['.', '../Rho-plugins', '../Rho-core'].map(dir => [dir, { commit: spawnSync('git', ['-C', path.resolve(checkout, dir), 'rev-parse', 'HEAD'], { encoding: 'utf8' }).stdout.trim(), dirty: !!spawnSync('git', ['-C', path.resolve(checkout, dir), 'status', '--porcelain', '--untracked-files=no'], { encoding: 'utf8' }).stdout.trim() }])),
+  runtime, web: JSON.parse(await fs.readFile(path.join(packageRoot, 'dist/web/composition.json'), 'utf8')), scriptSha256: sha(await fs.readFile(new URL(import.meta.url))) };
 let service, browser, context, page, project, person, conversationId, shot = 0;
 const nativePids = new Set();
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -99,6 +127,12 @@ print(name+' completed once')
   assert.match(first.steps.filter(s => s.kind === 'text').map(s => s.text).join(''), /18/);
   assert.ok(first.steps.some(s => s.tool === 'mcp__rho__rho_index' && s.outcome === 'returned'));
   const original = await record(); report.acpSessionId = original.acpSessionId; report.adapter = original.adapter;
+  if (values['package-root']) {
+    const command = spawnSync('ps', ['-p', String(first.pid), '-o', 'command='], { encoding: 'utf8' });
+    assert.equal(command.status, 0);
+    assert.ok(command.stdout.includes(path.join(packageRoot, 'node_modules/@agentclientprotocol/claude-agent-acp/dist/index.js')), 'The real ACP adapter must come from the installed package');
+    report.checks.push('installed application entries, WebUI, ACP adapter and dependencies used the selected package outside source checkouts');
+  }
   assert.equal(original.nativeSessionId, null); report.checks.push('lost acknowledgement retained one original message; real native Read and Rho MCP completed');
   await say('Call rho_index again once, then write the remembered phrase and sum to notes.txt using Write. Include the original Chinese characters. Do not read input.txt again.');
   const second = await ended(2, 'second-answer'); assert.equal(second.state, 'completed');
