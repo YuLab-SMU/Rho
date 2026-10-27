@@ -4,9 +4,12 @@ Updated: 2026-10-27.
 
 ## Current focus
 
-Claude ACP through Agent 0.4.8 now passes real Westlake HPC multi-turn, cancellation
-and recovery in an assembled installation outside the checkouts. The
-[ACP episode](ACP-EPISODE.md) records the candidate and checks. Core stays unchanged.
+The user's review reopened the broader Agent observation and shared-workspace goal.
+Claude ACP through Agent 0.4.8 passes transport, cancellation, recovery and installed
+delivery checks, but that does not close the observation/workspace loop. Session
+plans/usage, cross-source work relationships and shared progress remain missing;
+the [scope audit](ACP-EPISODE.md#scope-audit-after-the-users-review) records the gaps.
+Core stays unchanged.
 
 The user asked for an optimization of the home, projects and empty-project screens
 on 2026-10-27, supplying three reference screens for layout weight and hierarchy.

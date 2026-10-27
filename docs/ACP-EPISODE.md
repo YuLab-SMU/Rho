@@ -187,6 +187,48 @@ Rho retained the original prompt's confirmed cancellation and the measured proce
 exit; model prose is not execution evidence. No Core Host, scientific analysis,
 provider sign-in, registry publication or signed release is part of this acceptance.
 
+## Scope audit after the user's review
+
+The user pointed out that the intended Agent runtime → Rho observation and
+coordination → shared workspace loop is not established by the checks above.
+That assessment is correct. The source and installed runs accept the Claude
+conversation driver and its delivery, not the complete observation/workspace goal.
+The earlier statement that the remaining rounds were complete referred only to
+packaging and installation; it did not settle this broader goal.
+
+- Agent 0.4.8's `observe()` consumes message chunks and tool-call updates only
+  during an active prompt. The pinned SDK 2.0.2 has 14 stable v1 update variants.
+  Plans, usage and session metadata are not retained or presented. Counting all
+  variants is not itself a product acceptance criterion; thought chunks and raw
+  vendor diagnostics were deliberately excluded.
+- Simply removing the prompt-phase condition is insufficient. ACP
+  [session loading](https://agentclientprotocol.com/protocol/v1/session-setup)
+  replays history through `session/update`. History, new live updates and gaps
+  need to remain distinguishable, without changing an ended turn or implying
+  that a missing observation proves a process stopped. ACP
+  [plans](https://agentclientprotocol.com/protocol/v1/agent-plan) replace the
+  previous complete plan; they are the Agent's reported intentions/progress,
+  not independent evidence that project outputs are complete.
+- External Claude/dsh activity still uses its existing transcript/Core activity
+  path. The ACP channel and external observations are not joined into one work
+  read model. Passive attachment to another client's running session has not
+  been demonstrated. `session/load` is not evidence of that capability; the
+  original assessment also called for complementary independent observations.
+- `observation.snapshot` already includes a project event cursor, and
+  `ObservationClient` uses it for rereads and reconnects. It still mainly assembles
+  owner summaries without connecting an Agent plan to actual file changes,
+  results and human responses. A shared project view does not require a global
+  resource version or global scientific revision.
+- Only Claude has a conversation backend. That satisfies the selected first-client
+  scope, but does not prove interchangeable Agent providers. Documents supplies
+  buffers, versions and conflicts for editable content; no shared-notes workflow
+  or work-progress surface has been exercised as part of the ACP episode.
+
+This audit changes the completion claim, not the runtime. It does not accept a
+new progress model, external ACP attachment, a second Agent or a shared workspace
+implementation. Those require their own real project observations; the Core
+boundary and the existing source ownership remain unchanged.
+
 ## Resource limits
 
 `conversationLimits` can be set through Rho's `--limits` configuration. These are
