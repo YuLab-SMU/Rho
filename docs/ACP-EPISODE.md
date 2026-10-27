@@ -107,6 +107,24 @@ It never starts a Host, signs in to a provider or edits user configuration.
 `RHO_ACP_EVIDENCE` selects another evidence directory. The test chooses native
 allow-once options only for its own disposable write/gate commands.
 
+For an installed run, [assemble the package](HEADLESS.md#budgets-verification-and-assembly)
+and install its tarball into a new directory outside all three source checkouts:
+
+```sh
+npm install --prefix /absolute/new-install --omit=dev --ignore-scripts \
+  --no-audit --no-fund /absolute/rho-workspace-local-0.4.0.tgz
+npm run acceptance:acp -- --package-root \
+  /absolute/new-install/node_modules/@rho-workspace/local
+```
+
+The harness and Playwright remain in the checkout. The selected installed package
+supplies the service, clients, WebUI, Agent and ACP dependencies. The driver rejects
+checkout paths and dependencies escaping that package, checks the bundled Core
+digest, and verifies that the running ACP process uses its installed adapter.
+The report records package composition, entry hashes and dependency versions.
+`node scripts/install-smoke.mjs /absolute/rho-workspace-local-0.4.0.tgz` separately
+checks the installed CLI launcher and homepage in Chrome.
+
 Four Agent owner tests cover real stdio fault fixtures. Three application ACP tests
 cover message identity, cached grants, read-only restart, permission scope and
 connection eviction; two existing CLI tests cover compatibility. The owner suite
@@ -118,11 +136,56 @@ record cannot be replaced, and can be retried after storage recovers. The focuse
 ACP/CLI/style checks passed again. Agent installs and imports independently outside
 the checkouts, including its conversation entry and pinned adapter.
 
-The application assembly included both ACP packages but failed its existing
+## Assembly and installation rounds
+
+The first application assembly included both ACP packages but failed its existing
 no-project-recipe check on `fixtures/base-r-airquality/analysis.R` (introduced before
-this change). `work/acp-assembly.log` and the unaccepted stage are retained. No
-installed full-application or binary delivery acceptance is claimed; repairing that
-earlier fixture/packaging mismatch remains separate from ACP source acceptance.
+ACP). `work/acp-assembly.log` and that unaccepted stage are retained. The package
+manifest now lists only the inert `states.json` and its README; the base-R project
+and its driver remain available for source-checkout acceptance. The no-recipe
+guard is unchanged.
+
+The development assembly in `work/acp-assembly-round2/` passed with an explicit
+source override. Its installed CLI used the bundled Core, served the homepage at
+1440, 1024, 768 and 390 CSS pixels and left no Host behind
+(`work/acp-install-smoke-round2/report.json`). A separate installation outside the
+checkouts passed all seven real Westlake messages and the installed-path check
+(`work/acp-installed-probe/report.json`). The permission, stopped, unknown and
+resumed screens were inspected; the inherited raw-Markdown limitation remains.
+
+The Documents/Files-only assembly in `work/acp-without-agent/` also installed and
+ran. Agent, ACP SDK, Claude ACP adapter, Claude SDK and MCP SDK were physically
+absent; Unicode editing, export and observations worked without R or a Host.
+The acceptance result is retained in `work/acp-without-agent-install.log` and its
+reported temporary `report.json`. Focused ACP/CLI regression checks passed 5/5
+(`work/acp-install-regression.log`); the earlier full-suite scope above is reused.
+
+The final unsigned macOS arm64 candidate is
+`work/acp-delivery/rho-workspace-local-0.4.0.tgz` (132,419,362 bytes, 4,700 entries).
+Its SHA-256 is
+`7a736d640eff1fbf499f037eeeaa916bdcffd9cc270face4b02fba393227d8b8`.
+`work/acp-delivery/composition.json` records the complete source, artifact and
+production-lock identities; all selected build inputs have no local override:
+
+- Rho: `84fe1e6801740d2355cc23eca9da85f4c77405cb`.
+- Rho-plugins: `261b5d68b55f3dbdba73332ea323e39b9e1c97d8`, Agent 0.4.8.
+- Core: `4f5bed8631e15acad44cc86b63ea4779ab8af342`, existing binary SHA-256
+  `434a92fced13595d281b1f9e2d6d49cf9fa7c8a451da08aa3c1ba86cec85eab3`.
+
+That exact candidate passed the CLI/homepage check again
+(`work/acp-install-smoke-final/report.json`) and a fresh installed Westlake run
+(`work/acp-installed-final/report.json`): eight checks, seven turns ending
+completed/completed/completed/stopped/unknown/completed/completed, the original
+session ID after both recoveries, and no duplicate native dispatch. The permission,
+offline, stopped, unknown and mobile recovery screenshots were inspected. All three
+owned ACP process IDs had exited after cleanup. `work/acp-delivery/verification.json`
+associates both installation results with the same tarball digest and unchanged Core.
+
+In the final resumed reply, Claude described the cancelled command as rejected
+before execution even though the gate's entry marker and PID proved it had started.
+Rho retained the original prompt's confirmed cancellation and the measured process
+exit; model prose is not execution evidence. No Core Host, scientific analysis,
+provider sign-in, registry publication or signed release is part of this acceptance.
 
 ## Resource limits
 

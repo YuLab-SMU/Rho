@@ -4,9 +4,9 @@ Updated: 2026-10-27.
 
 ## Current focus
 
-Claude ACP is now connected through Agent 0.4.8, with real Westlake HPC multi-turn,
-cancellation and recovery evidence in the [ACP episode](ACP-EPISODE.md). Core stays
-unchanged. The earlier interface work below remains separate.
+Claude ACP through Agent 0.4.8 now passes real Westlake HPC multi-turn, cancellation
+and recovery in an assembled installation outside the checkouts. The
+[ACP episode](ACP-EPISODE.md) records the candidate and checks. Core stays unchanged.
 
 The user asked for an optimization of the home, projects and empty-project screens
 on 2026-10-27, supplying three reference screens for layout weight and hierarchy.
@@ -164,8 +164,9 @@ Only this machine's browser can answer a native permission request.
 - Checks: Rho 188/188 with the existing Core binary, Agent 80/80, generated contracts
   and builds pass. Agent 0.4.8 installs/imports outside the checkouts with its pinned
   ACP dependencies. Initial missing-binary/style failures remain in the episode.
-- Full application packaging still hits the pre-existing base-R fixture exclusion;
-  its failed assembly is retained. This is source acceptance, not binary delivery.
+- The base-R fixture packaging mismatch is fixed; its failed assembly is retained.
+  A committed unsigned macOS arm64 candidate passes installed CLI/homepage and
+  seven-turn ACP acceptance. The Agent-free package and focused ACP/CLI 5/5 pass.
 - Core remains at `4f5bed8631e15acad44cc86b63ea4779ab8af342`, unchanged. Screens at
   1440/390 CSS pixels were inspected; automated paths do not establish human usability.
 - The earlier [CLI episode](CONVERSATION-EPISODE.md) retains its measurements,
