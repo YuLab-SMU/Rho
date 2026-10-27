@@ -1,6 +1,6 @@
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
-import type { AgentConversation, AgentPermission, ConversationStep, ConversationEvent, ClaudeAcpOptions, SessionObservation } from '@rho-workspace/plugin-agent/conversation';
+import type { AgentConversation, AgentPermission, ConversationStep, ConversationEvent, ClaudeAcpOptions, CodexAcpOptions, SessionObservation } from '@rho-workspace/plugin-agent/conversation';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { atomicJson, canonical, digest, Fault, now, readJson, requireThat } from '@rho-workspace/plugin-contracts';
@@ -42,7 +42,7 @@ export const conversationLimits = {
 type StopReason = 'person' | 'closing' | 'wall-limit' | 'output-limit' | 'line-limit' | 'identity';
 type Step = ConversationStep;
 interface Permission extends AgentPermission { state: 'pending' | 'selected' | 'cancelled'; selected?: string }
-export interface ConversationConfig { backend?: 'claude-acp' | 'claude-cli'; claudeAcp?: Omit<ClaudeAcpOptions, 'cwd' | 'mcpServers' | 'limits' | 'sessionId' | 'claude' | 'observation' | 'observe'> }
+export interface ConversationConfig { backend?: 'claude-acp' | 'codex-acp' | 'claude-cli'; codex?: string; codexAcp?: Omit<CodexAcpOptions, 'cwd' | 'mcpServers' | 'limits' | 'sessionId' | 'codex' | 'observation' | 'observe'>; claudeAcp?: Omit<ClaudeAcpOptions, 'cwd' | 'mcpServers' | 'limits' | 'sessionId' | 'claude' | 'observation' | 'observe'> }
 interface Turn {
   id: string; changeId: string; requestDigest: string; by: string; text: string; sentAt: string;
   state: 'running' | 'completed' | 'failed' | 'stopped' | 'unknown'; startedAt: string | null; endedAt: string | null; pid: number | null; model: string | null;
@@ -52,15 +52,15 @@ interface Turn {
   problem: string | null; permissions?: Permission[];
 }
 interface Conversation {
-  format: 1 | 2; backend?: 'claude-acp' | 'claude-cli'; acpSessionId?: string; adapter?: { name: string; version?: string }; protocolVersion?: number; id: string; changeId: string; requestDigest: string; createdAt: string; createdBy: string; updatedAt: string; version: number;
-  client: 'claude-code'; nativeSessionId: string | null; confirmed: boolean; principal: string | null; title: string; turns: Turn[];
+  format: 1 | 2; backend?: 'claude-acp' | 'codex-acp' | 'claude-cli'; acpSessionId?: string; adapter?: { name: string; version?: string }; protocolVersion?: number; id: string; changeId: string; requestDigest: string; createdAt: string; createdBy: string; updatedAt: string; version: number;
+  client: 'claude-code' | 'codex'; nativeSessionId: string | null; confirmed: boolean; principal: string | null; title: string; turns: Turn[];
   observation?: SessionObservation;
 }
 interface Summary { conversationId: string; changeId: string; requestDigest: string; title: string; client: string; principal: string | null; createdAt: string; updatedAt: string; version: number; turns: number; state: string; lastAt: string }
 interface Live { project: Project; conversation: Conversation; turn: Turn; controller: AbortController; stop(reason: StopReason, by: string): void; done: Promise<void> }
 export interface ConversationPorts {
   // The project's Agent grant for this conversation, written to a private connection file.
-  grant(project: Project, conversation: { id: string; title: string }): Promise<{ file: string; principal: string }>;
+  grant(project: Project, conversation: { id: string; title: string; client: string }): Promise<{ file: string; principal: string }>;
   directory(project: Project): Promise<string>;
   changed(project: Project, conversationId: string): Promise<void>;
 }
@@ -82,7 +82,7 @@ export class Conversations {
   private permissions = new Map<string, { permission: Permission; resolve(choice: string | null): void }>();
   constructor(private ports: ConversationPorts, public binary = 'claude', limits: Partial<typeof conversationLimits> = {}, private config: ConversationConfig = {}) {
     this.limits = { ...conversationLimits, ...limits };
-    requireThat(!config.backend || ['claude-acp', 'claude-cli'].includes(config.backend), 'invalid', 'Choose claude-acp or claude-cli.');
+    requireThat(!config.backend || ['claude-acp', 'codex-acp', 'claude-cli'].includes(config.backend), 'invalid', 'Choose claude-acp, codex-acp or claude-cli.');
   }
 
   private serial<T>(key: string, run: () => Promise<T>) {
@@ -148,7 +148,7 @@ export class Conversations {
   }
   private capacity() {
     requireThat(!this.closing, 'unavailable', 'Rho is closing. Nothing was sent.');
-    requireThat(this.live.size < this.limits.maxRunning, 'limit', `Claude Code is already answering ${this.live.size} messages here. Wait for one to finish.`, { limit: 'maxRunning', maximum: this.limits.maxRunning });
+    requireThat(this.live.size < this.limits.maxRunning, 'limit', `Agents are already answering ${this.live.size} messages here. Wait for one to finish.`, { limit: 'maxRunning', maximum: this.limits.maxRunning });
   }
   private turn(changeId: string, requestDigest: string, by: string, text: string, index: number): Turn {
     return { id: 't' + index, changeId, requestDigest, by, text, sentAt: now(), state: 'running', startedAt: null, endedAt: null, pid: null, model: null, stop: null, exit: null, steps: [], omitted: 0, retry: null, result: null, problem: null };
@@ -176,8 +176,9 @@ export class Conversations {
   }
   // The caller holds the request identity: a repeat with the same words returns the original
   // conversation or message and starts nothing; changed words under that identity are refused.
-  async start(project: Project, by: string, input: { changeId: string; text: string }) {
-    const text = this.message(input.text), requestDigest = digest(canonical({ text }));
+  async start(project: Project, by: string, input: { changeId: string; text: string; backend?: 'claude-acp' | 'codex-acp' }) {
+    requireThat(!input.backend || ['claude-acp', 'codex-acp'].includes(input.backend), 'invalid', 'Choose Claude Code or Codex.');
+    const text = this.message(input.text), requestDigest = digest(canonical({ text, ...(input.backend ? { backend: input.backend } : {}) }));
     return this.serial(project.id, async () => {
       const index = await this.index(project), existing = index.conversations.find(x => x.changeId === input.changeId);
       if (existing) {
@@ -186,8 +187,8 @@ export class Conversations {
       }
       requireThat(index.conversations.length < this.limits.maxConversations, 'limit', `This project keeps at most ${this.limits.maxConversations} conversations started in Rho.`, { limit: 'maxConversations', maximum: this.limits.maxConversations });
       this.capacity();
-      const backend = this.config.backend ?? 'claude-acp';
-      const at = now(), c: Conversation = { format: 2, backend, id: 'c-' + randomBytes(8).toString('hex'), changeId: input.changeId, requestDigest, createdAt: at, createdBy: by, updatedAt: at, version: 0, client: 'claude-code', nativeSessionId: backend === 'claude-cli' ? randomUUID() : null, confirmed: false, principal: null, title: titleOf(text), turns: [] };
+      const backend = input.backend ?? this.config.backend ?? 'claude-acp';
+      const at = now(), c: Conversation = { format: 2, backend, id: 'c-' + randomBytes(8).toString('hex'), changeId: input.changeId, requestDigest, createdAt: at, createdBy: by, updatedAt: at, version: 0, client: backend === 'codex-acp' ? 'codex' : 'claude-code', nativeSessionId: backend === 'claude-cli' ? randomUUID() : null, confirmed: false, principal: null, title: titleOf(text), turns: [] };
       const turn = this.turn(input.changeId, requestDigest, by, text, 1);
       c.turns.push(turn);
       // Recorded before the process starts, so a crash in between leaves an unknown message, never a resend.
@@ -205,10 +206,10 @@ export class Conversations {
         return this.reply(project, c, existing);
       }
       const last = c.turns.at(-1);
-      requireThat(!last || last.state !== 'running' || !this.liveTurn(project, c, last), 'conflict', 'Claude Code is still answering the previous message. Wait for it, or stop it, before sending another.');
+      requireThat(!last || last.state !== 'running' || !this.liveTurn(project, c, last), 'conflict', 'The Agent is still answering the previous message. Wait for it, or stop it, before sending another.');
       if (last?.state === 'running' && last.pid) {
         let alive = false; try { process.kill(last.pid, 0); alive = true; } catch {}
-        requireThat(!alive, 'conflict', `Claude Code from before Rho restarted may still be answering (process ${last.pid}). End that process before sending another message.`);
+        requireThat(!alive, 'conflict', `The Agent from before Rho restarted may still be answering (process ${last.pid}). End that process before sending another message.`);
       }
       requireThat(c.turns.length < this.limits.maxTurns, 'limit', `A conversation keeps at most ${this.limits.maxTurns} messages. Start a new conversation.`, { limit: 'maxTurns', maximum: this.limits.maxTurns });
       requireThat(Buffer.byteLength(JSON.stringify({ ...c, observation: undefined })) + this.limits.maxObservationBytes + this.limits.maxTurnBytes + this.limits.maxMessageBytes <= this.limits.maxRecordBytes, 'limit', 'This conversation has reached the size Rho keeps. Start a new conversation.', { limit: 'maxRecordBytes', maximum: this.limits.maxRecordBytes });
@@ -312,15 +313,18 @@ export class Conversations {
       }
       const grant = await this.ports.grant(project, c); c.principal = grant.principal;
       const mcpServers = [{ name: 'rho', command: process.execPath, args: [fileURLToPath(import.meta.resolve('@rho-workspace/plugin-agent/mcp'))], env: [{ name: 'RHO_AGENT_CONNECTION', value: grant.file }] }];
-      const { ClaudeAcpConversation, ClaudeCliConversation } = await import('@rho-workspace/plugin-agent/conversation');
-      const driver = (c.backend ?? 'claude-cli') === 'claude-acp'
-        ? new ClaudeAcpConversation({ ...this.config.claudeAcp, cwd: project.root, mcpServers, limits: this.limits, sessionId: c.acpSessionId, claude: this.binary,
-          observation: c.observation, observe: observation => {
-            requireThat(observation.sessionId === c.acpSessionId, 'conflict', 'The observed Agent session differs from the retained identity.');
-            requireThat(Buffer.byteLength(JSON.stringify(observation)) <= this.limits.maxObservationBytes, 'limit', 'The session projection exceeded maxObservationBytes; prior observations were kept.');
-            c.observation = observation; this.schedule(project, c);
-          } })
-        : new ClaudeCliConversation({ cwd: project.root, binary: this.binary, sessionId: c.nativeSessionId!, confirmed: c.confirmed, projectName: project.name ?? path.basename(project.root), mcpServers, limits: this.limits });
+      const { ClaudeAcpConversation, CodexAcpConversation, ClaudeCliConversation } = await import('@rho-workspace/plugin-agent/conversation');
+      const observed = { observation: c.observation, observe: (observation: SessionObservation) => {
+        requireThat(observation.sessionId === c.acpSessionId, 'conflict', 'The observed Agent session differs from the retained identity.');
+        requireThat(Buffer.byteLength(JSON.stringify(observation)) <= this.limits.maxObservationBytes, 'limit', 'The session projection exceeded maxObservationBytes; prior observations were kept.');
+        c.observation = observation; this.schedule(project, c);
+      } };
+      const common = { cwd: project.root, mcpServers, limits: this.limits, sessionId: c.acpSessionId, ...observed };
+      const driver = c.backend === 'codex-acp'
+        ? new CodexAcpConversation({ ...this.config.codexAcp, ...common, codex: this.config.codex })
+        : c.backend === 'claude-acp'
+          ? new ClaudeAcpConversation({ ...this.config.claudeAcp, ...common, claude: this.binary })
+          : new ClaudeCliConversation({ cwd: project.root, binary: this.binary, sessionId: c.nativeSessionId!, confirmed: c.confirmed, projectName: project.name ?? path.basename(project.root), mcpServers, limits: this.limits });
       this.drivers.set(key, { driver, project, conversation: c }); return driver;
     });
   }

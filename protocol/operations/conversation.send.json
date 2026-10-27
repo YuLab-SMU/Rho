@@ -494,5 +494,5 @@
     ],
     "additionalProperties": true
   },
-  "description": "Person at this machine only: send the next message to a conversation started in Rho, which resumes the same Claude Code session. Refused while the previous message is being answered. A repeated changeId with the same text returns the original message."
+  "description": "Person at this machine only: send the next message to a conversation started in Rho, which resumes the same Agent session. Refused while the previous message is being answered. A repeated changeId with the same text returns the original message."
 }

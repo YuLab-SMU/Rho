@@ -4,13 +4,13 @@ Updated: 2026-10-27.
 
 ## Current focus
 
-The first Claude observation → shared notes → result loop now runs with Agent
-0.4.9. ACP plans, usage and session metadata survive idle time and reconnect;
-Project work links session identities, referenced files and the Documents notes
-buffer. Westlake HPC passed eight real turns including cancellation/recovery and
-a human notes edit applied by the same session. Core remains unchanged. Rho's
-190 checks and Agent's 84 checks pass; [the episode](ACP-EPISODE.md#shared-workspace-loop)
-records source coverage, native-source limits and the still-unproven second Agent.
+Agent 0.4.10 connects Claude and Codex to the shared notes/result loop. Both passed
+eight real Westlake HPC turns from the installed package, including cancellation,
+connection loss and original-session recovery. External Codex ACP loading, live
+observation across Rho restart and reconnect also passed. Core source/binary remain
+unchanged. Rho 192/192, Plugins 89/89 and contract/type checks pass. The unsigned
+macOS arm64 package passed install/start checks; [the record](ACP-MULTI-AGENT-EPISODE.md)
+distinguishes turn cancellation, native jobs and explicit external relay attachment.
 
 The user asked for an optimization of the home, projects and empty-project screens
 on 2026-10-27, supplying three reference screens for layout weight and hierarchy.
@@ -28,7 +28,7 @@ capability evidence, not the target interface or design acceptance criteria.
 | Execution identity, recovery and Documents buffers | Hardened | Owner and acceptance suites below | None in the current focus |
 | Question → Agent → linked result | Runs; not yet usable from the screens | [Base-R episode](BASE-R-EPISODE.md) | Can the answer be read from one screen? |
 | Comparing two results | Runs | Two views split by hand | Can the differences be read by key? |
-| Claude conversation and shared workspace | First loop runs | [ACP episode](ACP-EPISODE.md#shared-workspace-loop) | Second Agent and passive external ACP attachment remain unproven |
+| Claude/Codex and shared workspace | Both installed loops and external Codex relay run | [ACP acceptance](ACP-MULTI-AGENT-EPISODE.md) | Human usability and passive attachment to uninstrumented clients remain unproven |
 | Project shell and navigation | Runs | Frontend browser suite below | Does it hold up around the reworked episode? |
 | Plugin UI extensions | Runs | Authoring checks below | Does a view built with it serve a real episode? |
 | Domain episode (DESeq2) | Not started | — | What carries over from base-R? |
@@ -153,13 +153,13 @@ keep their existing reload defaults; exact entity/version anchors persist.
 
 ## Conversations started in Rho
 
-New conversations use Agent 0.4.8's persistent Claude ACP connection. Rho holds
+New conversations select Agent 0.4.10's persistent Claude or Codex ACP connection. Rho holds
 original message identities and the visible record; the plugin owns native
 protocol/session behavior. Existing CLI conversations retain their original driver.
-Rho MCP calls keep their project grant; native tools keep Claude's permissions.
+Rho MCP calls keep their project grant; native tools keep their Agent's permissions.
 Only this machine's browser can answer a native permission request.
 
-- The [ACP episode](ACP-EPISODE.md) ran real Claude Code 2.1.311 through Westlake HPC
+- The earlier [ACP episode](ACP-EPISODE.md) ran real Claude Code 2.1.311 through Westlake HPC
   (`westlakehpc/deepseek-v4.1-flash`): seven messages, Unicode read/write, the same
   ACP connection and MCP grant, lost acknowledgement, browser disconnection,
   confirmed cancellation, forced Agent loss, original-session load and Rho restart.

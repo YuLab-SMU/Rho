@@ -13,19 +13,21 @@ function openBrowser(target: string) {
   spawn(command, args, { stdio: 'ignore', detached: true }).on('error', () => process.stderr.write('Could not open a browser. Open openUrl from the output instead.\n')).unref();
 }
 const usage = `Start Rho:
-  rho --root PROJECTS_DIRECTORY --state-dir SERVICE_STATE [--core ABSOLUTE_CORE_BINARY] [--rscript ABSOLUTE_RSCRIPT] [--claude CLAUDE_CODE_BINARY] [--agent-backend claude-acp|claude-cli] [--port 0] [--limits JSON_FILE] [--plugins documents,files,...] [--open]
+  rho --root PROJECTS_DIRECTORY --state-dir SERVICE_STATE [--core ABSOLUTE_CORE_BINARY] [--rscript ABSOLUTE_RSCRIPT] [--claude CLAUDE_CODE_BINARY] [--codex CODEX_BINARY] [--agent-backend claude-acp|codex-acp|claude-cli] [--port 0] [--limits JSON_FILE] [--plugins documents,files,...] [--open]
 A narrower browser link (optional):
   rho --pair PRIVATE_CONNECTION_FILE [--root PROJECTS_RELATIVE_DIRECTORY] [--open]
 Give an Agent access to one project, and the command that adds it to Claude Code:
   rho --grant PRIVATE_CONNECTION_FILE --project PROJECTS_RELATIVE_DIRECTORY [--session NAME]
 Serve that access to the Agent over MCP (stdio):
   rho --mcp AGENT_CONNECTION_FILE
+Observe an external ACP client (use this as its agent command):
+  rho --acp /absolute/project --acp-agent claude|codex
 --open opens the printed url in the default browser. Opening that url on this machine needs no
 link, code or session credential; --pair makes a narrower, expiring link for one folder.
 PRIVATE_CONNECTION_FILE is the connectionFile the running service printed; it and every
 connection file are credentials.
 `;
-const options = { root: { type: 'string' }, 'state-dir': { type: 'string' }, core: { type: 'string' }, rscript: { type: 'string' }, claude: { type: 'string' }, 'agent-backend': { type: 'string' }, port: { type: 'string' }, limits: { type: 'string' }, plugins: { type: 'string' }, pair: { type: 'string' }, open: { type: 'boolean' },
+const options = { acp: { type: 'string' }, 'acp-agent': { type: 'string' }, root: { type: 'string' }, 'state-dir': { type: 'string' }, core: { type: 'string' }, rscript: { type: 'string' }, claude: { type: 'string' }, codex: { type: 'string' }, 'agent-backend': { type: 'string' }, port: { type: 'string' }, limits: { type: 'string' }, plugins: { type: 'string' }, pair: { type: 'string' }, open: { type: 'boolean' },
   grant: { type: 'string' }, project: { type: 'string' }, session: { type: 'string' }, mcp: { type: 'string' }, help: { type: 'boolean', short: 'h' } } as const;
 let parsed;
 try { parsed = parseArgs({ options }); }
@@ -34,7 +36,11 @@ const { values } = parsed;
 if (values.help) { process.stdout.write(usage); process.exit(0); }
 // The Agent's side of a grant: its MCP server reads the connection file and speaks on stdio,
 // so nothing else may write to stdout in this mode.
-if (values.mcp) {
+if (values.acp) {
+  if (!['claude', 'codex'].includes(values['acp-agent'] ?? '')) { process.stderr.write('Select --acp-agent claude or codex.\n'); process.exit(2); }
+  const { runExternalAcp } = await import('@rho-workspace/plugin-agent/acp-cli');
+  runExternalAcp(path.resolve(values.acp), values['acp-agent'] as 'claude' | 'codex');
+} else if (values.mcp) {
   process.env.RHO_AGENT_CONNECTION = path.resolve(values.mcp);
   await import('@rho-workspace/plugin-agent/mcp');
 } else {
@@ -71,8 +77,8 @@ if (values.mcp) {
   if (Object.keys(limits).some(k => !allowed.has(k))) throw new Error('Unknown service budget in --limits file.');
   const { RhoService } = await import('./server.js'), { runtime } = await import('./runtime.js');
   const agentBackend = values['agent-backend'] ?? process.env.RHO_AGENT_BACKEND ?? 'claude-acp';
-  if (agentBackend !== 'claude-acp' && agentBackend !== 'claude-cli') throw new Error('Choose --agent-backend claude-acp or claude-cli.');
-  const service = await new RhoService({ ...limits, root: path.resolve(values.root), stateDir: path.resolve(values['state-dir']), ...await runtime(values.core, values.rscript), agentBackend, claude: values.claude ?? process.env.RHO_CLAUDE ?? 'claude', port: Number(values.port ?? 0), ...(values.plugins !== undefined ? { plugins: values.plugins ? values.plugins.split(',') as PluginId[] : [] } : {}) }).start();
+  if (!['claude-acp', 'codex-acp', 'claude-cli'].includes(agentBackend)) throw new Error('Choose --agent-backend claude-acp, codex-acp or claude-cli.');
+  const service = await new RhoService({ ...limits, root: path.resolve(values.root), stateDir: path.resolve(values['state-dir']), ...await runtime(values.core, values.rscript), agentBackend: agentBackend as 'claude-acp' | 'codex-acp' | 'claude-cli', codex: values.codex ?? process.env.RHO_CODEX, claude: values.claude ?? process.env.RHO_CLAUDE ?? 'claude', port: Number(values.port ?? 0), ...(values.plugins !== undefined ? { plugins: values.plugins ? values.plugins.split(',') as PluginId[] : [] } : {}) }).start();
   // The narrow conclusion a person needs on one line: what was selected, where state
   // lives, and how to open it. It stays inside `ready` so a parser reading line one is
   // unaffected. Opening this url on this machine is the access; no link is minted.

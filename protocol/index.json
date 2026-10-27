@@ -207,22 +207,22 @@
       "sha256": "5568d734784a573abc0e9ca4074389e5e9e5010595efbb16b1d7a7387f86d77b"
     },
     "conversation.send": {
-      "summary": "Person at this machine only: send the next message to a conversation started in Rho, which resumes the same Claude Code session. Refused while the previous message is being answered. A repeated changeId with the same text returns the original message.",
+      "summary": "Person at this machine only: send the next message to a conversation started in Rho, which resumes the same Agent session. Refused while the previous message is being answered. A repeated changeId with the same text returns the original message.",
       "path": "operations/conversation.send.json",
-      "bytes": 12717,
-      "sha256": "8c87446086a39d18e5f9915b4ced7e8ab5401df8eab5a6960ad49cc978d4e617"
+      "bytes": 12711,
+      "sha256": "a8c7f06ca34275af9ea340b820b60692e39b9f511987f6f981f65213bb1b870f"
     },
     "conversation.start": {
-      "summary": "Person at this machine only: start a conversation with Claude Code in this project. Rho selects the Agent plugin backend, attaches this project's MCP grant and records the message before sending it. A repeated changeId with the same text returns the original conversation and starts nothing.",
+      "summary": "Person at this machine only: start a conversation with the selected Claude Code or Codex Agent in this project. Rho selects the Agent plugin backend, attaches this project's MCP grant and records the message before sending it. A repeated changeId with the same text returns the original conversation and starts nothing.",
       "path": "operations/conversation.start.json",
-      "bytes": 12626,
-      "sha256": "6ede6594e52c1fe225b8ec6380f9e22f16d6c328afc65fdb2e981e077a066349"
+      "bytes": 12756,
+      "sha256": "c8bf877067aaa07c92a2c51f0ce88f850eca82602cf4c00f1e6a713031d07a67"
     },
     "conversation.stop": {
-      "summary": "Person at this machine only: ask Claude Code to stop answering one message. ACP cancellation is confirmed by the original prompt response; a lost connection keeps the outcome unknown. Legacy CLI conversations confirm process exit. Steps already taken stay done.",
+      "summary": "Person at this machine only: ask the original Agent to stop answering one message. ACP cancellation is confirmed by the original prompt response; a lost connection keeps the outcome unknown. Legacy CLI conversations confirm process exit. Steps already taken stay done.",
       "path": "operations/conversation.stop.json",
-      "bytes": 12607,
-      "sha256": "5fc5b0d4982d8e3f539d18f8f58d92c33a132810424081c69ff21c7e1d3a0b33"
+      "bytes": 12614,
+      "sha256": "37a1018deabb4f60012f6dfceb46b6489a910d8d585370eb86e4b60cbf969694"
     },
     "data.compare": {
       "summary": "Join two explicit table versions using declared keys, namespaces, fields and join policy. Scientific comparability remains the project responsibility.",
@@ -419,8 +419,8 @@
     "project.work.read": {
       "summary": "Person at this machine only: read linked Agent sessions, retained native activity identities, current referenced files and the shared notes document. Source cursors and resource versions remain independent. Does not start an Agent, collector or Host.",
       "path": "operations/project.work.read.json",
-      "bytes": 17216,
-      "sha256": "08de2224d62a3f0a0105385b301615f0793aa4d797177e908b329e5309ee6263"
+      "bytes": 17804,
+      "sha256": "378b0bdb5605bf2ff62c16b8ce486b723498157281d02c7a800aae9b99896fb5"
     },
     "protocol.describe": {
       "summary": "protocol.describe",

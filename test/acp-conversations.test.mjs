@@ -4,6 +4,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { RhoService } from '../dist/server.js';
 import { CheckedClient } from './checked-client.mjs';
+import { ExternalAcpObserver, readExternalAcp } from '@rho-workspace/plugin-agent/external-acp';
 import { BrowserClient } from '../dist/browser.js';
 
 // Independent protocol peer for application identity/storage/authorization checks.
@@ -39,6 +40,7 @@ async function setup(root, budgets = {}) {
   const file = path.join(root, 'peer.mjs'), log = path.join(root, 'calls.jsonl');
   await fs.writeFile(file, peer); await fs.mkdir(path.join(root, 'project'), { recursive: true });
   const service = await new RhoService({ root, stateDir: path.join(root, '.service'), coreBinary: path.join(root, 'absent-core'), rscript: 'Rscript',
+    codexAcp: { command: { file: process.execPath, args: [file] }, env: { RHO_ACP_TEST_LOG: log } },
     claudeAcp: { command: { file: process.execPath, args: [file] }, env: { RHO_ACP_TEST_LOG: log } }, conversations: { stopGraceMs: 200, ...budgets } }).start();
   const operator = new CheckedClient({ url: service.url, token: service.adminToken }), person = new BrowserClient({ url: service.url });
   const project = await operator.call('project.open', { path: 'project' });
@@ -146,4 +148,35 @@ test('connection capacity releases idle Agents without losing conversations or s
     await f.call('conversation.send', { conversationId: a, changeId: 'c', text: 'after eviction' }); await f.wait(a, ended);
     assert.equal((await f.calls()).filter(x => x.kind === 'session/load').length, 1);
   } finally { await f.service.close(); await fs.rm(root, { recursive: true, force: true }); }
+});
+
+test('a selected Codex backend survives restart and cannot change under an existing message identity', async () => {
+  const root = await fs.mkdtemp('/tmp/rho-codex-ledger-'); let f = await setup(root);
+  try {
+    const input = { changeId: 'codex', text: 'hello', backend: 'codex-acp' };
+    const first = await f.call('conversation.start', input), id = first.conversation.conversationId;
+    assert.equal(first.conversation.client, 'codex'); await f.wait(id, ended);
+    assert.equal((await f.record(id)).backend, 'codex-acp');
+    assert.equal((await f.call('conversation.start', input)).conversation.conversationId, id);
+    await assert.rejects(f.call('conversation.start', { ...input, backend: 'claude-acp' }), e => e.error.kind === 'conflict');
+    await f.service.close(); f = await setup(root);
+    await f.call('conversation.send', { conversationId: id, changeId: 'next', text: 'continue' }); await f.wait(id, ended);
+    assert.equal((await f.calls()).filter(c => c.kind === 'session/new').length, 1);
+    assert.equal((await f.calls()).filter(c => c.kind === 'session/load').length, 1);
+    assert.equal((await f.call('project.work.read', {})).sessions[0].agent, 'codex');
+  } finally { await f.service.close(); await fs.rm(root, { recursive: true, force: true }); }
+});
+test('external ACP joins the project read without acquiring input or runtime ownership', async () => {
+  const root = await fs.mkdtemp('/tmp/rho-external-app-'); let f = await setup(root), external;
+  try {
+    external = new ExternalAcpObserver(f.project.root, 'codex');
+    external.client({ id: 1, method: 'session/new', params: { cwd: f.project.root } });
+    external.agentMessage({ id: 1, result: { sessionId: 'external-session' } });
+    const work = await f.call('project.work.read', {}), entry = work.sessions[0];
+    assert.equal(entry.source, 'external-acp'); assert.equal(entry.conversationId, undefined); assert.equal(entry.observation.connected, true);
+    assert.equal((await f.call('observation.snapshot', {})).conversations.length, 0);
+    await assert.rejects(f.call('conversation.send', { conversationId: entry.id, changeId: 'no', text: 'must not run' }));
+    await f.service.close(); assert.equal(readExternalAcp(f.project.root).sessions[0].connected, true);
+    f = await setup(root); assert.equal((await f.call('project.work.read', {})).sessions[0].id, entry.id); assert.equal((await f.calls()).length, 0);
+  } finally { external?.close(); await f.service.close(); await fs.rm(root, { recursive: true, force: true }); }
 });

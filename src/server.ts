@@ -39,7 +39,7 @@ export interface NativeAdapterRegistration {
   proof: { kind: 'claude-code-init'; sessionId: string; clientVersion: string };
 }
 export const serviceLimits = { maxRequestBytes: 1024 * 1024, maxEventBytes: 65536, eventRetention: 256, maxSubscriptions: 8, maxQueue: 32, maxContexts: 128, maxBindings: 64, maxActivities: 256, maxContextBytes: 1024 * 1024, maxRetainedMetadataBytes: 32 * 1024 * 1024 };
-export interface ServiceConfig extends Partial<typeof serviceLimits>, Partial<typeof requestLimits>, PluginConfig { root: string; stateDir: string; coreBinary: string; rscript: string; port?: number; nativeFolders?: Partial<typeof nativeFolderLimits>; workspace?: Partial<typeof workspaceLimits>; interactions?: Partial<typeof interactionLimits>; taskMap?: Partial<typeof taskMapLimits>; browser?: Partial<typeof browserLimits>; webRoot?: string; agentNativeActivity?: Partial<typeof nativeActivityLimits>; presentationWitness?: Partial<typeof presentationWitnessLimits>; visibility?: Partial<typeof visibilityLimits>; agentDelivery?: Partial<typeof agentDeliveryLimits>; deliveryTransportTimeoutMs?: number; claude?: string; agentBackend?: ConversationConfig['backend']; claudeAcp?: ConversationConfig['claudeAcp']; conversations?: Partial<typeof conversationLimits> }
+export interface ServiceConfig extends Partial<typeof serviceLimits>, Partial<typeof requestLimits>, PluginConfig { root: string; stateDir: string; coreBinary: string; rscript: string; port?: number; nativeFolders?: Partial<typeof nativeFolderLimits>; workspace?: Partial<typeof workspaceLimits>; interactions?: Partial<typeof interactionLimits>; taskMap?: Partial<typeof taskMapLimits>; browser?: Partial<typeof browserLimits>; webRoot?: string; agentNativeActivity?: Partial<typeof nativeActivityLimits>; presentationWitness?: Partial<typeof presentationWitnessLimits>; visibility?: Partial<typeof visibilityLimits>; agentDelivery?: Partial<typeof agentDeliveryLimits>; deliveryTransportTimeoutMs?: number; claude?: string; agentBackend?: ConversationConfig['backend']; claudeAcp?: ConversationConfig['claudeAcp']; codex?: string; codexAcp?: ConversationConfig['codexAcp']; conversations?: Partial<typeof conversationLimits> }
 const ajv = new Ajv({ allErrors: true, strict: false, allowUnionTypes: true });
 // The same timestamp check every published contract uses; an unknown format would be skipped silently.
 ajv.addFormat('date-time', { type: 'string', validate: isNativeTime });
@@ -347,14 +347,14 @@ export class RhoService {
       // The same project grant `rho --grant` gives, under this conversation's own principal.
       grant: async (project, conversation) => {
         const session = 'rho:' + conversation.id, file = path.join(this.state.directory, 'agent-' + digest(project.id + ':' + session) + '.json');
-        await this.agentConnection(project.id, session, file, undefined, undefined, 'layered-business', { label: 'Claude Code in Rho', conversationId: conversation.id });
+        await this.agentConnection(project.id, session, file, undefined, undefined, 'layered-business', { label: (conversation.client === 'codex' ? 'Codex' : 'Claude Code') + ' in Rho', conversationId: conversation.id });
         return { file, principal: 'agent:' + digest(project.id + ':' + session).slice(0, 32) };
       },
       directory: project => this.dataDir(project),
       // Queued behind the project's own writes; it never waits for them, so a write that
       // started a conversation is not held up by its own notification.
       changed: async (project, conversationId) => { void this.serial(project.id, () => this.emit(project, 'conversation.changed', conversationId, localBrowserId)).catch(() => {}); }
-    }, config.claude, config.conversations, { backend: config.agentBackend, claudeAcp: config.claudeAcp });
+    }, config.claude, config.conversations, { backend: config.agentBackend, claudeAcp: config.claudeAcp, codex: config.codex, codexAcp: config.codexAcp });
     this.folderPicker = new NativeFolderPicker({ ...nativeFolderLimits, ...config.nativeFolders });
     this.server = http.createServer((req, res) => void this.handle(req, res));
     this.server.requestTimeout = 15000; this.server.headersTimeout = 10000;
@@ -795,7 +795,7 @@ export class RhoService {
       }
       return projectWork({ project: p, cursor: (await this.events(p)).cursor, conversations: await this.conversations.work(p, b.limit),
         documents: await owners.documentSummaries(), activity: (await this.projectActivity(p)).entries,
-        native, inspect: agent?.observeSessionFiles });
+        native, external: agent?.readExternalAcp(p.root), inspect: agent?.observeSessionFiles });
     }
     if (method.startsWith('conversation.')) {
       requireThat(principal.id === localBrowserId, 'unauthorized', 'Conversations started in Rho belong to the person at this machine. Open Rho in a browser on this machine.');

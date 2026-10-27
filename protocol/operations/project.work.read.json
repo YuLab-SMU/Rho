@@ -67,7 +67,8 @@
               "enum": [
                 "acp",
                 "claude-cli",
-                "native-transcript"
+                "native-transcript",
+                "external-acp"
               ]
             },
             "sessionId": {
@@ -82,6 +83,23 @@
             },
             "title": {
               "type": "string"
+            },
+            "agent": {
+              "type": "string"
+            },
+            "connected": {
+              "type": "boolean"
+            },
+            "lastMessage": {
+              "type": "string"
+            },
+            "omittedMessageChars": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "pendingPermissions": {
+              "type": "integer",
+              "minimum": 0
             },
             "state": {
               "type": "string"
@@ -452,7 +470,7 @@
             "resourceRefs"
           ]
         },
-        "maxItems": 72
+        "maxItems": 80
       },
       "files": {
         "type": "array",
@@ -542,11 +560,16 @@
           "fileReferences": {
             "type": "integer",
             "minimum": 0
+          },
+          "external": {
+            "type": "integer",
+            "minimum": 0
           }
         },
         "required": [
           "conversations",
-          "fileReferences"
+          "fileReferences",
+          "external"
         ]
       }
     },

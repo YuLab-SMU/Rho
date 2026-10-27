@@ -34,7 +34,7 @@ inspect what happened. The application gives those actions direct places:
 - **Workspaces** hold real owner views in tabs and splits. Arrange views exposes
   split, move, close and undo operations; the command palette offers the same actions.
 - **Agent** opens on request. In a tab on this machine it holds conversations with
-  Claude Code started in Rho: start one, follow its steps and replies, reply, stop it
+  Claude Code or Codex started in Rho: select one for a new conversation, follow its steps and replies, reply, stop its turn
   and return to it after a reload ([conversation episode](CONVERSATION-EPISODE.md)).
   Sessions started elsewhere are listed with where to continue them. In an open
   workspace it also shows the Agent's recorded work and linked questions. A tab
@@ -64,6 +64,11 @@ Shared notes opens `project-notes.md` in the existing Documents owner; saving is
 explicit before asking Agent to read it. A failed work read keeps the previous
 view and offers Refresh. The cursor invalidates the read model; individual sources
 and resources retain their own versions. See the [observed loop](ACP-EPISODE.md#shared-workspace-loop).
+External ACP sessions use the same work surface with their own source identity,
+plans, usage and read-only latest reply. Their input and permission choices stay
+in the original client. The visible Overview rereads external projections every
+1.5 seconds; it does not start a collector, Agent or Host. Turn cancellation keeps
+unfinished tool outcomes unknown and does not claim all native processes exited.
 
 The browser calls the existing `BrowserClient` contract. Document content, undo,
 conditional save, execution identity, output and versions remain with their existing

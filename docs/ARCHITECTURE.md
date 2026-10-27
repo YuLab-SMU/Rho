@@ -111,15 +111,21 @@ merely because their ID strings match.
 
 Each Agent session has one input, held by whoever started it (the user's decision of
 2026-10-25). A session started outside Rho keeps its input in its own window; Rho
-shows its work and accepts one-way feedback. A conversation started in Rho is held
+shows its work; feedback uses the separately selected feedback entry. A conversation started in Rho is held
 by Rho: the Agent panel is its input, and the conversation outlives the panel, a
 reload and a service restart. A message whose outcome Rho did not observe stays
-unknown and is not sent again. Agent 0.4.9 owns the Claude ACP connection, native
-tools, permission requests and session loading; Rho owns the durable message
+unknown and is not sent again. Agent 0.4.10 owns the Claude and Codex ACP connections,
+permission requests and session loading; Rho owns the durable message
 identity, transcript and local input. Rho MCP calls retain their project grant;
-Claude's native tools retain Claude's own permissions and OS authority. ACP session
+Native tools retain their Agent's own permissions and OS authority. ACP session
 IDs are kept separately from unobserved native transcript IDs. Core is unchanged.
 The [ACP episode](ACP-EPISODE.md) records the actual cancellation and recovery scope.
+An external client can select the Agent plugin's stdio relay to expose a bounded
+session projection under its project. Rho reads that projection without acquiring
+the input, permissions or process lifetime. Existing sessions load in their original
+client; an uninstrumented running client has no generic passive ACP attachment.
+External connections have independent sequences and heartbeat observations; the
+application cursor is not a global clock for their updates.
 
 ## Execution continuity
 

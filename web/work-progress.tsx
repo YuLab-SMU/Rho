@@ -24,7 +24,9 @@ export function WorkProgress({ client, snapshot, openFile, openConversation, ope
     };
     const schedule = () => { if (!timer.current) timer.current = setTimeout(() => { timer.current = null; void read(); }, 750); };
     request.current = schedule; void read();
-    return () => { live = false; controller.abort(); if (timer.current) clearTimeout(timer.current); timer.current = null; request.current = null; };
+    // External ACP connections are owned outside this service and have their own cursor.
+    const external = setInterval(() => { if (!document.hidden) schedule(); }, 1500);
+    return () => { clearInterval(external); live = false; controller.abort(); if (timer.current) clearTimeout(timer.current); timer.current = null; request.current = null; };
   }, [client, snapshot.project.id]);
   useEffect(() => { request.current?.(); }, [snapshot.cursor]);
   return <section className="project-section project-work" aria-label="Project work">
@@ -34,9 +36,13 @@ export function WorkProgress({ client, snapshot, openFile, openConversation, ope
     {!work && !problem && <p role="status">Reading project work…</p>}
     {work && <>
       <div className="work-sessions">{work.sessions.map(session => <article className="work-session" key={session.id}>
-        <header><div><h3>{session.title}</h3><p>{stateWords[session.state] ?? session.state} · {session.source === 'acp' ? 'ACP' : session.source === 'native-transcript' ? 'Native transcript' : 'Claude CLI'}</p></div>
-          {session.conversationId ? <button onClick={() => openConversation(session.conversationId!)}>Continue conversation</button> : <button onClick={openActivity}>View activity</button>}</header>
+        <header><div><h3>{session.title}</h3><p>{stateWords[session.state] ?? session.state} · {session.source === 'acp' ? (session.agent === 'codex' ? 'Codex · ACP' : 'Claude Code · ACP') : session.source === 'external-acp' ? 'External ACP' : session.source === 'native-transcript' ? 'Native transcript' : 'Claude CLI'}</p></div>
+          {session.conversationId ? <button onClick={() => openConversation(session.conversationId!)}>Continue conversation</button> : session.source === 'external-acp' ? <span className="muted">Input stays in the original client</span> : <button onClick={openActivity}>View activity</button>}</header>
         {session.observation ? <SessionProgress observation={session.observation} /> : session.source === 'native-transcript' ? <p className="muted">Input stays in the original window. Retained through cursor {session.cursor}; {session.droppedEvents ?? 0} events dropped.</p> : <p className="muted">No session projection retained yet.</p>}
+        {session.source === 'external-acp' && <>
+          {(session.pendingPermissions ?? 0) > 0 && <p role="status">Waiting for a permission choice in the original client.</p>}
+          {session.lastMessage && <details><summary>Latest reply · read only</summary><p className="external-reply">{session.lastMessage}</p>{(session.omittedMessageChars ?? 0) > 0 && <small>Later reply text was not retained.</small>}</details>}
+        </>}
         {session.operationIds.length > 0 && <p className="work-references">Managed run references: {session.operationIds.join(', ')}</p>}
         {session.resourceRefs.length > 0 && <p className="work-references">{session.resourceRefs.length} resource versions referenced. Results keep their own integrity and provenance.</p>}
       </article>)}</div>
@@ -46,6 +52,8 @@ export function WorkProgress({ client, snapshot, openFile, openConversation, ope
         <details><summary>Sources</summary><ul>{file.references.map(ref => <li key={ref.session + ref.tool}>{work.sessions.find(s => s.id === ref.session)?.title ?? ref.session} · {ref.tool}</li>)}</ul><p>{file.observedAt}</p>{file.sha256 && <code>{file.sha256}</code>}</details>
       </li>)}</ul></div>}
       {work.omitted.fileReferences > 0 && <p className="muted">{work.omitted.fileReferences} file references were outside project scope or observation limits.</p>}
+      {work.omitted.external > 0 && <p className="muted">{work.omitted.external} external ACP observations are unavailable or outside retention limits.</p>}
+      <details className="external-acp-help"><summary>Connect an external ACP client</summary><p>Use this Agent plugin command in your client's agent configuration, with this project's absolute folder:</p><code>rho --acp /absolute/project --acp-agent codex</code><p>Choose claude for Claude Code. Reopen or load the session through that client. Rho observes its updates; prompts and permissions stay there.</p></details>
       <p className="work-native-note">{work.native.message}{work.native.state === 'available' && <button className="text-button" onClick={openActivity}>View native activity</button>}</p>
     </>}
   </section>;

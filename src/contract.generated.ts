@@ -4741,6 +4741,7 @@ export interface ConversationStartInput {
   projectId: string;
   changeId: string;
   text: string;
+  backend?: 'claude-acp' | 'codex-acp';
 }
 
 export interface ConversationStartOutput {
@@ -7963,13 +7964,18 @@ export interface ProjectWorkReadOutput {
     dirty?: boolean;
   };
   /**
-   * @maxItems 72
+   * @maxItems 80
    */
   sessions: {
     id: string;
-    source: 'acp' | 'claude-cli' | 'native-transcript';
+    source: 'acp' | 'claude-cli' | 'native-transcript' | 'external-acp';
     sessionId: string | null;
     title: string;
+    agent?: string;
+    connected?: boolean;
+    lastMessage?: string;
+    omittedMessageChars?: number;
+    pendingPermissions?: number;
     state: string;
     conversationId?: string;
     streamId?: string;
@@ -8072,6 +8078,7 @@ export interface ProjectWorkReadOutput {
   omitted: {
     conversations: number;
     fileReferences: number;
+    external: number;
   };
 }
 

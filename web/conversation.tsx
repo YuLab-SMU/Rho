@@ -10,7 +10,7 @@ import { SessionProgress } from '@rho-workspace/plugin-agent/ui';
 type Read = RhoOutput<'conversation.read'>;
 type Turn = Read['turns'][number];
 type Step = Turn['steps'][number];
-type Pending = { kind: 'start' | 'send'; changeId: string; text: string; conversationId?: string };
+type Pending = { kind: 'start' | 'send'; changeId: string; text: string; conversationId?: string; backend?: 'claude-acp' | 'codex-acp' };
 const stored = (key: string) => { try { return sessionStorage.getItem(key); } catch { return null; } };
 const store = (key: string, value: string | null) => { try { if (value === null) sessionStorage.removeItem(key); else sessionStorage.setItem(key, value); return true; } catch { return false; } };
 const clock = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
@@ -26,15 +26,16 @@ const outcomeWords = { requested: '', returned: '', rejected: ' · refused', unk
 function ending(turn: Turn) {
   if (turn.state === 'running') {
     if (turn.stop) return 'Stopping…';
-    if (turn.permissions?.some(p => p.state === 'pending')) return 'Claude Code is waiting for your choice.';
-    if (turn.retry) return `The model provider returned ${turn.retry.status ?? 'an error'}; Claude Code is retrying${turn.retry.attempt ? ` (attempt ${turn.retry.attempt}${turn.retry.of ? ' of ' + turn.retry.of : ''})` : ''}.`;
-    return 'Claude Code is working…';
+    if (turn.permissions?.some(p => p.state === 'pending')) return 'The Agent is waiting for your choice.';
+    if (turn.retry) return `The model provider returned ${turn.retry.status ?? 'an error'}; the Agent is retrying${turn.retry.attempt ? ` (attempt ${turn.retry.attempt}${turn.retry.of ? ' of ' + turn.retry.of : ''})` : ''}.`;
+    return 'Agent is working…';
   }
   if (turn.state === 'completed') return 'Done' + (turn.result?.durationMs ? ' in ' + seconds(turn.result.durationMs) : '');
   if (turn.state === 'stopped') {
+    if (turn.result?.reason === 'cancelled') return 'Turn cancelled. Steps already taken stay done; unfinished tools may still be running.';
     const reason = turn.stop?.reason;
     return reason === 'person' ? 'Stopped. Steps already taken stay done.' : reason === 'closing' ? 'Stopped when Rho closed. Steps already taken stay done.'
-      : reason === 'wall-limit' ? 'Stopped: this message ran longer than Rho allows for one message.' : reason === 'identity' ? turn.problem ?? 'Stopped.' : 'Stopped: Claude Code wrote more than Rho keeps for one message.';
+      : reason === 'wall-limit' ? 'Stopped: this message ran longer than Rho allows for one message.' : reason === 'identity' ? turn.problem ?? 'Stopped.' : 'Stopped: the Agent wrote more than Rho keeps for one message.';
   }
   if (turn.state === 'failed') {
     if (turn.result?.kind === 'error_max_turns') return 'Stopped at the step limit for one message. Ask it to continue.';
@@ -80,9 +81,11 @@ export function AgentConversation({ snapshot, client, selectedId, onSelected }: 
   const [draft, setDraft] = useState(() => stored(draftKey) ?? '');
   const [pending, setPending] = useState<Pending | null>(() => { try { return JSON.parse(stored(pendingKey) ?? 'null'); } catch { return null; } });
   const [read, setRead] = useState<Read | null>(null), [busy, setBusy] = useState(false), [problem, setProblem] = useState(''), [unconfirmed, setUnconfirmed] = useState(false);
+  const [backend, setBackend] = useState<'' | 'claude-acp' | 'codex-acp'>('');
   const [choosing, setChoosing] = useState<string | null>(null);
   const list = snapshot.conversations ?? [];
   const summary = list.find(c => c.conversationId === openId);
+  const agentName = (summary?.client ?? read?.conversation.client) === 'codex' || (!openId && backend === 'codex-acp') ? 'Codex' : (summary?.client ?? read?.conversation.client) === 'claude-code' || (!openId && backend === 'claude-acp') ? 'Claude Code' : 'Agent';
   const end = useRef<HTMLDivElement>(null), input = useRef<HTMLTextAreaElement>(null);
   useEffect(() => { setDraft(stored(draftKey) ?? ''); }, [draftKey]);
   useEffect(() => { if (selectedId) { open(selectedId); onSelected?.(); } }, [selectedId]);
@@ -108,7 +111,7 @@ export function AgentConversation({ snapshot, client, selectedId, onSelected }: 
     setPending(next); store(pendingKey, JSON.stringify(next));
     try {
       const reply = next.kind === 'start'
-        ? await client.call('conversation.start', { projectId, changeId: next.changeId, text: next.text })
+        ? await client.call('conversation.start', { projectId, changeId: next.changeId, text: next.text, ...(next.backend ? { backend: next.backend } : {}) })
         : await client.call('conversation.send', { projectId, conversationId: next.conversationId!, changeId: next.changeId, text: next.text });
       setPending(null); store(pendingKey, null);
       store(draftKey, null); setDraft('');
@@ -124,7 +127,7 @@ export function AgentConversation({ snapshot, client, selectedId, onSelected }: 
   function send() {
     const text = draft.trim() ? draft : '';
     if (!text) return;
-    void deliver(openId ? { kind: 'send', conversationId: openId, changeId: 'm-' + crypto.randomUUID(), text } : { kind: 'start', changeId: 'm-' + crypto.randomUUID(), text });
+    void deliver(openId ? { kind: 'send', conversationId: openId, changeId: 'm-' + crypto.randomUUID(), text } : { kind: 'start', changeId: 'm-' + crypto.randomUUID(), text, ...(backend ? { backend } : {}) });
   }
   async function stop() {
     if (!openId || !last) return;
@@ -136,7 +139,7 @@ export function AgentConversation({ snapshot, client, selectedId, onSelected }: 
     {openId ? <header className="conversation-head">
       <button className="text-button" onClick={() => open(null)}>All conversations</button>
       <strong title={summary?.title ?? read?.conversation.title}>{summary?.title ?? read?.conversation.title ?? 'Conversation'}</strong>
-    </header> : <header className="conversation-head"><strong>Claude Code</strong></header>}
+    </header> : <header className="conversation-head"><label>Agent <select aria-label="Conversation Agent" value={backend} disabled={busy || !!pending} onChange={e => setBackend(e.target.value as typeof backend)}><option value="">Configured default</option><option value="claude-acp">Claude Code</option><option value="codex-acp">Codex</option></select></label></header>}
     {openId ? <ol className="conversation-turns" aria-label="Messages">
       {(read?.first ?? 0) > 0 && <li className="turn-note">{read!.first} earlier {read!.first === 1 ? 'message is' : 'messages are'} kept but not shown.</li>}
       {read?.turns.map((turn, i) => <TurnView key={turn.id} turn={turn} running={turn.state === 'running' && i === read.turns.length - 1} choosing={choosing} choose={(turnId, permissionId, optionId) => {
@@ -146,7 +149,7 @@ export function AgentConversation({ snapshot, client, selectedId, onSelected }: 
         }, error => setProblem(error instanceof Error ? error.message : 'The choice could not be confirmed.')).finally(() => setChoosing(null));
       }} />)}
     </ol> : <div className="conversation-intro">
-      <p>Ask Claude Code to explore or change {projectName(snapshot.project)}. It runs on this machine with access to this project, and its replies appear here.</p>
+      <p>Ask {agentName} to explore or change {projectName(snapshot.project)}. It runs on this machine with access to this project, and its replies appear here.</p>
       {list.length > 0 && <ul className="conversation-list" aria-label="Conversations">{list.map(c => <li key={c.conversationId}>
         <button onClick={() => open(c.conversationId)}><strong>{c.title}</strong><span>{c.state === 'running' ? 'Answering now' : c.state === 'unknown' ? 'Last message: outcome unknown' : clock(c.lastAt)} · {c.turns} {c.turns === 1 ? 'message' : 'messages'}</span></button>
       </li>)}</ul>}
@@ -155,11 +158,11 @@ export function AgentConversation({ snapshot, client, selectedId, onSelected }: 
     <div className="conversation-composer">
       {waiting && unconfirmed && <p role="alert">Your message was not confirmed. Retry sends the same message once.<button className="small-button" disabled={busy} onClick={() => void deliver(waiting)}>Retry</button></p>}
       {problem && <p role="alert">{problem}</p>}
-      <label htmlFor="conversation-input" className="visually-hidden">{openId ? 'Message Claude Code' : 'Start a conversation'}</label>
-      <textarea id="conversation-input" ref={input} rows={3} value={waiting ? waiting.text : draft} readOnly={!!waiting} placeholder={openId ? 'Reply to Claude Code…' : 'What should Claude Code look at or change?'} onChange={e => edit(e.target.value)}
+      <label htmlFor="conversation-input" className="visually-hidden">{openId ? 'Message ' + agentName : 'Start a conversation'}</label>
+      <textarea id="conversation-input" ref={input} rows={3} value={waiting ? waiting.text : draft} readOnly={!!waiting} placeholder={openId ? 'Reply to ' + agentName + '…' : 'What should the Agent look at or change?'} onChange={e => edit(e.target.value)}
         onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !answering && !busy && !waiting) { e.preventDefault(); send(); } }} />
       <div className="conversation-actions">
-        <span>{answering ? 'Claude Code is answering. You can write your next message.' : openId ? 'Resumes this conversation.' : 'Starts a new conversation.'}</span>
+        <span>{answering ? agentName + ' is answering. You can write your next message.' : openId ? 'Resumes this conversation.' : 'Starts a new conversation.'}</span>
         {answering ? <button onClick={() => void stop()} disabled={!!last?.stop}>{last?.stop ? 'Stopping…' : 'Stop'}</button>
           : <button className="primary" disabled={busy || !!waiting || !draft.trim()} onClick={send}>{busy ? 'Sending…' : openId ? 'Send' : 'Start'}</button>}
       </div>

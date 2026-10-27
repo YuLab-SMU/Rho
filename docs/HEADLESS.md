@@ -109,15 +109,42 @@ that grant on stdio with the four tools `rho_index`, `rho_resolve`, `rho_call` a
 `rho_read`; nothing else writes to stdout in that mode. Every connection file is a
 credential. `rho --help` prints the usage; an unknown option exits 2 with it.
 
-New Agent-panel conversations use Agent 0.4.8's persistent Claude ACP entry.
+Agent 0.4.10 provides persistent Claude and Codex ACP entries. The Agent panel
+selects a backend for a new conversation; existing records retain their choice.
 `--claude PATH` / `RHO_CLAUDE` selects the native CLI; its existing provider/model
 configuration is used. The four Rho MCP tools retain a project grant, while native
-tools follow Claude's own permission policy. A native permission request displays
+tools follow the selected Agent's own permission policy. A native permission request displays
 only its offered choices to this machine's browser. It adds no Rho approval to an
 already authorized operation. `--agent-backend claude-cli` / `RHO_AGENT_BACKEND`
 selects the old per-message driver for new conversations; existing records keep
 their original backend and session identity. Configuration changes do not migrate
 sessions. See the [ACP episode](ACP-EPISODE.md) for limits and recovery semantics.
+
+`--agent-backend codex-acp` selects Codex as the service default; `--codex PATH` /
+`RHO_CODEX` optionally selects its native CLI. Otherwise the pinned official
+`@agentclientprotocol/codex-acp` 2.3.0 uses its bundled Codex 0.164.0. Native provider
+configuration stays with Codex (`CODEX_CONFIG` and its native config); Rho does not
+copy Claude credentials to Codex. The Westlake acceptance harness supplies an
+isolated native configuration with `tools.update_plan.enabled=true` and
+`features.apply_patch_freeform=true`. This enables real tools, not synthetic plans.
+`maxAgentTurns` is Claude's native step cap; Codex remains bounded by the application
+wall/output/record limits. ACP cancellation confirms the turn, not every native job.
+
+For an external ACP client, select this command as that client's Agent executable:
+
+```sh
+rho --acp /absolute/project --acp-agent codex
+# Use --acp-agent claude for Claude Code.
+```
+
+The external client sends `session/new` or loads its existing `sessionId` with
+`session/load`. The relay forwards unchanged stdio bytes and records selected
+updates in `.rho/agent/acp/`; prompts and permission choices stay in that client.
+`project.work.read` reads the projection without starting a runtime or taking over
+input. It shows up to eight external sessions, prioritizing connected sessions and
+then recency, and counts omissions. Rho restart/closing a view does not stop the
+external client. ACP v1 has no generic passive attach to an uninstrumented live
+client; native transcript collection remains the explicit fallback.
 
 ## Named workspaces and selected source folders
 
@@ -177,7 +204,7 @@ const check = await rho.call('requirements.check', {
 | `media.describe`, `object.read` | Original media reference and declared dimensions/pages; bounded exported JSON object snapshots. Neither starts R or decodes an interactive view. |
 | `context.create/read` | Exact buffer/version/range, declared selected entities, a media rectangle with page and pixels/points, or one run (`run: {operationId}`): its state, exit, stop, the last 8 KiB of retained stderr with its byte offset and Core's truncation flag, the script reference, args and declared files. |
 | `session.grant`, `binding.open/close/list/activity` | Operator-selected method grant, external binding metadata and bounded tool receipts. Agent grants include the read-only `project.entries` and no other `project.*` method. |
-| `conversation.start/send/stop/read/permission` | Only the browser on this machine. Original message identities, retained text/tool steps and one selected Agent session. New conversations use a persistent Claude ACP connection. Cancel is confirmed by the original prompt response; lost transport keeps an unknown outcome. Reads and reconnect never replay a prompt. Native permission choices are scoped to the original pending request. Limits are in `conversationLimits` and `--limits`. |
+| `conversation.start/send/stop/read/permission` | Only the browser on this machine. Original message identities, retained text/tool steps and one selected Agent session. New conversations use the selected Claude or Codex ACP connection. Cancel is confirmed by the original prompt response; lost transport keeps an unknown outcome. Reads and reconnect never replay a prompt. Native permission choices are scoped to the original pending request. Limits are in `conversationLimits` and `--limits`. |
 | `composition.put/read/apply/undo`, `view.close` | Registered entry/version, props and binding checks; `apply`/`undo` are conditional tree transactions with receipts ([Collaboration](COLLABORATION.md#composition-and-selection)). Uninstalled UI is explicitly unavailable. `rho.action` (version `1`, no bindings) is Rho's own form for one proposed action: props `{title, action, actionVersion, operationId, input, repairOf?}`, and the action must be registered at that version. |
 | `workspace.save/export/restore` | Drafts/undo, bytes/provenance, selections and composition intent; native execution is not replayed. |
 | `action.export` | One run as ordinary files in a new project folder (default `exports/<operationId>`): `script/` holds the code that ran, from the run's own record; `outputs/` holds each declared file as the run left it; `provenance.json` and `PROVENANCE.md` give the run, script digest, arguments, inputs, each file's SHA-256 and whether it matches the inventory the run wrote. A declared file that was not written, or no longer matches that inventory, is named and left out, and the export says `partial`. When the script has unsaved changes the call must say `unsaved: "include"` (written as `<name>.unsaved.<ext>`, marked as never run) or `"leave"`. Runs nothing; never writes into an existing folder. |
