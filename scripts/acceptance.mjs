@@ -130,7 +130,7 @@ try {
   check('original media, coordinate context and bounded exported object snapshots');
   const draft = await call('document.open', { path: first.script });
   await call('document.edit', { documentId: draft.id, expectedVersion: draft.version, edits: [{ from: 0, to: 0, insert: '# Unsaved 中文 🧬\n' }], undoGroup: 'export' });
-  await call('workspace.export', { destination: 'export' });
+  await call('workspace.export', { destination: 'export', format: 3 });
   const q = await c.call('project.create', { name: 'restored' });
   await fs.cp(path.join(project.root, 'export'), path.join(q.root, 'import'), { recursive: true });
   const restored = await c.call('workspace.restore', { projectId: q.id, source: 'import' });
