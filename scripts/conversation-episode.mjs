@@ -63,7 +63,7 @@ async function waitTurn(label, maxMs = 600000) {
     const text = present ? await ending.innerText({ timeout: 2000 }).catch(() => '') : '';
     if (cls?.includes('running')) {
       if (!sawWorking) { sawWorking = true; await snap(label + '-working'); }
-      if (!sawSteps && await panel().locator('.conversation-turns > .turn').last().locator('.turn-tools').count()) { sawSteps = true; await snap(label + '-steps'); }
+      if (!sawSteps && await panel().locator('.conversation-turns > .turn').last().locator('.activity-row, .activity-group').count()) { sawSteps = true; await snap(label + '-steps'); }
     } else if (cls) { await log('turn.ended', { label, state: cls.replace('turn-ending ', ''), text, ms: Date.now() - started }); await snap(label + '-ended'); return { state: cls.replace('turn-ending ', ''), text }; }
     if (Date.now() - started > maxMs) { await snap(label + '-timeout'); throw new Error('turn did not end: ' + label); }
     await page.waitForTimeout(1000);
@@ -98,7 +98,7 @@ try {
   await log('notes.md', { text: await fs.readFile(path.join(projectDir, 'notes.md'), 'utf8') });
   // Stop: ask for longer work, stop it once a step is shown.
   await say('Read data.csv and notes.md again, then describe every column of data.csv in detail, one paragraph each.');
-  await panel().locator('.conversation-turns > .turn').last().locator('.turn-tools').waitFor({ timeout: 300000 }).catch(() => {});
+  await panel().locator('.conversation-turns > .turn').last().locator('.activity-row, .activity-group').first().waitFor({ timeout: 300000 }).catch(() => {});
   await panel().getByRole('button', { name: 'Stop', exact: true }).click().catch(e => log('stop.click.failed', { message: e.message }));
   await waitTurn('t4-stop');
   c = await record(); await log('record', { id: c.id, native: c.nativeSessionId, turns: c.turns.map(t => ({ id: t.id, state: t.state, stop: t.stop, exit: t.exit, steps: t.steps.length, tools: t.steps.filter(s => s.kind === 'tool').map(s => (s.operation ?? s.tool) + ':' + s.outcome), result: t.result && { isError: t.result.isError, kind: t.result.kind, durationMs: t.result.durationMs, costUsd: t.result.costUsd } })) });

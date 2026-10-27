@@ -234,6 +234,28 @@
                   "type": "string",
                   "minLength": 1
                 },
+                "title": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "toolKind": {
+                  "enum": [
+                    "read",
+                    "edit",
+                    "delete",
+                    "move",
+                    "search",
+                    "execute",
+                    "think",
+                    "fetch",
+                    "switch_mode",
+                    "other"
+                  ]
+                },
+                "detail": {
+                  "type": "string",
+                  "minLength": 1
+                },
                 "outcome": {
                   "enum": [
                     "requested",

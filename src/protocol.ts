@@ -189,7 +189,12 @@ const catalog = { ...contract.capabilityCatalogSchema };
 // text and tool steps in order, and how the message ended. Hidden reasoning is never kept.
 const conversationSummary = response({ conversationId: text, title: text, client: text, principal: { anyOf: [text, { type: 'null' }] }, createdAt: text, updatedAt: text, version: integer, turns: integer, state: { enum: ['idle', 'running', 'completed', 'failed', 'stopped', 'unknown'] }, lastAt: text });
 const sessionObservation = ownerSchema('agent-session', 'sessionObservationSchema');
-const conversationStep = response({ kind: { enum: ['text', 'tool', 'error'] }, at: text, text: { type: 'string' }, cut: { type: 'boolean' }, id: text, tool: text, operation: text, outcome: { enum: ['requested', 'returned', 'rejected', 'unknown'] } }, ['kind', 'at']);
+// A tool step keeps its original identity, the Agent's bounded human title, its ACP
+// category and one identifying input (command, path, pattern or query). Raw tool
+// output and reasoning are never part of this record.
+const conversationStep = response({ kind: { enum: ['text', 'tool', 'error'] }, at: text, text: { type: 'string' }, cut: { type: 'boolean' }, id: text, tool: text, operation: text,
+  title: text, toolKind: { enum: ['read', 'edit', 'delete', 'move', 'search', 'execute', 'think', 'fetch', 'switch_mode', 'other'] }, detail: text,
+  outcome: { enum: ['requested', 'returned', 'rejected', 'unknown'] } }, ['kind', 'at']);
 const conversationTurn = response({ id: text, by: text, text: { type: 'string' }, sentAt: text, state: { enum: ['running', 'completed', 'failed', 'stopped', 'unknown'] }, startedAt: { anyOf: [text, { type: 'null' }] }, endedAt: { anyOf: [text, { type: 'null' }] }, model: { anyOf: [text, { type: 'null' }] },
   stop: { anyOf: [response({ requestedAt: text, by: text, reason: { enum: ['person', 'closing', 'wall-limit', 'output-limit', 'line-limit', 'identity'] } }), { type: 'null' }] },
   steps: array(conversationStep), omitted: integer,

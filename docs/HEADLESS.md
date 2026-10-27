@@ -109,7 +109,9 @@ that grant on stdio with the four tools `rho_index`, `rho_resolve`, `rho_call` a
 `rho_read`; nothing else writes to stdout in that mode. Every connection file is a
 credential. `rho --help` prints the usage; an unknown option exits 2 with it.
 
-Agent 0.4.10 provides persistent Claude and Codex ACP entries. The Agent panel
+Agent 0.4.11 provides persistent Claude and Codex ACP entries and retains each
+tool step's human title, ACP category and one identifying input (command, file path,
+pattern or query; bounded, with no raw tool output). The Agent panel
 selects a backend for a new conversation; existing records retain their choice.
 `--claude PATH` / `RHO_CLAUDE` selects the native CLI; its existing provider/model
 configuration is used. The four Rho MCP tools retain a project grant, while native

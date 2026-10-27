@@ -34,12 +34,23 @@ inspect what happened. The application gives those actions direct places:
 - **Workspaces** hold real owner views in tabs and splits. Arrange views exposes
   split, move, close and undo operations; the command palette offers the same actions.
 - **Agent** opens on request. In a tab on this machine it holds conversations with
-  Claude Code or Codex started in Rho: select one for a new conversation, follow its steps and replies, reply, stop its turn
-  and return to it after a reload ([conversation episode](CONVERSATION-EPISODE.md)).
+  Claude Code or Codex started in Rho: select one for a new conversation, follow its streaming
+  reply and its actions, reply, stop its turn and return to it after a reload
+  ([conversation episode](CONVERSATION-EPISODE.md)). The panel renders the retained
+  record rather than protocol events: the Agent's Markdown is prose, lists and code;
+  each tool step names what it did (`Read data.csv`, `Ran Rscript analysis.R`,
+  `Wrote results/summary.csv`, `Called data.page`) with the Agent's title and reported
+  path behind a disclosure; short runs stay visible and longer ones fold into what
+  they accomplished. The current plan entry sits above the composer, a native
+  permission request is an amber choice card, and an answered choice stays in the
+  turn. New activity is followed only while the person is at the end; scrolling up
+  keeps the position and offers "Jump to latest". The Agent's tool status and
+  reported path are distinct from Work progress's independently observed files.
   Sessions started elsewhere are listed with where to continue them. In an open
   workspace it also shows the Agent's recorded work and linked questions. A tab
   opened from a narrower link keeps a request draft for an external Agent: copying a
-  request is not sending it or receiving a reply.
+  request is not sending it or receiving a reply. The [live activity
+  episode](AGENT-UI-EPISODE.md) records the observations, checks and limits.
 
 The topbar names the way back — the projects list, then the project, then the open
 workspace — and keeps only the current place below 768 CSS px. Project settings and
@@ -56,7 +67,9 @@ over these screens, its checks and the listing gap it left open.
 entry, `web/overview.tsx` the project sections, and `web/plugins.tsx` the installed
 capability catalog. `web/shell/` renders the persisted composition tree and embeds
 registered owner views. `web/agents.tsx` handles the explicit external-Agent handoff and the session list;
-`web/conversation.tsx` shows a conversation started in Rho.
+`web/conversation.tsx` shows a conversation started in Rho. Its presentation comes
+from `src/conversation-presentation.ts` (text, action lines, folded runs, plan entry),
+and Agent prose is rendered by `src/agent-markdown.ts` with `web/markdown.tsx`.
 `web/work-progress.tsx` reads `project.work.read` for the local person's project
 Overview: Agent-reported plans/usage, retained native source identities and current
 referenced files. It links back to the original conversation or Activity view.
@@ -117,6 +130,14 @@ panel. Its assertions cover navigation, editing and undo, an unsent conversation
 the clipboard handoff in a link tab,
 conditional layout changes, reload, keyboard input, responsive overflow and accessible
 control names. The report and images go to `work/frontend-reset/browser/` by default.
+
+`npm run acceptance:agent-ui` drives a controlled ACP peer through the real service
+and Chrome; it uses no model credentials. It checks that reply text arrives in more
+than one visible piece, that read/command/write actions name their target while they
+run, that the plan line follows the entry in progress, that a native permission is
+shown, answered and retained, that the Agent's Markdown renders, and that reading
+earlier lines is not interrupted by new activity. Evidence and screenshots go to
+`work/agent-ui-acceptance/` by default.
 
 `npm run acceptance:base-r` runs the complete selected-row question, external Agent
 edit, real R execution, two-version comparison and browser-disconnection episode.

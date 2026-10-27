@@ -4489,6 +4489,10 @@ export interface ConversationPermissionOutput {
       id?: string;
       tool?: string;
       operation?: string;
+      title?: string;
+      toolKind?:
+        'read' | 'edit' | 'delete' | 'move' | 'search' | 'execute' | 'think' | 'fetch' | 'switch_mode' | 'other';
+      detail?: string;
       outcome?: 'requested' | 'returned' | 'rejected' | 'unknown';
     }[];
     omitted: number;
@@ -4625,6 +4629,10 @@ export interface ConversationReadOutput {
       id?: string;
       tool?: string;
       operation?: string;
+      title?: string;
+      toolKind?:
+        'read' | 'edit' | 'delete' | 'move' | 'search' | 'execute' | 'think' | 'fetch' | 'switch_mode' | 'other';
+      detail?: string;
       outcome?: 'requested' | 'returned' | 'rejected' | 'unknown';
     }[];
     omitted: number;
@@ -4702,6 +4710,10 @@ export interface ConversationSendOutput {
       id?: string;
       tool?: string;
       operation?: string;
+      title?: string;
+      toolKind?:
+        'read' | 'edit' | 'delete' | 'move' | 'search' | 'execute' | 'think' | 'fetch' | 'switch_mode' | 'other';
+      detail?: string;
       outcome?: 'requested' | 'returned' | 'rejected' | 'unknown';
     }[];
     omitted: number;
@@ -4779,6 +4791,10 @@ export interface ConversationStartOutput {
       id?: string;
       tool?: string;
       operation?: string;
+      title?: string;
+      toolKind?:
+        'read' | 'edit' | 'delete' | 'move' | 'search' | 'execute' | 'think' | 'fetch' | 'switch_mode' | 'other';
+      detail?: string;
       outcome?: 'requested' | 'returned' | 'rejected' | 'unknown';
     }[];
     omitted: number;
@@ -4855,6 +4871,10 @@ export interface ConversationStopOutput {
       id?: string;
       tool?: string;
       operation?: string;
+      title?: string;
+      toolKind?:
+        'read' | 'edit' | 'delete' | 'move' | 'search' | 'execute' | 'think' | 'fetch' | 'switch_mode' | 'other';
+      detail?: string;
       outcome?: 'requested' | 'returned' | 'rejected' | 'unknown';
     }[];
     omitted: number;

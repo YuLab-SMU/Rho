@@ -4,13 +4,16 @@ Updated: 2026-10-27.
 
 ## Current focus
 
-Agent 0.4.10 connects Claude and Codex to the shared notes/result loop. Both passed
-eight real Westlake HPC turns from the installed package, including cancellation,
+Agent 0.4.11 adds each tool step's human title, ACP category and identifying input
+to the Claude/Codex ACP connections accepted at 0.4.10. Both Agents passed eight
+real Westlake HPC turns from the installed package, including cancellation,
 connection loss and original-session recovery. External Codex ACP loading, live
-observation across Rho restart and reconnect also passed. Core source/binary remain
-unchanged. Rho 192/192, Plugins 89/89 and contract/type checks pass. The unsigned
-macOS arm64 package passed install/start checks; [the record](ACP-MULTI-AGENT-EPISODE.md)
+observation across Rho restart and reconnect also passed. Core source/binary remain unchanged.
+Rho 202/202, Plugins 89/89 and contract/type checks pass. The unsigned macOS arm64
+package passed install/start checks; [the record](ACP-MULTI-AGENT-EPISODE.md)
 distinguishes turn cancellation, native jobs and explicit external relay attachment.
+The Agent panel's streamed text, action rows, plan and permission treatment are in
+[Agent panel live activity](AGENT-UI-EPISODE.md).
 
 The user asked for an optimization of the home, projects and empty-project screens
 on 2026-10-27, supplying three reference screens for layout weight and hierarchy.
@@ -29,6 +32,7 @@ capability evidence, not the target interface or design acceptance criteria.
 | Question → Agent → linked result | Runs; not yet usable from the screens | [Base-R episode](BASE-R-EPISODE.md) | Can the answer be read from one screen? |
 | Comparing two results | Runs | Two views split by hand | Can the differences be read by key? |
 | Claude/Codex and shared workspace | Both installed loops and external Codex relay run | [ACP acceptance](ACP-MULTI-AGENT-EPISODE.md) | Human usability and passive attachment to uninstrumented clients remain unproven |
+| Agent panel presentation | Streams; controlled peer and one real turn observed | [Agent UI episode](AGENT-UI-EPISODE.md) | Can a person scan a long trace and act on it? |
 | Project shell and navigation | Runs | Frontend browser suite below | Does it hold up around the reworked episode? |
 | Plugin UI extensions | Runs | Authoring checks below | Does a view built with it serve a real episode? |
 | Domain episode (DESeq2) | Not started | — | What carries over from base-R? |
@@ -45,35 +49,28 @@ The home, projects and empty-project screens were reworked against what the
 application actually records; the [episode record](HOME-PROJECT-EPISODE.md) keeps
 the setup, the observations before and after, and the limits.
 
-- Home is one heading, one primary action and one list. Each row names the folder the
-  work lives in (source folders counted, exact path in the tooltip) and when it was
-  last opened, instead of printing an absolute path. With no projects it opens a
-  centred prompt with the two real starting actions.
-- The create-project sheet gained a close control, the chosen folders as rows and a
-  line naming what is still missing; the page behind is dimmed and blurred.
-- A project with nothing recorded opens a centred empty state with "Work with
-  Agent" and "Browse files" instead of empty sections; the listing below decides
-  which leads. The activity column appears only when there are runs, and the header
-  names the folder the work comes from.
-- The topbar names the way back (`Projects / project / workspace`, the current place
-  only below 768 px); Project settings and Plugins sit at the sidebar foot.
+- Home is one heading, one primary action and one list. Each row names the folder
+  the work lives in, counts its source folders and gives the exact path in its
+  tooltip; no projects opens the two real starting actions.
+- The create-project sheet closes, lists chosen folders as rows and names what is
+  still missing; the page behind is dimmed and blurred.
+- A project with nothing recorded opens "Work with Agent" and "Browse files"; the
+  listing decides which leads. The activity column appears only with runs, and the
+  header names the source folder.
+- The topbar names the way back and keeps only the current place below 768 px;
+  Project settings and Plugins sit at the sidebar foot.
 
-The first pass recorded that a project made from source folders could not list them,
-so `project.entries` now lists the project's folder together with an `@<sourceId>`
-entry per source folder and descends into them under the reference the file owners
-resolve; a moved or missing source is reported instead of followed. Fixing it
-surfaced a blocking defect: `State.openSelected` demanded an expiry, so "Open
-folder…" was refused as `unauthorized` for the person at this machine, whose access
-does not expire. It now uses the same rule as the other checks.
+The first pass could not list a project's source folders; `project.entries` now
+lists the folder and an `@<sourceId>` entry per source and descends into them.
+Fixing it surfaced that `State.openSelected` demanded an expiry, refusing "Open
+folder…" for this machine's non-expiring access; it now uses the same rule.
 
-Evidence: `npm run build`; Rho 185/185 unit checks, including a project made from
-source folders and this machine's own tab picking a folder — the latter fails on the
-previous commit; `acceptance:frontend` passed its 11 checks; `acceptance:pages`,
-`acceptance:shell` and `acceptance:person` passed; six interaction and five
-source-folder checks passed in real Chrome, with no browser page errors. Screenshots
-and scripts are in `work/ui-review-20261027/`. This shows the paths work and that the
-screens read as intended to the builder; it is not evidence that another person can
-follow them.
+Evidence: `npm run build`; Rho 185/185 unit checks, including source-folder listing
+and this machine's own tab picking a folder; `acceptance:frontend` 11 checks;
+`acceptance:pages`, `acceptance:shell` and `acceptance:person` passed; six
+interaction and five source-folder checks in real Chrome, no page errors.
+Screenshots and scripts are in `work/ui-review-20261027/`; this shows the paths work
+to the builder, not that another person can follow them.
 
 ## From-scratch design requirements
 
@@ -90,10 +87,9 @@ components, a plugin requirements card, four professional plugin examples and th
 cross-mode storyboards. Designers supply alternative directions, detailed flows,
 components, visual language and prototypes; implementers identify and build gaps.
 
-Document verification is recorded in [verification](design/2026-10-26/verification.json)
-with local evidence in `work/design-brief-v2-20261026/`. It does not establish product
-usability or change application behavior. The existing execution and content safety
-boundaries remain; they do not prescribe the new interface's shape.
+Document verification is in [verification](design/2026-10-26/verification.json),
+with evidence in `work/design-brief-v2-20261026/`; it establishes neither usability
+nor behavior, and existing execution/content boundaries do not prescribe the interface.
 
 ## External Agent activity
 
@@ -103,21 +99,19 @@ connection failure keeps received actions, and Reconnect reads the same cursor.
 Opening a CSV or image captures its observed digest through Files and opens an
 existing owner view. Original and later file snapshots remain independent.
 
-- Real final runs: Claude Code 2.1.310 and dsh 0.2.1-rc.2 through WestlakeHPC, with
-  7 pending / 10 final and 15 / 24 events retained; each analysis entered once,
-  showed diagnostic exit 7, and repeat collection added none. Chrome 155.0.8059.84
-  checked live pending, owned Host loss, reconnect, CSV/SVG opening, 1440/390 widths,
-  reload and both retained sessions after the text-file wording/PDF refusal fix.
+- Real final runs: Claude Code 2.1.310 and dsh 0.2.1-rc.2 through WestlakeHPC
+  retained 7 pending / 10 final and 15 / 24 events; each analysis entered once,
+  showed diagnostic exit 7, and repeat collection added none. Chrome checked
+  pending/Host loss/reconnect, CSV/SVG opening, 1440/390 widths, reload and both
+  sessions after the text-file wording/PDF refusal fix.
 - Rho 182/182 and Plugins 76/76 passed; [verification ledger](VERIFICATION.json).
-  The Rho suite ran sequentially after the known parallel MCP test timeout.
-- Evidence: `work/agent-activity/run-6/`, with exact binary/browser/input hashes
-  and explicit source overrides. Earlier failures and visual reviews remain in
-  the episode record. This demonstrates the flow, not human usability.
-- Source selection: Agent 0.4.7, Tables 0.4.3, unchanged Core at
-  `4f5bed8631e15acad44cc86b63ea4779ab8af342`. External sessions need an explicitly
-  selected collector; the UI does not discover or start every native session.
-  Native completion, producer attribution and scientific validity remain unknown
-  unless their own evidence supplies them. Activity is not archived by workspace export.
+- Evidence: `work/agent-activity/run-6/` records exact hashes, failures and reviews;
+  this demonstrates the flow, not human usability.
+- Source selection: Agent 0.4.7, Tables 0.4.3, Core unchanged at
+  `4f5bed8631e15acad44cc86b63ea4779ab8af342`. External sessions need an explicit
+  collector; the UI does not discover or start every native session. Native
+  completion, producer attribution and validity remain unknown unless their
+  evidence supplies them; export does not archive activity.
 
 ## Base-R collaboration loop
 
@@ -153,29 +147,35 @@ keep their existing reload defaults; exact entity/version anchors persist.
 
 ## Conversations started in Rho
 
-New conversations select Agent 0.4.10's persistent Claude or Codex ACP connection. Rho holds
+New conversations select Agent 0.4.11's persistent Claude or Codex ACP connection. Rho holds
 original message identities and the visible record; the plugin owns native
 protocol/session behavior. Existing CLI conversations retain their original driver.
 Rho MCP calls keep their project grant; native tools keep their Agent's permissions.
 Only this machine's browser can answer a native permission request.
 
-- The earlier [ACP episode](ACP-EPISODE.md) ran real Claude Code 2.1.311 through Westlake HPC
-  (`westlakehpc/deepseek-v4.1-flash`): seven messages, Unicode read/write, the same
-  ACP connection and MCP grant, lost acknowledgement, browser disconnection,
-  confirmed cancellation, forced Agent loss, original-session load and Rho restart.
-  An interrupted prompt stays unknown; Retry does not send it again. Reads start
-  nothing. The foreground cancellation command exited; background jobs are separate.
-- Checks: Rho 188/188 with the existing Core binary, Agent 80/80, generated contracts
-  and builds pass. Agent 0.4.8 installs/imports outside the checkouts with its pinned
-  ACP dependencies. Initial missing-binary/style failures remain in the episode.
-- The base-R fixture packaging mismatch is fixed; its failed assembly is retained.
-  A committed unsigned macOS arm64 candidate passes installed CLI/homepage and
-  seven-turn ACP acceptance. The Agent-free package and focused ACP/CLI 5/5 pass.
-- Core remains at `4f5bed8631e15acad44cc86b63ea4779ab8af342`, unchanged. Screens at
-  1440/390 CSS pixels were inspected; automated paths do not establish human usability.
-- The earlier [CLI episode](CONVERSATION-EPISODE.md) retains its measurements,
-  failures and reviews. Raw Markdown display and the 64-method Agent grant ceiling
-  remain open; conversation permission is local-person-only and consumes no grant slot.
+The panel renders the retained record as it arrives: Markdown prose, a caret and
+elapsed time on the live message, one line per action with its file, command,
+pattern or project operation, open short runs and folded longer runs, the live plan
+entry, an amber permission card and a retained human choice. It follows new activity
+only at the end and offers Jump to latest after the person scrolls up. Tool status
+and the ACP path are labelled as Agent reports; observed files remain in Work progress.
+
+- [Agent UI episode](AGENT-UI-EPISODE.md): `acceptance:agent-ui` 7/7,
+  `acceptance:frontend` 11/11, Rho 202/202 (one earlier full run cancelled the known
+  30 s test; two following runs passed) and Plugins 89/89; build and contract checks
+  passed. A controlled ACP peer and one real Westlake HPC Claude turn were observed
+  at 1440/390 CSS pixels without page errors.
+- The earlier [ACP episode](ACP-EPISODE.md) ran real Claude Code 2.1.311: seven
+  messages, Unicode, the same connection/grant, lost acknowledgement, disconnection,
+  confirmed cancellation, forced loss, session load and restart. An interrupted
+  prompt stays unknown; reads start nothing. Background jobs remain separate.
+- Checks then: Rho 188/188, Agent 80/80; Agent 0.4.8 installed outside the
+  checkouts. The unsigned macOS arm64 candidate passed installed CLI/homepage and
+  seven-turn ACP acceptance; Core remains at `4f5bed8`, unchanged.
+- The earlier [CLI episode](CONVERSATION-EPISODE.md) retains its measurements and
+  failures. The 64-method Agent grant ceiling remains open; conversation permission
+  is local-person-only and consumes no grant slot. Raw Markdown display is fixed by
+  this pass.
 
 ## UI extension authoring
 
