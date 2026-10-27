@@ -52,6 +52,7 @@ function App() {
   const [project, setProject] = useState<ProjectSummary | null>(null);
   const [snapshot, setSnapshot] = useState<WorkspaceSnapshot | null>(null);
   const [agentOpen, setAgentOpen] = useState(false);
+  const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
   // An open workspace can contribute recorded activity to the optional inspector.
   const [agentSlot, setAgentSlot] = useState<HTMLElement | null>(null);
   const [phase, setPhase] = useState<Phase>('connecting');
@@ -264,7 +265,7 @@ function App() {
     <div className="drawer-heading"><h2>Agent</h2><button className="icon-button" aria-label="Close Agent" onClick={() => { setAgentOpen(false); agentTrigger.current?.focus(); }}><Icon name="close" size={18} /></button></div>
     {project && <div className="context-section"><button onClick={() => { showSection('activity'); setAgentOpen(false); }}>View live activity</button></div>}
     {snapshot && (link ? <AgentRequest key={snapshot.project.id} snapshot={snapshot} principalId={connection.principalId ?? 'local'} />
-      : <AgentConversation key={snapshot.project.id} snapshot={snapshot} client={client} />)}
+      : <AgentConversation key={snapshot.project.id} snapshot={snapshot} client={client} selectedId={selectedConversation} onSelected={() => setSelectedConversation(null)} />)}
     <div ref={setAgentSlot} className="agent-slot" />
     {!composition && <section className="context-section"><h3>{link ? 'Sessions' : 'Sessions started elsewhere'}</h3><AgentAccess snapshot={snapshot} outside={!link} /></section>}
   </>;
@@ -309,7 +310,7 @@ function App() {
                   {layoutCommands && <details className="view-menu"><summary><Icon name="layout" size={15} />Arrange views</summary><div>{layoutCommands.commands.map(c => <button key={c.id} onClick={e => { c.run(); e.currentTarget.closest('details')?.removeAttribute('open'); }}><Icon name={c.icon} size={15} />{c.label}</button>)}</div></details>}
                 </div>
                 <Suspense fallback={<Loading text="Opening workspace…" />}><Workspace key={snapshot.project.id + composition.compositionId} composition={composition} snapshot={snapshot} client={client!} onAbout={about} contextTarget={context ? contextSlot : null} principalId={connection.principalId} feedbackContextActive={feedbackContext} onShowContext={() => { setFeedbackContext(true); setContext(true); setAgentOpen(false); }} openView={openView} onCommands={setLayoutCommands} agentTarget={agentOpen ? agentSlot : null} onShowAgent={() => setAgentOpen(true)} /></Suspense>
-              </> : <Suspense fallback={<Loading text="Opening project…" />}><ProjectOverview key={project.id} section={section} onSection={showSection} onAgent={() => setAgentOpen(true)} client={client!} onProjectChanged={next => { setProject(next); setProjects(list => list.map(p => p.id === next.id ? next : p)); }} project={project} snapshot={snapshot} onLayout={layout} onOpened={id => { layout(id); reread(); }} /></Suspense>}
+              </> : <Suspense fallback={<Loading text="Opening project…" />}><ProjectOverview key={project.id} section={section} onSection={showSection} onAgent={id => { if (id) setSelectedConversation(id); setAgentOpen(true); }} client={client!} onProjectChanged={next => { setProject(next); setProjects(list => list.map(p => p.id === next.id ? next : p)); }} project={project} snapshot={snapshot} onLayout={layout} onOpened={(id, view) => { layout(id, view); reread(); }} /></Suspense>}
           </main>
           {projectVisible && agentOpen && !narrow && <aside className="inspector-pane" aria-label="Agent panel">{agentContents}</aside>}
           {context && !narrow && <aside id="project-context" className="context-drawer inspector-pane" aria-label={feedbackContext ? 'Your question' : 'Context and access'}><div className="drawer-heading"><h2>{feedbackContext ? 'Your question' : 'Connection & access'}</h2><button className="icon-button" aria-label="Close context" onClick={() => { setContext(false); contextTrigger.current?.focus(); }}><Icon name="close" size={18} /></button></div>{contextSections}</aside>}

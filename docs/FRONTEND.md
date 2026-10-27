@@ -57,6 +57,13 @@ entry, `web/overview.tsx` the project sections, and `web/plugins.tsx` the instal
 capability catalog. `web/shell/` renders the persisted composition tree and embeds
 registered owner views. `web/agents.tsx` handles the explicit external-Agent handoff and the session list;
 `web/conversation.tsx` shows a conversation started in Rho.
+`web/work-progress.tsx` reads `project.work.read` for the local person's project
+Overview: Agent-reported plans/usage, retained native source identities and current
+referenced files. It links back to the original conversation or Activity view.
+Shared notes opens `project-notes.md` in the existing Documents owner; saving is
+explicit before asking Agent to read it. A failed work read keeps the previous
+view and offers Refresh. The cursor invalidates the read model; individual sources
+and resources retain their own versions. See the [observed loop](ACP-EPISODE.md#shared-workspace-loop).
 
 The browser calls the existing `BrowserClient` contract. Document content, undo,
 conditional save, execution identity, output and versions remain with their existing

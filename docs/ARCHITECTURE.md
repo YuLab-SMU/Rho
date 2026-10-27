@@ -95,7 +95,7 @@ a resident Core Host alone does not establish a live R session.
 | Selection/filter meaning | Participating component; Rho routes the explicit context |
 | Window arrangement, active view and component availability | Rho |
 | Cursor, scrolling and rendering resources | Individual view as appropriate |
-| Agent session and model context | The Agent client and Agent component; Rho keeps only the ID of a session it started |
+| Agent session and model context | The Agent runtime owns model context; Rho retains session identity and bounded observations |
 | A session's input and conversation record | Whoever started the session: its own window, or Rho |
 
 Multiple views of a document share one logical unsaved-buffer owner. Switching
@@ -103,13 +103,18 @@ tabs or moving a view between splits preserves content and undo; the later deskt
 client extends this to native windows. Saving checks external writes;
 disk files and Git history do not substitute for the current buffer. Versions and
 provenance belong to individual resources, with no global scientific revision.
+`project.work.read` is a linked application observation of those owners: conversation
+and native stream identities, Agent-reported progress, file observations and the
+shared Documents buffer. Its cursor is an invalidation cursor, not a transaction
+or a common resource version. ACP and native transcript identities are not merged
+merely because their ID strings match.
 
 Each Agent session has one input, held by whoever started it (the user's decision of
 2026-10-25). A session started outside Rho keeps its input in its own window; Rho
 shows its work and accepts one-way feedback. A conversation started in Rho is held
 by Rho: the Agent panel is its input, and the conversation outlives the panel, a
 reload and a service restart. A message whose outcome Rho did not observe stays
-unknown and is not sent again. Agent 0.4.8 owns the Claude ACP connection, native
+unknown and is not sent again. Agent 0.4.9 owns the Claude ACP connection, native
 tools, permission requests and session loading; Rho owns the durable message
 identity, transcript and local input. Rho MCP calls retain their project grant;
 Claude's native tools retain Claude's own permissions and OS authority. ACP session

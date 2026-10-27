@@ -7,6 +7,7 @@ import { Icon, type IconName } from './icons.js';
 import { availability, resourceIcon, size, type Entry, type Section } from './project.js';
 import { RunView } from './shell/facts.js';
 import { AgentActivity } from './agent-activity.js';
+import { WorkProgress } from './work-progress.js';
 
 function shownPath(at: string, project: ProjectSummary) {
   if (!at) return projectName(project);
@@ -16,8 +17,8 @@ function shownPath(at: string, project: ProjectSummary) {
 }
 interface Props {
   project: ProjectSummary; snapshot: WorkspaceSnapshot; client: BrowserClient; section: Section;
-  onSection: (section: Section) => void; onAgent: () => void;
-  onLayout: (id: string, view?: string) => void; onProjectChanged: (project: ProjectSummary) => void; onOpened: (id: string) => void;
+  onSection: (section: Section) => void; onAgent: (conversationId?: string) => void;
+  onLayout: (id: string, view?: string) => void; onProjectChanged: (project: ProjectSummary) => void; onOpened: (id: string, view?: string) => void;
 }
 export function ProjectOverview({ project, snapshot, client, section, onSection, onAgent, onLayout, onProjectChanged, onOpened }: Props) {
   const { runs, problem: runsProblem, readAgain } = useRuns(client, project.id, snapshot.cursor);
@@ -29,6 +30,7 @@ export function ProjectOverview({ project, snapshot, client, section, onSection,
   // Whether the project's own folder holds anything: one bounded listing, read only while the
   // project has nothing recorded, so an empty project can lead with the step that has content.
   const [rootEntries, setRootEntries] = useState<number | null>(null);
+  const [hasWork, setHasWork] = useState(false);
   const readSequence = useRef(0), runDialog = useRef<HTMLDialogElement>(null);
   const isFiles = section === 'files' || section === 'documents';
   const places = new Map<string, { compositionId: string; viewId: string }>();
@@ -43,7 +45,7 @@ export function ProjectOverview({ project, snapshot, client, section, onSection,
   // Nothing recorded yet: no workspaces, results, question or Agent notes. Runs are read
   // separately, so an unread run list is not reported as an empty one, and nothing is painted
   // over an otherwise empty project until that read settles.
-  const clean = !snapshot.compositions.length && !artifacts.length && !snapshot.taskMap?.question && !snapshot.taskMap?.items.length;
+  const clean = !snapshot.compositions.length && !artifacts.length && !snapshot.taskMap?.question && !snapshot.taskMap?.items.length && !snapshot.conversations?.length && !hasWork;
   const settled = !clean || ((runs !== null || !!runsProblem) && rootEntries !== null);
   const emptyProject = section === 'overview' && clean && runs !== null && runs.length === 0 && rootEntries !== null;
   // The activity column earns its place only when it has something to report.
@@ -53,7 +55,7 @@ export function ProjectOverview({ project, snapshot, client, section, onSection,
   const browseLeads = (rootEntries ?? 0) > 0;
   const nextSteps = ([
     { key: 'files', label: 'Browse files', icon: 'folder', run: () => onSection('files'), primary: browseLeads },
-    { key: 'agent', label: 'Work with Agent', icon: 'prompt', run: onAgent, primary: !browseLeads },
+    { key: 'agent', label: 'Work with Agent', icon: 'prompt', run: () => onAgent(), primary: !browseLeads },
   ] satisfies Array<{ key: string; label: string; icon: IconName; run: () => void; primary: boolean }>)
     .sort((left, right) => Number(right.primary) - Number(left.primary));
   async function listFolder(at = '') {
@@ -82,7 +84,7 @@ export function ProjectOverview({ project, snapshot, client, section, onSection,
     try {
       const current = snapshot.compositions.find(c => c.compositionId === 'workspace');
       const result = await client.call('project.openFile', { projectId: project.id, path: entry.path, compositionId: 'workspace', expectedVersion: current?.version ?? 0, changeId: 'open-' + crypto.randomUUID() });
-      onOpened(result.composition.compositionId);
+      onOpened(result.composition.compositionId, result.viewId);
     } catch (e) { setFileError(e instanceof Error ? e.message : 'Could not open this file. Try again.'); }
     finally { setOpening(''); }
   }
@@ -114,9 +116,11 @@ export function ProjectOverview({ project, snapshot, client, section, onSection,
   return <section className={'project-page overview' + (isFiles ? ' files-page' : '')} aria-labelledby="overview-title">
     <header className="page-heading">
       <div><h1 id="overview-title">{title}</h1>{section === 'overview' && <p title={where.full}>{where.text}</p>}</div>
-      {section === 'overview' && !emptyProject && <button className="primary" onClick={onAgent}><Icon name="prompt" size={17} /><span>Work with Agent</span></button>}
+      {section === 'overview' && !emptyProject && <button className="primary" onClick={() => onAgent()}><Icon name="prompt" size={17} /><span>Work with Agent</span></button>}
       {isFiles && <button onClick={() => void listFolder(folder?.path)} disabled={reading}><Icon name="refresh" size={15} />Refresh</button>}
     </header>
+    {section === 'overview' && snapshot.catalog.operations.some(o => o.method === 'project.work.read' && o.authorized) && <WorkProgress client={client} snapshot={snapshot} openFile={p => void open({ path: p })} openConversation={onAgent} openActivity={() => onSection('activity')} onPresence={setHasWork} />}
+    {section === 'overview' && fileError && <p role="alert">{fileError}</p>}
     {emptyProject && <div className="empty-project">
       <span className="empty-symbol"><Icon name="grid" size={26} stroke={1.5} /></span>
       <h2>No work yet</h2>
@@ -149,7 +153,7 @@ export function ProjectOverview({ project, snapshot, client, section, onSection,
       </section>
       {snapshot.resources.length > 0 && <section className="project-section"><div className="section-heading"><h2>Registered results</h2></div>{resultList}</section>}
     </>}
-    {section === 'activity' && <><section className="project-section"><AgentActivity client={client} projectId={project.id} onOpened={(id, view) => { onOpened(id); onLayout(id, view); }} /></section><section className="project-section"><h3>Managed runs</h3>{error(runsProblem, readAgain)}{runs === null ? <p role="status">Reading runs…</p> : orderedRuns.length ? <div className="activity-list">{orderedRuns.map(runRow)}</div> : <p className="muted">No managed runs yet.</p>}</section></>}
+    {section === 'activity' && <><section className="project-section"><AgentActivity client={client} projectId={project.id} onOpened={onOpened} /></section><section className="project-section"><h3>Managed runs</h3>{error(runsProblem, readAgain)}{runs === null ? <p role="status">Reading runs…</p> : orderedRuns.length ? <div className="activity-list">{orderedRuns.map(runRow)}</div> : <p className="muted">No managed runs yet.</p>}</section></>}
     {section === 'settings' && <div className="settings-sections"><section className="project-section"><h2>Source folders</h2><SourceFolders folders={project.sources ?? [{ id: project.id, root: project.root, name: projectName(project) }]} busy={adding} onAdd={() => void add()} />{error(sourceError, () => void add())}</section>
       <section className="project-section"><div className="section-heading"><h2>Project health</h2><button disabled={diagnosing} onClick={() => void diagnose()}>{diagnosing ? 'Checking…' : 'Check project'}</button></div>{doctor ? <ul className="health-list">{doctor.map(c => <li key={c.id}><span className={'state ' + c.state}>{c.state === 'ok' ? 'Ready' : c.state === 'fail' ? 'Blocked' : 'Check'}</span><div><p>{c.detail}</p>{c.remedy && <small>{c.remedy}</small>}</div></li>)}</ul> : <p className="muted">Check the tools and capabilities available to this project.</p>}{error(doctorError, () => void diagnose())}</section></div>}
     {inspecting && <dialog ref={runDialog} className="run-dialog" aria-label={inspecting} onClose={() => setInspecting(null)} onClick={event => { if (event.target === event.currentTarget) event.currentTarget.close(); }}><button className="icon-button run-dialog-close" aria-label="Close" onClick={() => runDialog.current?.close()}><Icon name="close" size={18} /></button><RunView key={inspecting} snapshot={snapshot} client={client} operationId={inspecting} runs={runs} readRuns={readAgain} onOpenRun={setInspecting} opener={ref => { const spot = places.get(ref.id + '@' + ref.version); return spot ? () => onLayout(spot.compositionId, spot.viewId) : null; }} /></dialog>}

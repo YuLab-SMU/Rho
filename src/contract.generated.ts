@@ -5,7 +5,7 @@
 // value an accepted response carries. The service, the Node client and the browser
 // client are all written against these types; runtime validation stays with Ajv.
 //
-// Contract identity: apiVersion 2.0, schemaVersion 2, 95 operations.
+// Contract identity: apiVersion 2.0, schemaVersion 2, 96 operations.
 export interface RhoOperationError {
   kind:
     | 'invalid'
@@ -4544,6 +4544,64 @@ export interface ConversationReadOutput {
     state: 'idle' | 'running' | 'completed' | 'failed' | 'stopped' | 'unknown';
     lastAt: string;
   };
+  observation?: {
+    at: string;
+    connected: boolean;
+    historyUpdates: number;
+    info: {
+      at: string;
+      origin: 'initial' | 'history' | 'live';
+      title?: string | null;
+      updatedAt?: string | null;
+    } | null;
+    omitted: number;
+    plan: {
+      at: string;
+      /**
+       * @maxItems 64
+       */
+      entries: {
+        content: string;
+        priority: 'high' | 'medium' | 'low';
+        status: 'pending' | 'in_progress' | 'completed';
+      }[];
+      omitted: number;
+      origin: 'initial' | 'history' | 'live';
+    } | null;
+    sequence: number;
+    sessionId: string;
+    source: 'acp';
+    /**
+     * @maxItems 64
+     */
+    tools: {
+      at: string;
+      id: string;
+      /**
+       * @maxItems 16
+       */
+      locations: {
+        line?: number;
+        path: string;
+      }[];
+      operation?: string;
+      origin: 'initial' | 'history' | 'live';
+      outcome?: 'requested' | 'returned' | 'rejected' | 'unknown';
+      tool?: string;
+    }[];
+    unrepresented: number;
+    updates: number;
+    usage: {
+      at: string;
+      cost?: {
+        amount: number;
+        currency: string;
+      } | null;
+      origin: 'initial' | 'history' | 'live';
+      size: number;
+      used: number;
+    } | null;
+  } | null;
   first: number;
   turns: {
     id: string;
@@ -7889,6 +7947,134 @@ export interface ProjectSourcePickOutput {
   } | null;
 }
 
+export interface ProjectWorkReadInput {
+  projectId: string;
+  limit?: number;
+}
+
+export interface ProjectWorkReadOutput {
+  projectId: string;
+  cursor: number;
+  observedAt: string;
+  notes: {
+    path: string;
+    documentId?: string;
+    version?: number;
+    dirty?: boolean;
+  };
+  /**
+   * @maxItems 72
+   */
+  sessions: {
+    id: string;
+    source: 'acp' | 'claude-cli' | 'native-transcript';
+    sessionId: string | null;
+    title: string;
+    state: string;
+    conversationId?: string;
+    streamId?: string;
+    principal?: string | null;
+    version?: number;
+    cursor?: number;
+    droppedEvents?: number;
+    retainedFrom?: number;
+    observation: {
+      at: string;
+      connected: boolean;
+      historyUpdates: number;
+      info: {
+        at: string;
+        origin: 'initial' | 'history' | 'live';
+        title?: string | null;
+        updatedAt?: string | null;
+      } | null;
+      omitted: number;
+      plan: {
+        at: string;
+        /**
+         * @maxItems 64
+         */
+        entries: {
+          content: string;
+          priority: 'high' | 'medium' | 'low';
+          status: 'pending' | 'in_progress' | 'completed';
+        }[];
+        omitted: number;
+        origin: 'initial' | 'history' | 'live';
+      } | null;
+      sequence: number;
+      sessionId: string;
+      source: 'acp';
+      /**
+       * @maxItems 64
+       */
+      tools: {
+        at: string;
+        id: string;
+        /**
+         * @maxItems 16
+         */
+        locations: {
+          line?: number;
+          path: string;
+        }[];
+        operation?: string;
+        origin: 'initial' | 'history' | 'live';
+        outcome?: 'requested' | 'returned' | 'rejected' | 'unknown';
+        tool?: string;
+      }[];
+      unrepresented: number;
+      updates: number;
+      usage: {
+        at: string;
+        cost?: {
+          amount: number;
+          currency: string;
+        } | null;
+        origin: 'initial' | 'history' | 'live';
+        size: number;
+        used: number;
+      } | null;
+    } | null;
+    /**
+     * @maxItems 256
+     */
+    operationIds: string[];
+    /**
+     * @maxItems 256
+     */
+    resourceRefs: {
+      id: string;
+      version: string;
+    }[];
+  }[];
+  /**
+   * @maxItems 16
+   */
+  files: {
+    path: string;
+    state: 'observed' | 'missing' | 'unavailable' | 'changed' | 'file-byte-limit';
+    observedAt: string;
+    bytes?: number;
+    sha256?: string;
+    /**
+     * @maxItems 32
+     */
+    references: {
+      session: string;
+      tool: string;
+    }[];
+  }[];
+  native: {
+    state: 'available' | 'unavailable';
+    message: string;
+  };
+  omitted: {
+    conversations: number;
+    fileReferences: number;
+  };
+}
+
 export interface ProtocolDescribeInput {
   projectId?: string;
   method?: string;
@@ -10365,6 +10551,7 @@ export interface RhoOperations {
   "project.runs": { input: ProjectRunsInput; output: ProjectRunsOutput };
   "project.source.add": { input: ProjectSourceAddInput; output: ProjectSourceAddOutput };
   "project.source.pick": { input: ProjectSourcePickInput; output: ProjectSourcePickOutput };
+  "project.work.read": { input: ProjectWorkReadInput; output: ProjectWorkReadOutput };
   "protocol.describe": { input: ProtocolDescribeInput; output: ProtocolDescribeOutput };
   "protocol.validate": { input: ProtocolValidateInput; output: ProtocolValidateOutput };
   "requirements.check": { input: RequirementsCheckInput; output: RequirementsCheckOutput };
@@ -10399,5 +10586,5 @@ export type RhoInput<M extends RhoMethod> = RhoOperations[M]['input'];
 export type RhoOutput<M extends RhoMethod> = RhoOperations[M]['output'];
 
 /** The names a caller may pass to protocol.describe / protocol.validate. */
-export const rhoMethods = ["action.cancel","action.export","action.list","action.lookup","action.observe","action.output","action.retry","action.submit","agent.activity.capture","agent.activity.outputs","agent.activity.read","annotation.create","annotation.list","annotation.read","annotation.reply","artifact.check","binding.activity","binding.activity.append","binding.close","binding.list","binding.open","capability.configure","capability.index","capability.list","capability.resolve","composition.apply","composition.put","composition.read","composition.undo","context.create","context.read","conversation.permission","conversation.read","conversation.send","conversation.start","conversation.stop","data.compare","data.page","data.plot","document.abandonSave","document.change.read","document.edit","document.history","document.open","document.read","document.revert","document.save","document.undo","document.undoOwn","feedback.read","feedback.status","feedback.submit","interaction.selection.read","interaction.selection.set","media.describe","object.read","observation.snapshot","project.create","project.createWorkspace","project.doctor","project.entries","project.list","project.open","project.openFile","project.pick","project.runs","project.source.add","project.source.pick","protocol.describe","protocol.validate","requirements.check","requirements.prepare","resource.list","resource.read","resource.register","selection.set","session.browser.pair","session.browser.revoke","session.grant","skill.list","skill.read","task.map.declare","task.map.present","task.map.read","task.map.respond","task.routing.put","view.close","view.observations.read","view.observe","view.protection.set","workspace.enhance","workspace.export","workspace.observe","workspace.restore","workspace.save"] as const satisfies readonly RhoMethod[];
+export const rhoMethods = ["action.cancel","action.export","action.list","action.lookup","action.observe","action.output","action.retry","action.submit","agent.activity.capture","agent.activity.outputs","agent.activity.read","annotation.create","annotation.list","annotation.read","annotation.reply","artifact.check","binding.activity","binding.activity.append","binding.close","binding.list","binding.open","capability.configure","capability.index","capability.list","capability.resolve","composition.apply","composition.put","composition.read","composition.undo","context.create","context.read","conversation.permission","conversation.read","conversation.send","conversation.start","conversation.stop","data.compare","data.page","data.plot","document.abandonSave","document.change.read","document.edit","document.history","document.open","document.read","document.revert","document.save","document.undo","document.undoOwn","feedback.read","feedback.status","feedback.submit","interaction.selection.read","interaction.selection.set","media.describe","object.read","observation.snapshot","project.create","project.createWorkspace","project.doctor","project.entries","project.list","project.open","project.openFile","project.pick","project.runs","project.source.add","project.source.pick","project.work.read","protocol.describe","protocol.validate","requirements.check","requirements.prepare","resource.list","resource.read","resource.register","selection.set","session.browser.pair","session.browser.revoke","session.grant","skill.list","skill.read","task.map.declare","task.map.present","task.map.read","task.map.respond","task.routing.put","view.close","view.observations.read","view.observe","view.protection.set","workspace.enhance","workspace.export","workspace.observe","workspace.restore","workspace.save"] as const satisfies readonly RhoMethod[];
 export type RhoInputFor<M extends RhoMethod> = RhoOperations[M]['input'];

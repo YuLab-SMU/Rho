@@ -29,6 +29,7 @@ const owners = [
   { id: 'agent', package: '@rho-workspace/plugin-agent', entry: './operations', take: ['operationContracts'] },
   { id: 'agent-feedback', package: '@rho-workspace/plugin-agent', entry: './feedback-contract', take: ['feedbackSchemas'] },
   { id: 'agent-native', package: '@rho-workspace/plugin-agent', entry: './contract', take: ['nativeSchemas'] },
+  { id: 'agent-session', package: '@rho-workspace/plugin-agent', entry: './session-contract', take: ['sessionObservationSchema'] },
   { id: 'annotations', package: '@rho-workspace/plugin-annotations', entry: './contract', take: ['inputs', 'outputs'] },
   { id: 'entry-files', package: '@rho-workspace/plugin-files', entry: './contract', take: ['declarationSchema'] },
   { id: 'entry-tables', package: '@rho-workspace/plugin-tables', entry: './contract', take: ['declarationSchema', 'columnSchema', 'tableFormatSchema'] },

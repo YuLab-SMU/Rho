@@ -4,12 +4,13 @@ Updated: 2026-10-27.
 
 ## Current focus
 
-The user's review reopened the broader Agent observation and shared-workspace goal.
-Claude ACP through Agent 0.4.8 passes transport, cancellation, recovery and installed
-delivery checks, but that does not close the observation/workspace loop. Session
-plans/usage, cross-source work relationships and shared progress remain missing;
-the [scope audit](ACP-EPISODE.md#scope-audit-after-the-users-review) records the gaps.
-Core stays unchanged.
+The first Claude observation → shared notes → result loop now runs with Agent
+0.4.9. ACP plans, usage and session metadata survive idle time and reconnect;
+Project work links session identities, referenced files and the Documents notes
+buffer. Westlake HPC passed eight real turns including cancellation/recovery and
+a human notes edit applied by the same session. Core remains unchanged. Rho's
+190 checks and Agent's 84 checks pass; [the episode](ACP-EPISODE.md#shared-workspace-loop)
+records source coverage, native-source limits and the still-unproven second Agent.
 
 The user asked for an optimization of the home, projects and empty-project screens
 on 2026-10-27, supplying three reference screens for layout weight and hierarchy.
@@ -27,7 +28,7 @@ capability evidence, not the target interface or design acceptance criteria.
 | Execution identity, recovery and Documents buffers | Hardened | Owner and acceptance suites below | None in the current focus |
 | Question → Agent → linked result | Runs; not yet usable from the screens | [Base-R episode](BASE-R-EPISODE.md) | Can the answer be read from one screen? |
 | Comparing two results | Runs | Two views split by hand | Can the differences be read by key? |
-| Conversation started in Rho | Runs | [Conversation episode](CONVERSATION-EPISODE.md) | Does a resumed message go straight to work? |
+| Claude conversation and shared workspace | First loop runs | [ACP episode](ACP-EPISODE.md#shared-workspace-loop) | Second Agent and passive external ACP attachment remain unproven |
 | Project shell and navigation | Runs | Frontend browser suite below | Does it hold up around the reworked episode? |
 | Plugin UI extensions | Runs | Authoring checks below | Does a view built with it serve a real episode? |
 | Domain episode (DESeq2) | Not started | — | What carries over from base-R? |

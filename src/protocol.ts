@@ -6,6 +6,7 @@ import * as contract from './response-contracts.js';
 import { objectSchema as obj, text, refSchema as ref } from '@rho-workspace/plugin-contracts';
 import { routeSchemas } from './task-routing-contract.js';
 import { baseProtocol } from './protocol-base.js';
+import { projectWorkSchema } from './work-contract.js';
 const base = structuredClone(baseProtocol);
 
 // ---------------------------------------------------------------------------
@@ -62,6 +63,7 @@ export const operations: Record<string, any> = { ...base.operations,
   'project.openFile': obj({ ...project, path: { type: 'string', minLength: 1, maxLength: 1024 }, compositionId: text, expectedVersion: integer, changeId: text }),
   // What this project is running: a bounded summary a person may read.
   'project.runs': obj({ ...project, limit: { type: 'integer', minimum: 1, maximum: 50 } }, ['projectId']),
+  'project.work.read': obj({ ...project, limit: { type: 'integer', minimum: 1, maximum: 8 } }, ['projectId']),
   // One run as ordinary files in a new folder, with where they came from and what was checked.
   'action.export': obj({ ...op, destination: { type: 'string', minLength: 1, maxLength: 240 }, unsaved: { enum: ['leave', 'include'] } }, ['projectId', 'operationId']),
   // Dry run: check a body against an operation's schema without doing anything.
@@ -186,6 +188,7 @@ const catalog = { ...contract.capabilityCatalogSchema };
 // A conversation started in Rho and one of its messages: the person's words, the Agent's visible
 // text and tool steps in order, and how the message ended. Hidden reasoning is never kept.
 const conversationSummary = response({ conversationId: text, title: text, client: text, principal: { anyOf: [text, { type: 'null' }] }, createdAt: text, updatedAt: text, version: integer, turns: integer, state: { enum: ['idle', 'running', 'completed', 'failed', 'stopped', 'unknown'] }, lastAt: text });
+const sessionObservation = ownerSchema('agent-session', 'sessionObservationSchema');
 const conversationStep = response({ kind: { enum: ['text', 'tool', 'error'] }, at: text, text: { type: 'string' }, cut: { type: 'boolean' }, id: text, tool: text, operation: text, outcome: { enum: ['requested', 'returned', 'rejected', 'unknown'] } }, ['kind', 'at']);
 const conversationTurn = response({ id: text, by: text, text: { type: 'string' }, sentAt: text, state: { enum: ['running', 'completed', 'failed', 'stopped', 'unknown'] }, startedAt: { anyOf: [text, { type: 'null' }] }, endedAt: { anyOf: [text, { type: 'null' }] }, model: { anyOf: [text, { type: 'null' }] },
   stop: { anyOf: [response({ requestedAt: text, by: text, reason: { enum: ['person', 'closing', 'wall-limit', 'output-limit', 'line-limit', 'identity'] } }), { type: 'null' }] },
@@ -230,6 +233,7 @@ const composition = { anyOf: [contract.legacyCompositionSchema, structuredCompos
 const taskMap = { ...contract.taskMapStateSchema, properties: { ...contract.taskMapStateSchema.properties, receipt: obj({ changeId: identity, requestDigest: digest, kind: { enum: ['declare', 'present', 'respond'] }, author: text, version: positive, at: { type: 'string', format: 'date-time' }, outcome: contract.taskMapReceiptField }, ['changeId', 'kind', 'author', 'version', 'at']) } };
 
 export const responses: Record<string, any> = { ...base.responses, ...ownerResponses,
+  'project.work.read': projectWorkSchema(sessionObservation),
   'project.open': { ...contract.projectRecordSchema, properties: { ...contract.projectRecordSchema.properties, host: contract.cliSchema }, required: [...contract.projectRecordSchema.required, 'host'] },
   'project.pick': response({ cancelled: { type: 'boolean' }, project: { anyOf: [contract.projectSummarySchema, { type: 'null' }] } }),
   'project.source.pick': response({ cancelled: { type: 'boolean' }, selection: { anyOf: [response({ selectionId: text, id: text, root: text, name: text }), { type: 'null' }] } }),
@@ -275,7 +279,7 @@ export const responses: Record<string, any> = { ...base.responses, ...ownerRespo
   'conversation.send': response({ conversation: conversationSummary, turn: conversationTurn }),
   'conversation.permission': response({ conversation: conversationSummary, turn: conversationTurn }),
   'conversation.stop': response({ conversation: conversationSummary, turn: conversationTurn }),
-  'conversation.read': response({ conversation: conversationSummary, first: integer, turns: array(conversationTurn) }),
+  'conversation.read': response({ conversation: conversationSummary, observation: { anyOf: [sessionObservation, { type: 'null' }] }, first: integer, turns: array(conversationTurn) }, ['conversation', 'first', 'turns']),
   'protocol.describe': response({ apiVersion: { const: '2.0' }, schemaVersion: { const: 2 }, revision: digest, entries: array(response({ method: text, summary: text })), next: { type: ['string', 'null'] }, complete: { type: 'boolean' }, contract: response({ method: text, inputSchema: { type: 'object' }, outputSchema: { type: 'object' }, definitions: { type: 'object' }, description: text }) }, ['apiVersion', 'schemaVersion', 'revision', 'entries', 'next', 'complete']),
   'capability.list': { ...catalog, properties: { ...catalog.properties, host: contract.cliSchema }, required: [...(catalog.required ?? []), 'host'] },
   'capability.configure': response({ version: positive, enabled: array(text), receipt: response({ changeId: text, author: text, version: positive, enabled: array(text), at: text }) }),
@@ -340,6 +344,7 @@ export const descriptions = {
   'conversation.stop': 'Person at this machine only: ask Claude Code to stop answering one message. ACP cancellation is confirmed by the original prompt response; a lost connection keeps the outcome unknown. Legacy CLI conversations confirm process exit. Steps already taken stay done.',
   'conversation.permission': 'Person at this machine only: record an offered choice for a pending Agent permission request. The original request identity is retained; repeated identical choices do not respond twice.',
   'conversation.read': 'Read a conversation started in Rho: the person\'s messages, the Agent\'s visible text and tool steps, and how each message ended. Reading starts and resumes nothing.',
+  'project.work.read': 'Person at this machine only: read linked Agent sessions, retained native activity identities, current referenced files and the shared notes document. Source cursors and resource versions remain independent. Does not start an Agent, collector or Host.',
   'resource.register': 'Declare scoped existing bytes and their type/schema at the supplied digest. This read and registration starts no runtime.',
   'project.runs': 'Report what this project has run and what it is running: one bounded summary per operation with its execution state, accepted time, author kind, the artifact paths its plan declared, whether each of those files is on disk now, whether the producer wrote a completion inventory, and the recorded integrity and domain states. A declaration, a file on disk and a verified artifact are separate facts. It carries no request body, no code and no output text, and starts nothing.',
   'protocol.validate': 'Check one operation body against its versioned schema without executing it: the same checks the server applies, reported with the edit each problem needs. Use it before a write whose shape is uncertain; it changes nothing and starts nothing.',

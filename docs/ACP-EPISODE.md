@@ -229,6 +229,76 @@ new progress model, external ACP attachment, a second Agent or a shared workspac
 implementation. Those require their own real project observations; the Core
 boundary and the existing source ownership remain unchanged.
 
+## Shared workspace loop
+
+The next batch implemented the first Claude loop before combined verification,
+as the user requested. Agent 0.4.9 owns connection-level session observation and
+its display/schema. Rho retains that projection with the original conversation,
+including idle updates and a final disconnect write. Replay has its own origin;
+it cannot append another turn or erase a later acknowledged message. Plans replace
+the prior list. Usage preserves the reported values and currency. Unrepresented
+v1 variants and bounded omissions remain visible; this is not a full transcript.
+
+`project.work.read` links conversations, native stream identities, current tool
+file references, retained operation/resource references and `project-notes.md`.
+The shared note is one Documents buffer with its existing save/undo/conflict rules.
+The Overview opens the note, the original conversation and referenced files.
+Model plans, current file hashes and managed run facts remain separate evidence.
+The project cursor invalidates observations; it does not replace owner versions.
+
+`node scripts/acp-episode.mjs --work` passed eight real turns with Claude Code
+2.1.311, ACP adapter 0.97.0 and Westlake HPC `deepseek-v4.1-flash`:
+
+1. The first message lost its HTTP acknowledgement; Retry retained one dispatch.
+   Native planning tools emitted a real ACP plan and context usage while Read and
+   Rho MCP inspected the project. A second message reused the session and wrote
+   Unicode text.
+2. Browser loss retained the same foreground invocation. Cancellation was confirmed
+   by its original ACP prompt and native PID exit. Killing the owned transport
+   retained partial output and an unknown outcome; duplicate input did not replay.
+   Explicit next messages loaded the same session after transport and service loss.
+3. The person opened Shared notes, edited and saved `teal river 你好` and `18`
+   through Documents. Continue conversation selected the original session. Claude
+   read that decision, updated its real plan and wrote `work-result.txt`. The work
+   view's SHA-256 matched the independently read 21 bytes. One notes buffer was
+   retained, with no unsaved changes.
+
+Screenshot review found that opening the result added its tab but left the notes
+selected. The earlier content assertion also matched the notes. Rho now passes
+the returned view identity to workspace navigation; the acceptance checks the
+selected result tab and exact result text. The final browser check reopened notes
+then the result, displaying the actual bytes at 1440/768/390 without another model
+turn. The WebUI build and types passed after this correction.
+
+The native-source check then used an owned Host on the same disposable project
+and the unchanged collector to backfill the real Claude transcript: 44 events,
+then zero new events on a repeat. ACP and native transcript sources appeared in
+one project view with distinct identities/cursors; View activity opened the
+existing native feed. This was explicit transcript collection, not passive ACP
+attachment to someone else's running session. No new Agent turn was dispatched.
+
+Evidence: `work/acp-work-episode-tasks/report.json` (eight checks, 25 captures),
+`work/acp-work-browser/report.json` (1440/768/390, failed read and refresh recovery),
+`work/acp-work-result-final/report.json` and `work/acp-work-native/report.json`.
+Browser inspection included the plan,
+notes editor, referenced result, lower file list and phone layout. Rho passed all
+190 tests with four test workers; Agent passed all 84 tests. Contract generation
+and type checks passed. The final cached-summary correction passed five focused
+application tests; eight focused owner tests cover the observation boundary.
+
+Failures were retained: the first batch missed Rho's exact Agent version selection;
+the first provider run exposed no native planning tools, so prose was correctly
+not counted as an ACP plan. The driver now defaults the SDK-documented
+`CLAUDE_CODE_ENABLE_TODO_TOOLS=1`, without changing native permissions. One fully
+parallel MCP test timed out; its isolated rerun and the complete four-worker suite
+passed. No failed run was counted as acceptance.
+
+This closes the observed first-Claude shared-workspace loop. It does not establish
+a second Agent backend, passive external ACP attachment, all 14 update displays,
+automatic filesystem watching, scientific result validity or usability with users.
+Core source and binary are unchanged. The earlier installed artifact above remains
+evidence for Agent 0.4.8; it is not an installation claim for these new changes.
+
 ## Resource limits
 
 `conversationLimits` can be set through Rho's `--limits` configuration. These are
@@ -243,6 +313,9 @@ application budgets, not native heap/process quotas.
 | Native steps / turn wall time | 64 / 30 minutes | Native step-limit result, or cancellation followed by confirmed/unknown outcome. |
 | Stdout and stderr / NDJSON line | 32 MiB per turn / 4 MiB | Close transport; retain received output and uncertainty. |
 | Retained text block / turn content | 64 KiB / 256 KiB | Mark cut text; count omitted updates; do not grow the record. |
+| Session projection (`maxObservationBytes`) | 512 KiB | Close observation on excess; retain the prior projection. Reserved within the record budget. |
+| Agent projection (`observationLimits`) | 32 plan entries / 32 tools / 4 locations each / 1,024 characters per text | Keep bounded content, count omissions; trusted configuration may reduce these limits. |
+| Referenced file observation (`sessionFileLimits`) | 16 files / 2 MiB each | Omit excess references; report missing, changed, unavailable or oversized files. No traversal outside project scope. |
 | Native permission requests | 32 per turn, within turn byte budget | Decline additional requests; keep prior choices. |
 | Cancellation acknowledgement | 5 seconds | Close the owned connection; report unknown unless the prompt confirmed cancellation. |
 

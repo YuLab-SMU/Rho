@@ -24,6 +24,11 @@ createInterface({input:process.stdin}).on('line',line=>{
  if(r.method==='session/cancel'){if(active)out({id:active,result:{stopReason:'cancelled'}});active=null;permission=null;return;}
  if(r.method==='session/prompt'){
   active=r.id;const text=p.prompt[0].text;update({sessionUpdate:'agent_message_chunk',content:{type:'text',text:'kept '+text},messageId:'answer'});
+  if(text==='observe'){
+    update({sessionUpdate:'tool_call',toolCallId:'notes',title:'Read',status:'completed',locations:[{path:process.cwd()+'/project-notes.md'}]});
+    update({sessionUpdate:'plan',entries:[{content:'Initial plan',status:'in_progress',priority:'medium'}]});
+    setTimeout(()=>update({sessionUpdate:'plan',entries:[{content:'Idle replacement 你好',status:'completed',priority:'medium'}]}),100);
+  }
   if(text==='drop')return process.exit(7);
   if(text==='wait')return;
   if(text==='permission'){permission=r.id;out({id:'permission',method:'session/request_permission',params:{sessionId:'kept-session',toolCall:{toolCallId:'write',title:'Write notes',rawInput:{file_path:'notes.txt'}},options:[{optionId:'yes',kind:'allow_once',name:'Allow once'},{optionId:'no',kind:'reject_once',name:'Reject'}]}});return;}
@@ -73,6 +78,33 @@ test('Rho keeps ACP message identities, one grant per connection and the origina
     assert.equal((await f.calls()).filter(x => x.kind === 'session/new').length, 1);
     assert.deepEqual((await f.calls()).filter(x => x.kind === 'session/load').map(x => x.sessionId), [session]);
     await assert.rejects(fs.stat(path.join(f.project.root, '.rho/host.sock')), { code: 'ENOENT' });
+  } finally { await f.service.close(); await fs.rm(root, { recursive: true, force: true }); }
+});
+test('project work links session reports to current files and the single notes buffer; reads never connect', async () => {
+  const root = await fs.mkdtemp('/tmp/rho-acp-work-'); let f = await setup(root, { idleMs: 500 });
+  try {
+    const empty = await f.call('project.work.read', {});
+    assert.deepEqual(empty.sessions, []); assert.equal(empty.native.state, 'unavailable'); assert.equal((await f.calls()).length, 0);
+    const note = await f.call('project.openFile', { path: 'project-notes.md', compositionId: 'notes', expectedVersion: 0, changeId: 'open-notes' });
+    const again = await f.call('project.openFile', { path: 'project-notes.md', compositionId: 'notes', expectedVersion: note.composition.version, changeId: 'open-again' });
+    assert.equal(note.document.id, again.document.id); assert.equal(note.viewId, again.viewId);
+    await fs.writeFile(path.join(f.project.root, 'project-notes.md'), 'Human instruction 你好');
+    const started = await f.call('conversation.start', { changeId: 'observe', text: 'observe' }), id = started.conversation.conversationId;
+    const idle = await f.wait(id, r => r.observation?.plan?.entries[0]?.content === 'Idle replacement 你好');
+    assert.equal(idle.turns.length, 1); assert.equal(idle.turns[0].state, 'completed'); assert.equal(idle.observation.connected, true);
+    const work = await f.call('project.work.read', {});
+    assert.equal(work.sessions[0].conversationId, id); assert.equal(work.notes.documentId, note.document.id);
+    assert.equal(work.files[0].state, 'observed'); assert.equal(work.files[0].references[0].session, work.sessions[0].id);
+    assert.equal(work.sessions[0].observation.plan.entries[0].content, 'Idle replacement 你好');
+    await f.call('conversation.send', { conversationId: id, changeId: 'next', text: 'next' }); await f.wait(id, ended);
+    await f.wait(id, r => !r.observation.connected);
+    assert.equal((await f.record(id)).turns.length, 2, 'idle projection flush cannot overwrite a newer turn');
+    // Operator access is deliberately insufficient for a local person's conversation.
+    await assert.rejects(f.operator.call('project.work.read', { projectId: f.project.id }));
+    await f.service.close(); f = await setup(root);
+    const before = (await f.calls()).length, retained = await f.call('project.work.read', {});
+    assert.equal(retained.sessions[0].observation.connected, false); assert.equal((await f.calls()).length, before);
+    assert.equal(retained.sessions[0].observation.plan.entries[0].content, 'Idle replacement 你好');
   } finally { await f.service.close(); await fs.rm(root, { recursive: true, force: true }); }
 });
 test('Agent permission choices are scoped, conditional, retained, and cancelled with the original turn', async () => {
