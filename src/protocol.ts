@@ -78,6 +78,7 @@ export const operations: Record<string, any> = { ...base.operations,
   // A conversation the person starts in Rho: their words, under a request identity they hold.
   'conversation.start': obj({ ...project, changeId, text: { type: 'string', minLength: 1, maxLength: 16384 } }),
   'conversation.send': obj({ ...project, conversationId: changeId, changeId, text: { type: 'string', minLength: 1, maxLength: 16384 } }),
+  'conversation.permission': obj({ ...project, conversationId: changeId, turnId: changeId, permissionId: changeId, optionId: { type: 'string', minLength: 1, maxLength: 256 } }),
   'conversation.stop': obj({ ...project, conversationId: changeId, turnId: changeId }),
   'conversation.read': obj({ ...project, conversationId: changeId, before: integer, limit: { type: 'integer', minimum: 1, maximum: 200 } }, ['projectId', 'conversationId'])
 };
@@ -189,6 +190,7 @@ const conversationStep = response({ kind: { enum: ['text', 'tool', 'error'] }, a
 const conversationTurn = response({ id: text, by: text, text: { type: 'string' }, sentAt: text, state: { enum: ['running', 'completed', 'failed', 'stopped', 'unknown'] }, startedAt: { anyOf: [text, { type: 'null' }] }, endedAt: { anyOf: [text, { type: 'null' }] }, model: { anyOf: [text, { type: 'null' }] },
   stop: { anyOf: [response({ requestedAt: text, by: text, reason: { enum: ['person', 'closing', 'wall-limit', 'output-limit', 'line-limit', 'identity'] } }), { type: 'null' }] },
   steps: array(conversationStep), omitted: integer,
+  permissions: array(response({ id: text, title: { type: 'string' }, toolCallId: text, details: { type: 'string' }, options: array(response({ id: text, name: text, kind: text })), state: { enum: ['pending', 'selected', 'cancelled'] }, selected: text }, ['id', 'title', 'toolCallId', 'options', 'state'])),
   retry: { anyOf: [response({ attempt: { anyOf: [integer, { type: 'null' }] }, of: { anyOf: [integer, { type: 'null' }] }, status: { anyOf: [integer, { type: 'null' }] }, at: text }), { type: 'null' }] },
   result: { anyOf: [response({ isError: { type: 'boolean' }, kind: { anyOf: [text, { type: 'null' }] }, reason: { anyOf: [text, { type: 'null' }] }, steps: { anyOf: [integer, { type: 'null' }] }, durationMs: { anyOf: [{ type: 'number' }, { type: 'null' }] }, costUsd: { anyOf: [{ type: 'number' }, { type: 'null' }] }, message: { anyOf: [{ type: 'string' }, { type: 'null' }] } }), { type: 'null' }] },
   problem: { anyOf: [{ type: 'string' }, { type: 'null' }] } }, ['id', 'by', 'text', 'sentAt', 'state', 'steps', 'omitted', 'problem']);
@@ -271,6 +273,7 @@ export const responses: Record<string, any> = { ...base.responses, ...ownerRespo
   'session.browser.revoke': response({ sessionId: text, revoked: { type: 'boolean' } }),
   'conversation.start': response({ conversation: conversationSummary, turn: conversationTurn }),
   'conversation.send': response({ conversation: conversationSummary, turn: conversationTurn }),
+  'conversation.permission': response({ conversation: conversationSummary, turn: conversationTurn }),
   'conversation.stop': response({ conversation: conversationSummary, turn: conversationTurn }),
   'conversation.read': response({ conversation: conversationSummary, first: integer, turns: array(conversationTurn) }),
   'protocol.describe': response({ apiVersion: { const: '2.0' }, schemaVersion: { const: 2 }, revision: digest, entries: array(response({ method: text, summary: text })), next: { type: ['string', 'null'] }, complete: { type: 'boolean' }, contract: response({ method: text, inputSchema: { type: 'object' }, outputSchema: { type: 'object' }, definitions: { type: 'object' }, description: text }) }, ['apiVersion', 'schemaVersion', 'revision', 'entries', 'next', 'complete']),
@@ -332,9 +335,10 @@ export const descriptions = {
   'action.submit': 'Execute the explicitly selected project R script snapshot and requirements. Persist operationId before delivery; identical retries retain the original Core identity. Output directory is the first R argument, followed by explicit args or frozen resource paths. Artifact paths are output-relative; completion is run-directory-relative, returned as plan.completion, so an inventory can remain beside immutable producer artifacts.',
   'binding.activity.append': 'Registered native adapter only: retain original CLI tool and artifact-ready observations. This does not execute, validate, or present artifacts.',
   'task.routing.put': 'Control plane only: conditionally assign one task and business binding to this project without starting a native session.',
-  'conversation.start': 'Person at this machine only: start a conversation with Claude Code in this project. Rho runs the local Claude Code CLI with this project\'s Agent grant and records the message before it starts. A repeated changeId with the same text returns the original conversation and starts nothing.',
+  'conversation.start': 'Person at this machine only: start a conversation with Claude Code in this project. Rho selects the Agent plugin backend, attaches this project\'s MCP grant and records the message before sending it. A repeated changeId with the same text returns the original conversation and starts nothing.',
   'conversation.send': 'Person at this machine only: send the next message to a conversation started in Rho, which resumes the same Claude Code session. Refused while the previous message is being answered. A repeated changeId with the same text returns the original message.',
-  'conversation.stop': 'Person at this machine only: ask Claude Code to stop answering one message. The stop is confirmed when the process is seen to end; steps already taken stay done.',
+  'conversation.stop': 'Person at this machine only: ask Claude Code to stop answering one message. ACP cancellation is confirmed by the original prompt response; a lost connection keeps the outcome unknown. Legacy CLI conversations confirm process exit. Steps already taken stay done.',
+  'conversation.permission': 'Person at this machine only: record an offered choice for a pending Agent permission request. The original request identity is retained; repeated identical choices do not respond twice.',
   'conversation.read': 'Read a conversation started in Rho: the person\'s messages, the Agent\'s visible text and tool steps, and how each message ended. Reading starts and resumes nothing.',
   'resource.register': 'Declare scoped existing bytes and their type/schema at the supplied digest. This read and registration starts no runtime.',
   'project.runs': 'Report what this project has run and what it is running: one bounded summary per operation with its execution state, accepted time, author kind, the artifact paths its plan declared, whether each of those files is on disk now, whether the producer wrote a completion inventory, and the recorded integrity and domain states. A declaration, a file on disk and a verified artifact are separate facts. It carries no request body, no code and no output text, and starts nothing.',

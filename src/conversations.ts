@@ -1,20 +1,13 @@
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
-import { spawn, type ChildProcess } from 'node:child_process';
-import { createInterface } from 'node:readline';
-import { once } from 'node:events';
+import type { AgentConversation, AgentPermission, ConversationStep, ConversationEvent, ClaudeAcpOptions } from '@rho-workspace/plugin-agent/conversation';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { atomicJson, canonical, digest, Fault, now, readJson, requireThat } from '@rho-workspace/plugin-contracts';
 import type { Project } from './state.js';
 
-// A conversation the person starts in Rho. Rho holds its input: the person writes in the Agent
-// panel, and Rho runs the person's own Claude Code CLI in the project folder, one process per
-// message, with this project's Agent grant and no other tools. The conversation is Claude Code's
-// session under its native id, kept in Claude Code's own store; each later message resumes that
-// id. Rho keeps what the person sent, what the Agent wrote back (never hidden reasoning), the
-// tools it called and how each message ended. A session started outside Rho keeps its own window
-// as its entry; Rho only shows its work.
+// Rho holds user messages and their original identities. The selected Agent plugin
+// owns the connection, native session and protocol. Reads never start a driver.
 export const conversationLimits = {
   // Conversations kept per project; starting another is refused.
   maxConversations: 64,
@@ -30,32 +23,37 @@ export const conversationLimits = {
   maxTextBytes: 65536,
   // Messages being answered at once by this service; another is refused until one ends.
   maxRunning: 4,
+  // Owned connections, including idle ones; evict an idle connection or refuse.
+  maxConnections: 4, idleMs: 300000, connectTimeoutMs: 60000,
+  // Permission requests kept per message; later requests are declined.
+  maxPermissions: 32,
   // Claude Code's own step limit (--max-turns) for one message.
   maxAgentTurns: 64,
-  // One message's wall time; past it the process is stopped and the stop recorded.
+  // One message's wall time; past it cancellation is requested, then confirmed or unknown.
   turnWallMs: 1800000,
   // What Claude Code may write for one message, and in one record; past either it is stopped.
   maxOutputBytes: 33554432, maxLineBytes: 4194304,
   // Between asking a process to stop and forcing it.
   stopGraceMs: 5000
 };
-const rhoTools = ['rho_index', 'rho_resolve', 'rho_call', 'rho_read'];
 type StopReason = 'person' | 'closing' | 'wall-limit' | 'output-limit' | 'line-limit' | 'identity';
-interface Step { kind: 'text' | 'tool' | 'error'; at: string; text?: string; cut?: boolean; id?: string; tool?: string; operation?: string; outcome?: 'requested' | 'returned' | 'rejected' | 'unknown' }
+type Step = ConversationStep;
+interface Permission extends AgentPermission { state: 'pending' | 'selected' | 'cancelled'; selected?: string }
+export interface ConversationConfig { backend?: 'claude-acp' | 'claude-cli'; claudeAcp?: Omit<ClaudeAcpOptions, 'cwd' | 'mcpServers' | 'limits' | 'sessionId' | 'claude'> }
 interface Turn {
   id: string; changeId: string; requestDigest: string; by: string; text: string; sentAt: string;
   state: 'running' | 'completed' | 'failed' | 'stopped' | 'unknown'; startedAt: string | null; endedAt: string | null; pid: number | null; model: string | null;
   stop: { requestedAt: string; by: string; reason: StopReason } | null; exit: { code: number | null; signal: string | null } | null;
   steps: Step[]; omitted: number; retry: { attempt: number | null; of: number | null; status: number | null; at: string } | null;
   result: { isError: boolean; kind: string | null; reason: string | null; steps: number | null; durationMs: number | null; costUsd: number | null; message: string | null } | null;
-  problem: string | null;
+  problem: string | null; permissions?: Permission[];
 }
 interface Conversation {
-  format: 1; id: string; changeId: string; requestDigest: string; createdAt: string; createdBy: string; updatedAt: string; version: number;
-  client: 'claude-code'; nativeSessionId: string; confirmed: boolean; principal: string | null; title: string; turns: Turn[];
+  format: 1 | 2; backend?: 'claude-acp' | 'claude-cli'; acpSessionId?: string; adapter?: { name: string; version?: string }; protocolVersion?: number; id: string; changeId: string; requestDigest: string; createdAt: string; createdBy: string; updatedAt: string; version: number;
+  client: 'claude-code'; nativeSessionId: string | null; confirmed: boolean; principal: string | null; title: string; turns: Turn[];
 }
 interface Summary { conversationId: string; changeId: string; requestDigest: string; title: string; client: string; principal: string | null; createdAt: string; updatedAt: string; version: number; turns: number; state: string; lastAt: string }
-interface Live { project: Project; conversation: Conversation; turn: Turn; child: ChildProcess | null; stop(reason: StopReason, by: string): void; done: Promise<void> }
+interface Live { project: Project; conversation: Conversation; turn: Turn; controller: AbortController; stop(reason: StopReason, by: string): void; done: Promise<void> }
 export interface ConversationPorts {
   // The project's Agent grant for this conversation, written to a private connection file.
   grant(project: Project, conversation: { id: string; title: string }): Promise<{ file: string; principal: string }>;
@@ -63,8 +61,6 @@ export interface ConversationPorts {
   changed(project: Project, conversationId: string): Promise<void>;
 }
 const identity = /^c-[a-f0-9]{16}$/;
-const number = (value: unknown) => typeof value === 'number' && Number.isFinite(value) ? value : null;
-const word = (value: unknown) => typeof value === 'string' && value ? value : null;
 function cut(text: string, maxBytes: number) {
   if (Buffer.byteLength(text) <= maxBytes) return { text };
   // Cut on a character boundary; the cut is reported, never silent.
@@ -78,7 +74,12 @@ export class Conversations {
   private queues = new Map<string, Promise<unknown>>();
   private flushes = new Map<string, ReturnType<typeof setTimeout>>();
   private closing = false;
-  constructor(private ports: ConversationPorts, public binary = 'claude', limits: Partial<typeof conversationLimits> = {}) { this.limits = { ...conversationLimits, ...limits }; }
+  private drivers = new Map<string, { driver: AgentConversation; timer?: ReturnType<typeof setTimeout> }>();
+  private permissions = new Map<string, { permission: Permission; resolve(choice: string | null): void }>();
+  constructor(private ports: ConversationPorts, public binary = 'claude', limits: Partial<typeof conversationLimits> = {}, private config: ConversationConfig = {}) {
+    this.limits = { ...conversationLimits, ...limits };
+    requireThat(!config.backend || ['claude-acp', 'claude-cli'].includes(config.backend), 'invalid', 'Choose claude-acp or claude-cli.');
+  }
 
   private serial<T>(key: string, run: () => Promise<T>) {
     const task = (this.queues.get(key) ?? Promise.resolve()).catch(() => {}).then(run);
@@ -99,7 +100,7 @@ export class Conversations {
     const stat = await fs.stat(file).catch((e: any) => { if (e.code === 'ENOENT') throw new Fault('not_found', 'No conversation has that identity in this project.'); throw e; });
     requireThat(stat.size <= this.limits.maxRecordBytes + 1048576, 'limit', 'This conversation record is larger than Rho reads; it is kept as it is.', { limit: 'maxRecordBytes' });
     const value = await readJson<Conversation>(file);
-    requireThat(value?.format === 1 && value.id === id && Array.isArray(value.turns), 'storage', 'This conversation record is unreadable; it is kept as it is.');
+    requireThat([1, 2].includes(value?.format) && value.id === id && Array.isArray(value.turns), 'storage', 'This conversation record is unreadable; it is kept as it is.');
     return value;
   }
   private summary(c: Conversation): Summary {
@@ -126,7 +127,7 @@ export class Conversations {
   // is sent again on its behalf.
   private view(project: Project, c: Conversation, turn: Turn) {
     if (turn.state !== 'running' || this.liveTurn(project, c, turn)) return turn;
-    return { ...turn, state: 'unknown' as const, problem: turn.problem ?? 'Rho stopped before this message was answered. Steps after the last one shown are not known, and the message was not sent again.' };
+    return { ...turn, permissions: turn.permissions?.map(p => p.state === 'pending' ? { ...p, state: 'cancelled' as const } : p), state: 'unknown' as const, problem: turn.problem ?? 'Rho stopped before this message was answered. Steps after the last one shown are not known, and the message was not sent again.' };
   }
   private reply(project: Project, c: Conversation, turn: Turn) { return { conversation: this.listed(project, this.summary(c)), turn: this.view(project, c, turn) }; }
   private listed(project: Project, s: Summary) {
@@ -168,7 +169,8 @@ export class Conversations {
       }
       requireThat(index.conversations.length < this.limits.maxConversations, 'limit', `This project keeps at most ${this.limits.maxConversations} conversations started in Rho.`, { limit: 'maxConversations', maximum: this.limits.maxConversations });
       this.capacity();
-      const at = now(), c: Conversation = { format: 1, id: 'c-' + randomBytes(8).toString('hex'), changeId: input.changeId, requestDigest, createdAt: at, createdBy: by, updatedAt: at, version: 0, client: 'claude-code', nativeSessionId: randomUUID(), confirmed: false, principal: null, title: titleOf(text), turns: [] };
+      const backend = this.config.backend ?? 'claude-acp';
+      const at = now(), c: Conversation = { format: 2, backend, id: 'c-' + randomBytes(8).toString('hex'), changeId: input.changeId, requestDigest, createdAt: at, createdBy: by, updatedAt: at, version: 0, client: 'claude-code', nativeSessionId: backend === 'claude-cli' ? randomUUID() : null, confirmed: false, principal: null, title: titleOf(text), turns: [] };
       const turn = this.turn(input.changeId, requestDigest, by, text, 1);
       c.turns.push(turn);
       // Recorded before the process starts, so a crash in between leaves an unknown message, never a resend.
@@ -202,7 +204,7 @@ export class Conversations {
       return this.reply(project, c, turn);
     });
   }
-  // A stop is a request until the process is seen to end; what was already done stays done.
+  // A stop is a request until the driver confirms it; what was already done stays done.
   async stop(project: Project, by: string, input: { conversationId: string; turnId: string }) {
     return this.serial(project.id, async () => {
       const c = await this.load(project, input.conversationId), turn = c.turns.find(t => t.id === input.turnId);
@@ -212,119 +214,131 @@ export class Conversations {
       return this.reply(project, c, turn);
     });
   }
+  async permission(project: Project, by: string, input: { conversationId: string; turnId: string; permissionId: string; optionId: string }) {
+    return this.serial(project.id, async () => {
+      const c = await this.load(project, input.conversationId), turn = c.turns.find(t => t.id === input.turnId);
+      const permission = turn?.permissions?.find(p => p.id === input.permissionId);
+      requireThat(turn && permission, 'not_found', 'No Agent permission request has that identity.');
+      if (permission.state === 'selected') {
+        requireThat(permission.selected === input.optionId, 'conflict', 'That request already has a different choice.');
+        return this.reply(project, c, turn);
+      }
+      const pending = this.permissions.get(project.id + '/' + c.id + '/' + permission.id);
+      requireThat(permission.state === 'pending' && pending && this.liveTurn(project, c, turn), 'unavailable', 'This Agent request is no longer waiting for a choice.');
+      requireThat(permission.options.some(x => x.id === input.optionId), 'invalid', 'Choose an option offered by this Agent request.');
+      permission.state = 'selected'; permission.selected = input.optionId;
+      try { await this.write(project, c); }
+      catch (error) { permission.state = 'pending'; delete permission.selected; throw error; }
+      pending.resolve(input.optionId);
+      return this.reply(project, c, turn);
+    });
+  }
   async close() {
     this.closing = true;
     for (const live of this.live.values()) live.stop('closing', 'rho');
     await Promise.all([...this.live.values()].map(live => live.done));
+    for (const entry of this.drivers.values()) { if (entry.timer) clearTimeout(entry.timer); await entry.driver.close(); }
+    this.drivers.clear();
     await Promise.all([...this.queues.values()].map(task => task.catch(() => {})));
   }
-
+  private cancelPermissions(project: Project, c: Conversation) {
+    const prefix = project.id + '/' + c.id + '/';
+    for (const [key, pending] of this.permissions) if (key.startsWith(prefix)) {
+      if (pending.permission.state === 'pending') pending.permission.state = 'cancelled';
+      pending.resolve(null); this.permissions.delete(key);
+    }
+  }
   private launch(project: Project, c: Conversation, turn: Turn) {
-    const key = project.id + '/' + c.id + '/' + turn.id;
-    const live: Live = { project, conversation: c, turn, child: null, done: Promise.resolve(), stop: (reason, by) => {
+    const key = project.id + '/' + c.id + '/' + turn.id, controller = new AbortController();
+    const live: Live = { project, conversation: c, turn, controller, done: Promise.resolve(), stop: (reason, by) => {
       if (turn.stop) return;
       turn.stop = { requestedAt: now(), by, reason };
-      const signal = (name: NodeJS.Signals) => { if (live.child?.pid) try { process.kill(-live.child.pid, name); } catch {} };
-      signal('SIGTERM');
-      setTimeout(() => signal('SIGKILL'), this.limits.stopGraceMs).unref();
+      controller.abort(); this.cancelPermissions(project, c);
     } };
     this.live.set(key, live);
-    live.done = this.run(live).catch(e => { turn.problem ??= 'Rho lost track of this message: ' + (e instanceof Error ? e.message : String(e)); })
+    live.done = this.run(live).catch(() => { turn.problem ??= 'Rho lost track of this message. Received steps were kept; it was not sent again.'; })
       .finally(async () => {
         if (turn.state === 'running') turn.state = 'unknown';
         turn.endedAt ??= now();
+        for (const step of turn.steps) if (step.kind === 'tool' && step.outcome === 'requested') step.outcome = 'unknown';
+        this.cancelPermissions(project, c);
         const pending = this.flushes.get(project.id + '/' + c.id); if (pending) { clearTimeout(pending); this.flushes.delete(project.id + '/' + c.id); }
-        // The message stays held until its ending is written, so closing waits for that write.
         await this.serial(project.id, () => this.write(project, c)).catch(() => {});
         this.live.delete(key);
+        const entry = this.drivers.get(project.id + '/' + c.id);
+        if (entry) { entry.timer = setTimeout(() => void this.serial('driver-pool', async () => {
+          if ([...this.live.values()].some(x => x.project.id === project.id && x.conversation.id === c.id)) return;
+          if (this.drivers.get(project.id + '/' + c.id) === entry) { await entry.driver.close(); this.drivers.delete(project.id + '/' + c.id); }
+        }).catch(() => {}), this.limits.idleMs); entry.timer.unref(); }
       });
   }
-  private async run(live: Live) {
-    const { project, conversation: c, turn } = live;
-    let grant;
-    try { grant = await this.ports.grant(project, c); }
-    catch (e) {
-      turn.state = 'failed'; turn.endedAt = now();
-      turn.problem = 'Rho could not give this conversation access to the project. ' + (e instanceof Error ? e.message : ''); return;
-    }
-    c.principal = grant.principal;
-    // Stopped before Claude Code started: nothing ran for this message.
-    if (turn.stop) { turn.state = 'stopped'; turn.endedAt = now(); return; }
-    const mcp = JSON.stringify({ mcpServers: { rho: { command: process.execPath, args: [fileURLToPath(import.meta.resolve('@rho-workspace/plugin-agent/mcp'))], env: { RHO_AGENT_CONNECTION: grant.file } } } });
-    const args = ['-p', '--output-format', 'stream-json', '--verbose', ...(c.confirmed ? ['--resume', c.nativeSessionId] : ['--session-id', c.nativeSessionId]),
-      '--strict-mcp-config', '--mcp-config', mcp, '--tools', '', '--allowedTools', ...rhoTools.map(name => 'mcp__rho__' + name),
-      '--permission-mode', 'dontAsk', '--max-turns', String(this.limits.maxAgentTurns),
-      '--append-system-prompt', `You were started from Rho by the person working in the Rho project "${project.name ?? path.basename(project.root)}". They read your replies in Rho's Agent panel, next to the project's files, documents, tables, figures and runs. Work on the project through the rho tools: rho_index finds operations, rho_resolve gives their contracts, rho_call calls one and rho_read reads a large result. Keep results in this project and say what you changed or ran.`];
-    const child = spawn(this.binary, args, { cwd: project.root, detached: true, stdio: ['pipe', 'pipe', 'pipe'], env: process.env });
-    live.child = child;
-    turn.startedAt = now(); turn.pid = child.pid ?? null;
-    const ended = new Promise<{ code: number | null; signal: string | null; error?: Error }>(resolve => {
-      child.once('error', error => resolve({ code: null, signal: null, error }));
-      child.once('close', (code, signal) => resolve({ code, signal }));
+  private async driver(project: Project, c: Conversation) {
+    return this.serial('driver-pool', async () => {
+      const key = project.id + '/' + c.id, old = this.drivers.get(key);
+      if (old?.timer) clearTimeout(old.timer);
+      if (old?.driver.connected) return old.driver;
+      if (old) { await old.driver.close(); this.drivers.delete(key); }
+      if (this.drivers.size >= this.limits.maxConnections) {
+        const idle = [...this.drivers].find(([k]) => ![...this.live.values()].some(x => x.project.id + '/' + x.conversation.id === k));
+        requireThat(idle, 'limit', 'All Agent connections are busy. Wait for one to finish.', { limit: 'maxConnections' });
+        if (idle[1].timer) clearTimeout(idle[1].timer); await idle[1].driver.close(); this.drivers.delete(idle[0]);
+      }
+      const grant = await this.ports.grant(project, c); c.principal = grant.principal;
+      const mcpServers = [{ name: 'rho', command: process.execPath, args: [fileURLToPath(import.meta.resolve('@rho-workspace/plugin-agent/mcp'))], env: [{ name: 'RHO_AGENT_CONNECTION', value: grant.file }] }];
+      const { ClaudeAcpConversation, ClaudeCliConversation } = await import('@rho-workspace/plugin-agent/conversation');
+      const driver = (c.backend ?? 'claude-cli') === 'claude-acp'
+        ? new ClaudeAcpConversation({ ...this.config.claudeAcp, cwd: project.root, mcpServers, limits: this.limits, sessionId: c.acpSessionId, claude: this.binary })
+        : new ClaudeCliConversation({ cwd: project.root, binary: this.binary, sessionId: c.nativeSessionId!, confirmed: c.confirmed, projectName: project.name ?? path.basename(project.root), mcpServers, limits: this.limits });
+      this.drivers.set(key, { driver }); return driver;
     });
-    child.stdin.on('error', () => {});
-    child.stdin.end(turn.text);
-    let bytes = 0, stderr = '';
-    child.stderr.on('data', (chunk: Buffer) => { stderr = (stderr + chunk.toString('utf8')).slice(-4096); });
-    child.stdout.on('data', (chunk: Buffer) => { bytes += chunk.length; if (bytes > this.limits.maxOutputBytes) live.stop('output-limit', 'rho'); });
-    const lines = createInterface({ input: child.stdout, crlfDelay: Infinity }), read = once(lines, 'close');
-    lines.on('line', line => {
-      if (Buffer.byteLength(line) > this.limits.maxLineBytes) return live.stop('line-limit', 'rho');
-      let record: any; try { record = JSON.parse(line); } catch { return; }
-      if (this.observe(c, turn, record)) this.schedule(project, c);
-      else live.stop('identity', 'rho');
-    });
-    const wall = setTimeout(() => live.stop('wall-limit', 'rho'), this.limits.turnWallMs); wall.unref();
-    const end = await ended; clearTimeout(wall);
-    await Promise.race([read, new Promise(resolve => setTimeout(resolve, 1000).unref())]);
-    turn.exit = { code: end.code, signal: end.signal }; turn.endedAt = now(); turn.retry = null;
-    for (const step of turn.steps) if (step.kind === 'tool' && step.outcome === 'requested') step.outcome = 'unknown';
-    if (turn.result) turn.state = turn.result.isError ? 'failed' : 'completed';
-    else if (turn.stop) turn.state = 'stopped';
-    else {
-      turn.state = 'failed';
-      const said = stderr.trim().split('\n').filter(Boolean).at(-1);
-      turn.problem ??= end.error ? `Claude Code could not be started (${(end.error as NodeJS.ErrnoException).code ?? end.error.message}). Install it, or start Rho with --claude pointing to it.`
-        : `Claude Code ended (${end.signal ?? 'exit ' + end.code}) without finishing this message.${said ? ' It said: ' + cut(said, 1024).text : ''}`;
-    }
   }
-  // Returns false when the record names another native session: the conversation's identity is
-  // the session Rho started, and a stream about a different one is not this conversation.
-  private observe(c: Conversation, turn: Turn, record: any) {
-    if (typeof record?.session_id === 'string' && record.session_id !== c.nativeSessionId) {
-      turn.problem = 'Claude Code reported a different session, so Rho stopped this message to keep the conversation as it was.'; return false;
+  private observe(live: Live, event: ConversationEvent) {
+    const { project, conversation: c, turn } = live;
+    if (event.type === 'started') { turn.pid = event.pid; turn.startedAt ??= now(); }
+    if (event.type === 'model') turn.model = event.model;
+    if (event.type === 'retry') turn.retry = event.retry;
+    if (event.type === 'limit') live.stop(event.reason, 'rho');
+    if (event.type === 'step') {
+      const incoming = event.step;
+      const existing = incoming.kind === 'tool' && incoming.id ? turn.steps.find(s => s.kind === 'tool' && s.id === incoming.id)
+        : event.append && turn.steps.at(-1)?.kind === 'text' && turn.steps.at(-1)?.id === incoming.id ? turn.steps.at(-1) : undefined;
+      const next = { ...existing, ...incoming };
+      if (incoming.text !== undefined) Object.assign(next, cut((event.append && existing ? existing.text ?? '' : '') + incoming.text, this.limits.maxTextBytes));
+      const size = Buffer.byteLength(JSON.stringify({ steps: turn.steps, permissions: turn.permissions })) - (existing ? Buffer.byteLength(JSON.stringify(existing)) : 0);
+      if (size + Buffer.byteLength(JSON.stringify(next)) > this.limits.maxTurnBytes) turn.omitted++;
+      else if (existing) Object.assign(existing, next); else turn.steps.push(next);
     }
-    const add = (step: Step) => {
-      const size = turn.steps.reduce((sum, s) => sum + Buffer.byteLength(JSON.stringify(s)), 0);
-      if (size + Buffer.byteLength(JSON.stringify(step)) > this.limits.maxTurnBytes) turn.omitted++; else turn.steps.push(step);
-    };
-    if (record?.type === 'system' && record.subtype === 'init') { c.confirmed = true; turn.model = word(record.model); return true; }
-    if (record?.type === 'system' && record.subtype === 'api_retry') { turn.retry = { attempt: number(record.attempt), of: number(record.max_retries), status: number(record.error_status), at: now() }; return true; }
-    const content: any[] = Array.isArray(record?.message?.content) ? record.message.content : [];
-    if (record?.type === 'assistant') {
-      // A provider failure arrives as a synthetic assistant message; it is not the Agent's words.
-      if (record.is_api_error_message || record.message?.model === '<synthetic>') {
-        for (const block of content) if (block?.type === 'text' && typeof block.text === 'string') add({ kind: 'error', at: now(), ...cut(block.text, 4096) });
-        return true;
-      }
-      turn.retry = null;
-      for (const block of content) {
-        if (block?.type === 'text' && typeof block.text === 'string' && block.text.trim()) add({ kind: 'text', at: now(), ...cut(block.text, this.limits.maxTextBytes) });
-        if (block?.type === 'tool_use') {
-          const operation = block.name === 'mcp__rho__rho_call' && typeof block.input?.operation === 'string' ? block.input.operation : undefined;
-          add({ kind: 'tool', at: now(), id: String(block.id), tool: String(block.name), ...(operation ? { operation } : {}), outcome: 'requested' });
+    this.schedule(project, c);
+  }
+  private async run(live: Live) {
+    const { project, conversation: c, turn, controller } = live;
+    if (turn.stop) { turn.state = 'stopped'; return; }
+    let driver: AgentConversation;
+    try { driver = await this.driver(project, c); }
+    catch (e) { turn.state = 'failed'; turn.problem = e instanceof Fault ? e.message : 'Rho could not connect this conversation to the project.'; return; }
+    const wall = setTimeout(() => live.stop('wall-limit', 'rho'), this.limits.turnWallMs); wall.unref();
+    try {
+      const completion = await driver.run({ text: turn.text, signal: controller.signal,
+        session: identity => this.serial(project.id, async () => {
+          requireThat(!identity.acpSessionId || !c.acpSessionId || identity.acpSessionId === c.acpSessionId, 'conflict', 'The original ACP session identity changed.');
+          requireThat(!identity.nativeSessionId || !c.nativeSessionId || identity.nativeSessionId === c.nativeSessionId, 'conflict', 'The original native session identity changed.');
+          Object.assign(c, identity); c.confirmed = true; await this.write(project, c);
+        }),
+        event: event => this.observe(live, event),
+        permission: async request => {
+          let resolve!: (choice: string | null) => void;
+          const answer = new Promise<string | null>(r => { resolve = r; }), key = project.id + '/' + c.id + '/' + request.id;
+          await this.serial(project.id, async () => {
+            if (controller.signal.aborted) { resolve(null); return; }
+            const permission: Permission = { ...request, state: 'pending' };
+            requireThat((turn.permissions?.length ?? 0) < this.limits.maxPermissions && Buffer.byteLength(JSON.stringify({ steps: turn.steps, permissions: [...(turn.permissions ?? []), permission] })) < this.limits.maxTurnBytes, 'limit', 'This message has reached its retained permission limit.');
+            (turn.permissions ??= []).push(permission); this.permissions.set(key, { permission, resolve });
+            await this.write(project, c);
+          });
+          try { return await answer; } finally { this.permissions.delete(key); }
         }
-      }
-      return true;
-    }
-    if (record?.type === 'user') {
-      for (const block of content) if (block?.type === 'tool_result') {
-        const step = turn.steps.find(s => s.kind === 'tool' && s.id === block.tool_use_id);
-        if (step) step.outcome = block.is_error ? 'rejected' : 'returned';
-      }
-      return true;
-    }
-    if (record?.type === 'result') turn.result = { isError: record.is_error === true, kind: word(record.subtype), reason: word(record.terminal_reason), steps: number(record.num_turns), durationMs: number(record.duration_ms), costUsd: number(record.total_cost_usd), message: record.is_error === true ? cut(String(record.result ?? ''), 4096).text : null };
-    return true;
+      });
+      Object.assign(turn, completion); turn.retry = null; turn.endedAt = now();
+    } finally { clearTimeout(wall); }
   }
 }

@@ -1,5 +1,8 @@
 # Conversation episode
 
+This is the historical per-message CLI episode. New conversations now use the
+[Claude ACP entry](ACP-EPISODE.md); existing CLI records retain the behavior below.
+
 This episode exercises a conversation with Claude Code that a person starts from
 Rho's Agent panel: ask about a project, follow the Agent's work, reply, come back
 after a reload or a service restart, let the Agent change a file, and stop it. It

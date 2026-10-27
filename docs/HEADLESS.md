@@ -106,11 +106,18 @@ file, the number of granted methods (the server default), an `mcp` entry
 (`name`, `command`, `args`) for an MCP configuration file, and the equivalent
 `claude mcp add rho-<folder> -- … --mcp <file>` command. `rho --mcp FILE` serves
 that grant on stdio with the four tools `rho_index`, `rho_resolve`, `rho_call` and
-`rho_read`; nothing else writes to stdout in that mode. A conversation started in
-the browser's Agent panel gets the same kind of grant: Rho runs the person's
-`claude` for each message with only these four tools (`--claude PATH` or
-`RHO_CLAUDE` selects another executable). Every connection file is a
+`rho_read`; nothing else writes to stdout in that mode. Every connection file is a
 credential. `rho --help` prints the usage; an unknown option exits 2 with it.
+
+New Agent-panel conversations use Agent 0.4.8's persistent Claude ACP entry.
+`--claude PATH` / `RHO_CLAUDE` selects the native CLI; its existing provider/model
+configuration is used. The four Rho MCP tools retain a project grant, while native
+tools follow Claude's own permission policy. A native permission request displays
+only its offered choices to this machine's browser. It adds no Rho approval to an
+already authorized operation. `--agent-backend claude-cli` / `RHO_AGENT_BACKEND`
+selects the old per-message driver for new conversations; existing records keep
+their original backend and session identity. Configuration changes do not migrate
+sessions. See the [ACP episode](ACP-EPISODE.md) for limits and recovery semantics.
 
 ## Named workspaces and selected source folders
 
@@ -170,7 +177,7 @@ const check = await rho.call('requirements.check', {
 | `media.describe`, `object.read` | Original media reference and declared dimensions/pages; bounded exported JSON object snapshots. Neither starts R or decodes an interactive view. |
 | `context.create/read` | Exact buffer/version/range, declared selected entities, a media rectangle with page and pixels/points, or one run (`run: {operationId}`): its state, exit, stop, the last 8 KiB of retained stderr with its byte offset and Core's truncation flag, the script reference, args and declared files. |
 | `session.grant`, `binding.open/close/list/activity` | Operator-selected method grant, external binding metadata and bounded tool receipts. Agent grants include the read-only `project.entries` and no other `project.*` method. |
-| `conversation.start/send/stop/read` | Only the browser on this machine. A conversation started in Rho: one Claude Code session, one process per message, the original message identity, recorded text, tool steps and endings; a message Rho did not observe to its end reads `unknown` and is not sent again. Limits are in `conversationLimits` and `--limits`. |
+| `conversation.start/send/stop/read/permission` | Only the browser on this machine. Original message identities, retained text/tool steps and one selected Agent session. New conversations use a persistent Claude ACP connection. Cancel is confirmed by the original prompt response; lost transport keeps an unknown outcome. Reads and reconnect never replay a prompt. Native permission choices are scoped to the original pending request. Limits are in `conversationLimits` and `--limits`. |
 | `composition.put/read/apply/undo`, `view.close` | Registered entry/version, props and binding checks; `apply`/`undo` are conditional tree transactions with receipts ([Collaboration](COLLABORATION.md#composition-and-selection)). Uninstalled UI is explicitly unavailable. `rho.action` (version `1`, no bindings) is Rho's own form for one proposed action: props `{title, action, actionVersion, operationId, input, repairOf?}`, and the action must be registered at that version. |
 | `workspace.save/export/restore` | Drafts/undo, bytes/provenance, selections and composition intent; native execution is not replayed. |
 | `action.export` | One run as ordinary files in a new project folder (default `exports/<operationId>`): `script/` holds the code that ran, from the run's own record; `outputs/` holds each declared file as the run left it; `provenance.json` and `PROVENANCE.md` give the run, script digest, arguments, inputs, each file's SHA-256 and whether it matches the inventory the run wrote. A declared file that was not written, or no longer matches that inventory, is named and left out, and the export says `partial`. When the script has unsaved changes the call must say `unsaved: "include"` (written as `<name>.unsaved.<ext>`, marked as never run) or `"leave"`. Runs nothing; never writes into an existing folder. |

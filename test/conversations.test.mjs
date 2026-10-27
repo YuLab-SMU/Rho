@@ -31,7 +31,7 @@ async function fixture(root) {
   const state = path.join(root, '.service'), log = path.join(root, 'claude.jsonl'), claude = path.join(root, 'claude-stub.mjs');
   await fs.mkdir(path.join(root, 'work'), { recursive: true });
   await fs.writeFile(claude, fakeClaude(log), { mode: 0o755 });
-  const service = await new RhoService({ root, stateDir: state, coreBinary: path.join(root, 'no-core'), rscript: 'Rscript', claude }).start();
+  const service = await new RhoService({ root, stateDir: state, coreBinary: path.join(root, 'no-core'), rscript: 'Rscript', claude, agentBackend: 'claude-cli' }).start();
   const operator = new RhoClient({ url: service.url, token: service.adminToken });
   const p = await operator.call('project.open', { path: 'work' });
   const person = new BrowserClient({ url: service.url });
@@ -137,6 +137,7 @@ test('a message Rho stopped observing stays unknown and is never sent again', as
     // As if the service died while a message was being answered.
     const file = path.join(root, 'work', '.rho', 'rho', 'conversations', id + '.json');
     const record = JSON.parse(await fs.readFile(file, 'utf8'));
+    record.format = 1; delete record.backend; // Legacy on-disk conversation, before ACP.
     record.turns.push({ ...record.turns[0], id: 't2', changeId: 'lost', text: 'lost words', state: 'running', steps: [], result: null, endedAt: null, pid: null });
     await fs.writeFile(file, JSON.stringify(record));
     const indexFile = path.join(path.dirname(file), 'index.json'), index = JSON.parse(await fs.readFile(indexFile, 'utf8'));

@@ -247,6 +247,73 @@
             "type": "integer",
             "minimum": 0
           },
+          "permissions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "title": {
+                  "type": "string"
+                },
+                "toolCallId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "details": {
+                  "type": "string"
+                },
+                "options": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "name": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "kind": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "name",
+                      "kind"
+                    ],
+                    "additionalProperties": true
+                  }
+                },
+                "state": {
+                  "enum": [
+                    "pending",
+                    "selected",
+                    "cancelled"
+                  ]
+                },
+                "selected": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "id",
+                "title",
+                "toolCallId",
+                "options",
+                "state"
+              ],
+              "additionalProperties": true
+            }
+          },
           "retry": {
             "anyOf": [
               {
@@ -421,5 +488,5 @@
     ],
     "additionalProperties": true
   },
-  "description": "Person at this machine only: ask Claude Code to stop answering one message. The stop is confirmed when the process is seen to end; steps already taken stay done."
+  "description": "Person at this machine only: ask Claude Code to stop answering one message. ACP cancellation is confirmed by the original prompt response; a lost connection keeps the outcome unknown. Legacy CLI conversations confirm process exit. Steps already taken stay done."
 }

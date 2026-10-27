@@ -248,6 +248,73 @@
             "type": "integer",
             "minimum": 0
           },
+          "permissions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "title": {
+                  "type": "string"
+                },
+                "toolCallId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "details": {
+                  "type": "string"
+                },
+                "options": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "name": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "kind": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "name",
+                      "kind"
+                    ],
+                    "additionalProperties": true
+                  }
+                },
+                "state": {
+                  "enum": [
+                    "pending",
+                    "selected",
+                    "cancelled"
+                  ]
+                },
+                "selected": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "id",
+                "title",
+                "toolCallId",
+                "options",
+                "state"
+              ],
+              "additionalProperties": true
+            }
+          },
           "retry": {
             "anyOf": [
               {
@@ -422,5 +489,5 @@
     ],
     "additionalProperties": true
   },
-  "description": "Person at this machine only: start a conversation with Claude Code in this project. Rho runs the local Claude Code CLI with this project's Agent grant and records the message before it starts. A repeated changeId with the same text returns the original conversation and starts nothing."
+  "description": "Person at this machine only: start a conversation with Claude Code in this project. Rho selects the Agent plugin backend, attaches this project's MCP grant and records the message before sending it. A repeated changeId with the same text returns the original conversation and starts nothing."
 }

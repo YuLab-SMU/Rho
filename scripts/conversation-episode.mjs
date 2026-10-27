@@ -24,7 +24,7 @@ const port = await new Promise(resolve => { const s = net.createServer(); s.list
 const core = path.resolve('../Rho-core/target/debug/rho-core'), rscript = '/usr/local/bin/Rscript';
 let service;
 async function startService(label) {
-  const child = spawn(process.execPath, ['dist/cli.js', '--root', root, '--state-dir', state, '--core', core, '--rscript', rscript, '--port', String(port)], { stdio: ['ignore', 'pipe', 'pipe'] });
+  const child = spawn(process.execPath, ['dist/cli.js', '--root', root, '--state-dir', state, '--core', core, '--rscript', rscript, '--agent-backend', 'claude-cli', '--port', String(port)], { stdio: ['ignore', 'pipe', 'pipe'] });
   const err = []; child.stderr.on('data', d => err.push(d));
   const lines = createInterface({ input: child.stdout });
   const ready = await new Promise((resolve, reject) => { lines.once('line', line => resolve(JSON.parse(line).ready)); child.once('exit', code => reject(new Error('service exited ' + code + ' ' + Buffer.concat(err)))); });

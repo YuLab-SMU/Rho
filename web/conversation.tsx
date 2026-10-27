@@ -25,6 +25,7 @@ const outcomeWords = { requested: '', returned: '', rejected: ' · refused', unk
 function ending(turn: Turn) {
   if (turn.state === 'running') {
     if (turn.stop) return 'Stopping…';
+    if (turn.permissions?.some(p => p.state === 'pending')) return 'Claude Code is waiting for your choice.';
     if (turn.retry) return `The model provider returned ${turn.retry.status ?? 'an error'}; Claude Code is retrying${turn.retry.attempt ? ` (attempt ${turn.retry.attempt}${turn.retry.of ? ' of ' + turn.retry.of : ''})` : ''}.`;
     return 'Claude Code is working…';
   }
@@ -50,7 +51,7 @@ function groups(steps: Step[]) {
   }
   return out;
 }
-function TurnView({ turn, running }: { turn: Turn; running: boolean }) {
+function TurnView({ turn, running, choose, choosing }: { turn: Turn; running: boolean; choose(turnId: string, permissionId: string, optionId: string): void; choosing: string | null }) {
   const failure = turn.state === 'failed' ? turn.result?.message ?? turn.problem : null;
   const shown = groups(turn.steps.filter(step => !(step.kind === 'error' && step.text === failure)));
   return <li className={'turn ' + turn.state}>
@@ -62,6 +63,11 @@ function TurnView({ turn, running }: { turn: Turn; running: boolean }) {
         </details>
       : <p key={i} className={group.kind === 'error' ? 'turn-error' : 'turn-text'}>{group.step.text}{group.step.cut ? ' … (cut; the rest was not kept)' : ''}</p>)}
     {turn.omitted > 0 && <p className="turn-note">{turn.omitted} later {turn.omitted === 1 ? 'step was' : 'steps were'} not kept.</p>}
+    {running && turn.permissions?.filter(p => p.state === 'pending').map(permission => <div key={permission.id} className="turn-permission" role="group" aria-label="Agent permission">
+      <p>{permission.title}</p>
+      {permission.details && <pre>{permission.details}</pre>}
+      <div>{permission.options.map(option => <button key={option.id} disabled={choosing === permission.id} onClick={() => choose(turn.id, permission.id, option.id)}>{option.name}</button>)}</div>
+    </div>)}
     <p className={'turn-ending ' + turn.state} role={turn.state === 'running' ? 'status' : undefined}>{ending(turn)}</p>
   </li>;
 }
@@ -73,6 +79,7 @@ export function AgentConversation({ snapshot, client }: { snapshot: WorkspaceSna
   const [draft, setDraft] = useState(() => stored(draftKey) ?? '');
   const [pending, setPending] = useState<Pending | null>(() => { try { return JSON.parse(stored(pendingKey) ?? 'null'); } catch { return null; } });
   const [read, setRead] = useState<Read | null>(null), [busy, setBusy] = useState(false), [problem, setProblem] = useState(''), [unconfirmed, setUnconfirmed] = useState(false);
+  const [choosing, setChoosing] = useState<string | null>(null);
   const list = snapshot.conversations ?? [];
   const summary = list.find(c => c.conversationId === openId);
   const end = useRef<HTMLDivElement>(null), input = useRef<HTMLTextAreaElement>(null);
@@ -130,7 +137,12 @@ export function AgentConversation({ snapshot, client }: { snapshot: WorkspaceSna
     </header> : <header className="conversation-head"><strong>Claude Code</strong></header>}
     {openId ? <ol className="conversation-turns" aria-label="Messages">
       {(read?.first ?? 0) > 0 && <li className="turn-note">{read!.first} earlier {read!.first === 1 ? 'message is' : 'messages are'} kept but not shown.</li>}
-      {read?.turns.map((turn, i) => <TurnView key={turn.id} turn={turn} running={turn.state === 'running' && i === read.turns.length - 1} />)}
+      {read?.turns.map((turn, i) => <TurnView key={turn.id} turn={turn} running={turn.state === 'running' && i === read.turns.length - 1} choosing={choosing} choose={(turnId, permissionId, optionId) => {
+        setChoosing(permissionId); setProblem('');
+        void client.call('conversation.permission', { projectId, conversationId: openId!, turnId, permissionId, optionId }).then(reply => {
+          setRead(current => current ? { ...current, conversation: reply.conversation, turns: current.turns.map(t => t.id === reply.turn.id ? reply.turn : t) } : current);
+        }, error => setProblem(error instanceof Error ? error.message : 'The choice could not be confirmed.')).finally(() => setChoosing(null));
+      }} />)}
     </ol> : <div className="conversation-intro">
       <p>Ask Claude Code to explore or change {projectName(snapshot.project)}. It runs on this machine with access to this project, and its replies appear here.</p>
       {list.length > 0 && <ul className="conversation-list" aria-label="Conversations">{list.map(c => <li key={c.conversationId}>

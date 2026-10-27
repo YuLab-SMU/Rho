@@ -299,6 +299,10 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 .turn-error, .turn-ending.failed { color: var(--color-failed); }
 .turn-ending.running { color: var(--color-accent); }
 .turn-ending.unknown { color: var(--color-amber-text); }
+.turn-permission { padding: 10px; border: 1px solid var(--color-hairline); border-radius: 8px; }
+.turn-permission p { margin: 0 0 8px; overflow-wrap: anywhere; }
+.turn-permission pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
+.turn-permission > div { display: flex; flex-wrap: wrap; gap: 6px; }
 .turn-tools { color: var(--color-meta); font-size: 12px; }
 .turn-tools summary { cursor: pointer; }
 .turn-tools ol { margin: 6px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 3px; }

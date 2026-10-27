@@ -4,6 +4,10 @@ Updated: 2026-10-27.
 
 ## Current focus
 
+Claude ACP is now connected through Agent 0.4.8, with real Westlake HPC multi-turn,
+cancellation and recovery evidence in the [ACP episode](ACP-EPISODE.md). Core stays
+unchanged. The earlier interface work below remains separate.
+
 The user asked for an optimization of the home, projects and empty-project screens
 on 2026-10-27, supplying three reference screens for layout weight and hierarchy.
 That pass is recorded in the [home and project episode](HOME-PROJECT-EPISODE.md) and
@@ -145,37 +149,28 @@ keep their existing reload defaults; exact entity/version anchors persist.
 
 ## Conversations started in Rho
 
-The user decided on 2026-10-25 that whoever holds a session's input provides its
-conversation entry. A person can now start a conversation with Claude Code in the
-Agent panel, follow its steps and replies, reply, stop it, and return to it after a
-reload or a service restart. Rho holds the input and the record and runs the
-person's Claude Code for each message under a project grant like `rho --grant`.
-Sessions started outside Rho keep their input in their own window; the panel lists
-them and says where to continue. The [conversation episode](CONVERSATION-EPISODE.md)
-records how it runs, its limits and the reviews of five real runs.
+New conversations use Agent 0.4.8's persistent Claude ACP connection. Rho holds
+original message identities and the visible record; the plugin owns native
+protocol/session behavior. Existing CLI conversations retain their original driver.
+Rho MCP calls keep their project grant; native tools keep Claude's permissions.
+Only this machine's browser can answer a native permission request.
 
-- Real runs used Claude Code 2.1.310 and Chrome 155.0.8059.84 at 1440 and 390 CSS
-  pixels: four messages, a reload, a service restart, a conditional save checked on
-  disk and a Stop confirmed by the process exit. The first question went unanswered
-  for 40 model turns because Agent grants left out every `project.*` operation; with
-  the read-only `project.entries` included it was answered in 13 turns and 96 s.
-- A resumed message goes straight to work: each message is a new process, so the
-  contracts it resolved are kept beside the conversation's private connection and
-  restored for the next one, while the service still rechecks the current contract
-  before a call. Message 2 fell from 5 model turns, 73 s and US$1.38 to 2 turns, 20 s
-  and US$0.56. Rho selects the Agent plugin 0.4.6 the Plugins checkout carries, and
-  the descriptor version moves with the package version.
-- At that stage Rho 181/181 unit checks and Plugins 74/74 passed in one ledger run.
-  `test/mcp.test.mjs` has reached its 30 s limit in several earlier full runs and
-  passes alone in 17.5 s; rebuilding the 211 KB `capability.list` reply takes 430 MCP
-  reads. Browser suites: `acceptance:frontend`, `acceptance:shell`,
-  `acceptance:pages` and `acceptance:person` passed. `acceptance:ui` waits for a
-  heading, "This link has already been used", that the application does not have at
-  the previous commit either.
-- Open: Agent text is shown as raw Markdown; each message costs more than the last
-  because it resumes the whole session; the default Agent grant has 64 methods, the
-  layered limit, so the next Agent-visible operation would refuse every default
-  grant. No person other than the builder has used it.
+- The [ACP episode](ACP-EPISODE.md) ran real Claude Code 2.1.311 through Westlake HPC
+  (`westlakehpc/deepseek-v4.1-flash`): seven messages, Unicode read/write, the same
+  ACP connection and MCP grant, lost acknowledgement, browser disconnection,
+  confirmed cancellation, forced Agent loss, original-session load and Rho restart.
+  An interrupted prompt stays unknown; Retry does not send it again. Reads start
+  nothing. The foreground cancellation command exited; background jobs are separate.
+- Checks: Rho 188/188 with the existing Core binary, Agent 80/80, generated contracts
+  and builds pass. Agent 0.4.8 installs/imports outside the checkouts with its pinned
+  ACP dependencies. Initial missing-binary/style failures remain in the episode.
+- Full application packaging still hits the pre-existing base-R fixture exclusion;
+  its failed assembly is retained. This is source acceptance, not binary delivery.
+- Core remains at `4f5bed8631e15acad44cc86b63ea4779ab8af342`, unchanged. Screens at
+  1440/390 CSS pixels were inspected; automated paths do not establish human usability.
+- The earlier [CLI episode](CONVERSATION-EPISODE.md) retains its measurements,
+  failures and reviews. Raw Markdown display and the 64-method Agent grant ceiling
+  remain open; conversation permission is local-person-only and consumes no grant slot.
 
 ## UI extension authoring
 

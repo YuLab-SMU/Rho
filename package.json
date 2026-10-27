@@ -103,7 +103,8 @@
     "ui:create": "node scripts/ui-plugin.mjs create",
     "ui:dev": "node scripts/ui-plugin.mjs dev",
     "acceptance:plugin-dx": "node scripts/plugin-dx-acceptance.mjs",
-    "acceptance:agent-activity": "node scripts/agent-activity-episode.mjs"
+    "acceptance:agent-activity": "node scripts/agent-activity-episode.mjs",
+    "acceptance:acp": "node scripts/acp-episode.mjs"
   },
   "dependencies": {
     "@rho-workspace/plugin-agent": "file:../Rho-plugins/plugins/agent",

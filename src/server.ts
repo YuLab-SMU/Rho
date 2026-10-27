@@ -30,7 +30,7 @@ import { exitWords, stopState } from './execution-facts.js';
 import { exportRun } from './run-export.js';
 import type { nativeActivityLimits, agentDeliveryLimits, RunContext } from '@rho-workspace/plugin-agent';
 import { ownerContracts } from './contracts/owners.generated.js';
-import { Conversations, conversationLimits } from './conversations.js';
+import { Conversations, conversationLimits, type ConversationConfig } from './conversations.js';
 export interface FeedbackTransport { accept(envelope: any): Promise<any>; lookup(envelope: any): Promise<any> }
 export interface NativeAdapterRegistration {
   projectId: string; taskId: string; registrationId: string; principal: string; adapterPrincipal: string;
@@ -38,7 +38,7 @@ export interface NativeAdapterRegistration {
   proof: { kind: 'claude-code-init'; sessionId: string; clientVersion: string };
 }
 export const serviceLimits = { maxRequestBytes: 1024 * 1024, maxEventBytes: 65536, eventRetention: 256, maxSubscriptions: 8, maxQueue: 32, maxContexts: 128, maxBindings: 64, maxActivities: 256, maxContextBytes: 1024 * 1024, maxRetainedMetadataBytes: 32 * 1024 * 1024 };
-export interface ServiceConfig extends Partial<typeof serviceLimits>, Partial<typeof requestLimits>, PluginConfig { root: string; stateDir: string; coreBinary: string; rscript: string; port?: number; nativeFolders?: Partial<typeof nativeFolderLimits>; workspace?: Partial<typeof workspaceLimits>; interactions?: Partial<typeof interactionLimits>; taskMap?: Partial<typeof taskMapLimits>; browser?: Partial<typeof browserLimits>; webRoot?: string; agentNativeActivity?: Partial<typeof nativeActivityLimits>; presentationWitness?: Partial<typeof presentationWitnessLimits>; visibility?: Partial<typeof visibilityLimits>; agentDelivery?: Partial<typeof agentDeliveryLimits>; deliveryTransportTimeoutMs?: number; claude?: string; conversations?: Partial<typeof conversationLimits> }
+export interface ServiceConfig extends Partial<typeof serviceLimits>, Partial<typeof requestLimits>, PluginConfig { root: string; stateDir: string; coreBinary: string; rscript: string; port?: number; nativeFolders?: Partial<typeof nativeFolderLimits>; workspace?: Partial<typeof workspaceLimits>; interactions?: Partial<typeof interactionLimits>; taskMap?: Partial<typeof taskMapLimits>; browser?: Partial<typeof browserLimits>; webRoot?: string; agentNativeActivity?: Partial<typeof nativeActivityLimits>; presentationWitness?: Partial<typeof presentationWitnessLimits>; visibility?: Partial<typeof visibilityLimits>; agentDelivery?: Partial<typeof agentDeliveryLimits>; deliveryTransportTimeoutMs?: number; claude?: string; agentBackend?: ConversationConfig['backend']; claudeAcp?: ConversationConfig['claudeAcp']; conversations?: Partial<typeof conversationLimits> }
 const ajv = new Ajv({ allErrors: true, strict: false, allowUnionTypes: true });
 // The same timestamp check every published contract uses; an unknown format would be skipped silently.
 ajv.addFormat('date-time', { type: 'string', validate: isNativeTime });
@@ -353,7 +353,7 @@ export class RhoService {
       // Queued behind the project's own writes; it never waits for them, so a write that
       // started a conversation is not held up by its own notification.
       changed: async (project, conversationId) => { void this.serial(project.id, () => this.emit(project, 'conversation.changed', conversationId, localBrowserId)).catch(() => {}); }
-    }, config.claude, config.conversations);
+    }, config.claude, config.conversations, { backend: config.agentBackend, claudeAcp: config.claudeAcp });
     this.folderPicker = new NativeFolderPicker({ ...nativeFolderLimits, ...config.nativeFolders });
     this.server = http.createServer((req, res) => void this.handle(req, res));
     this.server.requestTimeout = 15000; this.server.headersTimeout = 10000;
@@ -386,8 +386,7 @@ export class RhoService {
     this.plugins.need('agent');
     const capabilities = new Capabilities(this.plugins, project);
     const state = await capabilities.state();
-    // Listing the project folder is read-only and confined like document.read; an Agent
-    // started in Rho has no file tools of its own to find what is there.
+    // The shared project listing remains available alongside an Agent's native tools.
     const available = Object.keys(operations).filter(m => !m.startsWith('agent.activity.') && !m.startsWith('session.') && !m.startsWith('conversation.') && (!m.startsWith('project.') || m === 'project.entries') && !m.startsWith('requirements.prepare') && !m.startsWith('workspace.restore') && !['task.routing.put', 'binding.activity.append', 'feedback.submit', 'view.observe', 'view.observations.read', 'task.map.respond'].includes(m));
     const profileMethods = profile === 'layered-presentation' ? ['binding.open', 'capability.index', 'capability.resolve', 'workspace.observe', 'workspace.enhance'] : available.filter(m => !['workspace.observe', 'workspace.enhance'].includes(m));
     const selected = methods ?? (profile === 'layered-presentation' ? profileMethods : (await Promise.all(profileMethods.map(async method => [method, await capabilities.isAvailable(method, state)] as const))).filter(([, enabled]) => enabled).map(([method]) => method));
@@ -782,6 +781,7 @@ export class RhoService {
     if (method.startsWith('conversation.')) {
       requireThat(principal.id === localBrowserId, 'unauthorized', 'Conversations started in Rho belong to the person at this machine. Open Rho in a browser on this machine.');
       if (method === 'conversation.read') return this.conversations.read(p, b);
+      if (method === 'conversation.permission') return this.conversations.permission(p, principal.id, b);
       if (method === 'conversation.stop') return this.conversations.stop(p, principal.id, b);
       this.plugins.need('agent');
       if (method === 'conversation.start') return this.conversations.start(p, principal.id, b);

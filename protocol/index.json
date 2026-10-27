@@ -194,29 +194,35 @@
       "bytes": 7719,
       "sha256": "f3ca05f37c9dc2d272abe2a2f8afbc6445aee8f3f086d7a88a15dbf95290cf3b"
     },
+    "conversation.permission": {
+      "summary": "Person at this machine only: record an offered choice for a pending Agent permission request. The original request identity is retained; repeated identical choices do not respond twice.",
+      "path": "operations/conversation.permission.json",
+      "bytes": 12787,
+      "sha256": "7ca810601ebbe4577e838b9bc343afe5f376f5d6e07baf09463c04b0bcdb7654"
+    },
     "conversation.read": {
       "summary": "Read a conversation started in Rho: the person's messages, the Agent's visible text and tool steps, and how each message ended. Reading starts and resumes nothing.",
       "path": "operations/conversation.read.json",
-      "bytes": 11405,
-      "sha256": "219654edc1d877ccc2b69d03587c555608396475b0de4c75cb473a3e856479d1"
+      "bytes": 13475,
+      "sha256": "709d30b4ee3a3b8debdcfe1278e84f4236f875ce22f3bb7f5dcb5bdec8018867"
     },
     "conversation.send": {
       "summary": "Person at this machine only: send the next message to a conversation started in Rho, which resumes the same Claude Code session. Refused while the previous message is being answered. A repeated changeId with the same text returns the original message.",
       "path": "operations/conversation.send.json",
-      "bytes": 10781,
-      "sha256": "9769c69bc062ae990be059bdfa8c62907728087a4271f31a36a5bee7e282e7d5"
+      "bytes": 12717,
+      "sha256": "8c87446086a39d18e5f9915b4ced7e8ab5401df8eab5a6960ad49cc978d4e617"
     },
     "conversation.start": {
-      "summary": "Person at this machine only: start a conversation with Claude Code in this project. Rho runs the local Claude Code CLI with this project's Agent grant and records the message before it starts. A repeated changeId with the same text returns the original conversation and starts nothing.",
+      "summary": "Person at this machine only: start a conversation with Claude Code in this project. Rho selects the Agent plugin backend, attaches this project's MCP grant and records the message before sending it. A repeated changeId with the same text returns the original conversation and starts nothing.",
       "path": "operations/conversation.start.json",
-      "bytes": 10684,
-      "sha256": "3c0ad520cafc68fb5cdf066d809afe815d8a8b714ea81dee5df1bdaa8379ee10"
+      "bytes": 12626,
+      "sha256": "6ede6594e52c1fe225b8ec6380f9e22f16d6c328afc65fdb2e981e077a066349"
     },
     "conversation.stop": {
-      "summary": "Person at this machine only: ask Claude Code to stop answering one message. The stop is confirmed when the process is seen to end; steps already taken stay done.",
+      "summary": "Person at this machine only: ask Claude Code to stop answering one message. ACP cancellation is confirmed by the original prompt response; a lost connection keeps the outcome unknown. Legacy CLI conversations confirm process exit. Steps already taken stay done.",
       "path": "operations/conversation.stop.json",
-      "bytes": 10571,
-      "sha256": "da83cf8f78861a8c4de3a9aa3fa556c2c33143eb0ed7c810961e833f70f9d08a"
+      "bytes": 12607,
+      "sha256": "5fc5b0d4982d8e3f539d18f8f58d92c33a132810424081c69ff21c7e1d3a0b33"
     },
     "data.compare": {
       "summary": "Join two explicit table versions using declared keys, namespaces, fields and join policy. Scientific comparability remains the project responsibility.",

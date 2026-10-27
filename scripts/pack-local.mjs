@@ -78,7 +78,7 @@ await fs.writeFile(path.join(stage, 'vendor/composition.json'), JSON.stringify(c
 const result = JSON.parse(run('npm', ['pack', '--ignore-scripts', '--json', '--pack-destination', destination], stage))[0];
 if (result.files.some(f => path.isAbsolute(f.path) || f.path.split('/').includes('..'))) throw new Error('Package contains a path outside the assembled root.');
 for (const required of ['vendor/rho-core', 'protocol/index.json', 'fixtures/states.json', 'dist/web/index.html', 'dist/web/composition.json', 'dist/web/licenses.md', ...web.assets.map(a => 'dist/web/' + a.path), ...pluginPacks.packages.map(p => 'node_modules/' + p.package + '/dist/index.js')]) if (!result.files.some(f => f.path === required)) throw new Error('Package is missing ' + required);
-for (const [id, dependency] of [['tables', 'csv-parse'], ['agent', '@modelcontextprotocol/sdk']]) {
+for (const [id, dependency] of [['tables', 'csv-parse'], ['agent', '@modelcontextprotocol/sdk'], ['agent', '@agentclientprotocol/sdk'], ['agent', '@agentclientprotocol/claude-agent-acp']]) {
   if (result.files.some(f => f.path === 'node_modules/' + dependency + '/package.json') !== selected.includes(id)) throw new Error('Optional dependency did not follow its plugin: ' + dependency);
 }
 const firstParty = file => !file.startsWith('node_modules/') || file.startsWith('node_modules/@rho-workspace/');

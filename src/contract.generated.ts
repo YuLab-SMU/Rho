@@ -5,7 +5,7 @@
 // value an accepted response carries. The service, the Node client and the browser
 // client are all written against these types; runtime validation stays with Ajv.
 //
-// Contract identity: apiVersion 2.0, schemaVersion 2, 94 operations.
+// Contract identity: apiVersion 2.0, schemaVersion 2, 95 operations.
 export interface RhoOperationError {
   kind:
     | 'invalid'
@@ -4446,6 +4446,84 @@ export interface ContextReadOutput {
   };
 }
 
+export interface ConversationPermissionInput {
+  projectId: string;
+  conversationId: string;
+  turnId: string;
+  permissionId: string;
+  optionId: string;
+}
+
+export interface ConversationPermissionOutput {
+  conversation: {
+    conversationId: string;
+    title: string;
+    client: string;
+    principal: string | null;
+    createdAt: string;
+    updatedAt: string;
+    version: number;
+    turns: number;
+    state: 'idle' | 'running' | 'completed' | 'failed' | 'stopped' | 'unknown';
+    lastAt: string;
+  };
+  turn: {
+    id: string;
+    by: string;
+    text: string;
+    sentAt: string;
+    state: 'running' | 'completed' | 'failed' | 'stopped' | 'unknown';
+    startedAt?: string | null;
+    endedAt?: string | null;
+    model?: string | null;
+    stop?: {
+      requestedAt: string;
+      by: string;
+      reason: 'person' | 'closing' | 'wall-limit' | 'output-limit' | 'line-limit' | 'identity';
+    } | null;
+    steps: {
+      kind: 'text' | 'tool' | 'error';
+      at: string;
+      text?: string;
+      cut?: boolean;
+      id?: string;
+      tool?: string;
+      operation?: string;
+      outcome?: 'requested' | 'returned' | 'rejected' | 'unknown';
+    }[];
+    omitted: number;
+    permissions?: {
+      id: string;
+      title: string;
+      toolCallId: string;
+      details?: string;
+      options: {
+        id: string;
+        name: string;
+        kind: string;
+      }[];
+      state: 'pending' | 'selected' | 'cancelled';
+      selected?: string;
+    }[];
+    retry?: {
+      attempt: number | null;
+      of: number | null;
+      status: number | null;
+      at: string;
+    } | null;
+    result?: {
+      isError: boolean;
+      kind: string | null;
+      reason: string | null;
+      steps: number | null;
+      durationMs: number | null;
+      costUsd: number | null;
+      message: string | null;
+    } | null;
+    problem: string | null;
+  };
+}
+
 export interface ConversationReadInput {
   projectId: string;
   conversationId: string;
@@ -4492,6 +4570,19 @@ export interface ConversationReadOutput {
       outcome?: 'requested' | 'returned' | 'rejected' | 'unknown';
     }[];
     omitted: number;
+    permissions?: {
+      id: string;
+      title: string;
+      toolCallId: string;
+      details?: string;
+      options: {
+        id: string;
+        name: string;
+        kind: string;
+      }[];
+      state: 'pending' | 'selected' | 'cancelled';
+      selected?: string;
+    }[];
     retry?: {
       attempt: number | null;
       of: number | null;
@@ -4556,6 +4647,19 @@ export interface ConversationSendOutput {
       outcome?: 'requested' | 'returned' | 'rejected' | 'unknown';
     }[];
     omitted: number;
+    permissions?: {
+      id: string;
+      title: string;
+      toolCallId: string;
+      details?: string;
+      options: {
+        id: string;
+        name: string;
+        kind: string;
+      }[];
+      state: 'pending' | 'selected' | 'cancelled';
+      selected?: string;
+    }[];
     retry?: {
       attempt: number | null;
       of: number | null;
@@ -4619,6 +4723,19 @@ export interface ConversationStartOutput {
       outcome?: 'requested' | 'returned' | 'rejected' | 'unknown';
     }[];
     omitted: number;
+    permissions?: {
+      id: string;
+      title: string;
+      toolCallId: string;
+      details?: string;
+      options: {
+        id: string;
+        name: string;
+        kind: string;
+      }[];
+      state: 'pending' | 'selected' | 'cancelled';
+      selected?: string;
+    }[];
     retry?: {
       attempt: number | null;
       of: number | null;
@@ -4682,6 +4799,19 @@ export interface ConversationStopOutput {
       outcome?: 'requested' | 'returned' | 'rejected' | 'unknown';
     }[];
     omitted: number;
+    permissions?: {
+      id: string;
+      title: string;
+      toolCallId: string;
+      details?: string;
+      options: {
+        id: string;
+        name: string;
+        kind: string;
+      }[];
+      state: 'pending' | 'selected' | 'cancelled';
+      selected?: string;
+    }[];
     retry?: {
       attempt: number | null;
       of: number | null;
@@ -10198,6 +10328,7 @@ export interface RhoOperations {
   "composition.undo": { input: CompositionUndoInput; output: CompositionUndoOutput };
   "context.create": { input: ContextCreateInput; output: ContextCreateOutput };
   "context.read": { input: ContextReadInput; output: ContextReadOutput };
+  "conversation.permission": { input: ConversationPermissionInput; output: ConversationPermissionOutput };
   "conversation.read": { input: ConversationReadInput; output: ConversationReadOutput };
   "conversation.send": { input: ConversationSendInput; output: ConversationSendOutput };
   "conversation.start": { input: ConversationStartInput; output: ConversationStartOutput };
@@ -10268,5 +10399,5 @@ export type RhoInput<M extends RhoMethod> = RhoOperations[M]['input'];
 export type RhoOutput<M extends RhoMethod> = RhoOperations[M]['output'];
 
 /** The names a caller may pass to protocol.describe / protocol.validate. */
-export const rhoMethods = ["action.cancel","action.export","action.list","action.lookup","action.observe","action.output","action.retry","action.submit","agent.activity.capture","agent.activity.outputs","agent.activity.read","annotation.create","annotation.list","annotation.read","annotation.reply","artifact.check","binding.activity","binding.activity.append","binding.close","binding.list","binding.open","capability.configure","capability.index","capability.list","capability.resolve","composition.apply","composition.put","composition.read","composition.undo","context.create","context.read","conversation.read","conversation.send","conversation.start","conversation.stop","data.compare","data.page","data.plot","document.abandonSave","document.change.read","document.edit","document.history","document.open","document.read","document.revert","document.save","document.undo","document.undoOwn","feedback.read","feedback.status","feedback.submit","interaction.selection.read","interaction.selection.set","media.describe","object.read","observation.snapshot","project.create","project.createWorkspace","project.doctor","project.entries","project.list","project.open","project.openFile","project.pick","project.runs","project.source.add","project.source.pick","protocol.describe","protocol.validate","requirements.check","requirements.prepare","resource.list","resource.read","resource.register","selection.set","session.browser.pair","session.browser.revoke","session.grant","skill.list","skill.read","task.map.declare","task.map.present","task.map.read","task.map.respond","task.routing.put","view.close","view.observations.read","view.observe","view.protection.set","workspace.enhance","workspace.export","workspace.observe","workspace.restore","workspace.save"] as const satisfies readonly RhoMethod[];
+export const rhoMethods = ["action.cancel","action.export","action.list","action.lookup","action.observe","action.output","action.retry","action.submit","agent.activity.capture","agent.activity.outputs","agent.activity.read","annotation.create","annotation.list","annotation.read","annotation.reply","artifact.check","binding.activity","binding.activity.append","binding.close","binding.list","binding.open","capability.configure","capability.index","capability.list","capability.resolve","composition.apply","composition.put","composition.read","composition.undo","context.create","context.read","conversation.permission","conversation.read","conversation.send","conversation.start","conversation.stop","data.compare","data.page","data.plot","document.abandonSave","document.change.read","document.edit","document.history","document.open","document.read","document.revert","document.save","document.undo","document.undoOwn","feedback.read","feedback.status","feedback.submit","interaction.selection.read","interaction.selection.set","media.describe","object.read","observation.snapshot","project.create","project.createWorkspace","project.doctor","project.entries","project.list","project.open","project.openFile","project.pick","project.runs","project.source.add","project.source.pick","protocol.describe","protocol.validate","requirements.check","requirements.prepare","resource.list","resource.read","resource.register","selection.set","session.browser.pair","session.browser.revoke","session.grant","skill.list","skill.read","task.map.declare","task.map.present","task.map.read","task.map.respond","task.routing.put","view.close","view.observations.read","view.observe","view.protection.set","workspace.enhance","workspace.export","workspace.observe","workspace.restore","workspace.save"] as const satisfies readonly RhoMethod[];
 export type RhoInputFor<M extends RhoMethod> = RhoOperations[M]['input'];

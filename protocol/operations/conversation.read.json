@@ -257,6 +257,73 @@
               "type": "integer",
               "minimum": 0
             },
+            "permissions": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "toolCallId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "details": {
+                    "type": "string"
+                  },
+                  "options": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "name": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "kind": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "kind"
+                      ],
+                      "additionalProperties": true
+                    }
+                  },
+                  "state": {
+                    "enum": [
+                      "pending",
+                      "selected",
+                      "cancelled"
+                    ]
+                  },
+                  "selected": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "id",
+                  "title",
+                  "toolCallId",
+                  "options",
+                  "state"
+                ],
+                "additionalProperties": true
+              }
+            },
             "retry": {
               "anyOf": [
                 {

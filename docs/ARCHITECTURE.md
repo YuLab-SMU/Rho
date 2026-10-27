@@ -109,8 +109,12 @@ Each Agent session has one input, held by whoever started it (the user's decisio
 shows its work and accepts one-way feedback. A conversation started in Rho is held
 by Rho: the Agent panel is its input, and the conversation outlives the panel, a
 reload and a service restart. A message whose outcome Rho did not observe stays
-unknown and is not sent again. The Agent in that conversation works only through
-Rho's project grant.
+unknown and is not sent again. Agent 0.4.8 owns the Claude ACP connection, native
+tools, permission requests and session loading; Rho owns the durable message
+identity, transcript and local input. Rho MCP calls retain their project grant;
+Claude's native tools retain Claude's own permissions and OS authority. ACP session
+IDs are kept separately from unobserved native transcript IDs. Core is unchanged.
+The [ACP episode](ACP-EPISODE.md) records the actual cancellation and recovery scope.
 
 ## Execution continuity
 
