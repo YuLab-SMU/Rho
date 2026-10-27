@@ -98,19 +98,87 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .skip-link:focus { top: 12px; }
 .application { height: 100dvh; min-width: 320px; display: flex; flex-direction: column; }
 .app-body { display: flex; flex: 1; min-height: 0; }
-.project-nav { display: flex; flex-direction: column; flex: 0 0 228px; padding: 20px 12px 12px; border-right: 1px solid var(--color-hairline); background: var(--color-canvas); overflow: auto; }
+.project-nav { display: flex; flex-direction: column; flex: 0 0 240px; padding: 16px 12px 12px; border-right: 1px solid var(--color-hairline); background: var(--color-canvas); overflow: auto; }
 .brand { justify-content: flex-start; gap: 10px; align-self: flex-start; padding: 0 10px; border: 0; background: transparent; font-size: 20px; letter-spacing: -.5px; }
 .brand-mark { width: 29px; height: 29px; display: grid; place-content: center; background: var(--color-accent); color: white; font: 25px/1 Georgia, serif; border-radius: 9px; padding-bottom: 3px; }
 .project-switcher { margin: 28px 0 20px; padding: 10px; justify-content: flex-start; border-color: var(--color-hairline); background: white; min-height: 44px; }
 .project-switcher > span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
 .nav-group { display: flex; flex-direction: column; gap: 3px; }
 .nav-row { display: flex; width: 100%; min-height: 38px; justify-content: flex-start; gap: 11px; padding: 9px 10px; border: 0; background: transparent; color: var(--color-muted); text-align: left; font-weight: 400; }
-.nav-row[aria-current=page] { background: var(--color-selected); color: var(--color-accent-strong); font-weight: 600; }
+.nav-row[aria-current=page] { background: var(--color-surface); color: var(--color-ink); font-weight: 600; box-shadow: 0 0 0 1px var(--color-hairline), 0 1px 2px #20392b0d; }
+.nav-row:hover:not([aria-current=page]) { background: var(--color-hover); }
+.nav-row.within { color: var(--color-ink); font-weight: 600; }
+.nav-row > svg { color: var(--color-muted); }
+.nav-row[aria-current=page] > svg { color: var(--color-accent); }
 .nav-row-name { min-width: 0; flex: 1; overflow-wrap: anywhere; }
 .nav-row-count { font-size: 12px; color: var(--color-meta); }
 .nav-workspaces { margin-top: 28px; }
 .section-label { display: block; padding: 0 10px 9px; color: var(--color-meta); font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
 .navigation-footer { display: flex; flex-direction: column; margin-top: auto; padding-top: 24px; }
+/* Project sidebar: the way back, the project, its places and its contents by kind. */
+.nav-back { align-self: flex-start; gap: 6px; min-height: 30px; padding: 4px 8px; border: 0; background: transparent; color: var(--color-muted); font-weight: 400; font-size: 13px; }
+.project-card { position: relative; margin: 14px 0 22px; }
+.project-card summary { display: flex; align-items: center; gap: 11px; padding: 8px 8px; border-radius: 10px; cursor: pointer; list-style: none; }
+.project-card summary::-webkit-details-marker { display: none; }
+.project-card summary:hover, .project-card[open] summary { background: var(--color-hover); }
+.project-card summary > svg { color: var(--color-meta); }
+.project-avatar { display: grid; place-content: center; flex: none; width: 38px; height: 38px; border-radius: 10px; background: var(--color-accent); color: white; font-size: 14px; font-weight: 650; letter-spacing: .02em; }
+.project-avatar.small { width: 24px; height: 24px; border-radius: 7px; font-size: 11px; }
+.project-avatar.moss { background: var(--color-hue-moss-ink); } .project-avatar.iris { background: var(--color-hue-iris-ink); } .project-avatar.sky { background: var(--color-hue-sky-ink); }
+.project-avatar.clay { background: var(--color-hue-clay-ink); } .project-avatar.rose { background: var(--color-hue-rose-ink); }
+.project-card-name { display: flex; flex-direction: column; flex: 1; min-width: 0; line-height: 1.25; }
+.project-card-name small { color: var(--color-meta); font-size: 10.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
+.project-card-name strong { font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.project-menu { position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 30; display: flex; flex-direction: column; padding: 6px; background: var(--color-surface); border: 1px solid var(--color-hairline); border-radius: 10px; box-shadow: 0 10px 30px #20392b1f; }
+.project-menu button { justify-content: flex-start; gap: 9px; border: 0; background: transparent; font-weight: 400; text-align: left; }
+.project-menu button > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nav-sub { display: flex; flex-direction: column; gap: 1px; margin: 0 0 4px 21px; padding-left: 8px; border-left: 1px solid var(--color-hairline); }
+.nav-sub-row { min-height: 30px; padding: 5px 8px; font-size: 13px; }
+.nav-badge { display: inline-flex; align-items: center; gap: 5px; padding: 1px 7px; border-radius: 999px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+.nav-badge.working { background: var(--color-accent-soft); color: var(--color-accent-strong); }
+.nav-badge.waiting { background: var(--color-amber-soft); color: var(--color-amber-text); border: 1px solid var(--color-amber-line); }
+.nav-sources { margin-top: 26px; }
+.nav-heading { display: flex; align-items: center; justify-content: space-between; padding-right: 2px; }
+.nav-heading .section-label { padding-bottom: 0; }
+.nav-add { min-height: 26px; width: 26px; padding: 0; border: 0; background: transparent; color: var(--color-meta); }
+.nav-sources .nav-group { margin-top: 6px; }
+.pulse-dot { display: inline-block; flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--color-verified); box-shadow: 0 0 0 0 #32836166; animation: pulse 1.6s ease-out infinite; }
+.pulse-dot.large { width: 12px; height: 12px; }
+@keyframes pulse { 70% { box-shadow: 0 0 0 6px #32836100; } 100% { box-shadow: 0 0 0 0 #32836100; } }
+/* What the Agent is doing, visible from every project page. */
+.agent-chip { min-height: 32px; max-width: min(420px, 38vw); padding: 4px 12px; gap: 8px; border-radius: 999px; font-size: 12.5px; font-weight: 400; }
+.agent-chip strong { font-weight: 600; white-space: nowrap; }
+.agent-chip-what { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--color-muted); font-family: var(--font-mono); font-size: 11.5px; }
+.agent-chip.working { border-color: var(--color-hairline-strong); background: var(--color-surface); }
+.agent-chip.waiting { border-color: var(--color-amber-line); background: var(--color-amber-soft); color: var(--color-amber-text); }
+.agent-chip.waiting .pulse-dot { background: var(--color-amber); animation: none; }
+.agent-chip.waiting .agent-chip-what { color: var(--color-amber-text); font-family: var(--font-ui); }
+/* Studio: the workspaces as tabs, following the Agent, and arranging views. */
+.studio-bar { display: flex; align-items: center; gap: 10px; padding: 8px 14px; min-height: 52px; border-bottom: 1px solid var(--color-hairline); background: var(--color-surface); }
+.studio-tabs { display: flex; gap: 4px; flex: 1; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.studio-tab { flex: none; gap: 7px; min-height: 34px; padding: 5px 12px; border: 0; border-radius: 8px; background: transparent; color: var(--color-muted); font-weight: 500; }
+.studio-tab small { color: var(--color-meta); font-size: 11.5px; font-weight: 400; }
+.studio-tab[aria-current=page] { background: var(--color-well); color: var(--color-ink); font-weight: 650; }
+.studio-tab > svg { color: var(--color-accent); }
+.follow-toggle { flex: none; min-height: 32px; padding: 4px 12px; border-radius: 999px; font-size: 12.5px; gap: 7px; }
+.follow-toggle.on { border-color: var(--color-accent); background: var(--color-accent-soft); color: var(--color-accent-strong); }
+.canvas-note { display: flex; align-items: center; gap: 12px; padding: 8px 16px; background: var(--color-well); border-bottom: 1px solid var(--color-hairline); color: var(--color-muted); font-size: 12.5px; }
+.canvas-note p { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.studio-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 40px 24px; text-align: center; background: var(--color-canvas); }
+.studio-empty h2 { font-size: 17px; }
+.studio-empty p { max-width: 460px; color: var(--color-muted); font-size: 13.5px; overflow-wrap: anywhere; }
+/* One kind of project file. */
+.source-summary { color: var(--color-meta); font-size: 13px; }
+.source-rows { list-style: none; margin: 0; padding: 0; border: 1px solid var(--color-hairline); border-radius: 12px; overflow: hidden; }
+.source-rows li + li { border-top: 1px solid var(--color-divider); }
+.source-row { width: 100%; justify-content: flex-start; gap: 12px; padding: 10px 14px; border: 0; border-radius: 0; background: transparent; text-align: left; font-weight: 400; }
+.source-row:hover { background: var(--color-well); }
+.source-row:focus-visible { outline-offset: -3px; }
+.source-name { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.source-name strong { font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.source-name small { color: var(--color-meta); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.source-meta { flex: none; color: var(--color-meta); font-size: 12px; }
+.source-list .file-toolbar { margin-bottom: 12px; }
 .project-heading { padding: 12px 10px; display: flex; flex-direction: column; gap: 5px; }
 .project-heading > span { font-size: 12px; color: var(--color-meta); }
 .app-content { display: flex; flex-direction: column; flex: 1; min-width: 0; }
@@ -467,7 +535,8 @@ dialog::backdrop { background: #13231c45; }
 .run-dialog-close { position: absolute; top: 10px; right: 10px; z-index: 1; }
 @media (min-width: 1600px) { .project-nav { flex-basis: 248px; } }
 @media (max-width: 1150px) {
-  .project-nav { flex-basis: 208px; }
+  .project-nav { flex-basis: 216px; }
+  .agent-chip-what { display: none; }
   .project-columns { grid-template-columns: minmax(0, 1fr); gap: 32px; }
   .project-recent { border-left: 0; padding-left: 0; padding-top: 26px; border-top: 1px solid var(--color-hairline); }
   .project-recent .activity-row { flex-wrap: nowrap; }
@@ -477,6 +546,8 @@ dialog::backdrop { background: #13231c45; }
   .command-trigger > span { display: none; }
 }
 @media (max-width: 767px) {
+  /* The drawer replaces the sidebar here, already in the frame before the page knows it is narrow. */
+  .app-body > .project-nav { display: none; }
   .topbar { padding: 0 10px; gap: 8px; min-height: 54px; }
   .topbar-actions { gap: 6px; }
   .connection-label, .command-trigger kbd, .context-toggle { display: none; }
@@ -506,6 +577,8 @@ dialog::backdrop { background: #13231c45; }
   .activity-row > .state { font-size: 11px; }
   .project-recent .activity-row > svg { display: none; }
   .workspace-tools { gap: 8px; padding: 6px 10px; }
+  .agent-chip { max-width: 44px; padding: 4px 10px; } .agent-chip strong, .agent-chip-what { display: none; }
+  .studio-bar { padding: 6px 10px; gap: 6px; } .studio-tab small { display: none; } .follow-toggle { padding: 4px 9px; }
   .workspace-question { display: none; }
   .view-menu { margin-left: auto; }
   .command-footer .command-keys { display: none; }

@@ -19,8 +19,7 @@
     },
     "required": [
       "projectId",
-      "path",
-      "expectedDigest"
+      "path"
     ],
     "type": "object"
   },

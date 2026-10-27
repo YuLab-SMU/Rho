@@ -4,12 +4,19 @@ Updated: 2026-10-27.
 
 ## Current focus
 
+On 2026-10-27 the user found working with the Agent inside a project poor: the
+sidebar held almost nothing and the main area stayed still while the Agent worked.
+They supplied a reference screen. The project sidebar now names its places and counts
+its Sources, and the [Agent canvas](#project-sidebar-and-agent-canvas) opens the files
+the Agent reads and changes as it works. Documents 0.4.3 and Agent 0.4.12 carry the
+two owner repairs this needed; [the record](AGENT-CANVAS-EPISODE.md) keeps the runs.
+
 Agent 0.4.11 adds each tool step's human title, ACP category and identifying input
 to the Claude/Codex ACP connections accepted at 0.4.10. Both Agents passed eight
 real Westlake HPC turns from the installed package, including cancellation,
 connection loss and original-session recovery. External Codex ACP loading, live
 observation across Rho restart and reconnect also passed. Core source/binary remain unchanged.
-Rho 202/202, Plugins 89/89 and contract/type checks pass. The unsigned macOS arm64
+At that point Rho 202/202, Plugins 89/89 and contract/type checks passed. The unsigned macOS arm64
 package passed install/start checks; [the record](ACP-MULTI-AGENT-EPISODE.md)
 distinguishes turn cancellation, native jobs and explicit external relay attachment.
 The Agent panel's streamed text, action rows, plan and permission treatment are in
@@ -33,6 +40,7 @@ capability evidence, not the target interface or design acceptance criteria.
 | Comparing two results | Runs | Two views split by hand | Can the differences be read by key? |
 | Claude/Codex and shared workspace | Both installed loops and external Codex relay run | [ACP acceptance](ACP-MULTI-AGENT-EPISODE.md) | Human usability and passive attachment to uninstrumented clients remain unproven |
 | Agent panel presentation | Streams; controlled peer and one real turn observed | [Agent UI episode](AGENT-UI-EPISODE.md) | Can a person scan a long trace and act on it? |
+| Project sidebar and Agent canvas | Runs; four real Claude turns and a controlled peer | [Agent canvas episode](AGENT-CANVAS-EPISODE.md) | Can a person follow a long, fast turn on the canvas and step in? |
 | Project shell and navigation | Runs | Frontend browser suite below | Does it hold up around the reworked episode? |
 | Plugin UI extensions | Runs | Authoring checks below | Does a view built with it serve a real episode? |
 | Domain episode (DESeq2) | Not started | — | What carries over from base-R? |
@@ -42,6 +50,25 @@ specification written earlier on 2026-10-25 were withdrawn the same day at the
 user's request. They fixed grammars, visual values, state sequences and acceptance
 criteria before the application or its plugins had produced results to learn from.
 Git retains them at `24d9998b`; they are not requirements or reference designs.
+
+## Project sidebar and Agent canvas
+
+- The sidebar shows All projects, the project and a menu to switch, then Overview,
+  Studio with its workspaces, Agent (Working or Needs you), Activity with its run
+  count, and Sources: Data, Code, Results & figures and Notes from one bounded walk
+  (48 folders, 5 levels, 4000 files; partial counts say so), then Files.
+- Sending from the Agent panel opens the Agent canvas and follows the turn: files the
+  steps name, files a finished command names and outputs that appear on disk open
+  once, code left and data/figures right; the tab of the last named file carries the
+  Agent's verb. Choosing another view, typing or leaving stops following.
+- Documents 0.4.3 adopts a changed file into a buffer with no unsaved text; Agent
+  0.4.12 captures one named file without scanning its folder, digest optional.
+
+Evidence: Rho 202/202 (serial) and Plugins 90/90 ([ledger](VERIFICATION.json));
+the new `acceptance:agent-canvas` 8/8 with a controlled peer; `acceptance:frontend`
+11/11, `agent-ui` 7/7, pages, shell, person, objects, actions, continuity and plugin
+UI passed. Four real Westlake HPC Claude turns found and fixed five defects. This
+shows the paths work, not that a person can follow a fast Agent there.
 
 ## Home, projects and empty project
 
@@ -104,7 +131,7 @@ existing owner view. Original and later file snapshots remain independent.
   showed diagnostic exit 7, and repeat collection added none. Chrome checked
   pending/Host loss/reconnect, CSV/SVG opening, 1440/390 widths, reload and both
   sessions after the text-file wording/PDF refusal fix.
-- Rho 182/182 and Plugins 76/76 passed; [verification ledger](VERIFICATION.json).
+- Rho 182/182 and Plugins 76/76 passed then.
 - Evidence: `work/agent-activity/run-6/` records exact hashes, failures and reviews;
   this demonstrates the flow, not human usability.
 - Source selection: Agent 0.4.7, Tables 0.4.3, Core unchanged at
@@ -179,29 +206,19 @@ and the ACP path are labelled as Agent reports; observed files remain in Work pr
 
 ## UI extension authoring
 
-`rho-ui create`, `dev`, `check` and `build` provide a standalone author workflow.
-A generated typed React package reads an existing capability through the public
-UI contract. Its fixture preview supports state/width controls, props editing,
-visible errors, a bounded call list and automatic refresh after source changes.
-It receives no project credentials and starts no runtime.
+`rho-ui create`, `dev`, `check` and `build` provide a standalone author workflow: a
+typed React package reads an existing capability through the public UI contract, with
+a fixture preview (states, widths, props, errors, bounded calls, refresh) that gets no
+project credentials and starts no runtime. An explicit `RHO_UI_EXTENSIONS` selection
+pins package versions or local overrides; Rho generates the browser registry and
+registers the same metadata with the capability owner. It adds views, not backend
+methods. [Plugin authoring](PLUGIN-AUTHORING.md) is the executable guide.
 
-An explicit `RHO_UI_EXTENSIONS` JSON selection pins installed package versions or
-records local directory overrides. Rho generates the browser registry and registers
-the same component/props/bindings metadata with the existing capability owner.
-No application adapter or generated operation contract edit is needed. This path
-adds views, not backend methods or runtime module injection. The default selection
-is unchanged. [Plugin authoring](PLUGIN-AUTHORING.md) contains the executable guide.
-
-- Then-current checks: Rho 174/174 unit tests, covering scaffolding without
-  overwrites, pinned identities, reserved names, schema/path containment, real
-  document bindings, unchanged grants and retained content after removal; server
-  discovery never executes UI code. Chrome 155.0.8059.84 passed preview and
-  installed-view checks at four widths, including loading/error/unbound states,
-  props changes, Unicode, source refresh, splitting and reload, without starting a
-  Host. An unsigned tarball installed outside the checkouts generated, built and
-  previewed another package and launched with no Host left behind.
-- Browser, package and document evidence is recorded under `work/plugin-dx/`.
-  The tarball uses explicit local source overrides; it is not a signed release.
+Then-current checks: Rho 174/174 (scaffolding without overwrites, pinned identities,
+reserved names, containment, document bindings, unchanged grants, removal), Chrome
+155 preview and installed views at four widths without starting a Host, and an
+unsigned tarball outside the checkouts that generated, built and previewed another
+package. Evidence is under `work/plugin-dx/`; it is not a signed release.
 
 ## Frontend reset
 
@@ -210,10 +227,9 @@ documents, rules and designs, and asked for a reconstruction from the work peopl
 need to do. AGENTS.md and the documentation index no longer direct work through those
 plans, and the superseded `work/` evidence is gone; Git retains their history.
 
-The browser now has one project sidebar, dedicated Overview/Files/Activity/settings
-sections, searchable projects and files, direct workspace controls and an optional
-Agent inspector. There is no permanent Agent column or compressed run timeline;
-execution records remain reachable from Activity and exact artifact provenance.
+The reset built one project sidebar, dedicated project sections, searchable projects
+and files, direct workspace controls and an optional Agent inspector; execution
+records remain reachable from Activity and exact artifact provenance.
 In a tab opened from a narrower link, the Agent request field uses an explicit
 clipboard handoff to the external Agent, while a tab on this machine holds
 conversations started in Rho; the draft survives panel closure, scoped by
@@ -241,31 +257,15 @@ usability, physical IME behaviour and distribution are not verified here.
 
 ## Verification of this reconstruction
 
-- `npm run build`: passed.
-- The frontend reset passed 171 unit checks; current source checks are recorded above.
-- Real Chrome 155.0.8059.84: project entry/creation, files, table, figure, layout,
-  activity, settings, plugin catalog/detail and responsive dialogs passed at
-  1440, 1024, 768 and 390 CSS pixels. The newer frontend, entry, pages, plugin,
-  shell, actions, objects, continuity, document and person-files suites passed.
-- Native browser input: real clipboard, Unicode, Chrome CDP IME composition,
-  keyboard commands, modal focus containment and focus return passed. Real R
-  execution: edited action input, one dispatch after a lost reply, stop
-  confirmation, failure/repair, unknown outcomes, exact artifact provenance,
-  explicit linked answers and partial exports passed through the rebuilt UI.
-- Recovery: unsaved text and own undo survive tab/layout changes; shared selections
-  survive re-layout; confirmed documents, layouts and contexts survive normal and
-  sudden service exits, and reconnection reads without resubmitting work.
-- An unsigned local development tarball installed and launched outside the source
-  repositories with no development runtime overrides and no Host left behind,
-  separate from a signed release or registry publication.
-- Screenshots and detailed reports are retained locally under
-  `work/frontend-reset/`; document rendering and link checks are recorded there.
-  Previous frontend appearance acceptance is not inherited.
-
-Checks use disposable projects and owned Hosts. The plugin repository's pre-existing
-uncommitted `plugins/tables/src/ui.tsx` change was preserved; browser builds record
-that local override. No component source was edited or published in this task.
-The unit result for Plugins in the ledger remains historical, with its original date.
+The 2026-10-25 reconstruction passed `npm run build`, 171 unit checks and real Chrome
+155 at 1440, 1024, 768 and 390 CSS px: project entry, files, table, figure, layout,
+activity, settings, plugins and dialogs; clipboard, Unicode, CDP IME composition and
+focus return; real R runs with one dispatch after a lost reply, stop, repair, unknown
+outcomes, provenance and partial export; unsaved text, undo, selections, documents,
+layouts and contexts across re-layout and normal or sudden service exits. An unsigned
+tarball installed and launched outside the source repositories. Reports are under
+`work/frontend-reset/`; earlier appearance acceptance is not inherited. The unit
+result for Plugins in that ledger entry kept its original date.
 
 ## Existing application capabilities
 

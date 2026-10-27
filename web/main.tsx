@@ -1,10 +1,13 @@
 import { lazy, Fragment, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserClient, type BrowserConnection, type ProjectSummary, type WorkspaceSnapshot } from '../src/browser.js';
-import { Home, located, projectName as name, trapTab } from './home.js';
+import { Home, projectHue, projectName as name, trapTab } from './home.js';
 import { AgentAccess, AgentRequest } from './agents.js';
 import { AgentConversation } from './conversation.js';
-import { ProjectNavigation, type Section } from './project.js';
+import { ProjectNavigation, type Section, type SourceRow } from './project.js';
+import { capturable, useProjectFiles } from './sources.js';
+import { useAgentNow, type AgentNow } from './agent-now.js';
+import { canvasId, compositionName, fileKey, openInWorkspace } from './canvas.js';
 import { Icon } from './icons.js';
 import { CommandPalette, type Command, type CommandGroup } from './commands.js';
 import { PluginCatalog, PluginNavigation } from './plugins.js';
@@ -64,6 +67,12 @@ function App() {
   const [pluginId, setPluginId] = useState(''), [pluginReturn, setPluginReturn] = useState(false);
   const [context, setContext] = useState(false), [navigation, setNavigation] = useState(true);
   const [feedbackContext, setFeedbackContext] = useState(false);
+  const [category, setCategory] = useState<SourceRow>('data'), [addingSource, setAddingSource] = useState(false);
+  // Following: the Agent canvas opens what the Agent reads and changes, and brings it forward.
+  // It starts when the person sends a message here or asks to follow, and stops when they go
+  // somewhere else themselves.
+  const [following, setFollowing] = useState(false), [canvasNote, setCanvasNote] = useState('');
+  const followingNow = useRef(false); followingNow.current = following;
   // The layout commands the workspace offers for its focused view.
   const [layoutCommands, setLayoutCommands] = useState<CommandGroup | null>(null);
   // A view may place its own section (for example Changes) at the top of the context panel.
@@ -84,7 +93,7 @@ function App() {
     setPhase('offline'); setOfflineAt(at => at ?? new Date()); setError(humanError(e));
   }
   function chooseProject(next: ProjectSummary, restoreLayout = false) {
-    if (next.id !== project?.id) { setSnapshot(null); setCompositionId(''); setPluginId(''); }
+    if (next.id !== project?.id) { setSnapshot(null); setCompositionId(''); setPluginId(''); setFollowing(false); setCanvasNote(''); }
     // The project opens on its own question, not on whichever layout was last open:
     // a person arriving should see what the work is and where it stands.
     if (!restoreLayout) sessionStorage.removeItem('rho.layout.v1:' + connection?.principalId + ':' + next.id);
@@ -176,12 +185,29 @@ function App() {
   }
   // Opening a layout may name the view to bring forward: from the project page a
   // person picks an artifact, not a tab.
-  function layout(id: string, view?: string) { if (project) sessionStorage.setItem('rho.layout.v1:' + connection?.principalId + ':' + project.id, id); setCompositionId(id); setOpenView(view ?? ''); setOverview(false); setScreen('project'); }
-  function showOverview() { setSection('overview'); if (project) sessionStorage.removeItem('rho.layout.v1:' + connection?.principalId + ':' + project.id); setOverview(true); setScreen('project'); }
+  function place(id: string, view?: string) { if (project) sessionStorage.setItem('rho.layout.v1:' + connection?.principalId + ':' + project.id, id); setCompositionId(id); setOpenView(view ?? ''); setOverview(false); setScreen('project'); }
+  // A workspace the person opens is their choice; only the Agent canvas keeps following.
+  function layout(id: string, view?: string) { if (id !== canvasId) setFollowing(false); place(id, view); }
+  function showOverview() { setFollowing(false); setSection('overview'); if (project) sessionStorage.removeItem('rho.layout.v1:' + connection?.principalId + ':' + project.id); setOverview(true); setScreen('project'); }
   function showSection(next: Section) { showOverview(); setScreen('project'); setSection(next); }
-  function plugins() { setPluginId(''); setPluginReturn(false); setScreen('plugins'); }
+  function showSources(next: SourceRow) { setCategory(next); showSection('sources'); }
+  // Studio opens the workspace last open here, the Agent canvas, or the first one.
+  function studio() {
+    const kept = project ? sessionStorage.getItem('rho.layout.v1:' + connection?.principalId + ':' + project.id) : null;
+    const list = snapshot?.compositions ?? [];
+    layout(list.find(c => c.compositionId === kept)?.compositionId ?? list.find(c => c.compositionId === canvasId)?.compositionId ?? list[0]?.compositionId ?? canvasId);
+  }
+  function follow() { setFollowing(true); setCanvasNote(''); place(canvasId, shownView.current); }
+  function plugins() { setFollowing(false); setPluginId(''); setPluginReturn(false); setScreen('plugins'); }
   function about(id: string) { setPluginId(id); setPluginReturn(true); setScreen('plugins'); }
-  function goHome() { setScreen('home'); setHomeFocus(true); }
+  function goHome() { setFollowing(false); setScreen('home'); setHomeFocus(true); }
+  async function addSource() {
+    if (!project) return;
+    setAddingSource(true);
+    try { const result = await client.call('project.source.add', { projectId: project.id }, new AbortController().signal); if (result.project) { setProject(result.project); setProjects(list => list.map(p => p.id === result.project!.id ? result.project! : p)); files.refresh(); } }
+    catch (e) { setNotice(e instanceof Error ? e.message : 'The folder could not be added.'); }
+    finally { setAddingSource(false); }
+  }
   // A choice in the drawer closes it; focus returns to the navigation button unless the choice moves it.
   const pick = (run: () => void) => () => { run(); if (narrow) setNavigation(false); };
   // Leaving a link keeps the page: the same person at the same machine keeps reading the same
@@ -190,7 +216,56 @@ function App() {
     sessionStorage.removeItem(sessionKey); confirmReturn.current = null;
     setLink(null); setNotice(message); setConfirming(false); setError(''); setReconnect(v => v + 1);
   }
-  const composition = overview ? undefined : snapshot?.compositions.find(c => c.compositionId === compositionId) ?? snapshot?.compositions[0];
+  // The Agent canvas may be asked for before its first view exists; Studio then shows it empty.
+  const composition = overview ? undefined : snapshot?.compositions.find(c => c.compositionId === compositionId) ?? (compositionId === canvasId ? undefined : snapshot?.compositions[0]);
+  const studioOpen = screen === 'project' && !overview;
+  const files = useProjectFiles(client, project && screen !== 'home' ? project.id : undefined, snapshot?.cursor);
+  const agentNow = useAgentNow(client, project && snapshot?.project.id === project.id ? snapshot : null);
+  const shownView = useRef('');
+  // Each file the Agent's running turn names is opened on the canvas once: a read as soon as
+  // it is reported, an edit or a write once it returned, so the canvas shows the new text.
+  const followed = useRef(new Set<string>());
+  useEffect(() => { followed.current.clear(); }, [project?.id, agentNow?.conversationId]);
+  useEffect(() => {
+    if (!following || !snapshot || !agentNow?.running) return;
+    const fresh = agentNow.files.filter(f => !followed.current.has(f.key + ':' + f.path) && (f.action === 'read' ? f.outcome !== 'rejected' : f.outcome === 'returned'));
+    for (const file of fresh.slice(-6)) {
+      followed.current.add(file.key + ':' + file.path);
+      openInWorkspace(client, snapshot, canvasId, file.path).then(placed => {
+        // A command may name a file it removed or never made; only what exists is shown.
+        if (!placed) { if (file.action !== 'run') setCanvasNote(`${file.verb} ${file.path} · Rho has no viewer for this kind of file yet.`); return; }
+        setCanvasNote('');
+        shownView.current = placed.viewId;
+        if (followingNow.current) place(canvasId, placed.viewId);
+      }, error => { if (file.action !== 'run') setCanvasNote(`${file.verb} ${file.path} · ${error instanceof Error ? error.message : 'It could not be opened.'}`); });
+    }
+  }, [following, agentNow, snapshot?.project.id]);
+  // Outputs that appear or change on disk while a turn runs are shown too, whether or not a
+  // step named them: the walk observes the folder, it does not say who wrote the file. The
+  // walk after the turn ends is included, since the last outputs often land just then.
+  const outputs = useRef<{ conversationId: string; sizes: Map<string, number>; endedAt: number; done: boolean } | null>(null);
+  useEffect(() => {
+    if (!agentNow || !snapshot) return;
+    const sizes = new Map(files.files.map(f => [f.path, f.bytes]));
+    const seen = outputs.current;
+    if (agentNow.running && (!seen || seen.conversationId !== agentNow.conversationId || seen.done || seen.endedAt)) { outputs.current = { conversationId: agentNow.conversationId, sizes, endedAt: 0, done: false }; return; }
+    if (!seen || seen.done || seen.conversationId !== agentNow.conversationId) return;
+    if (!agentNow.running) {
+      if (!seen.endedAt) seen.endedAt = Date.now();
+      else if (files.readAt > seen.endedAt) seen.done = true;
+    }
+    if (following && files.readAt) {
+      const changed = files.files.filter(f => (f.category === 'figures' || f.category === 'results') && capturable(f.path) && seen.sizes.get(f.path) !== f.bytes);
+      for (const file of changed.slice(-4)) openInWorkspace(client, snapshot, canvasId, file.path).then(placed => {
+        if (!placed) return;
+        shownView.current = placed.viewId;
+        if (followingNow.current) place(canvasId, placed.viewId);
+      }, () => undefined);
+    }
+    seen.sizes = sizes;
+  }, [files.readAt, agentNow?.running, agentNow?.conversationId]);
+  // Where the Agent is on the canvas now: the view of the file its newest action named.
+  const presence = useMemo(() => agentPresence(agentNow, snapshot, composition), [agentNow, snapshot, composition]);
   const folder = { root: connection.root, label: connection.rootLabel ?? connection.root ?? '' };
   const projectVisible = screen !== 'home' && project;
   // Plugins has its own sidebar; the plugin shown names the page.
@@ -247,13 +322,31 @@ function App() {
     </section>
     </>}
   </>;
+  // Counts by kind of file, from the last walk; results also count registered results.
+  const counts = files.readAt ? {
+    data: files.files.filter(f => f.category === 'data').length, code: files.files.filter(f => f.category === 'code').length, notes: files.files.filter(f => f.category === 'notes').length,
+    results: new Set([...files.files.filter(f => f.category === 'figures' || f.category === 'results').map(f => f.path), ...(snapshot?.resources ?? []).filter(r => (r.provenance as { source?: string } | undefined)?.source !== 'current-filesystem-observation').map(r => r.path)]).size,
+  } : null;
+  const here = screen === 'plugins' ? 'plugins' : screen !== 'project' ? '' : studioOpen ? 'studio:' + (composition?.compositionId ?? compositionId) : section === 'sources' ? 'sources:' + category : section === 'documents' ? 'files' : section;
+  const initials = project ? name(project).split(/[\s_.-]+/).filter(Boolean).slice(0, 2).map(w => [...w][0]!.toUpperCase()).join('') || 'P' : '';
   const navigationContents = <>
-    <button className="brand" onClick={goHome} aria-label="Rho home"><span className="brand-mark">ρ</span><strong>Rho</strong></button>
-    <button className="project-switcher" onClick={pick(goHome)}><Icon name="folder" size={18} /><span>{project ? name(project) : 'Your projects'}</span><Icon name="chevron" size={13} /></button>
-    {project && <>
-      {screen === 'plugins' ? <><button className="nav-row" onClick={pick(showOverview)}><Icon name="chevron" size={14} /><span>Back to project</span></button><PluginNavigation catalog={snapshot?.catalog} pluginId={pluginId} onSelect={id => pick(() => choosePlugin(id))()} /></>
-      : <ProjectNavigation project={project} location={located(project, folder)} snapshot={snapshot} overview={!composition && screen === 'project'} section={section} compositionId={composition?.compositionId ?? ''}
-          onOverview={pick(showOverview)} onLayout={id => pick(() => layout(id))()} onSection={next => pick(() => showSection(next))()} />}
+    {project ? <>
+      <button className="nav-back" onClick={pick(goHome)}><Icon name="back" size={15} /><span>All projects</span></button>
+      <details className="project-card">
+        <summary aria-label={'Project ' + name(project) + '. Switch project'}><span className={'project-avatar ' + projectHue(project.id + name(project))} aria-hidden="true">{initials}</span><span className="project-card-name"><small>Project</small><strong>{name(project)}</strong></span><Icon name="updown" size={16} /></summary>
+        <div className="project-menu" role="group" aria-label="Switch project">
+          {projects.filter(p => p.id !== project.id).slice(0, 8).map(p => <button key={p.id} onClick={e => { e.currentTarget.closest('details')?.removeAttribute('open'); pick(() => chooseProject(p))(); }}><span className={'project-avatar small ' + projectHue(p.id + name(p))} aria-hidden="true">{name(p).slice(0, 1).toUpperCase()}</span><span>{name(p)}</span></button>)}
+          <button onClick={e => { e.currentTarget.closest('details')?.removeAttribute('open'); pick(goHome)(); }}><Icon name="folder" size={16} /><span>All projects…</span></button>
+        </div>
+      </details>
+      {screen === 'plugins' ? <><button className="nav-row" onClick={pick(showOverview)}><Icon name="back" size={14} /><span>Back to project</span></button><PluginNavigation catalog={snapshot?.catalog} pluginId={pluginId} onSelect={id => pick(() => choosePlugin(id))()} /></>
+      : <ProjectNavigation project={project} snapshot={snapshot} current={here} counts={counts} partial={files.truncated} runs={snapshot ? snapshot.operations.length : null}
+          agent={{ running: !!agentNow?.running, waiting: !!agentNow?.waiting, conversations: snapshot?.conversations?.length ?? 0 }} agentOpen={agentOpen} adding={addingSource}
+          onOverview={pick(showOverview)} onStudio={pick(studio)} onAgent={pick(() => { setAgentOpen(true); setContext(false); })} onLayout={id => pick(() => layout(id))()}
+          onSection={next => pick(() => showSection(next))()} onSources={next => pick(() => showSources(next))()} onAddSource={() => void addSource()} />}
+    </> : <>
+      <button className="brand" onClick={goHome} aria-label="Rho home"><span className="brand-mark">ρ</span><strong>Rho</strong></button>
+      <button className="project-switcher" onClick={pick(goHome)}><Icon name="folder" size={18} /><span>Your projects</span><Icon name="chevron" size={13} /></button>
     </>}
     <div className="navigation-footer">
       {project && <button className="nav-row" aria-current={screen === 'project' && overview && section === 'settings' ? 'page' : undefined} onClick={pick(() => showSection('settings'))}><Icon name="context" size={17} /><span>Project settings</span></button>}
@@ -265,7 +358,7 @@ function App() {
     <div className="drawer-heading"><h2>Agent</h2><button className="icon-button" aria-label="Close Agent" onClick={() => { setAgentOpen(false); agentTrigger.current?.focus(); }}><Icon name="close" size={18} /></button></div>
     {project && <div className="context-section"><button onClick={() => { showSection('activity'); setAgentOpen(false); }}>View live activity</button></div>}
     {snapshot && (link ? <AgentRequest key={snapshot.project.id} snapshot={snapshot} principalId={connection.principalId ?? 'local'} />
-      : <AgentConversation key={snapshot.project.id} snapshot={snapshot} client={client} selectedId={selectedConversation} onSelected={() => setSelectedConversation(null)} />)}
+      : <AgentConversation key={snapshot.project.id} snapshot={snapshot} client={client} selectedId={selectedConversation} onSelected={() => setSelectedConversation(null)} onSent={follow} />)}
     <div ref={setAgentSlot} className="agent-slot" />
     {!composition && <section className="context-section"><h3>{link ? 'Sessions' : 'Sessions started elsewhere'}</h3><AgentAccess snapshot={snapshot} outside={!link} /></section>}
   </>;
@@ -273,8 +366,11 @@ function App() {
   // heading names the section itself, so the trail carries only the path back.
   const crumbs: Array<{ label: string; run?: () => void }> = !project || screen === 'home' ? [{ label: 'Projects' }]
     : screen === 'plugins' ? [{ label: 'Projects', run: goHome }, { label: name(project), run: showOverview }, { label: pluginTitle || 'Plugins' }]
-    : composition ? [{ label: 'Projects', run: goHome }, { label: name(project), run: showOverview }, { label: composition.compositionId }]
+    : studioOpen ? [{ label: 'Projects', run: goHome }, { label: name(project), run: showOverview }, { label: compositionName(composition?.compositionId ?? compositionId) }]
     : [{ label: 'Projects', run: goHome }, { label: name(project) }];
+  const shownId = composition?.compositionId ?? compositionId;
+  const studioList = [...(snapshot?.compositions ?? [])].sort((a, b) => Number(b.compositionId === canvasId) - Number(a.compositionId === canvasId));
+  if (studioOpen && shownId === canvasId && !studioList.some(c => c.compositionId === canvasId)) studioList.unshift({ compositionId: canvasId, views: [] } as unknown as typeof studioList[number]);
   return <div className="application">
     <a className="skip-link" href="#main">Skip to workspace</a>
     <div className="app-body">
@@ -291,6 +387,9 @@ function App() {
             {!edits && <span className="read-only"><Icon name="lock" size={12} />Read-only</span>}
           </nav>
           <div className="topbar-actions">
+            {projectVisible && agentNow?.running && <button className={'agent-chip ' + (agentNow.waiting ? 'waiting' : 'working')} title={agentNow.title}
+              onClick={() => { if (agentNow.waiting) { setAgentOpen(true); setContext(false); } else follow(); }}>
+              <span className="pulse-dot" aria-hidden="true" /><strong>{agentNow.waiting ? 'Needs your choice' : agentNow.agent}</strong><span className="agent-chip-what">{agentNow.waiting ?? doing(agentNow, project?.root)}</span></button>}
             <button ref={commandTrigger} className="command-trigger" aria-label="Commands · Type a command" aria-keyshortcuts="Meta+K Control+K" onClick={() => setCommands(true)}><Icon name="search" size={16} /><span>Commands</span><kbd>{shortcut}</kbd></button>
             <span className={'connection ' + phase} role="status" title={connectionNote}><span className="status-dot" /><span className="connection-label">{phase === 'live' ? 'Connected' : phase === 'offline' ? 'Offline' : 'Connecting'}</span></span>
             {projectVisible && <button ref={agentTrigger} className="agent-toggle" aria-expanded={agentOpen} aria-label="Agent" onClick={() => { setAgentOpen(v => !v); setContext(false); }}><Icon name="prompt" size={17} /><span>Agent</span></button>}
@@ -298,19 +397,30 @@ function App() {
           </div>
         </header>
         <div className="content-row">
-          <main id="main" tabIndex={-1} className={composition && screen === 'project' ? 'main project-main workspace-main' : 'main'}>
+          <main id="main" tabIndex={-1} className={studioOpen && snapshot ? 'main project-main workspace-main' : 'main'}>
             {notice && <div className="offline-bar notice-bar" role="status"><Icon name="info" size={17} /><p>{notice}</p><button onClick={() => setNotice('')}>Dismiss</button></div>}
             {screen === 'project' && snapshot?.presentation?.pending && <div className="offline-bar" role="status"><p>New output is ready. Your current views are kept.</p><button onClick={() => showSection('files')}>Show files</button></div>}
             {(phase === 'offline' || reconnecting) && <div className="offline-bar" role="alert"><Icon name="offline" size={17} /><p>{reconnecting ? 'Reconnecting. ' : "Can't reach Rho. "}{seen}</p><button disabled={reconnecting} onClick={reread}>Reconnect</button></div>}
             {screen === 'home' || !project ? <Home client={client!} projects={projects} folder={folder} focusRequest={homeFocus} onFocused={() => setHomeFocus(false)} onChoose={chooseProject} onOpened={opened} onAccessEnded={() => useLocalAccess('That access has ended. This tab uses this machine.')} />
               : !snapshot ? <Loading text="Opening project…" />
               : screen === 'plugins' ? <PluginCatalog catalog={snapshot.catalog} project={name(project)} pluginId={pluginId} onSelect={choosePlugin} back={pluginReturn ? { label: 'Back to project', run: () => { setPluginReturn(false); setPluginId(''); setScreen('project'); setMainFocus(true); } } : undefined} />
-              : composition ? <>
-                <div className="workspace-tools"><button className="text-button" onClick={showOverview}><Icon name="chevron" size={13} />Project</button><span className="workspace-question">{snapshot.taskMap?.question ?? name(project)}</span>
-                  {layoutCommands && <details className="view-menu"><summary><Icon name="layout" size={15} />Arrange views</summary><div>{layoutCommands.commands.map(c => <button key={c.id} onClick={e => { c.run(); e.currentTarget.closest('details')?.removeAttribute('open'); }}><Icon name={c.icon} size={15} />{c.label}</button>)}</div></details>}
+              : studioOpen ? <>
+                <div className="studio-bar">
+                  <nav className="studio-tabs" aria-label="Workspaces">
+                    {studioList.map(c => <button key={c.compositionId} className="studio-tab" aria-current={c.compositionId === shownId ? 'page' : undefined} onClick={() => layout(c.compositionId)}>
+                      {c.compositionId === canvasId && <Icon name="spark" size={14} />}<span>{compositionName(c.compositionId)}</span><small>{c.views.length ? c.views.length + (c.views.length === 1 ? ' view' : ' views') : 'empty'}</small></button>)}
+                  </nav>
+                  {agentNow?.running && (following && shownId === canvasId
+                    ? <button className="follow-toggle on" aria-pressed="true" title="Files the Agent reads and changes open here. Choosing another view stops following." onClick={() => setFollowing(false)}><span className="pulse-dot" aria-hidden="true" />Following {agentNow.agent}</button>
+                    : shownId === canvasId ? <button className="follow-toggle" aria-pressed="false" onClick={follow}><Icon name="follow" size={15} />Follow {agentNow.agent}</button>
+                    : <button className="follow-toggle" onClick={follow}><span className="pulse-dot" aria-hidden="true" />{agentNow.agent} is working · Agent canvas</button>)}
+                  {composition && layoutCommands && <details className="view-menu"><summary><Icon name="layout" size={15} />Arrange views</summary><div>{layoutCommands.commands.map(c => <button key={c.id} onClick={e => { c.run(); e.currentTarget.closest('details')?.removeAttribute('open'); }}><Icon name={c.icon} size={15} />{c.label}</button>)}</div></details>}
                 </div>
-                <Suspense fallback={<Loading text="Opening workspace…" />}><Workspace key={snapshot.project.id + composition.compositionId} composition={composition} snapshot={snapshot} client={client!} onAbout={about} contextTarget={context ? contextSlot : null} principalId={connection.principalId} feedbackContextActive={feedbackContext} onShowContext={() => { setFeedbackContext(true); setContext(true); setAgentOpen(false); }} openView={openView} onCommands={setLayoutCommands} agentTarget={agentOpen ? agentSlot : null} onShowAgent={() => setAgentOpen(true)} /></Suspense>
-              </> : <Suspense fallback={<Loading text="Opening project…" />}><ProjectOverview key={project.id} section={section} onSection={showSection} onAgent={id => { if (id) setSelectedConversation(id); setAgentOpen(true); }} client={client!} onProjectChanged={next => { setProject(next); setProjects(list => list.map(p => p.id === next.id ? next : p)); }} project={project} snapshot={snapshot} onLayout={layout} onOpened={(id, view) => { layout(id, view); reread(); }} /></Suspense>}
+                {shownId === canvasId && canvasNote && <div className="canvas-note" role="status"><p>{canvasNote}</p><button className="small-button" onClick={() => setCanvasNote('')}>Dismiss</button></div>}
+                {composition ? <Suspense fallback={<Loading text="Opening workspace…" />}><Workspace key={snapshot.project.id + composition.compositionId} composition={composition} snapshot={snapshot} client={client!} onAbout={about} contextTarget={context ? contextSlot : null} principalId={connection.principalId} feedbackContextActive={feedbackContext} onShowContext={() => { setFeedbackContext(true); setContext(true); setAgentOpen(false); }} openView={openView} onCommands={setLayoutCommands} agentTarget={agentOpen ? agentSlot : null} onShowAgent={() => setAgentOpen(true)}
+                    presence={presence} onPersonMoved={() => setFollowing(false)} bar={composition.compositionId !== canvasId} following={following && composition.compositionId === canvasId} /></Suspense>
+                  : <StudioEmpty root={project.root} agent={agentNow} canvas={shownId === canvasId} following={following} onAgent={() => { setAgentOpen(true); setContext(false); }} onFiles={() => showSources('data')} />}
+              </> : <Suspense fallback={<Loading text="Opening project…" />}><ProjectOverview key={project.id} section={section} category={category} files={files} onSection={showSection} onAgent={id => { if (id) setSelectedConversation(id); setAgentOpen(true); }} client={client!} onProjectChanged={next => { setProject(next); setProjects(list => list.map(p => p.id === next.id ? next : p)); }} project={project} snapshot={snapshot} onLayout={layout} onOpened={(id, view) => { layout(id, view); reread(); }} /></Suspense>}
           </main>
           {projectVisible && agentOpen && !narrow && <aside className="inspector-pane" aria-label="Agent panel">{agentContents}</aside>}
           {context && !narrow && <aside id="project-context" className="context-drawer inspector-pane" aria-label={feedbackContext ? 'Your question' : 'Context and access'}><div className="drawer-heading"><h2>{feedbackContext ? 'Your question' : 'Connection & access'}</h2><button className="icon-button" aria-label="Close context" onClick={() => { setContext(false); contextTrigger.current?.focus(); }}><Icon name="close" size={18} /></button></div>{contextSections}</aside>}
@@ -324,6 +434,37 @@ function App() {
     <dialog ref={confirmDialog} className="confirm" aria-labelledby="disconnect-title" aria-describedby="disconnect-body" onCancel={() => setConfirming(false)} onClose={() => { setConfirming(false); confirmReturn.current?.focus(); }}>
       <h2 id="disconnect-title">Use this machine's access?</h2><p id="disconnect-body">This tab stops using its link and keeps working as this machine. Open projects, unsaved edits and running work are unchanged.</p><div className="dialog-actions"><button onClick={() => setConfirming(false)}>Cancel</button><button className="danger" onClick={() => useLocalAccess('This tab now uses this machine.')}>Use this machine</button></div>
     </dialog>
+  </div>;
+}
+// The newest thing the Agent reported doing, in the words the Agent panel uses.
+// Paths inside the project read as the project names them.
+function doing(now: AgentNow, root?: string) {
+  if (!now.latest) return 'Answering';
+  let text = [now.latest.verb, now.latest.target].filter(Boolean).join(' ');
+  if (root) text = text.split(root.replace(/\/+$/, '') + '/').join('').split(root.replace(/\/+$/, '')).join('.');
+  return text;
+}
+// While a turn runs, the view of the last file the Agent's actions named, in the workspace
+// on screen. It is live while that action is the newest one and still running.
+function agentPresence(now: AgentNow | null, snapshot: WorkspaceSnapshot | null, composition?: WorkspaceSnapshot['compositions'][number]) {
+  const file = now?.files.at(-1);
+  if (!now?.running || !snapshot || !composition || !file) return null;
+  const document = snapshot.documents.find(d => d.path === file.path), key = fileKey(file.path);
+  const view = composition.views.find(v => v.id.startsWith(key)
+    || (!!document && Object.values(v.bindings ?? {}).some(b => (b as { documentId?: unknown }).documentId === document.id)));
+  if (!view) return null;
+  const live = file.outcome === 'requested' && now.latest?.key === file.key;
+  const label = file.action === 'read' ? (live ? 'Reading' : 'Read') : file.action === 'edit' ? (live ? 'Editing' : 'Edited') : file.action === 'run' ? (live ? 'Running' : 'Ran') : (live ? 'Writing' : 'Wrote');
+  return { viewId: view.id, label: `${now.agent} · ${label} ${file.path}`, verb: label, live };
+}
+// Studio before anything is open in it. The Agent canvas says what will appear there.
+function StudioEmpty({ root, agent, canvas, following, onAgent, onFiles }: { root: string; agent: AgentNow | null; canvas: boolean; following: boolean; onAgent: () => void; onFiles: () => void }) {
+  const working = !!agent?.running && canvas;
+  return <div className="studio-empty">
+    <span className="empty-symbol">{working ? <span className="pulse-dot large" aria-hidden="true" /> : <Icon name={canvas ? 'spark' : 'layout'} size={26} stroke={1.5} />}</span>
+    <h2>{working ? `${agent!.agent} is working` : canvas ? 'Nothing on the Agent canvas yet' : 'Nothing open in Studio yet'}</h2>
+    <p>{working ? (following ? `Files it reads or changes open here as it goes. Now: ${doing(agent!, root)}.` : `Now: ${doing(agent!, root)}.`) : 'Files the Agent reads or changes open here while you follow it. You can also open files from Sources.'}</p>
+    <div className="empty-actions"><button className={working ? undefined : 'primary'} onClick={onAgent}><Icon name="prompt" size={17} stroke={1.6} /><span>{working ? 'Show conversation' : 'Ask Agent'}</span></button><button onClick={onFiles}><Icon name="table" size={17} stroke={1.6} /><span>Browse data</span></button></div>
   </div>;
 }
 function Loading({ text }: { text: string }) { return <div className="loading-state" role="status"><span className="loading-dot" /><span>{text}</span></div>; }

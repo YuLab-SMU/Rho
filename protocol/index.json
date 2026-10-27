@@ -59,8 +59,8 @@
     "agent.activity.capture": {
       "summary": "agent.activity.capture",
       "path": "operations/agent.activity.capture.json",
-      "bytes": 1066,
-      "sha256": "99446fe6c6bf4361e9364d79f6267dd4d596d540ba9ed57642f5beb32dfed31d"
+      "bytes": 1042,
+      "sha256": "0cda2defcd9c329a92e020f9637da75c89b362bd408f8efd9e1d8e9faea314ba"
     },
     "agent.activity.outputs": {
       "summary": "agent.activity.outputs",

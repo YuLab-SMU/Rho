@@ -23,6 +23,10 @@ inspect what happened. The application gives those actions direct places:
   there are any. A project with nothing recorded yet shows its two next steps —
   work with the Agent or browse its files — rather than empty sections, leading with
   whichever one the project's listing says has something behind it.
+- **Sources** counts the project's Data, Code, Results & figures and Notes from one
+  bounded walk of its folders, by file name, and lists each kind across the project
+  and its source folders. A CSV or image opens in its table or media view, text in
+  the editor, a registered result as its exact version. `+` adds a source folder.
 - **Files** opens documents, browses the project's folder and the source folders it
   works in, and filters the current folder. A source folder is named as the person
   named it and opens one level at a time, the same way any other folder does.
@@ -31,6 +35,15 @@ inspect what happened. The application gives those actions direct places:
   errors and observed output files. The [activity episode](AGENT-ACTIVITY.md)
   describes attachment, bounded polling, reconnect and exact output snapshots.
 - **Project settings** manages source folders and explicitly checks available tools.
+- **Studio** shows the workspaces as tabs, each with its view count; the sidebar lists
+  them under Studio. The **Agent canvas** (`agent-canvas`) is the workspace the Agent's
+  work opens in: sending a message from the Agent panel shows it and follows the turn.
+  Each project file the Agent's steps name opens there once (a read when reported, an
+  edit or write once it returned, files a finished command names), as do outputs that
+  appear on disk during the turn. Code sits left, data and figures right. The tab of the
+  file the Agent last named says Reading, Edited, Ran…; the topbar names the Agent's
+  newest action on every project page. Choosing another view, typing or leaving stops
+  following until the person follows again ([episode](AGENT-CANVAS-EPISODE.md)).
 - **Workspaces** hold real owner views in tabs and splits. Arrange views exposes
   split, move, close and undo operations; the command palette offers the same actions.
 - **Agent** opens on request. In a tab on this machine it holds conversations with
@@ -53,8 +66,10 @@ inspect what happened. The application gives those actions direct places:
   episode](AGENT-UI-EPISODE.md) records the observations, checks and limits.
 
 The topbar names the way back — the projects list, then the project, then the open
-workspace — and keeps only the current place below 768 CSS px. Project settings and
-Plugins sit together at the foot of the project sidebar. The sidebar and optional
+workspace — and keeps only the current place below 768 CSS px. The project sidebar
+starts with All projects and the project (its menu switches to another open project),
+then Overview, Studio, Agent (Working or Needs you while a turn runs) and Activity,
+then Sources. Project settings and Plugins sit together at its foot. The sidebar and optional
 inspector adapt to available space. Narrow screens show one workspace view at a time.
 Closing a panel does not cancel work.
 
@@ -70,6 +85,12 @@ registered owner views. `web/agents.tsx` handles the explicit external-Agent han
 `web/conversation.tsx` shows a conversation started in Rho. Its presentation comes
 from `src/conversation-presentation.ts` (text, action lines, folded runs, plan entry),
 and Agent prose is rendered by `src/agent-markdown.ts` with `web/markdown.tsx`.
+`web/project.tsx` draws the project sidebar; `web/sources.ts` walks the project folders
+within its limits and names each file's kind. `web/agent-now.ts` reads the running
+turn's record (`conversation.read`, last turn) and maps its steps to project paths;
+`web/canvas.ts` places a file's owner view in a workspace with one conditional
+`composition.apply`, through `document.open` for text and `agent.activity.capture`
+for a CSV or image. Following is a tab-local choice; the canvas layout is saved.
 `web/work-progress.tsx` reads `project.work.read` for the local person's project
 Overview: Agent-reported plans/usage, retained native source identities and current
 referenced files. It links back to the original conversation or Activity view.
@@ -130,6 +151,13 @@ panel. Its assertions cover navigation, editing and undo, an unsent conversation
 the clipboard handoff in a link tab,
 conditional layout changes, reload, keyboard input, responsive overflow and accessible
 control names. The report and images go to `work/frontend-reset/browser/` by default.
+
+`npm run acceptance:agent-canvas` drives a controlled ACP peer that reads, edits and
+runs project files and writes an output no step names. It checks the sidebar counts,
+that Start opens the following Agent canvas, the table, editor and media views it
+opens with the Agent's place on their tabs, the edited text on disk, the saved
+canvas, that choosing another view stops following until Follow, and overflow at
+1024/390. Evidence goes to `work/agent-canvas-acceptance/` by default.
 
 `npm run acceptance:agent-ui` drives a controlled ACP peer through the real service
 and Chrome; it uses no model credentials. It checks that reply text arrives in more

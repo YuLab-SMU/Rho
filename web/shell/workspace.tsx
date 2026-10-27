@@ -18,7 +18,7 @@ type Tabs = Extract<Region, { kind: 'tabs' }>;
 // The workspace shell: the owner's composition tree drawn as
 // splits and tab groups, owner views mounted within the rendering budget, and a slot for
 // what Rho adds above the work. It decides nothing about attention; useLive does.
-export function Workspace({ composition: recorded, snapshot, client, onAbout, contextTarget, principalId, onShowContext, feedbackContextActive, openView, onCommands, agentTarget, onShowAgent }: { onCommands?: (group: CommandGroup | null) => void; composition: CompositionSummary; snapshot: WorkspaceSnapshot; client: BrowserClient; onAbout: (pluginId: string) => void; contextTarget: HTMLElement | null; principalId?: string; onShowContext: () => void; feedbackContextActive: boolean; mapChipTarget?: HTMLElement | null; openView?: string; agentTarget?: HTMLElement | null; onShowAgent?: () => void }) {
+export function Workspace({ composition: recorded, snapshot, client, onAbout, contextTarget, principalId, onShowContext, feedbackContextActive, openView, onCommands, agentTarget, onShowAgent, presence, onPersonMoved, bar = true, following = false }: { following?: boolean; bar?: boolean; presence?: { viewId: string; label: string; verb: string; live: boolean } | null; onPersonMoved?: () => void; onCommands?: (group: CommandGroup | null) => void; composition: CompositionSummary; snapshot: WorkspaceSnapshot; client: BrowserClient; onAbout: (pluginId: string) => void; contextTarget: HTMLElement | null; principalId?: string; onShowContext: () => void; feedbackContextActive: boolean; mapChipTarget?: HTMLElement | null; openView?: string; agentTarget?: HTMLElement | null; onShowAgent?: () => void }) {
   const live = useLive(snapshot, recorded, client, principalId), layout = live.layout;
   // A question sent from another browser session has no context in this one. Preparing it under
   // the question's own changeId (as the table's send does) keeps one context per question version.
@@ -54,7 +54,9 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
     bring(live.active);
   }, [live.active, root]);
   const brought = useRef('');
-  useEffect(() => { if (openView && brought.current !== openView && byId.has(openView)) { brought.current = openView; show(openView); } }, [openView, byId]);
+  // Following the Agent only changes what is shown; a view the person opens is also held, so a
+  // newer layout keeps it. A view merely followed past is not kept beside its replacement.
+  useEffect(() => { if (openView && brought.current !== openView && byId.has(openView)) { brought.current = openView; if (following) bring(openView); else show(openView); } }, [openView, byId]);
   const focused = order.includes(focus) ? focus : order[0] ?? '';
   const groups = root ? tabGroups(root) : [];
   const visible = narrow ? (focused ? [focused] : []) : groups.map(shown);
@@ -177,12 +179,12 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
   };
   const render: TabRender = {
     label: id => title(byId.get(id)!), container,
-    title: id => { const v = byId.get(id)!; return <><Icon name={viewIcon(v, snapshot)} size={14} stroke={2} /><span className="shell-tab-name">{title(v)}</span></>; },
+    title: id => { const v = byId.get(id)!; return <><Icon name={viewIcon(v, snapshot)} size={14} stroke={2} /><span className="shell-tab-name">{title(v)}</span>{presence?.viewId === id && <span className={'agent-presence' + (presence.live ? ' live' : '')} title={presence.label}><span className="pulse-dot" aria-hidden="true" />{presence.verb}</span>}</>; },
   };
   const groupName = (id: string) => groups.length === 1 ? 'Views' : `Views ${groups.findIndex(g => g.id === id) + 1} of ${groups.length}`;
   const firstTitle = (region: Region): string => { const id = region.kind === 'tabs' ? shown(region) : viewOrder(region)[0]; return id ? title(byId.get(id)!) : 'view'; };
   const draw = (region: Region): ReactNode => region.kind === 'tabs'
-    ? <TabGroup key={region.id} group={region} name={groupName(region.id)} selected={shown(region)} onSelect={show} onHeader={headerRef(region.id)} render={render} />
+    ? <TabGroup key={region.id} group={region} name={groupName(region.id)} selected={shown(region)} onSelect={id => { if (id !== shown(region)) onPersonMoved?.(); show(id); }} onHeader={headerRef(region.id)} render={render} />
     : <Split key={region.id} region={region} weights={own[region.id] ?? region.weights} onResize={values => resized(region.id, values)}
       label={i => `Resize ${firstTitle(region.children[i - 1])} and ${firstTitle(region.children[i])}`}>{region.children.map(draw)}</Split>;
   // The focused view's layout commands, offered in the command palette.
@@ -222,17 +224,17 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
   const focusObject = live.screen?.views.find(v => v.id === focused)?.object ?? null;
   const toggleEvidence = () => { setEvidence(v => !v); onShowAgent?.(); live.act({ kind: 'reveal', target: evidence ? null : live.screen?.agent?.object ?? 'workspace' }); };
   return <section className="workspace shell" aria-label="Layout">
-    <Bar live={live} evidence={evidence} held={items.length - unhidden.length} onEvidence={toggleEvidence} />
+    {bar && <Bar live={live} evidence={evidence} held={items.length - unhidden.length} onEvidence={toggleEvidence} />}
     {agentTarget && createPortal(<AgentColumn live={live} agents={snapshot.agents} contexts={snapshot.contexts} prepare={prepareQuestion} principalId={principalId} evidence={evidence} onEvidence={toggleEvidence} focusObject={focusObject} />, agentTarget)}
     <Interruption live={live} items={unhidden} onHide={key => setHidden(h => [...h, key])} />
     {layoutProblem && <div className="shell-interruption problem" data-rho-layer="transient" data-rho-interruption="" role="alert"><span className="shell-interruption-text">{layoutProblem}</span><button className="shell-quiet" onClick={() => setLayoutProblem('')}>Dismiss</button></div>}
     <Digest live={live} />
-    <div className="shell-stage" onPointerDownCapture={event => live.hold((event.target as HTMLElement).closest<HTMLElement>('[data-owner-view]')?.dataset.ownerView ?? focused)} onKeyDownCapture={() => live.hold(focused)} onCompositionStartCapture={() => live.hold(focused)}>
+    <div className="shell-stage" onPointerDownCapture={event => live.hold((event.target as HTMLElement).closest<HTMLElement>('[data-owner-view]')?.dataset.ownerView ?? focused)} onKeyDownCapture={event => { live.hold(focused); if (!event.metaKey && !event.ctrlKey && event.key.length === 1) onPersonMoved?.(); }} onCompositionStartCapture={() => live.hold(focused)}>
       {contextTarget && feedbackContextActive && feedbackSource && feedbackAllowed && feedbackEntry && snapshot.feedback?.draftDocumentId && createPortal(feedbackLimit ? <section className="unavailable" role="status"><h3>Close a view before opening feedback</h3><p>Existing views and input are kept within this layout's view limit.</p></section> : <feedbackEntry.View key={[snapshot.project.id, snapshot.feedback.taskId, feedbackSource, principalId].join(':')} viewId={'feedback:' + feedbackSource} view={{ id: 'feedback:' + feedbackSource, component: feedbackEntry.component, version: feedbackEntry.componentVersion, props: { title: 'Your question', taskId: snapshot.feedback.taskId, sourceSelectionScope: byId.get(feedbackSource) ? selectionScope(byId.get(feedbackSource)!) : { kind: 'shared', id: feedbackSource } }, bindings: { draft: { kind: 'live-document', documentId: snapshot.feedback.draftDocumentId } } }} projectId={snapshot.project.id} snapshot={snapshot} client={client} active principalId={principalId} contextTarget={null} feedbackConfiguration={{ ...snapshot.feedback, draftDocumentId: snapshot.feedback.draftDocumentId }} />, contextTarget)}
       {!root ? <div className="empty"><h2>No views in this layout</h2><p>The saved layout is empty. No view is created automatically.</p></div>
         : narrow ? <section className="shell-group">
           <div className="shell-tabbar"><div ref={narrowList} className="shell-tabs" role="tablist" aria-label="Views" onKeyDown={moveNarrow}>
-            {order.map((id, i) => <button key={id} id={tabId + i} role="tab" aria-selected={id === focused} aria-controls={tabId + 'panel'} tabIndex={id === focused ? 0 : -1} onClick={() => show(id)}><span className="shell-tab-name">{title(byId.get(id)!)}</span></button>)}
+            {order.map((id, i) => <button key={id} id={tabId + i} role="tab" aria-selected={id === focused} aria-controls={tabId + 'panel'} tabIndex={id === focused ? 0 : -1} onClick={() => { if (id !== focused) onPersonMoved?.(); show(id); }}><span className="shell-tab-name">{title(byId.get(id)!)}</span></button>)}
           </div></div>
           <div className="shell-header-slot shell-header-narrow" ref={headerRef('narrow')} />
           {focused && <Slot key={focused} container={container(focused)} id={tabId + 'panel'} labelledBy={tabId + order.indexOf(focused)} />}

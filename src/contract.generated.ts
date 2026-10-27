@@ -1997,7 +1997,7 @@ export interface ActionSubmitOutput {
 
 export interface AgentActivityCaptureInput {
   projectId: string;
-  expectedDigest: string;
+  expectedDigest?: string;
   path: string;
 }
 

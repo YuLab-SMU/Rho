@@ -129,7 +129,7 @@ function TurnView({ turn, running, observation, projectRoot, choose, choosing, a
   </li>;
 }
 
-export function AgentConversation({ snapshot, client, selectedId, onSelected }: { snapshot: WorkspaceSnapshot; client: BrowserClient; selectedId?: string | null; onSelected?: () => void }) {
+export function AgentConversation({ snapshot, client, selectedId, onSelected, onSent }: { snapshot: WorkspaceSnapshot; client: BrowserClient; selectedId?: string | null; onSelected?: () => void; onSent?: () => void }) {
   const projectId = snapshot.project.id, openKey = 'rho.conversation.open.v1:' + projectId;
   const [openId, setOpenId] = useState<string | null>(() => stored(openKey));
   const draftKey = 'rho.conversation.draft.v1:' + projectId + ':' + (openId ?? 'new'), pendingKey = 'rho.conversation.pending.v1:' + projectId;
@@ -206,7 +206,7 @@ export function AgentConversation({ snapshot, client, selectedId, onSelected }: 
   function send() {
     const text = draft.trim() ? draft : '';
     if (!text) return;
-    setFollowing(true); setUnseen(false);
+    setFollowing(true); setUnseen(false); onSent?.();
     void deliver(openId ? { kind: 'send', conversationId: openId, changeId: 'm-' + crypto.randomUUID(), text } : { kind: 'start', changeId: 'm-' + crypto.randomUUID(), text, ...(backend ? { backend } : {}) });
   }
   async function stop() {

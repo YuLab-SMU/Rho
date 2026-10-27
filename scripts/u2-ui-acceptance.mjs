@@ -124,7 +124,7 @@ try {
   const agentChange = page.locator('.rho-doc-changes li.agent').first();
   await agentChange.getByRole('button', { name: 'Show before', exact: true }).click();
   await agentChange.locator('pre').waitFor();
-  const highlights = page.getByRole('checkbox', { name: "Claude Code's edits", exact: true });
+  const highlights = page.getByRole('checkbox', { name: 'Highlight changes', exact: true });
   assert.ok(await highlights.evaluate(e => e.getBoundingClientRect().height <= 16));
   await highlights.uncheck(); assert.equal(await page.locator('.rho-doc-agent-line:visible').count(), 0);
   await highlights.check(); assert.ok(await page.locator('.rho-doc-agent-line:visible').count() > 0);

@@ -13,7 +13,8 @@
 .shell-divider:focus-visible { outline-offset: -2px; }
 .shell-group { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; overflow: hidden; background: white; border: 1px solid var(--color-hairline); border-radius: 8px; }
 .shell-tabbar { display: flex; flex-wrap: wrap; align-items: center; flex: none; min-height: 42px; padding: 0 8px; border-bottom: 1px solid var(--color-hairline); }
-.shell-tabs { display: flex; align-self: stretch; align-items: stretch; flex: 1; min-width: 0; overflow-x: auto; scrollbar-width: thin; }
+/* Tabs keep their names; a view's own controls move to a second row when both do not fit. */
+.shell-tabs { display: flex; align-self: stretch; align-items: stretch; flex: 1 0 auto; max-width: 100%; min-width: 0; overflow-x: auto; scrollbar-width: thin; }
 .shell-tabs button { flex: none; max-width: 260px; min-height: 40px; padding: 0 12px; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; font-size: 13px; font-weight: 400; color: var(--color-meta); white-space: nowrap; }
 .shell-tabs button:hover { background: var(--color-hover); }
 .shell-tabs button[aria-selected=true] { border-bottom-color: var(--color-accent); color: var(--color-accent-strong); font-weight: 600; }
@@ -158,3 +159,7 @@ button.agent-output-name { border: 0; background: transparent; padding: 0; justi
   .shell-interruption { flex-wrap: wrap; padding: 10px; }
   .shell-interruption-text { flex-basis: 70%; }
 }
+
+/* The Agent's place on the canvas: the view of the file its newest action named. */
+.agent-presence { display: inline-flex; align-items: center; gap: 5px; margin-left: 6px; padding: 0 7px; border-radius: 999px; background: var(--color-accent-soft, #e5f1e9); color: var(--color-accent-strong, #164e3c); font-size: 11px; font-weight: 600; line-height: 18px; white-space: nowrap; }
+.agent-presence:not(.live) .pulse-dot { animation: none; }
