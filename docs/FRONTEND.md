@@ -47,15 +47,26 @@ inspect what happened. The application gives those actions direct places:
   [Agent page pass](AGENT-CANVAS-EPISODE.md#one-agent-entry-and-the-agent-page)).
 - **Project settings** manages source folders and explicitly checks available tools.
 - **Studio** shows the workspaces as tabs, each with its view count; the sidebar lists
-  them under Studio. The **Agent canvas** (`agent-canvas`) is the workspace the Agent's
-  work opens in: sending a message from the Agent panel shows it and follows the turn.
-  Each project file the Agent's steps name opens there once (a read when reported, an
-  edit or write once it returned, files a finished command names), as do outputs that
-  appear on disk during the turn. Code sits left, data and figures right, each in its
-  own group wherever it has since been moved. The tab of the file the Agent last named
-  says Reading, Edited, Ran…; the topbar names the Agent's newest action on every
-  project page. Choosing another view, typing, dragging a tab or leaving stops
-  following until the person follows again ([episode](AGENT-CANVAS-EPISODE.md)).
+  them under Studio. The person and the Agent share one workspace: the one on screen,
+  else the one last open in the tab, else the first, else a new `workspace`. Sending a
+  message from the Agent panel follows the turn there. Each project file the Agent's
+  steps name opens once (a read when reported, an edit or write once it returned,
+  files a finished command names), as do outputs that appear on disk during the turn,
+  beside the person's own views: code joins code and data and figures join data,
+  wherever those groups now are, or get a group at their edge. The tab of the file the
+  Agent last named says Reading, Edited, Ran…; the topbar names the Agent's newest
+  action on every project page. Choosing another view, typing, dragging a tab or
+  leaving stops following until the person follows again
+  ([canvas episode](AGENT-CANVAS-EPISODE.md), [one workspace](GRAPH-EPISODE.md)).
+- **Graph** draws what the Agent did: each message a row from the files it read to
+  the question, what it edited and ran, and what changed on disk while its command
+  ran; a later row refers to an earlier output. Lines say whether the Agent reported
+  it, a command named it, or a change was seen on disk. Cards preview tables and
+  figures; choosing one shows its path and the file in its own view; the timeline
+  replays the work. While the Agent works the Graph stays and follows it, and its
+  files still open in the shared workspace; a step waiting for the person's choice
+  turns amber and is answered there. A file opened from it is held in the workspace
+  while following goes on ([episode](GRAPH-EPISODE.md)).
 - **Workspaces** hold real owner views in tabs and splits. Arrange views exposes
   split, move, close and undo operations; the command palette offers the same actions.
   A tab drags onto another group's tabs (a line marks the place), onto the middle of a
@@ -115,7 +126,10 @@ its page and `web/preview.tsx`, which shows one file in place. `web/agent-now.ts
 turn's record (`conversation.read`, last turn) and maps its steps to project paths;
 `web/canvas.ts` resolves a file's owner view (`viewFor`) and places it in a workspace
 with one conditional `composition.apply`, through `document.open` for text and `agent.activity.capture`
-for a CSV or image. Following is a tab-local choice; the canvas layout is saved.
+for a CSV or image. Following is a tab-local choice; the workspace layout is saved.
+`src/work-graph.ts` builds the Graph from `conversation.read` records (a finished
+message keeps the project files that changed on disk while it ran) and the folder walk
+(`project.entries` gives each file's `modifiedAt`), and lays each message out as a row; `web/graph.tsx` draws it, its previews, the inspector and the timeline.
 `web/work-progress.tsx` reads `project.work.read` for the local person's project
 Overview: Agent-reported plans/usage, retained native source identities and current
 referenced files. It links back to the original conversation or the Agent page.
@@ -185,11 +199,21 @@ control names. The report and images go to `work/frontend-reset/browser/` by def
 
 `npm run acceptance:agent-canvas` drives a controlled ACP peer that reads, edits and
 runs project files and writes an output no step names. It checks the sidebar counts,
-that Start opens the following Agent canvas, the table, editor and media views it
-opens with the Agent's place on their tabs, the edited text on disk, the saved
-canvas, the Agent page's record of the turn and a file it names shown in place, that
-choosing another view stops following until Follow, that a pane the person drags out
-stays while the Agent's next data file joins the data group, and overflow at 1024/390. Evidence goes to `work/agent-canvas-acceptance/` by default.
+that Start follows in the workspace the person has open, the table, editor and media
+views the Agent's files open in beside the person's script with the Agent's place on
+their tabs, the edited text on disk, the one saved layout, the Agent page's record of
+the turn and a file it names shown in place, that choosing another view stops
+following until Follow, that a pane the person drags out stays while the Agent's next
+data file joins the data group, and overflow at 1024/390. Evidence goes to
+`work/agent-canvas-acceptance/` by default.
+
+`npm run acceptance:graph` drives a controlled peer that runs the real Rscript for two
+messages. It checks the empty Graph, the Agent's flag on the card it reads while the
+Graph stays and follows, the two rows with their lines and the reference between them,
+table and figure previews, a figure's path and its own view, arrow keys along the
+path, a reference going to its output, Play's narration, the files in the one shared
+workspace, and overflow at 1024/390. Set `RHO_RSCRIPT` if `Rscript` is not on the
+path. Evidence goes to `work/graph-acceptance/` by default.
 
 `npm run acceptance:sources` browses a project of data, scripts in two folders and
 figures in two output folders from the sidebar, without a model. It checks the

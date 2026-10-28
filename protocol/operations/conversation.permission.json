@@ -500,6 +500,72 @@
                 "type": "null"
               }
             ]
+          },
+          "files": {
+            "type": "object",
+            "properties": {
+              "changed": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "change": {
+                      "enum": [
+                        "added",
+                        "modified",
+                        "removed"
+                      ]
+                    },
+                    "modifiedAt": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "bytes": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "change",
+                    "modifiedAt",
+                    "bytes"
+                  ],
+                  "additionalProperties": true
+                }
+              },
+              "omitted": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "partial": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "changed",
+              "omitted",
+              "partial"
+            ],
+            "additionalProperties": true
           }
         },
         "required": [

@@ -2,6 +2,11 @@
 
 Updated 2026-10-27.
 
+Later the same day the user asked for the canvas and the workspace to be one page. The
+Agent's files now open in the workspace the person shares with it, and the Graph shows
+what the Agent did; see [One workspace and the Graph](GRAPH-EPISODE.md). The runs below
+describe the separate canvas as it was.
+
 ## Question
 
 The user tried working with the Agent inside a project and found it a poor
@@ -120,7 +125,7 @@ Annotations 0.4.4 only widens its optional Documents peer to include 0.4.3.
 - `npm run build` and `npm run check:contracts` passed (97 operations, 96 typed).
 - Rho unit tests: 202 tests; the full parallel run passed 201 and cancelled the
   known MCP v2 test at its 30 s limit, which passed alone (2/2, 16.4 s). See
-  [Status](STATUS.md#project-sidebar-and-agent-canvas) for the serial run.
+  [Status](STATUS.md#project-sidebar-workspace-and-graph) for the serial run.
 - Rho-plugins: 90/90, including the new disk-following test (a changed line
   adopted as the span `{from: 12, to: 13}`, its before text readable, an unchanged
   file making no version, unsaved text kept with a save conflict, a non-UTF-8 file

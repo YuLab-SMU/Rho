@@ -23,9 +23,9 @@ function ownsKeys(target: EventTarget | null) {
   return !!element?.closest('input, textarea, select, [contenteditable=""], [contenteditable=true], [data-owner-body], [role=tablist], [role=menu], dialog[open]');
 }
 
-export function FilePreview({ client, snapshot, item, items, kind, principalId, onMove, onStudio, onList, onAbout }: {
+export function FilePreview({ client, snapshot, item, items, kind, principalId, workspace, onMove, onStudio, onList, onAbout }: {
   client: BrowserClient; snapshot: WorkspaceSnapshot; item: SourceItem; items: SourceItem[]; kind: string; principalId?: string;
-  onMove: (item: SourceItem) => void; onStudio: (compositionId: string, viewId: string) => void; onList: () => void; onAbout: (pluginId: string) => void;
+  workspace: () => string; onMove: (item: SourceItem) => void; onStudio: (compositionId: string, viewId: string) => void; onList: () => void; onAbout: (pluginId: string) => void;
 }) {
   const [shown, setShown] = useState<Shown>(null), [header, setHeader] = useState<HTMLDivElement | null>(null);
   const [placing, setPlacing] = useState(false), [placeProblem, setPlaceProblem] = useState('');
@@ -56,7 +56,7 @@ export function FilePreview({ client, snapshot, item, items, kind, principalId, 
   async function studio() {
     setPlacing(true); setPlaceProblem('');
     try {
-      const placed = await openInWorkspace(client, snapshot, 'workspace', item.resource ?? item.path);
+      const placed = await openInWorkspace(client, snapshot, workspace(), item.resource ?? item.path);
       if (placed) onStudio(placed.compositionId, placed.viewId); else setPlaceProblem('Rho has no viewer for this kind of file yet.');
     } catch (error) { setPlaceProblem(error instanceof Error ? error.message : 'It could not be opened in Studio.'); }
     finally { setPlacing(false); }

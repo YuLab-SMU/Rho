@@ -1,9 +1,10 @@
-// Agent canvas acceptance: a controlled ACP peer reads, edits and runs project files through
+// Shared workspace acceptance: a controlled ACP peer reads, edits and runs project files through
 // the real service and Chrome, and writes an output no step names. No model credentials are
 // used. It checks that the sidebar counts the project's contents, that a message sent from the
-// Agent panel opens the Agent canvas, that each file the Agent works on opens there with the
-// Agent's place on its tab, that an edit shows the text now on disk, that an output appearing
-// during the turn is shown, and that choosing another view stops following until asked again.
+// Agent panel follows in the workspace the person has open, that each file the Agent works on
+// opens there beside the person's own with the Agent's place on its tab, that an edit shows the
+// text now on disk, that an output appearing during the turn is shown, and that choosing another
+// view stops following until asked again.
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -92,25 +93,30 @@ try {
   const nav = page.locator('.project-nav');
   const counts = () => page.evaluate(() => Object.fromEntries([...document.querySelectorAll('.project-nav .nav-row')].map(row => [row.querySelector('.nav-row-name')?.textContent ?? '', row.querySelector('.nav-row-count')?.textContent ?? null])));
   await until(counts, c => c.Data === '1' && c.Code === '1' && c.Notes === '1' && c['Results & figures'] === '0', 'sidebar counts by kind');
-  for (const name of ['Overview', 'Studio', 'Agent', 'Data', 'Code', 'Results & figures', 'Notes', 'Files']) await nav.getByRole('button', { name, exact: true }).waitFor();
+  for (const name of ['Overview', 'Studio', 'Graph', 'Agent', 'Data', 'Code', 'Results & figures', 'Notes', 'Files']) await nav.getByRole('button', { name, exact: true }).waitFor();
   await nav.getByRole('button', { name: 'Data', exact: true }).click();
   await nav.locator('.nav-file').filter({ hasText: 'airquality.csv' }).waitFor();
   await shot('01-sidebar-data');
   passed('the sidebar names the project places and counts its data, code, results and notes');
 
+  // The person opens the script in Studio first; the Agent works in that same workspace.
+  await nav.getByRole('button', { name: 'Code', exact: true }).click();
+  await nav.locator('.nav-file').filter({ hasText: 'analysis.R' }).click();
+  await page.getByRole('button', { name: 'Open in Studio' }).click();
+  await page.locator('.location-name').filter({ hasText: 'Workspace' }).waitFor();
   await page.getByRole('button', { name: 'Agent panel', exact: true }).click();
   await page.getByRole('textbox', { name: 'Start a conversation' }).fill('Fit ozone on temperature and draw it.');
   await page.getByRole('button', { name: 'Start', exact: true }).click();
-  await page.locator('.location-name').filter({ hasText: 'Agent canvas' }).waitFor();
   await page.locator('.follow-toggle[aria-pressed=true]').waitFor();
+  assert.equal(await page.locator('.location-name').textContent(), 'Workspace', 'the person stays in their own workspace');
   await page.locator('.agent-chip').waitFor();
   await nav.locator('.nav-badge.working').waitFor();
-  passed('sending from the Agent panel opens the Agent canvas, following, with the Agent working in the topbar and sidebar');
+  passed('sending from the Agent panel follows in the workspace the person has open, with the Agent working in the topbar and sidebar');
 
   const reading = await until(tabs, t => t.some(tab => tab.name === 'airquality.csv' && tab.selected && tab.presence === 'Reading'), 'the read file shown with the Agent reading it');
   await page.locator('.ag-row[row-index="0"]').first().waitFor();
   await shot('02-reading-table');
-  passed('a file the Agent reads opens on the canvas in its table view, marked as being read');
+  passed('a file the Agent reads opens in the shared workspace in its table view, marked as being read');
 
   await until(tabs, t => t.some(tab => tab.name === 'analysis.R' && tab.selected), 'the edited script brought forward');
   await until(() => page.locator('[data-owner-view] .cm-content').first().innerText(), text => /fit <- lm/.test(text), 'the edited script showing the text on disk');
@@ -124,14 +130,16 @@ try {
   passed('an output that appears on disk during the turn is shown, without a step naming it');
 
   await until(() => page.locator('.agent-chip').count(), n => n === 0, 'the turn ending', 30000);
-  const canvas = await admin.call('composition.read', { projectId: opened.id, compositionId: 'agent-canvas' });
+  const shared = await admin.call('observation.snapshot', { projectId: opened.id });
+  assert.deepEqual(shared.compositions.map(c => c.compositionId), ['workspace'], 'one workspace, the person\'s');
+  const canvas = await admin.call('composition.read', { projectId: opened.id, compositionId: 'workspace' });
   const titles = canvas.views.map(v => v.props.title).sort();
   assert.deepEqual(titles, ['airquality.csv', 'analysis.R', 'ozone.svg']);
   const split = canvas.nodes.find(n => n.id === canvas.rootId);
   assert.equal(split.presentation?.mode, 'split');
-  assert.deepEqual(split.children, ['canvas-code', 'canvas-data']);
+  assert.deepEqual(split.children, ['root', 'canvas-data'], 'the person\'s group keeps the script; data and figures join a group on its right');
   await until(counts, c => c['Results & figures'] === '1', 'the new output counted');
-  passed('the canvas is one saved layout: code on the left, data and figures on the right, each file once');
+  passed('the person and the Agent share one saved layout: the script in the person\'s group, data and figures beside it, each file once');
 
   // The Agent page keeps what the turn did; the sidebar's Agent row is the one Agent entry.
   assert.equal(await page.locator('.topbar').getByRole('button', { name: 'Agent panel' }).count(), 0, 'no second Agent entry beside the sidebar');
@@ -174,12 +182,12 @@ try {
   await page.mouse.move(from.x + from.width / 2 + 8, from.y + from.height / 2 + 8, { steps: 3 });
   await page.mouse.move(below.x + below.width / 2, below.y + below.height * 0.93, { steps: 10 }); await page.mouse.up();
   await page.locator('.follow-toggle[aria-pressed=false]').waitFor();
-  const read = () => admin.call('composition.read', { projectId: opened.id, compositionId: 'agent-canvas' });
+  const read = () => admin.call('composition.read', { projectId: opened.id, compositionId: 'workspace' });
   const holder = (c, title) => { const id = c.views.find(v => v.props.title === title)?.id; return c.nodes.find(n => n.children?.includes(id)); };
   await until(read, c => holder(c, 'notes.md')?.children.length === 1, 'notes.md in a pane of its own');
   await page.getByRole('textbox', { name: /Message|Reply/ }).fill('Now read the stations.');
   await page.getByRole('button', { name: 'Send', exact: true }).click();
-  const arranged = await until(read, c => c.views.some(v => v.props.title === 'stations.csv'), 'the Agent\'s new data file on the canvas');
+  const arranged = await until(read, c => c.views.some(v => v.props.title === 'stations.csv'), 'the Agent\'s new data file in the workspace');
   assert.equal(holder(arranged, 'stations.csv').id, 'canvas-data');
   assert.equal(holder(arranged, 'notes.md').children.length, 1, 'the person\'s pane stays');
   await page.getByRole('tab', { name: 'stations.csv' }).waitFor();
@@ -190,7 +198,7 @@ try {
     await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
     await page.waitForTimeout(400);
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'no horizontal overflow at ' + width);
-    await shot('07-canvas-' + width);
+    await shot('07-workspace-' + width);
   }
   assert.deepEqual(report.browserErrors, []);
   passed('no horizontal overflow at 1024 and 390, and no page errors');

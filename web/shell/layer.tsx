@@ -57,7 +57,8 @@ function AgentMarker({ live, who = true }: { live: Live; who?: boolean }) {
   </button>;
 }
 
-export function Bar({ live, evidence, onEvidence, held }: { live: Live; evidence: boolean; onEvidence: () => void; held: number }) {
+// Where the application follows the Agent itself, the bar leaves following to it.
+export function Bar({ live, evidence, onEvidence, held, attention = true }: { live: Live; evidence: boolean; onEvidence: () => void; held: number; attention?: boolean }) {
   const { screen, act } = live;
   if (!screen || !live.state) return <div className="shell-bar" role="status">Reading workspace…</div>;
   const following = screen.attention === 'following';
@@ -65,8 +66,8 @@ export function Bar({ live, evidence, onEvidence, held }: { live: Live; evidence
     <AgentMarker live={live} />
     <span className="shell-break" />
     {held > 0 && <span className="shell-held" role="status">{held} updates</span>}
-    <button className="shell-follow" aria-pressed={following} title="Follow the Agent's current view. Your input stops following." onClick={() => act({ kind: following ? 'unfollow' : 'follow' })}><Icon name="eye" size={14} />{following ? 'Following Agent' : 'Follow Agent'}</button>
-    <button className="shell-quiet" onClick={() => act({ kind: screen.attention === 'away' ? 'return' : 'leave' })}>{screen.attention === 'away' ? 'Return' : 'Step away'}</button>
+    {attention && <button className="shell-follow" aria-pressed={following} title="Follow the Agent's current view. Your input stops following." onClick={() => act({ kind: following ? 'unfollow' : 'follow' })}><Icon name="eye" size={14} />{following ? 'Following Agent' : 'Follow Agent'}</button>}
+    {attention && <button className="shell-quiet" onClick={() => act({ kind: screen.attention === 'away' ? 'return' : 'leave' })}>{screen.attention === 'away' ? 'Return' : 'Step away'}</button>}
     <button className="shell-quiet shell-evidence-toggle" aria-expanded={evidence} onClick={onEvidence}>Activity</button>
   </div>;
 }

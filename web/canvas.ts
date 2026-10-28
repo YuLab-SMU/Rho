@@ -4,8 +4,11 @@ import { capturable } from './sources.js';
 // Opening a project file into a workspace: text becomes the one shared document buffer in
 // its editor, a CSV or image becomes an immutable Files snapshot in its table or media
 // view. Every placement is one conditional layout write; the owners keep the content.
-export const canvasId = 'agent-canvas';
-export function compositionName(id: string) { return id === canvasId ? 'Agent canvas' : id === 'observed-outputs' ? 'Observed outputs' : id; }
+// The person and the Agent share one workspace: what the Agent opens lands beside what the
+// person has open, in the same saved layout either of them can arrange.
+export const defaultWorkspace = 'workspace';
+const names: Record<string, string> = { workspace: 'Workspace', 'agent-canvas': 'Agent canvas', 'observed-outputs': 'Observed outputs' };
+export function compositionName(id: string) { return names[id] ?? id; }
 
 type Side = 'code' | 'data';
 // A short, stable name for a file path, so a newer snapshot of the same file is recognised.
@@ -15,8 +18,11 @@ export function fileKey(path: string) {
   return 'file-' + (a.toString(16).padStart(8, '0') + b.toString(16).padStart(8, '0')).slice(0, 12) + '-';
 }
 interface Node { id: string; kind: 'group' | 'view'; children?: string[]; presentation?: { mode?: string; axis?: string; weights?: number[] }; props?: Record<string, unknown>; [key: string]: unknown }
-// The canvas keeps the newest views on each side; older ones close from the left.
+// A group the Agent's work made keeps its newest views; older ones close from the left. Groups
+// the person made are never trimmed.
 export const canvasLimits = { maxViewsPerSide: 6 };
+const agentGroup = 'canvas-';
+const sideOf = (node: Node): Side | null => node.kind !== 'view' ? null : node.component === 'rho.editor' ? 'code' : node.component === 'rho.table' || node.component === 'rho.media' ? 'data' : null;
 
 const allowed = (snapshot: WorkspaceSnapshot, method: string) => snapshot.catalog.operations.some(o => o.method === method && o.authorized && o.state === 'available');
 const component = (snapshot: WorkspaceSnapshot, id: string) => snapshot.catalog.components.find(c => c.id === id);
@@ -48,11 +54,13 @@ export async function viewFor(client: BrowserClient, snapshot: WorkspaceSnapshot
   return { side: 'code', node: { id: 'doc-' + document.id.slice(0, 12), kind: 'view', component: editor.id, version: editor.version, props: { title }, bindings: { document: { kind: 'live-document', documentId: document.id } } } };
 }
 
-function placed(current: { rootId?: string; nodes?: unknown[] } | null, view: Node, side: Side, canvas: boolean): { rootId: string; nodes: Node[] } | null {
+function placed(current: { rootId?: string; nodes?: unknown[] } | null, view: Node, side: Side): { rootId: string; nodes: Node[] } | null {
   const nodes: Node[] = structuredClone((current?.nodes ?? []) as Node[]);
-  const rootId = current?.rootId ?? (canvas ? 'canvas' : 'root');
+  let rootId = current?.rootId ?? 'root';
   if (nodes.some(n => n.id === view.id)) return null;
+  const byId = (id: string) => nodes.find(n => n.id === id);
   const parentOf = (id: string) => nodes.find(n => n.kind === 'group' && n.children?.includes(id));
+  const isTabs = (n: Node | undefined) => !!n && n.kind === 'group' && n.presentation?.mode !== 'split';
   // A newer snapshot of the same file takes the older one's place.
   const file = view.id.startsWith('file-') ? view.id.slice(0, 18) : '';
   const older = file ? nodes.find(n => n.kind === 'view' && n.id.startsWith(file)) : undefined;
@@ -63,32 +71,38 @@ function placed(current: { rootId?: string; nodes?: unknown[] } | null, view: No
       return { rootId, nodes: [...nodes.filter(n => n.id !== older.id), view] };
     }
   }
-  let root = nodes.find(n => n.id === rootId);
+  let root = byId(rootId);
   if (!root) { root = { id: rootId, kind: 'group', children: [] }; nodes.push(root); }
-  // The canvas keeps code on the left and data and figures on the right, wherever the person
-  // or the Agent has since moved those two groups; a split needs both, so with one side the
-  // canvas is that side's tabs. A side whose group was emptied returns at its edge of a
-  // left-to-right split.
-  const own = canvas ? nodes.find(n => n.id === 'canvas-' + side && n.kind === 'group') : undefined;
-  let target: Node;
-  if (own) target = own;
-  else if (canvas && (root.children!.every(id => id.startsWith('canvas-')) || (root.presentation?.mode === 'split' && root.presentation.axis === 'horizontal'))) {
-    const weights = root.presentation?.mode === 'split' && root.presentation.weights?.length === root.children!.length ? [...root.presentation.weights] : root.children!.map(() => 1);
-    const at = side === 'code' ? 0 : root.children!.length;
-    target = { id: 'canvas-' + side, kind: 'group', children: [] };
+  // Code joins code and data and figures join data: first the group the Agent's work made for
+  // that side, wherever it now is; then a group of tabs already holding that side's views; an
+  // empty workspace takes the view in its one group. Otherwise the side gets a group of its
+  // own at its edge, code on the left and data on the right of what is there.
+  const counts = new Map<Node, number>();
+  for (const n of nodes) if (sideOf(n) === side) { const holder = parentOf(n.id); if (isTabs(holder)) counts.set(holder!, (counts.get(holder!) ?? 0) + 1); }
+  let target = nodes.find(n => n.id === agentGroup + side && n.kind === 'group')
+    ?? [...counts].sort((a, b) => b[1] - a[1])[0]?.[0]
+    ?? (!root.children?.length ? root : undefined);
+  if (!target) {
+    target = { id: agentGroup + side, kind: 'group', children: [] };
     nodes.push(target);
-    root.children!.splice(at, 0, target.id);
-    weights.splice(at, 0, weights.length ? weights.reduce((a, b) => a + b, 0) / weights.length : 1);
-    if (root.children!.length > 1) root.presentation = { mode: 'split', axis: 'horizontal', weights };
-    else delete root.presentation;
-  } else if (root.presentation?.mode === 'split') {
-    // A person's own split: the new view joins the first group of tabs.
-    const tabs = (id: string): Node | undefined => { const n = nodes.find(x => x.id === id); return !n || n.kind === 'view' ? undefined : n.presentation?.mode === 'split' ? n.children!.map(tabs).find(Boolean) : n; };
-    target = tabs(root.id) ?? root;
-  } else target = root;
+    const at = (length: number) => side === 'code' ? 0 : length;
+    if (root.presentation?.mode === 'split' && root.presentation.axis === 'horizontal') {
+      const weights = root.presentation.weights?.length === root.children!.length ? [...root.presentation.weights] : root.children!.map(() => 1);
+      const index = at(root.children!.length);
+      root.children!.splice(index, 0, target.id);
+      weights.splice(index, 0, weights.reduce((a, b) => a + b, 0) / weights.length);
+      root.presentation = { ...root.presentation, weights };
+    } else {
+      let id = 'split', n = 1;
+      while (byId(id)) id = 'split-' + ++n;
+      const children = [rootId]; children.splice(at(1), 0, target.id);
+      nodes.push({ id, kind: 'group', children, presentation: { mode: 'split', axis: 'horizontal', weights: [1, 1] } });
+      rootId = id;
+    }
+  }
   target.children = [...(target.children ?? []), view.id];
   nodes.push(view);
-  if (canvas) while (target.children.length > canvasLimits.maxViewsPerSide) {
+  if (target.id.startsWith(agentGroup)) while (target.children.length > canvasLimits.maxViewsPerSide) {
     const dropped = target.children.shift()!;
     const index = nodes.findIndex(n => n.id === dropped);
     if (index >= 0) nodes.splice(index, 1);
@@ -103,7 +117,7 @@ export function openInWorkspace(client: BrowserClient, snapshot: WorkspaceSnapsh
   const run = (queues.get(key) ?? Promise.resolve()).catch(() => undefined).then(async () => {
     const made = await viewFor(client, snapshot, target);
     if (!made) return null;
-    const projectId = snapshot.project.id, canvas = compositionId === canvasId;
+    const projectId = snapshot.project.id;
     for (let attempt = 0; ; attempt++) {
       const current = await client.call('composition.read', { projectId, compositionId }).catch(error => {
         if (error instanceof BrowserApiError && error.error.kind === 'not_found') return null;
@@ -111,7 +125,7 @@ export function openInWorkspace(client: BrowserClient, snapshot: WorkspaceSnapsh
       }) as { version: number; rootId?: string; nodes?: unknown[] } | null;
       const existing = (current?.nodes as Node[] | undefined)?.find(n => n.id === made.node.id);
       if (existing) return { compositionId, viewId: existing.id };
-      const next = placed(current, made.node, made.side, canvas);
+      const next = placed(current, made.node, made.side);
       if (!next) return { compositionId, viewId: made.node.id };
       try {
         await client.call('composition.apply', { projectId, compositionId, expectedVersion: current?.version ?? 0, changeId: 'open-' + crypto.randomUUID(), operations: [{ op: 'replace', rootId: next.rootId, nodes: next.nodes }] } as never);

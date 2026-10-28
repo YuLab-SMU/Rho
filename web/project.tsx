@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import type { ProjectSummary, ResourceSummary, WorkspaceSnapshot, CompositionSummary } from '../src/browser.js';
-import { canvasId, compositionName } from './canvas.js';
+import { compositionName } from './canvas.js';
 import { Icon, type IconName } from './icons.js';
 
-export type Section = 'overview' | 'documents' | 'files' | 'agent' | 'settings' | 'sources' | 'file';
-export interface Entry { path: string; name: string; kind: 'file' | 'folder'; bytes: number; hidden: boolean }
+export type Section = 'overview' | 'documents' | 'files' | 'agent' | 'settings' | 'sources' | 'file' | 'graph';
+export interface Entry { path: string; name: string; kind: 'file' | 'folder'; bytes: number; hidden: boolean; modifiedAt?: string }
 export function size(bytes: number) {
   if (bytes < 1024) return bytes + ' B';
   const units = ['KB', 'MB', 'GB', 'TB'];
@@ -41,7 +41,7 @@ export function ProjectNavigation({ project, snapshot, current, sources, partial
     setUnfolded(next);
     try { sessionStorage.setItem(openKey, JSON.stringify(next)); } catch { /* the choice lasts for this page only */ }
   }
-  const layouts = [...(snapshot?.compositions ?? [])].sort((a, b) => Number(b.compositionId === canvasId) - Number(a.compositionId === canvasId));
+  const layouts = snapshot?.compositions ?? [];
   // A row is named by its place; the count beside it is a glance, repeated in its tooltip.
   const count = (value: number | null | undefined, noun: string) => value === null || value === undefined ? undefined
     : { title: `${value}${partial && noun !== 'run' ? ' or more' : ''} ${noun}${value === 1 ? '' : 's'}`, node: <span className="nav-row-count" aria-hidden="true">{value}{partial && noun !== 'run' ? '+' : ''}</span> };
@@ -54,6 +54,7 @@ export function ProjectNavigation({ project, snapshot, current, sources, partial
       {layouts.length > 0 && <div role="group" aria-label="Workspaces" className="nav-sub">
         {layouts.map(c => <button key={c.compositionId} className="nav-row nav-sub-row" aria-current={current === 'studio:' + c.compositionId ? 'page' : undefined} onClick={() => onLayout(c.compositionId)}><span className="nav-row-name">{compositionName(c.compositionId)}</span><span className="nav-row-count" title={views(c)}>{c.views.length}</span></button>)}
       </div>}
+      {row('graph', 'Graph', 'graph', () => onSection('graph'))}
       {/* The Agent's place is what it did here; its panel, beside any page, is where to talk to it. */}
       <div className="nav-agent">
         <button className="nav-row" aria-label={'Agent' + (agent.waiting ? ', needs your choice' : agent.running ? ', working' : '')} aria-current={current === 'agent' ? 'page' : undefined} onClick={() => onSection('agent')}><Icon name="spark" size={18} /><span className="nav-row-name">Agent</span>{agentState}</button>

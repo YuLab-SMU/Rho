@@ -30,6 +30,7 @@ createInterface({input:process.stdin}).on('line',line=>{
     update({sessionUpdate:'plan',entries:[{content:'Initial plan',status:'in_progress',priority:'medium'}]});
     setTimeout(()=>update({sessionUpdate:'plan',entries:[{content:'Idle replacement 你好',status:'completed',priority:'medium'}]}),100);
   }
+  if(text==='write'){fs.mkdirSync('results',{recursive:true});fs.writeFileSync('results/out.csv','a\\n1\\n');fs.rmSync('old.txt',{force:true});}
   if(text==='drop')return process.exit(7);
   if(text==='wait')return;
   if(text==='permission'){permission=r.id;out({id:'permission',method:'session/request_permission',params:{sessionId:'kept-session',toolCall:{toolCallId:'write',title:'Write notes',rawInput:{file_path:'notes.txt'}},options:[{optionId:'yes',kind:'allow_once',name:'Allow once'},{optionId:'no',kind:'reject_once',name:'Reject'}]}});return;}
@@ -109,6 +110,24 @@ test('project work links session reports to current files and the single notes b
     assert.equal(retained.sessions[0].observation.plan.entries[0].content, 'Idle replacement 你好');
   } finally { await f.service.close(); await fs.rm(root, { recursive: true, force: true }); }
 });
+test('a message records the project files that changed on disk while it ran, and says when the comparison was partial', async () => {
+  const root = await fs.mkdtemp('/tmp/rho-acp-files-'); let f = await setup(root);
+  try {
+    await fs.writeFile(path.join(f.project.root, 'old.txt'), 'old'); await fs.writeFile(path.join(f.project.root, 'kept.txt'), 'kept');
+    const id = (await f.call('conversation.start', { changeId: 'files', text: 'write' })).conversation.conversationId;
+    const files = (await f.wait(id, ended)).turns.at(-1).files;
+    assert.deepEqual(files.changed.map(c => [c.path, c.change, c.bytes]), [['results/out.csv', 'added', 4], ['old.txt', 'removed', null]]);
+    assert.equal(files.partial, false); assert.equal(files.omitted, 0);
+    await f.service.close();
+    f = await setup(root, { maxComparedFiles: 1 });
+    await fs.writeFile(path.join(f.project.root, 'old.txt'), 'again');
+    const next = (await f.call('conversation.start', { changeId: 'partial', text: 'write' })).conversation.conversationId;
+    const partial = (await f.wait(next, ended)).turns.at(-1).files;
+    assert.equal(partial.partial, true, 'a comparison stopped at its limit says so');
+    assert.ok(partial.changed.every(c => c.change !== 'removed'), 'nothing is called removed from a partial comparison');
+  } finally { await f.service.close(); }
+});
+
 test('Agent permission choices are scoped, conditional, retained, and cancelled with the original turn', async () => {
   const root = await fs.mkdtemp('/tmp/rho-acp-choice-'), f = await setup(root);
   try {

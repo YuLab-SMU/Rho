@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import type { BrowserClient, ProjectSummary, WorkspaceSnapshot } from '../src/browser.js';
+import type { BrowserClient, WorkspaceSnapshot } from '../src/browser.js';
 import type { RhoOutput } from '../src/contract.generated.js';
 import { conversationBlocks, type Activity } from '../src/conversation-presentation.js';
+import { commandFiles, projectPath } from '../src/work-graph.js';
 
 // What the Agent in this project is doing now, from the conversation record Rho keeps:
 // whether a turn is running, whether it waits for the person, and the files its actions
@@ -17,36 +18,7 @@ export interface AgentNow {
 }
 
 export const agentName = (client?: string | null) => client === 'codex' ? 'Codex' : client === 'claude-code' ? 'Claude Code' : 'Agent';
-// A path the Agent reported, as the project names it: relative inside the project folder,
-// @<sourceId>/… inside a source folder, nothing anywhere else or in internal state.
-export function projectPath(reported: string, project: ProjectSummary): string | null {
-  const value = reported.trim().replace(/\\/g, '/');
-  if (!value) return null;
-  const inside = (root: string) => { const base = root.replace(/\/+$/, '') + '/'; return value.startsWith(base) ? value.slice(base.length) : null; };
-  let relative: string | null = null;
-  if (!value.startsWith('/')) relative = value.replace(/^\.\//, '');
-  else {
-    relative = inside(project.root);
-    if (relative === null) for (const source of project.sources ?? []) {
-      const within = inside(source.root);
-      if (within !== null) { relative = '@' + source.id + '/' + within; break; }
-    }
-  }
-  if (!relative || relative.split('/').some(part => ['..', '.rho', '.git', ''].includes(part))) return null;
-  return relative;
-}
-
-// Project files a command line names by a file extension Rho can show, at most four.
-const named = /(?:^|[\s"'=(<>|;&])((?:\/|\.\/|[\w@-])[\w@./-]*\.(?:R|r|Rmd|qmd|py|sh|sql|md|txt|csv|tsv|json|png|jpe?g|svg))(?=$|[\s"')<>|;&,])/g;
-export function commandFiles(command: string, project: ProjectSummary) {
-  const found: string[] = [];
-  for (const match of command.matchAll(named)) {
-    const path = projectPath(match[1], project);
-    if (path && !found.includes(path)) found.push(path);
-    if (found.length === 4) break;
-  }
-  return found;
-}
+export { commandFiles, projectPath };
 export function useAgentNow(client: BrowserClient, snapshot: WorkspaceSnapshot | null): AgentNow | null {
   const list = snapshot?.conversations ?? [];
   // The running conversation if there is one; otherwise the latest, so its ending stays visible.

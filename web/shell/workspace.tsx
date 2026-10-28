@@ -18,7 +18,7 @@ type Tabs = Extract<Region, { kind: 'tabs' }>;
 // The workspace shell: the owner's composition tree drawn as
 // splits and tab groups, owner views mounted within the rendering budget, and a slot for
 // what Rho adds above the work. It decides nothing about attention; useLive does.
-export function Workspace({ composition: recorded, snapshot, client, onAbout, contextTarget, principalId, onShowContext, feedbackContextActive, openView, onCommands, agentTarget, onShowAgent, presence, onPersonMoved, bar = true, following = false }: { following?: boolean; bar?: boolean; presence?: { viewId: string; label: string; verb: string; live: boolean } | null; onPersonMoved?: () => void; onCommands?: (group: CommandGroup | null) => void; composition: CompositionSummary; snapshot: WorkspaceSnapshot; client: BrowserClient; onAbout: (pluginId: string) => void; contextTarget: HTMLElement | null; principalId?: string; onShowContext: () => void; feedbackContextActive: boolean; mapChipTarget?: HTMLElement | null; openView?: string; agentTarget?: HTMLElement | null; onShowAgent?: () => void }) {
+export function Workspace({ composition: recorded, snapshot, client, onAbout, contextTarget, principalId, onShowContext, feedbackContextActive, openView, onCommands, agentTarget, onShowAgent, presence, onPersonMoved, bar = true, attention = true, following = false }: { following?: boolean; bar?: boolean; attention?: boolean; presence?: { viewId: string; label: string; verb: string; live: boolean } | null; onPersonMoved?: () => void; onCommands?: (group: CommandGroup | null) => void; composition: CompositionSummary; snapshot: WorkspaceSnapshot; client: BrowserClient; onAbout: (pluginId: string) => void; contextTarget: HTMLElement | null; principalId?: string; onShowContext: () => void; feedbackContextActive: boolean; mapChipTarget?: HTMLElement | null; openView?: string; agentTarget?: HTMLElement | null; onShowAgent?: () => void }) {
   const live = useLive(snapshot, recorded, client, principalId), layout = live.layout;
   // A question sent from another browser session has no context in this one. Preparing it under
   // the question's own changeId (as the table's send does) keeps one context per question version.
@@ -241,7 +241,7 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
   const focusObject = live.screen?.views.find(v => v.id === focused)?.object ?? null;
   const toggleEvidence = () => { setEvidence(v => !v); onShowAgent?.(); live.act({ kind: 'reveal', target: evidence ? null : live.screen?.agent?.object ?? 'workspace' }); };
   return <section className="workspace shell" aria-label="Layout">
-    {bar && <Bar live={live} evidence={evidence} held={items.length - unhidden.length} onEvidence={toggleEvidence} />}
+    {bar && <Bar live={live} evidence={evidence} held={items.length - unhidden.length} onEvidence={toggleEvidence} attention={attention} />}
     {agentTarget && createPortal(<AgentColumn live={live} agents={snapshot.agents} contexts={snapshot.contexts} prepare={prepareQuestion} principalId={principalId} evidence={evidence} onEvidence={toggleEvidence} focusObject={focusObject} />, agentTarget)}
     <Interruption live={live} items={unhidden} onHide={key => setHidden(h => [...h, key])} />
     {layoutProblem && <div className="shell-interruption problem" data-rho-layer="transient" data-rho-interruption="" role="alert"><span className="shell-interruption-text">{layoutProblem}</span><button className="shell-quiet" onClick={() => setLayoutProblem('')}>Dismiss</button></div>}

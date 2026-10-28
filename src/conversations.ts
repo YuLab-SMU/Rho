@@ -40,7 +40,11 @@ export const conversationLimits = {
   stopGraceMs: 5000,
   // Settings chosen for one Agent or one conversation, and the length of one chosen value;
   // more are refused.
-  maxChoices: 12, maxChoiceChars: 512
+  maxChoices: 12, maxChoiceChars: 512,
+  // Files compared on disk before and after a message, to record which changed during it; past
+  // this many the comparison stops and the record says it is partial. Changes kept per message;
+  // more are counted.
+  maxComparedFiles: 20000, maxChangedFiles: 200
 };
 type StopReason = 'person' | 'closing' | 'wall-limit' | 'output-limit' | 'line-limit' | 'identity';
 type Step = ConversationStep;
@@ -53,6 +57,41 @@ interface Turn {
   steps: Step[]; omitted: number; retry: { attempt: number | null; of: number | null; status: number | null; at: string } | null;
   result: { isError: boolean; kind: string | null; reason: string | null; steps: number | null; durationMs: number | null; costUsd: number | null; message: string | null } | null;
   problem: string | null; permissions?: Permission[];
+  // Project files that changed on disk between the message's start and end, compared by time and
+  // size. It says what changed meanwhile, not what made the change.
+  files?: { changed: FileChange[]; omitted: number; partial: boolean };
+}
+interface FileChange { path: string; change: 'added' | 'modified' | 'removed'; modifiedAt: string | null; bytes: number | null }
+interface Disk { files: Map<string, { modified: number; bytes: number }>; partial: boolean }
+// The project's files, without Rho's own state or Git's, up to a limit.
+async function disk(root: string, limit: number): Promise<Disk> {
+  const files: Disk['files'] = new Map(), folders = [''];
+  while (folders.length) {
+    const folder = folders.shift()!;
+    const names = (await fs.readdir(path.join(root, folder)).catch(() => [] as string[])).filter(name => !['.rho', '.git', '.DS_Store'].includes(name)).sort();
+    const stats = await Promise.all(names.map(name => fs.lstat(path.join(root, folder, name)).catch(() => null)));
+    for (const [index, stat] of stats.entries()) {
+      const relative = (folder ? folder + '/' : '') + names[index];
+      if (!stat || stat.isSymbolicLink()) continue;
+      if (stat.isDirectory()) folders.push(relative);
+      else if (stat.isFile()) {
+        if (files.size >= limit) return { files, partial: true };
+        files.set(relative, { modified: stat.mtimeMs, bytes: stat.size });
+      }
+    }
+  }
+  return { files, partial: false };
+}
+function compare(before: Disk, after: Disk, limit: number): NonNullable<Turn['files']> {
+  const changed: FileChange[] = [], partial = before.partial || after.partial;
+  for (const [file, now] of after.files) {
+    const was = before.files.get(file);
+    if (!was && partial) continue;
+    if (!was || was.modified !== now.modified || was.bytes !== now.bytes) changed.push({ path: file, change: was ? 'modified' : 'added', modifiedAt: new Date(now.modified).toISOString(), bytes: now.bytes });
+  }
+  if (!partial) for (const file of before.files.keys()) if (!after.files.has(file)) changed.push({ path: file, change: 'removed', modifiedAt: null, bytes: null });
+  changed.sort((a, b) => (a.modifiedAt ?? '\uffff').localeCompare(b.modifiedAt ?? '\uffff') || a.path.localeCompare(b.path));
+  return { changed: changed.slice(0, limit), omitted: Math.max(0, changed.length - limit), partial };
 }
 interface Conversation {
   format: 1 | 2; backend?: 'claude-acp' | 'codex-acp' | 'claude-cli'; acpSessionId?: string; adapter?: { name: string; version?: string }; protocolVersion?: number; id: string; changeId: string; requestDigest: string; createdAt: string; createdBy: string; updatedAt: string; version: number;
@@ -74,7 +113,7 @@ const blankSettings = (): AgentSettings => ({ format: 1, version: 0, updatedAt: 
 type AcpDriver = Pick<ClaudeAcpConversation, 'configure' | 'inspect' | 'connected'>;
 const acpDriver = (driver: AgentConversation | undefined): driver is AgentConversation & AcpDriver => !!driver && 'configure' in driver;
 interface Summary { conversationId: string; changeId: string; requestDigest: string; title: string; client: string; principal: string | null; createdAt: string; updatedAt: string; version: number; turns: number; state: string; lastAt: string }
-interface Live { project: Project; conversation: Conversation; turn: Turn; controller: AbortController; stop(reason: StopReason, by: string): void; done: Promise<void> }
+interface Live { project: Project; conversation: Conversation; turn: Turn; controller: AbortController; stop(reason: StopReason, by: string): void; done: Promise<void>; before?: Disk | null }
 export interface ConversationPorts {
   // The project's Agent grant for this conversation, written to a private connection file.
   grant(project: Project, conversation: { id: string; title: string; client: string }): Promise<{ file: string; principal: string }>;
@@ -410,6 +449,10 @@ export class Conversations {
       .finally(async () => {
         if (turn.state === 'running') turn.state = 'unknown';
         turn.endedAt ??= now();
+        if (live.before) {
+          const after = await disk(project.root, this.limits.maxComparedFiles).catch(() => null);
+          if (after) turn.files = compare(live.before, after, this.limits.maxChangedFiles);
+        }
         for (const step of turn.steps) if (step.kind === 'tool' && step.outcome === 'requested') step.outcome = 'unknown';
         this.cancelPermissions(project, c);
         const pending = this.flushes.get(project.id + '/' + c.id); if (pending) { clearTimeout(pending); this.flushes.delete(project.id + '/' + c.id); }
@@ -474,6 +517,7 @@ export class Conversations {
   private async run(live: Live) {
     const { project, conversation: c, turn, controller } = live;
     if (turn.stop) { turn.state = 'stopped'; return; }
+    live.before = await disk(project.root, this.limits.maxComparedFiles).catch(() => null);
     let driver: AgentConversation;
     try { driver = await this.driver(project, c); }
     catch (e) { turn.state = 'failed'; turn.problem = e instanceof Fault ? e.message : 'Rho could not connect this conversation to the project.'; return; }

@@ -22,13 +22,15 @@ function shownPath(at: string, project: ProjectSummary) {
 }
 interface Props {
   project: ProjectSummary; snapshot: WorkspaceSnapshot; client: BrowserClient; section: Section;
+  // The workspace the person shares with the Agent, where an opened file goes.
+  workspace: () => string;
   onSection: (section: Section) => void; onAgent: (conversationId?: string) => void;
   onLayout: (id: string, view?: string) => void; onProjectChanged: (project: ProjectSummary) => void; onOpened: (id: string, view?: string) => void;
   category?: SourceRow; files?: ProjectFiles; sources?: Record<SourceRow, SourceItem[]> | null; onFile?: (row: SourceRow, item: SourceItem) => void;
   // The Agent page: a tab opened from a narrower link has no conversations here, only its handoff.
   linked?: boolean; onPath?: (path: string) => void; onNewConversation?: () => void;
 }
-export function ProjectOverview({ project, snapshot, client, section, onSection, onAgent, onLayout, onProjectChanged, onOpened, category, files, sources, onFile, linked = false, onPath, onNewConversation }: Props) {
+export function ProjectOverview({ project, snapshot, client, section, workspace, onSection, onAgent, onLayout, onProjectChanged, onOpened, category, files, sources, onFile, linked = false, onPath, onNewConversation }: Props) {
   // Sessions started outside Rho are read only while their section is open.
   const [outsideOpen, setOutsideOpen] = useState(false);
   const { runs, problem: runsProblem, readAgain } = useRuns(client, project.id, snapshot.cursor);
@@ -93,8 +95,8 @@ export function ProjectOverview({ project, snapshot, client, section, onSection,
     if (opening) return;
     setOpening(entry.path); setFileError('');
     try {
-      const current = snapshot.compositions.find(c => c.compositionId === 'workspace');
-      const result = await client.call('project.openFile', { projectId: project.id, path: entry.path, compositionId: 'workspace', expectedVersion: current?.version ?? 0, changeId: 'open-' + crypto.randomUUID() });
+      const target = workspace(), current = snapshot.compositions.find(c => c.compositionId === target);
+      const result = await client.call('project.openFile', { projectId: project.id, path: entry.path, compositionId: target, expectedVersion: current?.version ?? 0, changeId: 'open-' + crypto.randomUUID() });
       onOpened(result.composition.compositionId, result.viewId);
     } catch (e) { setFileError(e instanceof Error ? e.message : 'Could not open this file. Try again.'); }
     finally { setOpening(''); }

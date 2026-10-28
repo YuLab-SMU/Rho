@@ -4633,6 +4633,16 @@ export interface ConversationPermissionOutput {
       message: string | null;
     } | null;
     problem: string | null;
+    files?: {
+      changed: {
+        path: string;
+        change: 'added' | 'modified' | 'removed';
+        modifiedAt: string | null;
+        bytes: number | null;
+      }[];
+      omitted: number;
+      partial: boolean;
+    };
   };
 }
 
@@ -4801,6 +4811,16 @@ export interface ConversationReadOutput {
       message: string | null;
     } | null;
     problem: string | null;
+    files?: {
+      changed: {
+        path: string;
+        change: 'added' | 'modified' | 'removed';
+        modifiedAt: string | null;
+        bytes: number | null;
+      }[];
+      omitted: number;
+      partial: boolean;
+    };
   }[];
 }
 
@@ -4882,6 +4902,16 @@ export interface ConversationSendOutput {
       message: string | null;
     } | null;
     problem: string | null;
+    files?: {
+      changed: {
+        path: string;
+        change: 'added' | 'modified' | 'removed';
+        modifiedAt: string | null;
+        bytes: number | null;
+      }[];
+      omitted: number;
+      partial: boolean;
+    };
   };
 }
 
@@ -5199,6 +5229,16 @@ export interface ConversationStartOutput {
       message: string | null;
     } | null;
     problem: string | null;
+    files?: {
+      changed: {
+        path: string;
+        change: 'added' | 'modified' | 'removed';
+        modifiedAt: string | null;
+        bytes: number | null;
+      }[];
+      omitted: number;
+      partial: boolean;
+    };
   };
 }
 
@@ -5279,6 +5319,16 @@ export interface ConversationStopOutput {
       message: string | null;
     } | null;
     problem: string | null;
+    files?: {
+      changed: {
+        path: string;
+        change: 'added' | 'modified' | 'removed';
+        modifiedAt: string | null;
+        bytes: number | null;
+      }[];
+      omitted: number;
+      partial: boolean;
+    };
   };
 }
 
@@ -7893,6 +7943,7 @@ export interface ProjectEntriesOutput {
     kind: 'file' | 'folder';
     bytes: number;
     hidden: boolean;
+    modifiedAt?: string;
   }[];
   total: number;
   truncated: boolean;

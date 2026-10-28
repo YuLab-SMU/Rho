@@ -1,16 +1,16 @@
 # Rho status
 
-Updated: 2026-10-27.
+Updated: 2026-10-28.
 
 ## Current focus
 
 On 2026-10-27 the user found the project sidebar nearly empty and the main area
 still while the Agent worked. The sidebar now names its places and counts its Sources,
-the [Agent canvas](#project-sidebar-and-agent-canvas) opens the files the Agent reads
-and changes, a Sources file shows in place, and one Agent entry opens a page of what it
-did. The user then asked to choose the Agent and its model, and for the person to
-arrange the page as the Agent can; both now work. Documents 0.4.3 and Agent 0.4.13
-carry the owner changes; [the record](AGENT-CANVAS-EPISODE.md) keeps the runs.
+a Sources file shows in place, one Agent entry opens a page of what it did, the Agent
+and model can be chosen, and the person arranges views as the Agent can
+([record](AGENT-CANVAS-EPISODE.md)). The user then asked for one workspace the person
+and the Agent share, and a Graph of what the Agent did; both now run
+([section](#project-sidebar-workspace-and-graph), [record](GRAPH-EPISODE.md)).
 
 Agent 0.4.11 adds each tool step's title, ACP category and input to the Claude/Codex
 ACP connections of 0.4.10. Eight real Westlake HPC turns from the installed package
@@ -18,14 +18,12 @@ passed with cancellation, connection loss and session recovery, as did external 
 observation across restart; the unsigned macOS arm64 package installed and started
 ([record](ACP-MULTI-AGENT-EPISODE.md); panel: [Agent UI](AGENT-UI-EPISODE.md)).
 
-The 2026-10-27 home, projects and empty-project pass is in the
-[home and project episode](HOME-PROJECT-EPISODE.md) and
-[its summary](#home-projects-and-empty-project). Current implementation is still not
-the design target. The [from-scratch product design brief](design/2026-10-26/index.html)
-still describes the larger product: separate application and project navigation,
-Studio, panoramic Graph, a dynamic Agent experience, a dedicated conversation
-component and a shared plugin design standard. Implementation records below remain
-capability evidence, not the target interface or design acceptance criteria.
+The home, projects and empty-project pass of 2026-10-27 is in
+[its episode](HOME-PROJECT-EPISODE.md) and [summary](#home-projects-and-empty-project).
+The [from-scratch design brief](design/2026-10-26/index.html) still describes the larger
+product (two navigation scopes, Studio, a panoramic Graph, a dynamic Agent experience, a
+conversation component, a plugin design standard); records below are capability
+evidence, not the target interface or design acceptance criteria.
 
 | Part | Stage | Evidence | Next question |
 | --- | --- | --- | --- |
@@ -34,7 +32,7 @@ capability evidence, not the target interface or design acceptance criteria.
 | Comparing two results | Runs | Two views split by hand | Can the differences be read by key? |
 | Claude/Codex and shared workspace | Both installed loops and external Codex relay run | [ACP acceptance](ACP-MULTI-AGENT-EPISODE.md) | Human usability and passive attachment to uninstrumented clients remain unproven |
 | Agent panel presentation | Streams; controlled peer and one real turn observed | [Agent UI episode](AGENT-UI-EPISODE.md) | Can a person scan a long trace and act on it? |
-| Project sidebar and Agent canvas | Runs; real Claude turns and a controlled peer | [Agent canvas episode](AGENT-CANVAS-EPISODE.md) | Can a person follow a long, fast turn on the canvas and step in? |
+| Project sidebar, workspace and Graph | Runs; real Claude turns and controlled peers | [Graph episode](GRAPH-EPISODE.md) | Can a person read from the Graph what the Agent did, and step in? |
 | Project shell and navigation | Runs | Frontend browser suite below | Does it hold up around the reworked episode? |
 | Plugin UI extensions | Runs | Authoring checks below | Does a view built with it serve a real episode? |
 | Domain episode (DESeq2) | Not started | — | What carries over from base-R? |
@@ -44,7 +42,7 @@ written on 2026-10-25, were withdrawn that day at the user's request: they fixed
 grammars, visual values and acceptance criteria before results existed to learn from.
 Git retains them at `24d9998b`; they are not requirements or reference designs.
 
-## Project sidebar and Agent canvas
+## Project sidebar, workspace and Graph
 
 - The sidebar shows All projects, the project and a menu to switch, then Overview,
   Studio with its workspaces, Agent (Working or Needs you; its page and panel
@@ -52,26 +50,28 @@ Git retains them at `24d9998b`; they are not requirements or reference designs.
   (48 folders, 5 levels, 4000 files; partial counts say so), then Files. Each kind
   unfolds into its files by folder; one chosen shows in place with no layout written,
   ←/→ and ↑/↓ move through the kind, Open in Studio places it.
-- Sending from the Agent panel opens the Agent canvas and follows the turn: named
-  files and outputs that appear on disk open once, code and data/figures each in its
-  group wherever the person moved it; the last named file's tab carries the Agent's
+- Following, Open in Studio and Files use one workspace the person and the Agent share:
+  named files and outputs that appear on disk open once, code and data/figures each in
+  its group wherever the person moved it; the last named file's tab carries the Agent's
   verb. Choosing another view, typing, dragging or leaving stops following.
+- The Graph draws each message as a row from what it read to what changed on disk
+  while its commands ran (recorded per message when it ends), with table and figure
+  previews, a focus path, each file in its own view, replay, the Agent's flag and its
+  pending choices. Each line says whether it was reported, named or seen on disk.
 - Tabs drag onto other tabs, into a group or to its side, and the Agent panel's edge
   drags; each drop is the conditional `composition.apply` the Agent's grant also holds.
-- The Agent page lists each Rho conversation's latest messages (request, files changed
-  and looked at, commands, answer, ending and model), then runs and outside sessions.
-  Its card chooses the Agent, model, effort and mode for new conversations among what
-  the Agent last offered. Asking the Agent is the person's click and sends no message.
-  The panel's chip changes an open conversation's model and effort between messages.
+- The Agent page lists each Rho conversation's latest messages (request, files,
+  commands, answer, ending and model), then runs and outside sessions. Its card chooses
+  the Agent, model, effort and mode for new conversations among what it last offered,
+  sending nothing; the panel's chip changes an open conversation's between messages.
 - Documents 0.4.3 adopts a changed file into a buffer with no unsaved text. Agent
   0.4.12 captures one named file; 0.4.13 applies, changes and inspects ACP settings.
 
-Evidence: Rho 205/205 (serial) and Plugins 92/92 ([ledger](VERIFICATION.json));
-`acceptance:agent-canvas` 10/10 (controlled peer), `sources` 7/7, `frontend` 13/13,
-`agent-ui` 7/7, pages, shell, person, objects, actions, continuity and plugin UI passed.
-Four real Westlake HPC Claude turns found and fixed five defects; a test Agent found six
-in the settings; real Claude runs switched models and arranged a workspace as asked.
-Paths work; whether a person can follow a fast Agent, choose or arrange well is unobserved.
+Evidence: Rho 212/212 (serial) and Plugins 92/92 ([ledger](VERIFICATION.json));
+`acceptance:graph` 8/8 and `agent-canvas` 10/10 (controlled peers), `sources`,
+`frontend`, `agent-ui`, pages, shell, person, objects, actions, continuity and plugin UI
+passed. Real Claude runs found defects in following, settings and the Graph; each was
+fixed and run again. Whether a person can follow a fast Agent or read the Graph is unobserved.
 
 ## Home, projects and empty project
 

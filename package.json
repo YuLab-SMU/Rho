@@ -102,6 +102,7 @@
     "acceptance:frontend": "node scripts/frontend-acceptance.mjs",
     "acceptance:agent-canvas": "node scripts/agent-canvas-acceptance.mjs",
     "acceptance:sources": "node scripts/sources-acceptance.mjs",
+    "acceptance:graph": "node scripts/graph-acceptance.mjs",
     "ui:create": "node scripts/ui-plugin.mjs create",
     "ui:dev": "node scripts/ui-plugin.mjs dev",
     "acceptance:plugin-dx": "node scripts/plugin-dx-acceptance.mjs",

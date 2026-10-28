@@ -1,4 +1,4 @@
-export type IconName = 'home' | 'project' | 'plugins' | 'sidebar' | 'context' | 'lock' | 'folder' | 'folder-plus' | 'plus' | 'chevron' | 'info' | 'close' | 'overview' | 'layout' | 'document' | 'table' | 'image' | 'file' | 'offline' | 'prompt' | 'refresh' | 'unlink' | 'enter' | 'check' | 'grid' | 'copy' | 'eye' | 'run' | 'search' | 'code' | 'spark' | 'chart' | 'back' | 'updown' | 'follow' | 'pause';
+export type IconName = 'home' | 'project' | 'plugins' | 'sidebar' | 'context' | 'lock' | 'folder' | 'folder-plus' | 'plus' | 'chevron' | 'info' | 'close' | 'overview' | 'layout' | 'document' | 'table' | 'image' | 'file' | 'offline' | 'prompt' | 'refresh' | 'unlink' | 'enter' | 'check' | 'grid' | 'copy' | 'eye' | 'run' | 'search' | 'code' | 'spark' | 'chart' | 'back' | 'updown' | 'follow' | 'pause' | 'graph' | 'fit' | 'minus' | 'question';
 export function Icon({ name, size = 20, stroke = 1.6 }: { name: IconName; size?: number; stroke?: number }) {
   const paths = {
     home: 'm3 10 9-7 9 7v10h-6v-7H9v7H3z',
@@ -37,6 +37,10 @@ export function Icon({ name, size = 20, stroke = 1.6 }: { name: IconName; size?:
     updown: 'm8 9.5 4-4 4 4M8 14.5l4 4 4-4',
     follow: 'M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12zM12 10a2 2 0 1 0 0 4 2 2 0 1 0 0-4z',
     pause: 'M9 5.5v13M15 5.5v13',
+    graph: 'M6 4.5a2 2 0 1 0 0 4 2 2 0 1 0 0-4zM18 4.5a2 2 0 1 0 0 4 2 2 0 1 0 0-4zM12 15.5a2 2 0 1 0 0 4 2 2 0 1 0 0-4zM7.2 8.2l3.6 7.4M16.8 8.2l-3.6 7.4M8 6.5h8',
+    fit: 'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5',
+    minus: 'M4.5 12h15',
+    question: 'M12 2.4a9.6 9.6 0 1 0 0 19.2 9.6 9.6 0 1 0 0-19.2zM9.4 9.3a2.7 2.7 0 1 1 3.8 2.5c-.8.4-1.2 1-1.2 1.8v.4M12 16.9v.2',
   };
   return <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth={stroke} strokeLinejoin="round" strokeLinecap="round"><path d={paths[name]} /></svg>;
 }

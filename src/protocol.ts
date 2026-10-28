@@ -213,7 +213,9 @@ const conversationTurn = response({ id: text, by: text, text: { type: 'string' }
   permissions: array(response({ id: text, title: { type: 'string' }, toolCallId: text, details: { type: 'string' }, options: array(response({ id: text, name: text, kind: text })), state: { enum: ['pending', 'selected', 'cancelled'] }, selected: text }, ['id', 'title', 'toolCallId', 'options', 'state'])),
   retry: { anyOf: [response({ attempt: { anyOf: [integer, { type: 'null' }] }, of: { anyOf: [integer, { type: 'null' }] }, status: { anyOf: [integer, { type: 'null' }] }, at: text }), { type: 'null' }] },
   result: { anyOf: [response({ isError: { type: 'boolean' }, kind: { anyOf: [text, { type: 'null' }] }, reason: { anyOf: [text, { type: 'null' }] }, steps: { anyOf: [integer, { type: 'null' }] }, durationMs: { anyOf: [{ type: 'number' }, { type: 'null' }] }, costUsd: { anyOf: [{ type: 'number' }, { type: 'null' }] }, message: { anyOf: [{ type: 'string' }, { type: 'null' }] } }), { type: 'null' }] },
-  problem: { anyOf: [{ type: 'string' }, { type: 'null' }] } }, ['id', 'by', 'text', 'sentAt', 'state', 'steps', 'omitted', 'problem']);
+  problem: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+  // Project files that changed on disk while the message ran, compared at its start and end.
+  files: response({ changed: array(response({ path: text, change: { enum: ['added', 'modified', 'removed'] }, modifiedAt: { anyOf: [text, { type: 'null' }] }, bytes: { anyOf: [integer, { type: 'null' }] } })), omitted: integer, partial: { type: 'boolean' } }) }, ['id', 'by', 'text', 'sentAt', 'state', 'steps', 'omitted', 'problem']);
 const observationSnapshot = response({
   project: contract.projectRecordSchema,
   catalog,
@@ -289,7 +291,7 @@ export const responses: Record<string, any> = { ...base.responses, ...ownerRespo
   'protocol.validate': response({ method: text, valid: { type: 'boolean' }, problems: array(response({ path: text, keyword: text, message: text, fix: text })), requires: array(text) }),
   // A passing check carries no remedy, so the remedy is a possibly-empty string.
   'project.doctor': response({ ok: { type: 'boolean' }, checks: array(response({ id: text, state: { enum: ['ok', 'warn', 'fail'] }, detail: text, remedy: { type: 'string' } })), intent: { anyOf: [response({ id: text, methods: array(text), missing: array(text), ready: { type: 'boolean' } }), { type: 'null' }] } }),
-  'project.entries': response({ entries: array(response({ path: text, name: text, kind: { enum: ['file', 'folder'] }, bytes: integer, hidden: { type: 'boolean' } })), total: integer, truncated: { type: 'boolean' }, roots: array(text), path: { type: 'string', maxLength: 1024 } }),
+  'project.entries': response({ entries: array(response({ path: text, name: text, kind: { enum: ['file', 'folder'] }, bytes: integer, hidden: { type: 'boolean' }, modifiedAt: { type: 'string', format: 'date-time' } }, ['path', 'name', 'kind', 'bytes', 'hidden'])), total: integer, truncated: { type: 'boolean' }, roots: array(text), path: { type: 'string', maxLength: 1024 } }),
   'session.browser.pair': response({ code: text, expiresAt: text }),
   'session.browser.revoke': response({ sessionId: text, revoked: { type: 'boolean' } }),
   'conversation.start': response({ conversation: conversationSummary, turn: conversationTurn }),

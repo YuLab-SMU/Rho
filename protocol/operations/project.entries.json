@@ -46,6 +46,10 @@
             },
             "hidden": {
               "type": "boolean"
+            },
+            "modifiedAt": {
+              "type": "string",
+              "format": "date-time"
             }
           },
           "required": [

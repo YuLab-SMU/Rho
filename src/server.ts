@@ -726,7 +726,7 @@ export class RhoService {
       const relative = path.relative(base, canonical).split(path.sep).join('/');
       let names: string[] = [];
       try { names = await fs.readdir(canonical); } catch (e: any) { if (e.code !== 'ENOENT') throw e; }
-      const entries: Array<{ path: string; name: string; kind: 'file' | 'folder'; bytes: number; hidden: boolean }> = [];
+      const entries: Array<{ path: string; name: string; kind: 'file' | 'folder'; bytes: number; hidden: boolean; modifiedAt?: string }> = [];
       for (const name of names) {
         if (['.rho', '.git', '.DS_Store'].includes(name)) continue;
         const stat = await fs.lstat(path.join(canonical, name)).catch(() => null);
@@ -734,7 +734,8 @@ export class RhoService {
         const kind = stat.isDirectory() ? 'folder' as const : stat.isFile() ? 'file' as const : null;
         if (!kind) continue;
         const entryPath = at((relative ? relative + '/' : '') + name);
-        entries.push({ path: entryPath, name, kind, bytes: kind === 'file' ? stat.size : 0, hidden: name.startsWith('.') });
+        // When a file last changed on disk, so a view can say what changed while work ran.
+        entries.push({ path: entryPath, name, kind, bytes: kind === 'file' ? stat.size : 0, hidden: name.startsWith('.'), modifiedAt: stat.mtime.toISOString() });
       }
       // The project's own folder opens with the folders it works in beside its contents, so a
       // project made from source folders does not read as empty.

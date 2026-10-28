@@ -203,20 +203,20 @@
     "conversation.permission": {
       "summary": "Person at this machine only: record an offered choice for a pending Agent permission request. The original request identity is retained; repeated identical choices do not respond twice.",
       "path": "operations/conversation.permission.json",
-      "bytes": 13411,
-      "sha256": "a416ced8649be9b2054e8bb9a8897dc59dcb1ee3db47af40d5b7f3a8f4a66287"
+      "bytes": 15323,
+      "sha256": "c9be8afe445f01bd1e18fb4ea3cf3257e1fd45b071084a9673aeb11f62cd4ab2"
     },
     "conversation.read": {
       "summary": "Read a conversation started in Rho: the person's messages, the Agent's visible text and tool steps, and how each message ended. Reading starts and resumes nothing.",
       "path": "operations/conversation.read.json",
-      "bytes": 27455,
-      "sha256": "8935342173d2c3931deb8e162a9697fe0a55f09f7312ce332b9403790bd7a216"
+      "bytes": 29499,
+      "sha256": "6d63753c9b16dcd5496ea074520e77fc9ab676ff81b2847570cd9c9941cc81c3"
     },
     "conversation.send": {
       "summary": "Person at this machine only: send the next message to a conversation started in Rho, which resumes the same Agent session. Refused while the previous message is being answered. A repeated changeId with the same text returns the original message.",
       "path": "operations/conversation.send.json",
-      "bytes": 13335,
-      "sha256": "550200c8044f2cb6f0a268bcb34e2cf22550baf329a1e7fbca414434ffe390a6"
+      "bytes": 15247,
+      "sha256": "44b716c2e6db748358b9cda4433a7d94f0db0961deedb14ccf0b54171b7e2a16"
     },
     "conversation.settings.check": {
       "summary": "Person at this machine only: start the chosen Agent in this project to read the settings it offers, then remove that session and end the process. No message is sent; one check per Agent runs at a time.",
@@ -239,14 +239,14 @@
     "conversation.start": {
       "summary": "Person at this machine only: start a conversation with the selected Claude Code or Codex Agent in this project. Rho selects the Agent plugin backend, attaches this project's MCP grant and records the message before sending it. Without backend or config, the person's saved Agent and settings are used and recorded with the conversation. A repeated changeId with the same text returns the original conversation and starts nothing.",
       "path": "operations/conversation.start.json",
-      "bytes": 13896,
-      "sha256": "35e95898c3ac46b35ebefd0da44d26e52f6f4be0058a8c105583b992fcd3a250"
+      "bytes": 15808,
+      "sha256": "2a02b276e63040730d539afa48395a23a4a0651238de880541ec134b64b9a4ee"
     },
     "conversation.stop": {
       "summary": "Person at this machine only: ask the original Agent to stop answering one message. ACP cancellation is confirmed by the original prompt response; a lost connection keeps the outcome unknown. Legacy CLI conversations confirm process exit. Steps already taken stay done.",
       "path": "operations/conversation.stop.json",
-      "bytes": 13238,
-      "sha256": "0fc8c49bfc852b353084086cb6489259dfd764027a824cdeb612f961646dcc36"
+      "bytes": 15150,
+      "sha256": "0a8f71948fa469a905526abd40d72e1f424a09a1c2c9cc493a802fbb8d4d54ad"
     },
     "data.compare": {
       "summary": "Join two explicit table versions using declared keys, namespaces, fields and join policy. Scientific comparability remains the project responsibility.",
@@ -395,8 +395,8 @@
     "project.entries": {
       "summary": "List one level of a folder in this project: ordinary files and folders, bounded and confined to that folder, excluding owner state. The project folder lists the source folders it works in as @<sourceId> entries, which descend like any other folder. Listing reads no file contents and starts no runtime.",
       "path": "operations/project.entries.json",
-      "bytes": 2077,
-      "sha256": "30416e8df18659b1a1ef65b5c3cca30398046799128eb2aab2e3d82876088635"
+      "bytes": 2188,
+      "sha256": "d453173c4144b636bf479952f813780d6fff47461c1af6217841a49519220058"
     },
     "project.list": {
       "summary": "project.list",
