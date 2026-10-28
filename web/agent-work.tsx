@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { BrowserClient, WorkspaceSnapshot } from '../src/browser.js';
 import type { RhoOutput } from '../src/contract.generated.js';
 import { conversationBlocks, type Activity } from '../src/conversation-presentation.js';
-import { agentName, commandFiles, projectPath } from './agent-now.js';
+import { commandFiles, projectPath } from './agent-now.js';
 import { kindOf } from './sources.js';
 import { AgentMarkdown } from './markdown.js';
 import { Icon, type IconName } from './icons.js';
@@ -14,11 +14,11 @@ import { modelSetting, valueName } from './agent-settings.js';
 type Read = RhoOutput<'conversation.read'>;
 type Turn = Read['turns'][number];
 type Summary = NonNullable<WorkspaceSnapshot['conversations']>[number];
-// The page reads this many conversations, newest first, and this many messages of each.
-export const workLimits = { conversations: 6, turns: 4 };
+// An open conversation shows this many of its latest messages.
+export const workLimits = { turns: 4 };
 
 const clock = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
-function day(iso: string) {
+export function day(iso: string) {
   const at = new Date(iso), today = new Date(), yesterday = new Date(); yesterday.setDate(today.getDate() - 1);
   return at.toDateString() === today.toDateString() ? 'Today ' + clock(iso) : at.toDateString() === yesterday.toDateString() ? 'Yesterday ' + clock(iso) : at.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' + clock(iso);
 }
@@ -98,9 +98,9 @@ function TurnWork({ turn, snapshot, observation, exists, onPath }: { turn: Turn;
   </li>;
 }
 
-// A conversation is read again when its recorded version changes, at most every second
-// while the Agent is answering.
-function Conversation({ client, snapshot, summary, exists, onContinue, onPath }: { client: BrowserClient; snapshot: WorkspaceSnapshot; summary: Summary; exists: (path: string) => boolean; onContinue: (id: string) => void; onPath: (path: string) => void }) {
+// One conversation's latest messages, read when shown and again when its recorded version
+// changes, at most every second while the Agent is answering.
+export function ConversationTurns({ client, snapshot, summary, exists, onContinue, onPath }: { client: BrowserClient; snapshot: WorkspaceSnapshot; summary: Pick<Summary, 'conversationId' | 'state' | 'version'>; exists: (path: string) => boolean; onContinue?: (id: string) => void; onPath: (path: string) => void }) {
   const [read, setRead] = useState<Read | null>(null), [problem, setProblem] = useState('');
   useEffect(() => {
     let live = true;
@@ -110,29 +110,10 @@ function Conversation({ client, snapshot, summary, exists, onContinue, onPath }:
     return () => { live = false; clearTimeout(timer); };
   }, [client, snapshot.project.id, summary.conversationId, summary.version]);
   const earlier = read?.first ?? 0;
-  return <article className="work-card" aria-labelledby={'work-' + summary.conversationId}>
-    <header className="work-head">
-      <div><h2 id={'work-' + summary.conversationId}>{summary.title}</h2>
-        <p>{[agentName(summary.client), summary.turns + ' ' + (summary.turns === 1 ? 'message' : 'messages'), day(summary.lastAt)].join(' · ')}</p></div>
-      {summary.state === 'running' && <span className="nav-badge working"><span className="pulse-dot" aria-hidden="true" />Working</span>}
-      <button onClick={() => onContinue(summary.conversationId)}>{summary.state === 'running' ? 'Follow' : 'Continue'}</button>
-    </header>
-    {problem && <p className="inline-error" role="alert">{problem}</p>}
-    {!read && !problem && <p className="muted" role="status">Reading…</p>}
-    {read && <ol className="work-turns">
-      {earlier > 0 && <li className="work-earlier"><button className="text-button" onClick={() => onContinue(summary.conversationId)}>{earlier} earlier {earlier === 1 ? 'message' : 'messages'} in the conversation</button></li>}
-      {read.turns.map(turn => <TurnWork key={turn.id} turn={turn} snapshot={snapshot} observation={read.observation} exists={exists} onPath={onPath} />)}
-    </ol>}
-  </article>;
-}
-
-export function AgentWork({ client, snapshot, exists, onContinue, onPath, onNew }: { client: BrowserClient; snapshot: WorkspaceSnapshot; exists: (path: string) => boolean; onContinue: (id: string) => void; onPath: (path: string) => void; onNew: () => void }) {
-  const [shown, setShown] = useState(workLimits.conversations);
-  const list = [...(snapshot.conversations ?? [])].sort((a, b) => Number(b.state === 'running') - Number(a.state === 'running') || b.lastAt.localeCompare(a.lastAt));
-  if (!list.length) return <div className="empty-state agent-empty"><span className="empty-symbol"><Icon name="spark" size={26} stroke={1.5} /></span><h2>No conversations yet</h2>
-    <p>Ask the Agent to explore or change this project. What it reads, changes and runs is kept here.</p><button className="primary" onClick={onNew}><Icon name="prompt" size={16} />New conversation</button></div>;
-  return <div className="work-list">
-    {list.slice(0, shown).map(summary => <Conversation key={summary.conversationId} client={client} snapshot={snapshot} summary={summary} exists={exists} onContinue={onContinue} onPath={onPath} />)}
-    {list.length > shown && <button className="work-older" onClick={() => setShown(n => n + workLimits.conversations)}>Show {Math.min(workLimits.conversations, list.length - shown)} older {list.length - shown === 1 ? 'conversation' : 'conversations'}</button>}
-  </div>;
+  if (problem) return <p className="inline-error" role="alert">{problem}</p>;
+  if (!read) return <p className="muted" role="status">Reading…</p>;
+  return <ol className="work-turns">
+    {earlier > 0 && <li className="work-earlier">{onContinue ? <button className="text-button" onClick={() => onContinue(summary.conversationId)}>{earlier} earlier {earlier === 1 ? 'message' : 'messages'} in the conversation</button> : <span>{earlier} earlier {earlier === 1 ? 'message' : 'messages'}</span>}</li>}
+    {read.turns.map(turn => <TurnWork key={turn.id} turn={turn} snapshot={snapshot} observation={read.observation} exists={exists} onPath={onPath} />)}
+  </ol>;
 }

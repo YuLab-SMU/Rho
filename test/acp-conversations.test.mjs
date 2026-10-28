@@ -128,6 +128,39 @@ test('a message records the project files that changed on disk while it ran, and
   } finally { await f.service.close(); }
 });
 
+test('a conversation in the trash is kept whole, frees its place, cannot be continued, and is deleted only from there', async () => {
+  const root = await fs.mkdtemp('/tmp/rho-acp-trash-'); let f = await setup(root, { maxConversations: 2 });
+  try {
+    const first = (await f.call('conversation.start', { changeId: 'trash-1', text: 'hello' })).conversation.conversationId;
+    await f.wait(first, ended);
+    const second = (await f.call('conversation.start', { changeId: 'trash-2', text: 'wait' })).conversation.conversationId;
+    // A list carries what a row shows without reading each record.
+    const listed = (await f.call('conversation.list', {})).conversations.find(c => c.conversationId === first);
+    assert.equal(listed.backend, 'claude-acp'); assert.equal(listed.trashedAt, null); assert.ok('usage' in listed && 'sessionId' in listed);
+    await assert.rejects(f.call('conversation.start', { changeId: 'trash-3', text: 'hello' }), e => e.error?.kind === 'limit');
+    await assert.rejects(f.call('conversation.trash', { conversationId: second }), e => e.error?.kind === 'conflict', 'not while the Agent answers');
+    await assert.rejects(f.call('conversation.delete', { conversationId: first }), e => e.error?.kind === 'conflict', 'only from the trash');
+    const trashed = await f.call('conversation.trash', { conversationId: first });
+    assert.ok(trashed.conversation.trashedAt);
+    assert.deepEqual((await f.call('conversation.list', {})).conversations.map(c => c.conversationId), [second]);
+    assert.deepEqual((await f.call('conversation.list', { trashed: true })).conversations.map(c => c.conversationId), [first]);
+    assert.ok(!(await f.person.call('observation.snapshot', { projectId: f.project.id })).conversations.some(c => c.conversationId === first), 'the project no longer lists it');
+    assert.equal((await f.call('conversation.read', { conversationId: first })).turns.length, 1, 'kept whole');
+    await assert.rejects(f.call('conversation.send', { conversationId: first, changeId: 'again', text: 'more' }), e => e.error?.kind === 'conflict');
+    const third = (await f.call('conversation.start', { changeId: 'trash-3', text: 'hello' })).conversation.conversationId;
+    await f.wait(third, ended);
+    await assert.rejects(f.call('conversation.restore', { conversationId: first }), e => e.error?.kind === 'limit', 'restoring respects the limit');
+    await f.call('conversation.trash', { conversationId: third });
+    assert.equal((await f.call('conversation.restore', { conversationId: first })).conversation.trashedAt, null);
+    const deleted = await f.call('conversation.delete', { conversationId: third });
+    assert.deepEqual(deleted, { conversationId: third, deleted: true });
+    await assert.rejects(f.call('conversation.read', { conversationId: third }), e => e.error?.kind === 'not_found');
+    await assert.rejects(f.call('conversation.start', { changeId: 'trash-3', text: 'hello' }), e => e.error?.kind === 'conflict', 'the deleted request is not started again');
+    await f.call('conversation.stop', { conversationId: second, turnId: 't1' });
+    await f.wait(second, ended);
+  } finally { await f.service.close(); }
+});
+
 test('Agent permission choices are scoped, conditional, retained, and cancelled with the original turn', async () => {
   const root = await fs.mkdtemp('/tmp/rho-acp-choice-'), f = await setup(root);
   try {

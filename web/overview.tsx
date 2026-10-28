@@ -9,8 +9,7 @@ import { compositionName } from './canvas.js';
 import { walkLimits, type ProjectFiles, type SourceItem } from './sources.js';
 import { RunView } from './shell/facts.js';
 import { AgentActivity } from './agent-activity.js';
-import { AgentWork } from './agent-work.js';
-import { AgentSettingsCard } from './agent-settings.js';
+import { AgentPage } from './agent-manage.js';
 import { AgentAccess } from './agents.js';
 import { WorkProgress } from './work-progress.js';
 
@@ -170,15 +169,16 @@ export function ProjectOverview({ project, snapshot, client, section, workspace,
       </section>
       {snapshot.resources.length > 0 && <section className="project-section"><div className="section-heading"><h2>Registered results</h2></div>{resultList}</section>}
     </>}
-    {section === 'agent' && <>
-      {!linked && <AgentSettingsCard client={client} projectId={project.id} />}
-      {!linked && <AgentWork client={client} snapshot={snapshot} exists={path => !!files?.files.some(file => file.path === path)} onContinue={id => onAgent(id)} onPath={path => onPath?.(path)} onNew={() => onNewConversation?.()} />}
+    {section === 'agent' && (() => {
+      const extra = <>
       {(orderedRuns.length > 0 || runsProblem) && <section className="project-section agent-runs"><div className="section-heading"><h2>Runs</h2></div>{error(runsProblem, readAgain)}<div className="activity-list">{orderedRuns.map(runRow)}</div></section>}
       <details className="agent-outside" open={outsideOpen} onToggle={event => setOutsideOpen(event.currentTarget.open)}>
         <summary>{linked ? 'Agent sessions with access' : 'Sessions started outside Rho'}</summary>
         {outsideOpen && <><AgentAccess snapshot={snapshot} outside={!linked} /><AgentActivity client={client} projectId={project.id} onOpened={onOpened} /></>}
       </details>
-    </>}
+      </>;
+      return linked ? extra : <AgentPage client={client} snapshot={snapshot} exists={path => !!files?.files.some(file => file.path === path)} onContinue={id => onAgent(id)} onPath={path => onPath?.(path)} onNew={() => onNewConversation?.()} extra={extra} />;
+    })()}
     {section === 'settings' && <div className="settings-sections"><section className="project-section"><h2>Source folders</h2><SourceFolders folders={project.sources ?? [{ id: project.id, root: project.root, name: projectName(project) }]} busy={adding} onAdd={() => void add()} />{error(sourceError, () => void add())}</section>
       <section className="project-section"><div className="section-heading"><h2>Project health</h2><button disabled={diagnosing} onClick={() => void diagnose()}>{diagnosing ? 'Checking…' : 'Check project'}</button></div>{doctor ? <ul className="health-list">{doctor.map(c => <li key={c.id}><span className={'state ' + c.state}>{c.state === 'ok' ? 'Ready' : c.state === 'fail' ? 'Blocked' : 'Check'}</span><div><p>{c.detail}</p>{c.remedy && <small>{c.remedy}</small>}</div></li>)}</ul> : <p className="muted">Check the tools and capabilities available to this project.</p>}{error(doctorError, () => void diagnose())}</section></div>}
     {inspecting && <dialog ref={runDialog} className="run-dialog" aria-label={inspecting} onClose={() => setInspecting(null)} onClick={event => { if (event.target === event.currentTarget) event.currentTarget.close(); }}><button className="icon-button run-dialog-close" aria-label="Close" onClick={() => runDialog.current?.close()}><Icon name="close" size={18} /></button><RunView key={inspecting} snapshot={snapshot} client={client} operationId={inspecting} runs={runs} readRuns={readAgain} onOpenRun={setInspecting} opener={ref => { const spot = places.get(ref.id + '@' + ref.version); return spot ? () => onLayout(spot.compositionId, spot.viewId) : null; }} /></dialog>}

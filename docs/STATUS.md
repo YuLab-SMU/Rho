@@ -6,11 +6,11 @@ Updated: 2026-10-28.
 
 On 2026-10-27 the user found the project sidebar nearly empty and the main area
 still while the Agent worked. The sidebar now names its places and counts its Sources,
-a Sources file shows in place, one Agent entry opens a page of what it did, the Agent
-and model can be chosen, and the person arranges views as the Agent can
-([record](AGENT-CANVAS-EPISODE.md)). The user then asked for one workspace the person
-and the Agent share, and a Graph of what the Agent did; both now run
-([section](#project-sidebar-workspace-and-graph), [record](GRAPH-EPISODE.md)).
+one Agent entry opens its page, the Agent and model can be chosen, and the person
+arranges views as the Agent can ([record](AGENT-CANVAS-EPISODE.md)). Then came one
+shared workspace and a Graph of what the Agent did ([record](GRAPH-EPISODE.md)), and
+Agent settings with conversation management ([record](AGENT-PAGE-EPISODE.md)); all
+run ([section](#project-sidebar-workspace-and-graph)).
 
 Agent 0.4.11 adds each tool step's title, ACP category and input to the Claude/Codex
 ACP connections of 0.4.10. Eight real Westlake HPC turns from the installed package
@@ -60,18 +60,18 @@ Git retains them at `24d9998b`; they are not requirements or reference designs.
   pending choices. Each line says whether it was reported, named or seen on disk.
 - Tabs drag onto other tabs, into a group or to its side, and the Agent panel's edge
   drags; each drop is the conditional `composition.apply` the Agent's grant also holds.
-- The Agent page lists each Rho conversation's latest messages (request, files,
-  commands, answer, ending and model), then runs and outside sessions. Its card chooses
-  the Agent, model, effort and mode for new conversations among what it last offered,
-  sending nothing; the panel's chip changes an open conversation's between messages.
+- The Agent page's Conversations tab lists conversations by day with model, effort,
+  context, cost, search, Markdown export and a trash (restore; delete only from there);
+  a row opens to its facts and work. Its Agents tab shows each Agent's version, models
+  by provider, own names and settings, and the default; asking is the person's click.
 - Documents 0.4.3 adopts a changed file into a buffer with no unsaved text. Agent
   0.4.12 captures one named file; 0.4.13 applies, changes and inspects ACP settings.
 
-Evidence: Rho 212/212 (serial) and Plugins 92/92 ([ledger](VERIFICATION.json));
-`acceptance:graph` 8/8 and `agent-canvas` 10/10 (controlled peers), `sources`,
-`frontend`, `agent-ui`, pages, shell, person, objects, actions, continuity and plugin UI
-passed. Real Claude runs found defects in following, settings and the Graph; each was
-fixed and run again. Whether a person can follow a fast Agent or read the Graph is unobserved.
+Evidence: Rho 214/214 (serial) and Plugins 92/92 ([ledger](VERIFICATION.json));
+`acceptance:agent-page` 5/5, `graph` 8/8 and `agent-canvas` 10/10 (controlled peers),
+`sources`, `frontend`, `agent-ui`, pages, shell, person, objects, actions, continuity and
+plugin UI passed. Real Claude and Codex runs found defects in following, settings, the
+Graph and the Agent page; each was fixed and run again. No other person has used them.
 
 ## Home, projects and empty project
 

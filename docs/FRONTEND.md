@@ -36,15 +36,18 @@ inspect what happened. The application gives those actions direct places:
 - **Files** opens documents, browses the project's folder and the source folders it
   works in, and filters the current folder. A source folder is named as the person
   named it and opens one level at a time, the same way any other folder does.
-- **Agent** (the sidebar row) is the page of what Agents did here. Each conversation
-  started in Rho lists its latest messages: what the person asked, the files the
-  Agent changed and looked at (each shown in place when chosen), the commands it ran
-  and which were refused, its answer, how the message ended and how long it took.
-  Runs follow when there are any, with their execution records, output, repair
-  context and exports. Sessions started outside Rho — Core-backed Claude Code/dsh
-  activity streams, native errors and observed output files — sit in a section read
-  only while it is open ([activity episode](AGENT-ACTIVITY.md),
-  [Agent page pass](AGENT-CANVAS-EPISODE.md#one-agent-entry-and-the-agent-page)).
+- **Agent** (the sidebar row) has two tabs. Conversations lists those started in Rho
+  by day, searchable and by Agent: each row its title, model, effort, messages, state,
+  context use and cost, with Continue, export as Markdown and the trash; opened, its
+  facts beside what its latest messages did (the files changed and looked at, each
+  shown in place when chosen, the commands and the answer). The trash restores or
+  deletes. Runs follow when there are any, with their execution records, output,
+  repair context and exports. Sessions started outside Rho — Core-backed Claude
+  Code/dsh activity streams, native errors and observed output files — sit in a
+  section read only while it is open. Agents shows Claude Code and Codex: version,
+  whether asked, the default, model, settings, Claude Code's own model names and the
+  providers with their models ([activity episode](AGENT-ACTIVITY.md),
+  [Agents and conversations](AGENT-PAGE-EPISODE.md)).
 - **Project settings** manages source folders and explicitly checks available tools.
 - **Studio** shows the workspaces as tabs, each with its view count; the sidebar lists
   them under Studio. The person and the Agent share one workspace: the one on screen,
@@ -133,10 +136,11 @@ message keeps the project files that changed on disk while it ran) and the folde
 `web/work-progress.tsx` reads `project.work.read` for the local person's project
 Overview: Agent-reported plans/usage, retained native source identities and current
 referenced files. It links back to the original conversation or the Agent page.
-`web/agent-work.tsx` draws the Agent page's conversations from `conversation.read`
-(the latest four messages of up to six conversations at a time) through the same
-step model as the panel. `web/agent-settings.tsx` keeps one copy of
-`conversation.settings.read` per tab for the Agent page's card and the panel's chip;
+`web/agent-manage.tsx` draws the Agent page's tabs from the conversation summaries in
+the snapshot and `conversation.list` for the trash; an opened row reads its latest
+four messages through `web/agent-work.tsx`, the same step model as the panel.
+`web/agent-settings.tsx` keeps one copy of `conversation.settings.read` per tab for
+the Agents tab and the panel's chip;
 asking an Agent what it offers (`conversation.settings.check`) is always the
 person's click.
 Shared notes opens `project-notes.md` in the existing Documents owner; saving is
@@ -206,6 +210,14 @@ the turn and a file it names shown in place, that choosing another view stops
 following until Follow, that a pane the person drags out stays while the Agent's next
 data file joins the data group, and overflow at 1024/390. Evidence goes to
 `work/agent-canvas-acceptance/` by default.
+
+`npm run acceptance:agent-page` drives controlled peers for Claude Code and Codex
+that offer models, settings and Claude Code's own names and report a title, context
+and cost. It checks asking an Agent, its names, providers and models, saving the model,
+effort and default; the rows with their model, effort, context and cost, search and
+the Agent filter; an opened row's facts and rendered table and the Markdown export;
+the trash with Undo, restore and delete, never while the Agent answers; and overflow
+at 1024/390. Evidence goes to `work/agent-page-acceptance/` by default.
 
 `npm run acceptance:graph` drives a controlled peer that runs the real Rscript for two
 messages. It checks the empty Graph, the Agent's flag on the card it reads while the

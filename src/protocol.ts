@@ -86,6 +86,10 @@ export const operations: Record<string, any> = { ...base.operations,
   'conversation.permission': obj({ ...project, conversationId: changeId, turnId: changeId, permissionId: changeId, optionId: { type: 'string', minLength: 1, maxLength: 256 } }),
   'conversation.stop': obj({ ...project, conversationId: changeId, turnId: changeId }),
   'conversation.read': obj({ ...project, conversationId: changeId, before: integer, limit: { type: 'integer', minimum: 1, maximum: 200 } }, ['projectId', 'conversationId']),
+  'conversation.list': obj({ ...project, trashed: { type: 'boolean' } }, ['projectId']),
+  'conversation.trash': obj({ ...project, conversationId: changeId }),
+  'conversation.restore': obj({ ...project, conversationId: changeId }),
+  'conversation.delete': obj({ ...project, conversationId: changeId }),
   // The person's Agent and its settings (model, effort, mode…) among those the Agent offers.
   'conversation.configure': obj({ ...project, conversationId: changeId, configId: choiceText, value: choiceValue }),
   'conversation.settings.read': obj(project),
@@ -195,7 +199,14 @@ for (const [method, schema] of Object.entries(ownerSchemaRecord('annotations', '
 const catalog = { ...contract.capabilityCatalogSchema };
 // A conversation started in Rho and one of its messages: the person's words, the Agent's visible
 // text and tool steps in order, and how the message ended. Hidden reasoning is never kept.
-const conversationSummary = response({ conversationId: text, title: text, client: text, principal: { anyOf: [text, { type: 'null' }] }, createdAt: text, updatedAt: text, version: integer, turns: integer, state: { enum: ['idle', 'running', 'completed', 'failed', 'stopped', 'unknown'] }, lastAt: text });
+// A list reads a conversation from its summary: the Agent's own title for the session, the
+// Agent and adapter, the last model, the person's choices, reported usage and cost, the session
+// identity and whether it is in the trash.
+const conversationSummary = response({ conversationId: text, title: text, client: text, principal: { anyOf: [text, { type: 'null' }] }, createdAt: text, updatedAt: text, version: integer, turns: integer, state: { enum: ['idle', 'running', 'completed', 'failed', 'stopped', 'unknown'] }, lastAt: text,
+  backend: text, agentTitle: { anyOf: [text, { type: 'null' }] }, adapter: { anyOf: [response({ name: text, version: text }, ['name']), { type: 'null' }] }, model: { anyOf: [text, { type: 'null' }] }, config: choices,
+  usage: { anyOf: [response({ used: { type: 'number', minimum: 0 }, size: { type: 'number', minimum: 0 }, cost: { anyOf: [response({ amount: { type: 'number' }, currency: text }), { type: 'null' }] } }), { type: 'null' }] },
+  costUsd: { anyOf: [{ type: 'number' }, { type: 'null' }] }, sessionId: { anyOf: [text, { type: 'null' }] }, trashedAt: { anyOf: [text, { type: 'null' }] } },
+  ['conversationId', 'title', 'client', 'principal', 'createdAt', 'updatedAt', 'version', 'turns', 'state', 'lastAt']);
 const sessionObservation = ownerSchema('agent-session', 'sessionObservationSchema');
 // What one Agent offered, from a check or a conversation's first session, and the person's choices.
 const offered = response({ at: text, source: { enum: ['check', 'conversation'] }, adapter: { anyOf: [response({ name: text, version: text }, ['name']), { type: 'null' }] }, options: array(ownerSchema('agent-session', 'configOptionSchema')), omitted: integer });
@@ -299,6 +310,10 @@ export const responses: Record<string, any> = { ...base.responses, ...ownerRespo
   'conversation.permission': response({ conversation: conversationSummary, turn: conversationTurn }),
   'conversation.stop': response({ conversation: conversationSummary, turn: conversationTurn }),
   'conversation.read': response({ conversation: conversationSummary, observation: { anyOf: [sessionObservation, { type: 'null' }] }, config: choices, first: integer, turns: array(conversationTurn) }, ['conversation', 'first', 'turns']),
+  'conversation.list': response({ conversations: { type: 'array', maxItems: 64, items: conversationSummary } }),
+  'conversation.trash': response({ conversation: conversationSummary }),
+  'conversation.restore': response({ conversation: conversationSummary }),
+  'conversation.delete': response({ conversationId: text, deleted: { const: true } }),
   'conversation.configure': response({ conversation: conversationSummary, observation: { anyOf: [sessionObservation, { type: 'null' }] }, config: choices }),
   'conversation.settings.read': agentSettings,
   'conversation.settings.update': agentSettings,
@@ -367,6 +382,10 @@ export const descriptions = {
   'conversation.stop': 'Person at this machine only: ask the original Agent to stop answering one message. ACP cancellation is confirmed by the original prompt response; a lost connection keeps the outcome unknown. Legacy CLI conversations confirm process exit. Steps already taken stay done.',
   'conversation.permission': 'Person at this machine only: record an offered choice for a pending Agent permission request. The original request identity is retained; repeated identical choices do not respond twice.',
   'conversation.configure': 'Person at this machine only: change one setting the Agent offers (model, effort, mode…) for the next messages of a conversation started in Rho. An open session changes now; otherwise the choice is applied when the session next opens. Refused while a message is being answered.',
+  'conversation.list': 'Person at this machine only: list the conversations started in Rho in this project, or those in its trash, with each one\'s Agent, last model, choices and reported usage. Reading starts nothing.',
+  'conversation.trash': 'Person at this machine only: move a conversation that is not being answered to the trash. It is kept whole and not continued until restored; an idle connection to its Agent ends.',
+  'conversation.restore': 'Person at this machine only: return a conversation from the trash to the project\'s conversations, within the project\'s conversation limit.',
+  'conversation.delete': 'Person at this machine only: delete Rho\'s record of a conversation in the trash. The Agent\'s own session files are not touched. Repeating the request that started it is then refused.',
   'conversation.settings.read': 'Person at this machine only: read the Agent and settings chosen for new conversations and what each Agent last offered. Reading starts nothing.',
   'conversation.settings.update': 'Person at this machine only: choose the Agent and its settings for new conversations, among the values that Agent last offered. A stale expectedVersion is refused.',
   'conversation.settings.check': 'Person at this machine only: start the chosen Agent in this project to read the settings it offers, then remove that session and end the process. No message is sent; one check per Agent runs at a time.',

@@ -47,3 +47,13 @@ test('inline code is literal and Unicode is preserved', () => {
   assert.equal(code.text, 'a ** b');
   assert.match(nodes.map(n => n.text ?? '').join(''), /你好/);
 });
+
+test('a table after a line of prose is a table, with its alignment, code spans holding pipes and short rows filled', () => {
+  const blocks = markdownBlocks('Means by month:\n| Month | Mean | `a|b` |\n|---|--:|:-:|\n| May | 23.6 |\n| Jun | 29.4 | x |\nAfter.');
+  assert.deepEqual(blocks.map(b => b.type), ['paragraph', 'table', 'paragraph']);
+  const table = blocks[1];
+  assert.deepEqual(table.align, [null, 'right', 'center']);
+  assert.deepEqual(table.head.map(c => c.map(n => n.text).join('')), ['Month', 'Mean', 'a|b']);
+  assert.deepEqual(table.rows.map(r => r.map(c => c.map(n => n.text ?? '').join(''))), [['May', '23.6', ''], ['Jun', '29.4', 'x']]);
+  assert.deepEqual(markdownBlocks('a | b\nnot a delimiter').map(b => b.type), ['paragraph'], 'pipes alone are prose');
+});

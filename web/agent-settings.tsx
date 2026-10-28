@@ -2,6 +2,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalSto
 import { BrowserApiError, type BrowserClient } from '../src/browser.js';
 import type { RhoOutput } from '../src/contract.generated.js';
 import { Icon } from './icons.js';
+import { BrandMark, brandOf, ProviderMark } from './brand-marks.js';
 
 // The person's Agent and its settings (model, effort, mode…) for new conversations, and the
 // same controls for one open conversation. The values and their names are the Agent's own,
@@ -71,7 +72,7 @@ export type AgentSettingsState = ReturnType<typeof useAgentSettings>;
 export const modelSetting = (options?: SettingOption[] | null) => options?.find(o => o.category === 'model' && o.type === 'select') ?? null;
 export const effortSetting = (options?: SettingOption[] | null) => options?.find(o => o.category === 'thought_level' && o.type === 'select') ?? null;
 // Names such as "DeepSeek V4.1 Flash · routing group" carry where the model comes from.
-function split(name: string) { const at = name.lastIndexOf(' · '); return at > 0 ? { name: name.slice(0, at), group: name.slice(at + 3) } : { name, group: '' }; }
+export function split(name: string) { const at = name.lastIndexOf(' · '); return at > 0 ? { name: name.slice(0, at), group: name.slice(at + 3) } : { name, group: '' }; }
 export function valueName(option: SettingOption | null | undefined, value: SettingValue | null | undefined) {
   if (value === null || value === undefined) return '';
   if (option?.type === 'boolean' || typeof value === 'boolean') return value ? 'On' : 'Off';
@@ -160,7 +161,7 @@ export function ModelPicker({ option, value, agent, allowDefault, disabled, disa
           {showDefault && <div id={id + '-0'} role="option" aria-selected={value === null} className={'model-option' + (current === 0 ? ' active' : '')} onMouseMove={() => setActive(0)} onClick={() => choose(null)}>
             <span className="model-name">{agent}'s default</span>{defaultName && <span className="model-meta">{defaultName}</span>}{value === null && <Icon name="check" size={14} />}</div>}
           {groups.map(group => <div key={group || '-'} role="group" aria-label={group || agent}>
-            {(group || groups.length > 1) && <span className="model-group" aria-hidden="true">{group || agent}</span>}
+            {(group || groups.length > 1) && <span className="model-group" aria-hidden="true"><ProviderMark name={group || agent} size={13} />{group || agent}</span>}
             {ordered.filter(v => v.group === group).map(v => {
               const index = items.indexOf(v.value);
               return <div key={v.value} id={id + '-' + index} role="option" aria-selected={value === v.value} className={'model-option' + (current === index ? ' active' : '')}
@@ -197,57 +198,21 @@ export function SettingSelect({ option, value, allowDefault, disabled, disabledN
 }
 
 // The settings that matter most first; the rest stay one click away.
-function ordered(options: SettingOption[]) {
+export function ordered(options: SettingOption[]) {
   const model = modelSetting(options), effort = effortSetting(options);
   const mode = options.find(o => o.category === 'mode') ?? null;
   return { model, effort, mode, rest: options.filter(o => o !== model && o !== effort && o !== mode) };
 }
 
-// For new conversations: which Agent, and its model and settings. Shown on the Agent page.
-export function AgentSettingsSection({ state }: { state: AgentSettingsState }) {
-  const { settings, backend } = state, offered = state.offered(backend), choices = state.choices(backend);
-  const checking = state.checking.has(backend), agent = agentLabel[backend];
-  const { model, effort, mode, rest } = ordered(offered?.options ?? []);
-  const choose = (id: string) => (value: SettingValue | null) => void state.choose(backend, id, value);
-  const value = (option: SettingOption) => option.id in choices ? choices[option.id] : null;
-  const source = offered && (offered.source === 'check' ? 'Checked ' : 'Seen when a conversation started ') + when(offered.at);
-  return <section className="agent-settings" aria-labelledby="agent-settings-title">
-    <div className="agent-settings-head">
-      <h2 id="agent-settings-title">New conversations use</h2>
-      {settings && <div className="agent-choice" role="radiogroup" aria-label="Agent">
-        {backends.map(which => <button key={which} role="radio" aria-checked={which === backend} className={which === backend ? 'selected' : ''} onClick={() => which !== backend && void state.chooseAgent(which)}>{agentLabel[which]}</button>)}
-      </div>}
-    </div>
-    {!settings ? <p className="muted" role={state.problem ? 'alert' : 'status'}>{state.problem || 'Reading…'}</p> : <>
-      <div className="agent-settings-row">
-        <ModelPicker option={model} value={model ? (value(model) as string | null) : null} agent={agent} allowDefault checking={checking} checkProblem={state.checkProblem[backend]} onChoose={model ? choose(model.id) : () => {}} onCheck={() => void state.check(backend)} />
-        {effort && <SettingSelect option={effort} value={value(effort)} allowDefault onChoose={choose(effort.id)} />}
-        {mode && <SettingSelect option={mode} value={value(mode)} allowDefault onChoose={choose(mode.id)} />}
-        {rest.map(option => <SettingSelect key={option.id} option={option} value={value(option)} allowDefault onChoose={choose(option.id)} />)}
-      </div>
-      <p className="agent-settings-note">
-        {offered ? <>{agent}{offered.adapter ? ` (${offered.adapter.name.split('/').at(-1)} ${offered.adapter.version ?? ''})`.replace(' )', ')') : ''} offers these. {source}.{offered.omitted ? ` ${offered.omitted} more ${offered.omitted === 1 ? 'value is' : 'values are'} not listed.` : ''} </>
-          : <>Rho has not asked {agent} which models and settings it offers. Asking starts it in this project for a few seconds; no message is sent. </>}
-        <button className="text-button" disabled={checking} onClick={() => void state.check(backend)}>{checking ? 'Asking ' + agent + '…' : offered ? 'Check again' : 'Ask ' + agent}</button>
-      </p>
-      {state.checkProblem[backend] && <p className="inline-error" role="alert">{state.checkProblem[backend]}</p>}
-      {state.problem && <p className="inline-error" role="alert">{state.problem}</p>}
-    </>}
-  </section>;
-}
-
-// Read again each time the page opens: a conversation or another tab may have changed them.
-export function AgentSettingsCard({ client, projectId }: { client: BrowserClient; projectId: string }) {
-  const state = useAgentSettings(client, projectId);
-  useEffect(() => { if (store.value && !store.reading) void load(client, projectId); }, [client, projectId]);
-  return <AgentSettingsSection state={state} />;
-}
+// Read again each time the Agent page opens: a conversation or another tab may have changed them.
+export function refreshAgentSettings(client: BrowserClient, projectId: string) { if (store.value && !store.reading) void load(client, projectId); }
 
 // The compact form under the message box: one chip that names the Agent, model and effort, and
 // opens them together. For a new conversation these are the saved choices; for an open one,
 // that conversation's own settings, changed between messages.
 function Summary({ agent, model, effort }: { agent?: string; model: string; effort?: string }) {
-  return <span className="setting-summary">{agent && <span className="summary-agent">{agent}</span>}<span className="summary-model">{model}</span>{effort && <span className="summary-effort">{effort}</span>}</span>;
+  const brand = agent ? brandOf(agent) : null;
+  return <span className="setting-summary">{agent && <span className="summary-agent">{brand && <BrandMark brand={brand} size={13} />}{agent}</span>}<span className="summary-model">{model}</span>{effort && <span className="summary-effort">{effort}</span>}</span>;
 }
 export function ComposerSettings({ state }: { state: AgentSettingsState }) {
   const { backend } = state, offered = state.offered(backend), choices = state.choices(backend), agent = agentLabel[backend];
@@ -261,7 +226,7 @@ export function ComposerSettings({ state }: { state: AgentSettingsState }) {
       onChoose={next => model && void state.choose(backend, model.id, next)} onCheck={() => void state.check(backend)}
       summary={<Summary agent={agent} model={modelName} effort={effortName} />} summaryText={['Agent and model for a new conversation:', agent, modelName, effortName].filter(Boolean).join(' ')}
       extra={<>
-        <div className="agent-choice" role="radiogroup" aria-label="Agent">{backends.map(which => <button key={which} role="radio" aria-checked={which === backend} className={which === backend ? 'selected' : ''} onClick={() => which !== backend && void state.chooseAgent(which)}>{agentLabel[which]}</button>)}</div>
+        <div className="agent-choice" role="radiogroup" aria-label="Agent">{backends.map(which => <button key={which} role="radio" aria-checked={which === backend} className={which === backend ? 'selected' : ''} onClick={() => which !== backend && void state.chooseAgent(which)}><BrandMark brand={which === 'codex-acp' ? 'codex' : 'claude-code'} size={13} />{agentLabel[which]}</button>)}</div>
         {effort && <SettingSelect option={effort} value={effort.id in choices ? choices[effort.id] : null} allowDefault onChoose={next => void state.choose(backend, effort.id, next)} />}
       </>} />
   </div>;

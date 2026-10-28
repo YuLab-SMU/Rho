@@ -1,0 +1,39 @@
+{
+  "method": "conversation.delete",
+  "inputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "projectId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "conversationId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      }
+    },
+    "required": [
+      "projectId",
+      "conversationId"
+    ]
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "conversationId": {
+        "type": "string",
+        "minLength": 1
+      },
+      "deleted": {
+        "const": true
+      }
+    },
+    "required": [
+      "conversationId",
+      "deleted"
+    ],
+    "additionalProperties": true
+  },
+  "description": "Person at this machine only: delete Rho's record of a conversation in the trash. The Agent's own session files are not touched. Repeating the request that started it is then refused."
+}

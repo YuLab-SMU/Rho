@@ -9,8 +9,12 @@ import type { Project } from './state.js';
 // Rho holds user messages and their original identities. The selected Agent plugin
 // owns the connection, native session and protocol. Reads never start a driver.
 export const conversationLimits = {
-  // Conversations kept per project; starting another is refused.
+  // Conversations kept per project, not counting the trash; starting or restoring another is
+  // refused. The trash keeps as many again; past that, moving one there is refused.
   maxConversations: 64,
+  // Deleted conversations remembered by request identity, so repeating the request that
+  // started one is refused rather than started again; past this the oldest are forgotten.
+  maxDeleted: 256,
   // Messages kept per conversation; sending another is refused.
   maxTurns: 200,
   // One message from the person, in UTF-8 bytes.
@@ -100,6 +104,9 @@ interface Conversation {
   // The person's choices among the settings this conversation's Agent offers, applied each
   // time its session is opened.
   config?: Choices;
+  // Moved to the trash by the person: kept whole, not listed with the project's conversations,
+  // and not continued until restored.
+  trashedAt?: string | null; trashedBy?: string | null;
 }
 type Backend = 'claude-acp' | 'codex-acp';
 const backends: Backend[] = ['claude-acp', 'codex-acp'];
@@ -112,7 +119,15 @@ interface AgentSettings { format: 1; version: number; updatedAt: string | null; 
 const blankSettings = (): AgentSettings => ({ format: 1, version: 0, updatedAt: null, backend: null, choices: {}, offered: {} });
 type AcpDriver = Pick<ClaudeAcpConversation, 'configure' | 'inspect' | 'connected'>;
 const acpDriver = (driver: AgentConversation | undefined): driver is AgentConversation & AcpDriver => !!driver && 'configure' in driver;
-interface Summary { conversationId: string; changeId: string; requestDigest: string; title: string; client: string; principal: string | null; createdAt: string; updatedAt: string; version: number; turns: number; state: string; lastAt: string }
+interface Summary {
+  conversationId: string; changeId: string; requestDigest: string; title: string; client: string; principal: string | null; createdAt: string; updatedAt: string; version: number; turns: number; state: string; lastAt: string;
+  // What a list shows without reading each record: the Agent's own name for the session, the
+  // Agent and its adapter, the last model, the person's choices, what the session reported
+  // using and costing, its session identity and whether it is in the trash.
+  listed?: 1; backend?: string; agentTitle?: string | null; adapter?: { name: string; version?: string } | null; model?: string | null; config?: Choices;
+  usage?: { used: number; size: number; cost: { amount: number; currency: string } | null } | null; costUsd?: number | null; sessionId?: string | null; trashedAt?: string | null;
+}
+interface Index { format: 1; conversations: Summary[]; deleted?: Array<{ conversationId: string; changeId: string; requestDigest: string; deletedAt: string; deletedBy: string }> }
 interface Live { project: Project; conversation: Conversation; turn: Turn; controller: AbortController; stop(reason: StopReason, by: string): void; done: Promise<void>; before?: Disk | null }
 export interface ConversationPorts {
   // The project's Agent grant for this conversation, written to a private connection file.
@@ -152,7 +167,7 @@ export class Conversations {
     await fs.mkdir(directory, { recursive: true, mode: 0o700 }); return directory;
   }
   private async index(project: Project) {
-    return readJson<{ format: 1; conversations: Summary[] }>(path.join(await this.folder(project), 'index.json'), { format: 1, conversations: [] });
+    return readJson<Index>(path.join(await this.folder(project), 'index.json'), { format: 1, conversations: [] });
   }
   private async load(project: Project, id: string): Promise<Conversation> {
     requireThat(identity.test(id), 'not_found', 'No conversation has that identity in this project.');
@@ -167,15 +182,19 @@ export class Conversations {
     return value;
   }
   private summary(c: Conversation): Summary {
-    const last = c.turns.at(-1);
-    return { conversationId: c.id, changeId: c.changeId, requestDigest: c.requestDigest, title: c.title, client: c.client, principal: c.principal, createdAt: c.createdAt, updatedAt: c.updatedAt, version: c.version, turns: c.turns.length, state: last?.state ?? 'idle', lastAt: last?.endedAt ?? last?.sentAt ?? c.createdAt };
+    const last = c.turns.at(-1), usage = c.observation?.usage;
+    const costs = c.turns.map(t => t.result?.costUsd).filter((v): v is number => typeof v === 'number');
+    return { conversationId: c.id, changeId: c.changeId, requestDigest: c.requestDigest, title: c.title, client: c.client, principal: c.principal, createdAt: c.createdAt, updatedAt: c.updatedAt, version: c.version, turns: c.turns.length, state: last?.state ?? 'idle', lastAt: last?.endedAt ?? last?.sentAt ?? c.createdAt,
+      listed: 1, backend: c.backend ?? 'claude-cli', agentTitle: c.observation?.info?.title ?? null, adapter: c.adapter ?? null, model: [...c.turns].reverse().find(t => t.model)?.model ?? null, config: c.config ?? {},
+      usage: usage ? { used: usage.used, size: usage.size, cost: usage.cost ?? null } : null, costUsd: costs.length ? costs.reduce((a, b) => a + b, 0) : null,
+      sessionId: c.acpSessionId ?? c.nativeSessionId ?? null, trashedAt: c.trashedAt ?? null };
   }
   private async write(project: Project, c: Conversation) {
     const directory = await this.folder(project);
     c.version++; c.updatedAt = now();
     await atomicJson(path.join(directory, c.id + '.json'), c);
     const index = await this.index(project);
-    await atomicJson(path.join(directory, 'index.json'), { format: 1, conversations: [...index.conversations.filter(x => x.conversationId !== c.id), this.summary(c)] });
+    await atomicJson(path.join(directory, 'index.json'), { ...index, conversations: [...index.conversations.filter(x => x.conversationId !== c.id), this.summary(c)] });
     await this.ports.changed(project, c.id).catch(() => {});
   }
   private schedule(project: Project, c: Conversation) {
@@ -195,7 +214,7 @@ export class Conversations {
   private reply(project: Project, c: Conversation, turn: Turn) { return { conversation: this.listed(project, this.summary(c)), turn: this.view(project, c, turn) }; }
   private listed(project: Project, s: Summary) {
     const live = [...this.live.values()].some(x => x.project.id === project.id && x.conversation.id === s.conversationId);
-    const { changeId, requestDigest, ...shown } = s;
+    const { changeId, requestDigest, listed, ...shown } = s;
     return { ...shown, state: s.state === 'running' && !live ? 'unknown' : s.state };
   }
   private message(text: string) {
@@ -211,9 +230,65 @@ export class Conversations {
     return { id: 't' + index, changeId, requestDigest, by, text, sentAt: now(), state: 'running', startedAt: null, endedAt: null, pid: null, model: null, stop: null, exit: null, steps: [], omitted: 0, retry: null, result: null, problem: null };
   }
 
-  async list(project: Project) {
+  // The project's conversations, or those in its trash.
+  async list(project: Project, input: { trashed?: boolean } = {}) {
+    let index = await this.index(project);
+    if (index.conversations.some(s => !s.listed)) index = await this.serial(project.id, () => this.relist(project));
+    return index.conversations.filter(s => !!s.trashedAt === !!input.trashed).map(s => this.listed(project, s)).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  }
+  // Summaries written before lists carried their fields are rebuilt from the records once.
+  private async relist(project: Project) {
     const index = await this.index(project);
-    return index.conversations.map(s => this.listed(project, s)).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    if (!index.conversations.some(s => !s.listed)) return index;
+    const conversations = await Promise.all(index.conversations.map(async s => s.listed ? s
+      : await this.load(project, s.conversationId).then(c => this.summary(c), () => ({ ...s, listed: 1 as const }))));
+    const next = { ...index, conversations };
+    await atomicJson(path.join(await this.folder(project), 'index.json'), next);
+    return next;
+  }
+  // Moving a conversation to the trash keeps it whole and frees its place among the project's
+  // conversations; it cannot be continued until restored. An idle connection to its Agent ends.
+  async trash(project: Project, by: string, input: { conversationId: string }) {
+    const result = await this.serial(project.id, async () => {
+      const c = await this.load(project, input.conversationId);
+      if (c.trashedAt) return { conversation: this.listed(project, this.summary(c)) };
+      requireThat(![...this.live.values()].some(x => x.project.id === project.id && x.conversation.id === c.id), 'conflict', 'The Agent is answering in this conversation. Stop it before moving the conversation to the trash.');
+      const index = await this.index(project);
+      requireThat(index.conversations.filter(s => s.trashedAt).length < this.limits.maxConversations, 'limit', `The trash keeps at most ${this.limits.maxConversations} conversations. Delete some there first.`, { limit: 'maxConversations', maximum: this.limits.maxConversations });
+      c.trashedAt = now(); c.trashedBy = by;
+      await this.write(project, c);
+      return { conversation: this.listed(project, this.summary(c)) };
+    });
+    const key = project.id + '/' + input.conversationId;
+    if (this.drivers.has(key)) await this.serial('driver-pool', () => this.retire(key)).catch(() => {});
+    return result;
+  }
+  async restore(project: Project, input: { conversationId: string }) {
+    return this.serial(project.id, async () => {
+      const c = await this.load(project, input.conversationId);
+      if (!c.trashedAt) return { conversation: this.listed(project, this.summary(c)) };
+      const index = await this.index(project);
+      requireThat(index.conversations.filter(s => !s.trashedAt).length < this.limits.maxConversations, 'limit', `This project keeps at most ${this.limits.maxConversations} conversations started in Rho. Move one to the trash first.`, { limit: 'maxConversations', maximum: this.limits.maxConversations });
+      c.trashedAt = null; c.trashedBy = null;
+      await this.write(project, c);
+      return { conversation: this.listed(project, this.summary(c)) };
+    });
+  }
+  // Deleting removes Rho's record of a conversation in the trash. The Agent's own copy of the
+  // session (Claude Code's or Codex's files) is theirs and stays. The request that started it is
+  // remembered, so repeating it is refused rather than starting the conversation again.
+  async delete(project: Project, by: string, input: { conversationId: string }) {
+    return this.serial(project.id, async () => {
+      const c = await this.load(project, input.conversationId);
+      requireThat(c.trashedAt, 'conflict', 'Move the conversation to the trash before deleting it.');
+      requireThat(!this.drivers.has(project.id + '/' + c.id), 'conflict', 'Rho is still closing this conversation\'s Agent. Try again in a moment.');
+      const directory = await this.folder(project), index = await this.index(project);
+      const deleted = [...(index.deleted ?? []), { conversationId: c.id, changeId: c.changeId, requestDigest: c.requestDigest, deletedAt: now(), deletedBy: by }].slice(-this.limits.maxDeleted);
+      await atomicJson(path.join(directory, 'index.json'), { ...index, conversations: index.conversations.filter(x => x.conversationId !== c.id), deleted });
+      await fs.rm(path.join(directory, c.id + '.json'), { force: true });
+      await this.ports.changed(project, c.id).catch(() => {});
+      return { conversationId: c.id, deleted: true as const };
+    });
   }
   async read(project: Project, input: { conversationId: string; before?: number; limit?: number }) {
     const c = await this.load(project, input.conversationId);
@@ -241,11 +316,12 @@ export class Conversations {
     const text = this.message(input.text), requestDigest = digest(canonical({ text, ...(input.backend ? { backend: input.backend } : {}), ...(input.config ? { config: input.config } : {}) }));
     return this.serial(project.id, async () => {
       const index = await this.index(project), existing = index.conversations.find(x => x.changeId === input.changeId);
+      requireThat(!index.deleted?.some(x => x.changeId === input.changeId), 'conflict', 'That request started a conversation that was later deleted. It is not started again.');
       if (existing) {
         requireThat(existing.requestDigest === requestDigest, 'conflict', 'That request identity already started a different conversation.');
         const c = await this.load(project, existing.conversationId); return this.reply(project, c, c.turns[0]);
       }
-      requireThat(index.conversations.length < this.limits.maxConversations, 'limit', `This project keeps at most ${this.limits.maxConversations} conversations started in Rho.`, { limit: 'maxConversations', maximum: this.limits.maxConversations });
+      requireThat(index.conversations.filter(x => !x.trashedAt).length < this.limits.maxConversations, 'limit', `This project keeps at most ${this.limits.maxConversations} conversations started in Rho. Move one to the trash to start another.`, { limit: 'maxConversations', maximum: this.limits.maxConversations });
       this.capacity();
       const saved = await this.readSettings();
       const backend = input.backend ?? saved.backend ?? this.config.backend ?? 'claude-acp';
@@ -267,6 +343,7 @@ export class Conversations {
         requireThat(existing.requestDigest === requestDigest, 'conflict', 'That request identity already sent a different message.');
         return this.reply(project, c, existing);
       }
+      requireThat(!c.trashedAt, 'conflict', 'This conversation is in the trash. Restore it to continue.');
       const last = c.turns.at(-1);
       requireThat(!last || last.state !== 'running' || !this.liveTurn(project, c, last), 'conflict', 'The Agent is still answering the previous message. Wait for it, or stop it, before sending another.');
       if (last?.state === 'running' && last.pid) {
@@ -291,6 +368,7 @@ export class Conversations {
     return this.serial(project.id, async () => {
       const c = await this.load(project, input.conversationId), last = c.turns.at(-1);
       requireThat(c.backend === 'claude-acp' || c.backend === 'codex-acp', 'unavailable', 'This conversation\'s Agent has no settings Rho can change.');
+      requireThat(!c.trashedAt, 'conflict', 'This conversation is in the trash. Restore it to change its settings.');
       requireThat(!last || last.state !== 'running' || !this.liveTurn(project, c, last), 'conflict', 'The Agent is answering. Change its settings after this message.');
       const driver = this.drivers.get(project.id + '/' + c.id)?.driver;
       if (acpDriver(driver) && driver.connected) {

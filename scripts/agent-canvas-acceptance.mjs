@@ -144,7 +144,9 @@ try {
   // The Agent page keeps what the turn did; the sidebar's Agent row is the one Agent entry.
   assert.equal(await page.locator('.topbar').getByRole('button', { name: 'Agent panel' }).count(), 0, 'no second Agent entry beside the sidebar');
   await nav.getByRole('button', { name: 'Agent', exact: true }).click();
-  const card = page.locator('.work-card').filter({ hasText: 'Fit ozone on temperature and draw it.' });
+  const row = page.locator('.conv-row').filter({ hasText: 'Fit ozone on temperature and draw it.' });
+  await row.getByRole('button', { name: /^Show details of / }).click();
+  const card = row.locator('.conv-details');
   await card.locator('.work-answer').filter({ hasText: 'I fitted ozone on temperature' }).waitFor();
   const lines = await card.locator('.work-line').evaluateAll(rows => rows.map(row => row.textContent));
   assert.deepEqual(lines, ['Changedanalysis.Redited', 'Looked atairquality.csv']);

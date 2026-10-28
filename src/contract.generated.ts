@@ -5,7 +5,7 @@
 // value an accepted response carries. The service, the Node client and the browser
 // client are all written against these types; runtime validation stays with Ajv.
 //
-// Contract identity: apiVersion 2.0, schemaVersion 2, 100 operations.
+// Contract identity: apiVersion 2.0, schemaVersion 2, 104 operations.
 export interface RhoOperationError {
   kind:
     | 'invalid'
@@ -4465,6 +4465,27 @@ export interface ConversationConfigureOutput {
     turns: number;
     state: 'idle' | 'running' | 'completed' | 'failed' | 'stopped' | 'unknown';
     lastAt: string;
+    backend?: string;
+    agentTitle?: string | null;
+    adapter?: {
+      name: string;
+      version?: string;
+    } | null;
+    model?: string | null;
+    config?: {
+      [k: string]: string | boolean;
+    };
+    usage?: {
+      used: number;
+      size: number;
+      cost: {
+        amount: number;
+        currency: string;
+      } | null;
+    } | null;
+    costUsd?: number | null;
+    sessionId?: string | null;
+    trashedAt?: string | null;
   };
   observation: {
     at: string;
@@ -4554,6 +4575,60 @@ export interface ConversationConfigureOutput {
   };
 }
 
+export interface ConversationDeleteInput {
+  projectId: string;
+  conversationId: string;
+}
+
+export interface ConversationDeleteOutput {
+  conversationId: string;
+  deleted: true;
+}
+
+export interface ConversationListInput {
+  projectId: string;
+  trashed?: boolean;
+}
+
+export interface ConversationListOutput {
+  /**
+   * @maxItems 64
+   */
+  conversations: {
+    conversationId: string;
+    title: string;
+    client: string;
+    principal: string | null;
+    createdAt: string;
+    updatedAt: string;
+    version: number;
+    turns: number;
+    state: 'idle' | 'running' | 'completed' | 'failed' | 'stopped' | 'unknown';
+    lastAt: string;
+    backend?: string;
+    agentTitle?: string | null;
+    adapter?: {
+      name: string;
+      version?: string;
+    } | null;
+    model?: string | null;
+    config?: {
+      [k: string]: string | boolean;
+    };
+    usage?: {
+      used: number;
+      size: number;
+      cost: {
+        amount: number;
+        currency: string;
+      } | null;
+    } | null;
+    costUsd?: number | null;
+    sessionId?: string | null;
+    trashedAt?: string | null;
+  }[];
+}
+
 export interface ConversationPermissionInput {
   projectId: string;
   conversationId: string;
@@ -4574,6 +4649,27 @@ export interface ConversationPermissionOutput {
     turns: number;
     state: 'idle' | 'running' | 'completed' | 'failed' | 'stopped' | 'unknown';
     lastAt: string;
+    backend?: string;
+    agentTitle?: string | null;
+    adapter?: {
+      name: string;
+      version?: string;
+    } | null;
+    model?: string | null;
+    config?: {
+      [k: string]: string | boolean;
+    };
+    usage?: {
+      used: number;
+      size: number;
+      cost: {
+        amount: number;
+        currency: string;
+      } | null;
+    } | null;
+    costUsd?: number | null;
+    sessionId?: string | null;
+    trashedAt?: string | null;
   };
   turn: {
     id: string;
@@ -4665,6 +4761,27 @@ export interface ConversationReadOutput {
     turns: number;
     state: 'idle' | 'running' | 'completed' | 'failed' | 'stopped' | 'unknown';
     lastAt: string;
+    backend?: string;
+    agentTitle?: string | null;
+    adapter?: {
+      name: string;
+      version?: string;
+    } | null;
+    model?: string | null;
+    config?: {
+      [k: string]: string | boolean;
+    };
+    usage?: {
+      used: number;
+      size: number;
+      cost: {
+        amount: number;
+        currency: string;
+      } | null;
+    } | null;
+    costUsd?: number | null;
+    sessionId?: string | null;
+    trashedAt?: string | null;
   };
   observation?: {
     at: string;
@@ -4824,6 +4941,47 @@ export interface ConversationReadOutput {
   }[];
 }
 
+export interface ConversationRestoreInput {
+  projectId: string;
+  conversationId: string;
+}
+
+export interface ConversationRestoreOutput {
+  conversation: {
+    conversationId: string;
+    title: string;
+    client: string;
+    principal: string | null;
+    createdAt: string;
+    updatedAt: string;
+    version: number;
+    turns: number;
+    state: 'idle' | 'running' | 'completed' | 'failed' | 'stopped' | 'unknown';
+    lastAt: string;
+    backend?: string;
+    agentTitle?: string | null;
+    adapter?: {
+      name: string;
+      version?: string;
+    } | null;
+    model?: string | null;
+    config?: {
+      [k: string]: string | boolean;
+    };
+    usage?: {
+      used: number;
+      size: number;
+      cost: {
+        amount: number;
+        currency: string;
+      } | null;
+    } | null;
+    costUsd?: number | null;
+    sessionId?: string | null;
+    trashedAt?: string | null;
+  };
+}
+
 export interface ConversationSendInput {
   projectId: string;
   conversationId: string;
@@ -4843,6 +5001,27 @@ export interface ConversationSendOutput {
     turns: number;
     state: 'idle' | 'running' | 'completed' | 'failed' | 'stopped' | 'unknown';
     lastAt: string;
+    backend?: string;
+    agentTitle?: string | null;
+    adapter?: {
+      name: string;
+      version?: string;
+    } | null;
+    model?: string | null;
+    config?: {
+      [k: string]: string | boolean;
+    };
+    usage?: {
+      used: number;
+      size: number;
+      cost: {
+        amount: number;
+        currency: string;
+      } | null;
+    } | null;
+    costUsd?: number | null;
+    sessionId?: string | null;
+    trashedAt?: string | null;
   };
   turn: {
     id: string;
@@ -5170,6 +5349,27 @@ export interface ConversationStartOutput {
     turns: number;
     state: 'idle' | 'running' | 'completed' | 'failed' | 'stopped' | 'unknown';
     lastAt: string;
+    backend?: string;
+    agentTitle?: string | null;
+    adapter?: {
+      name: string;
+      version?: string;
+    } | null;
+    model?: string | null;
+    config?: {
+      [k: string]: string | boolean;
+    };
+    usage?: {
+      used: number;
+      size: number;
+      cost: {
+        amount: number;
+        currency: string;
+      } | null;
+    } | null;
+    costUsd?: number | null;
+    sessionId?: string | null;
+    trashedAt?: string | null;
   };
   turn: {
     id: string;
@@ -5260,6 +5460,27 @@ export interface ConversationStopOutput {
     turns: number;
     state: 'idle' | 'running' | 'completed' | 'failed' | 'stopped' | 'unknown';
     lastAt: string;
+    backend?: string;
+    agentTitle?: string | null;
+    adapter?: {
+      name: string;
+      version?: string;
+    } | null;
+    model?: string | null;
+    config?: {
+      [k: string]: string | boolean;
+    };
+    usage?: {
+      used: number;
+      size: number;
+      cost: {
+        amount: number;
+        currency: string;
+      } | null;
+    } | null;
+    costUsd?: number | null;
+    sessionId?: string | null;
+    trashedAt?: string | null;
   };
   turn: {
     id: string;
@@ -5329,6 +5550,47 @@ export interface ConversationStopOutput {
       omitted: number;
       partial: boolean;
     };
+  };
+}
+
+export interface ConversationTrashInput {
+  projectId: string;
+  conversationId: string;
+}
+
+export interface ConversationTrashOutput {
+  conversation: {
+    conversationId: string;
+    title: string;
+    client: string;
+    principal: string | null;
+    createdAt: string;
+    updatedAt: string;
+    version: number;
+    turns: number;
+    state: 'idle' | 'running' | 'completed' | 'failed' | 'stopped' | 'unknown';
+    lastAt: string;
+    backend?: string;
+    agentTitle?: string | null;
+    adapter?: {
+      name: string;
+      version?: string;
+    } | null;
+    model?: string | null;
+    config?: {
+      [k: string]: string | boolean;
+    };
+    usage?: {
+      used: number;
+      size: number;
+      cost: {
+        amount: number;
+        currency: string;
+      } | null;
+    } | null;
+    costUsd?: number | null;
+    sessionId?: string | null;
+    trashedAt?: string | null;
   };
 }
 
@@ -7821,6 +8083,27 @@ export interface ObservationSnapshotOutput {
     turns: number;
     state: 'idle' | 'running' | 'completed' | 'failed' | 'stopped' | 'unknown';
     lastAt: string;
+    backend?: string;
+    agentTitle?: string | null;
+    adapter?: {
+      name: string;
+      version?: string;
+    } | null;
+    model?: string | null;
+    config?: {
+      [k: string]: string | boolean;
+    };
+    usage?: {
+      used: number;
+      size: number;
+      cost: {
+        amount: number;
+        currency: string;
+      } | null;
+    } | null;
+    costUsd?: number | null;
+    sessionId?: string | null;
+    trashedAt?: string | null;
   }[];
   selection: {
     resource: {
@@ -10990,14 +11273,18 @@ export interface RhoOperations {
   "context.create": { input: ContextCreateInput; output: ContextCreateOutput };
   "context.read": { input: ContextReadInput; output: ContextReadOutput };
   "conversation.configure": { input: ConversationConfigureInput; output: ConversationConfigureOutput };
+  "conversation.delete": { input: ConversationDeleteInput; output: ConversationDeleteOutput };
+  "conversation.list": { input: ConversationListInput; output: ConversationListOutput };
   "conversation.permission": { input: ConversationPermissionInput; output: ConversationPermissionOutput };
   "conversation.read": { input: ConversationReadInput; output: ConversationReadOutput };
+  "conversation.restore": { input: ConversationRestoreInput; output: ConversationRestoreOutput };
   "conversation.send": { input: ConversationSendInput; output: ConversationSendOutput };
   "conversation.settings.check": { input: ConversationSettingsCheckInput; output: ConversationSettingsCheckOutput };
   "conversation.settings.read": { input: ConversationSettingsReadInput; output: ConversationSettingsReadOutput };
   "conversation.settings.update": { input: ConversationSettingsUpdateInput; output: ConversationSettingsUpdateOutput };
   "conversation.start": { input: ConversationStartInput; output: ConversationStartOutput };
   "conversation.stop": { input: ConversationStopInput; output: ConversationStopOutput };
+  "conversation.trash": { input: ConversationTrashInput; output: ConversationTrashOutput };
   "data.compare": { input: DataCompareInput; output: DataCompareOutput };
   "data.page": { input: DataPageInput; output: DataPageOutput };
   "data.plot": { input: DataPlotInput; output: DataPlotOutput };
@@ -11065,5 +11352,5 @@ export type RhoInput<M extends RhoMethod> = RhoOperations[M]['input'];
 export type RhoOutput<M extends RhoMethod> = RhoOperations[M]['output'];
 
 /** The names a caller may pass to protocol.describe / protocol.validate. */
-export const rhoMethods = ["action.cancel","action.export","action.list","action.lookup","action.observe","action.output","action.retry","action.submit","agent.activity.capture","agent.activity.outputs","agent.activity.read","annotation.create","annotation.list","annotation.read","annotation.reply","artifact.check","binding.activity","binding.activity.append","binding.close","binding.list","binding.open","capability.configure","capability.index","capability.list","capability.resolve","composition.apply","composition.put","composition.read","composition.undo","context.create","context.read","conversation.configure","conversation.permission","conversation.read","conversation.send","conversation.settings.check","conversation.settings.read","conversation.settings.update","conversation.start","conversation.stop","data.compare","data.page","data.plot","document.abandonSave","document.change.read","document.edit","document.history","document.open","document.read","document.revert","document.save","document.undo","document.undoOwn","feedback.read","feedback.status","feedback.submit","interaction.selection.read","interaction.selection.set","media.describe","object.read","observation.snapshot","project.create","project.createWorkspace","project.doctor","project.entries","project.list","project.open","project.openFile","project.pick","project.runs","project.source.add","project.source.pick","project.work.read","protocol.describe","protocol.validate","requirements.check","requirements.prepare","resource.list","resource.read","resource.register","selection.set","session.browser.pair","session.browser.revoke","session.grant","skill.list","skill.read","task.map.declare","task.map.present","task.map.read","task.map.respond","task.routing.put","view.close","view.observations.read","view.observe","view.protection.set","workspace.enhance","workspace.export","workspace.observe","workspace.restore","workspace.save"] as const satisfies readonly RhoMethod[];
+export const rhoMethods = ["action.cancel","action.export","action.list","action.lookup","action.observe","action.output","action.retry","action.submit","agent.activity.capture","agent.activity.outputs","agent.activity.read","annotation.create","annotation.list","annotation.read","annotation.reply","artifact.check","binding.activity","binding.activity.append","binding.close","binding.list","binding.open","capability.configure","capability.index","capability.list","capability.resolve","composition.apply","composition.put","composition.read","composition.undo","context.create","context.read","conversation.configure","conversation.delete","conversation.list","conversation.permission","conversation.read","conversation.restore","conversation.send","conversation.settings.check","conversation.settings.read","conversation.settings.update","conversation.start","conversation.stop","conversation.trash","data.compare","data.page","data.plot","document.abandonSave","document.change.read","document.edit","document.history","document.open","document.read","document.revert","document.save","document.undo","document.undoOwn","feedback.read","feedback.status","feedback.submit","interaction.selection.read","interaction.selection.set","media.describe","object.read","observation.snapshot","project.create","project.createWorkspace","project.doctor","project.entries","project.list","project.open","project.openFile","project.pick","project.runs","project.source.add","project.source.pick","project.work.read","protocol.describe","protocol.validate","requirements.check","requirements.prepare","resource.list","resource.read","resource.register","selection.set","session.browser.pair","session.browser.revoke","session.grant","skill.list","skill.read","task.map.declare","task.map.present","task.map.read","task.map.respond","task.routing.put","view.close","view.observations.read","view.observe","view.protection.set","workspace.enhance","workspace.export","workspace.observe","workspace.restore","workspace.save"] as const satisfies readonly RhoMethod[];
 export type RhoInputFor<M extends RhoMethod> = RhoOperations[M]['input'];

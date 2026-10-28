@@ -252,7 +252,7 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .agent-settings-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .agent-settings-head h2 { font-size: 13px; font-weight: 600; }
 .agent-choice { display: inline-flex; gap: 2px; padding: 2px; border-radius: 8px; background: var(--color-well); }
-.agent-choice button { min-height: 26px; padding: 3px 11px; border: 0; border-radius: 6px; background: transparent; color: var(--color-muted); font-size: 12px; font-weight: 500; }
+.agent-choice button { gap: 6px; min-height: 26px; padding: 3px 11px; border: 0; border-radius: 6px; background: transparent; color: var(--color-muted); font-size: 12px; font-weight: 500; }
 .agent-choice button:hover { color: var(--color-ink); }
 .agent-choice button.selected { background: var(--color-surface); color: var(--color-ink); font-weight: 600; box-shadow: 0 1px 2px rgba(20, 30, 25, 0.12); }
 .agent-settings-row, .composer-settings { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
@@ -274,7 +274,7 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .model-search { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--color-divider); color: var(--color-meta); }
 .model-search input { flex: 1; min-width: 0; padding: 4px 0; border: 0; outline: none; box-shadow: none; background: transparent; font-size: 13px; }
 .model-list { position: relative; flex: 1 1 auto; min-height: 60px; max-height: 320px; overflow-y: auto; overscroll-behavior: contain; padding: 5px; }
-.model-group { display: block; padding: 10px 8px 4px; color: var(--color-meta); font-size: 11px; }
+.model-group { display: flex; align-items: center; gap: 6px; padding: 10px 8px 4px; color: var(--color-meta); font-size: 11px; }
 .model-option { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 6px; font-size: 12.5px; cursor: pointer; }
 .model-option.active { background: var(--color-selected); }
 .model-option[aria-selected=true] .model-name { font-weight: 600; }
@@ -287,6 +287,7 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .composer-settings .model-picker, .composer-settings .setting-chip { width: auto; max-width: 100%; }
 .setting-summary { display: flex; align-items: baseline; gap: 7px; min-width: 0; overflow: hidden; white-space: nowrap; }
 .summary-agent, .summary-effort { flex: none; color: var(--color-meta); }
+.summary-agent { display: inline-flex; align-items: center; gap: 5px; }
 .summary-model { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .model-extra { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--color-divider); }
 .agent-outside { border-top: 1px solid var(--color-hairline); padding-top: 14px; }
@@ -550,6 +551,12 @@ body[data-resizing=col] { cursor: col-resize; user-select: none; }
 .md-list { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 2px; }
 .md-list li { overflow-wrap: anywhere; }
 .md-code { margin: 0; padding: 8px 10px; border: 1px solid var(--color-divider); border-radius: 6px; background: var(--color-well); white-space: pre; overflow: auto; font-size: 11.5px; line-height: 1.5; }
+/* A table scrolls on its own when it is wider than the text. */
+.md-table { max-width: 100%; overflow-x: auto; border: 1px solid var(--color-divider); border-radius: 6px; }
+.md-table table { border-collapse: collapse; font-size: 12.5px; line-height: 1.45; font-variant-numeric: tabular-nums; }
+.md-table th, .md-table td { padding: 5px 10px; border-bottom: 1px solid var(--color-divider); text-align: left; vertical-align: top; white-space: nowrap; }
+.md-table th { background: var(--color-well); color: var(--color-muted); font-weight: 600; }
+.md-table tr:last-child td { border-bottom: 0; }
 .md-inline { padding: 1px 4px; border-radius: 4px; background: var(--color-well); font-size: 11.5px; }
 .turn-text blockquote { margin: 0; padding-left: 10px; border-left: 2px solid var(--color-hairline-strong); color: var(--color-muted); }
 .md-rule { margin: 10px 0; border: 0; border-top: 1px solid var(--color-divider); }

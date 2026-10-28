@@ -27,6 +27,10 @@ function blockNode(block: Block, key: string, caret: boolean): ReactNode {
       return block.ordered ? <ol key={key} className="md-list">{items}</ol> : <ul key={key} className="md-list">{items}</ul>;
     }
     case 'quote': return <blockquote key={key}>{inlineNodes(block.children, caret)}</blockquote>;
+    case 'table': return <div key={key} className="md-table"><table>
+      <thead><tr>{block.head.map((cell, c) => <th key={c} style={block.align[c] ? { textAlign: block.align[c]! } : undefined}>{inlineNodes(cell)}</th>)}</tr></thead>
+      <tbody>{block.rows.map((row, r) => <tr key={r}>{row.map((cell, c) => <td key={c} style={block.align[c] ? { textAlign: block.align[c]! } : undefined}>{inlineNodes(cell, caret && r === block.rows.length - 1 && c === row.length - 1)}</td>)}</tr>)}</tbody>
+    </table></div>;
     case 'rule': return <Fragment key={key}><hr className="md-rule" />{caret && <span className="stream-caret" aria-hidden="true" />}</Fragment>;
     default: return null;
   }

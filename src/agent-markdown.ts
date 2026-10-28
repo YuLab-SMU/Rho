@@ -14,6 +14,7 @@ export type Block =
   | { type: 'code'; text: string; language: string | null }
   | { type: 'list'; ordered: boolean; items: Inline[][] }
   | { type: 'quote'; children: Inline[] }
+  | { type: 'table'; align: Array<'left' | 'center' | 'right' | null>; head: Inline[][]; rows: Inline[][][] }
   | { type: 'rule' };
 
 export function safeHref(value: string) {
@@ -78,6 +79,24 @@ export function inlineMarkdown(source: string): Inline[] {
   flush();
   return out;
 }
+// A table row's cells: split on pipes outside code spans, without the outer pipes.
+function cells(line: string) {
+  const out: string[] = [];
+  let cell = '', ticks = 0;
+  const text = line.trim().replace(/^\|/, '').replace(/(?<!\\)\|$/, '');
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    if (char === '\\' && text[i + 1] === '|') { cell += '|'; i++; continue; }
+    if (char === '`') ticks = ticks ? 0 : 1;
+    if (char === '|' && !ticks) { out.push(cell.trim()); cell = ''; continue; }
+    cell += char;
+  }
+  out.push(cell.trim());
+  return out;
+}
+const delimiter = /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/;
+// A header row with pipes, then a row of dashes with as many cells.
+const startsTable = (line: string, next: string | undefined) => line.includes('|') && next !== undefined && delimiter.test(next) && next.includes('-') && cells(line).length === cells(next).length;
 const startsBlock = (line: string) => /^(#{1,6})\s+/.test(line) || /^(```+|~~~+)/.test(line) || /^ {0,3}>/.test(line) || /^ {0,3}([-*+]|\d+[.)])\s+/.test(line) || /^ {0,3}(-{3,}|\*{3,}|_{3,})\s*$/.test(line);
 // A fence that has not been closed yet is still code: streaming shows the block
 // as it arrives rather than flashing raw backticks until the last chunk.
@@ -95,6 +114,19 @@ export function markdownBlocks(source: string): Block[] {
       while (i < lines.length && !close.test(lines[i])) { body.push(lines[i]); i++; }
       if (i < lines.length) i++;
       blocks.push({ type: 'code', text: body.join('\n'), language: fence[2] || null });
+      continue;
+    }
+    if (startsTable(line, lines[i + 1])) {
+      const head = cells(line), width = head.length;
+      const align = cells(lines[i + 1]).map(c => c.startsWith(':') && c.endsWith(':') ? 'center' as const : c.endsWith(':') ? 'right' as const : c.startsWith(':') ? 'left' as const : null);
+      const rows: Inline[][][] = [];
+      i += 2;
+      while (i < lines.length && lines[i].trim() && lines[i].includes('|')) {
+        const row = cells(lines[i]);
+        rows.push(Array.from({ length: width }, (_, c) => inlineMarkdown(row[c] ?? '')));
+        i++;
+      }
+      blocks.push({ type: 'table', align, head: head.map(c => inlineMarkdown(c)), rows });
       continue;
     }
     const heading = /^(#{1,6})\s+(.*)$/.exec(line);
@@ -122,7 +154,7 @@ export function markdownBlocks(source: string): Block[] {
     }
     const body = [line.trim()];
     i++;
-    while (i < lines.length && lines[i].trim() && !startsBlock(lines[i])) { body.push(lines[i].trim()); i++; }
+    while (i < lines.length && lines[i].trim() && !startsBlock(lines[i]) && !startsTable(lines[i], lines[i + 1])) { body.push(lines[i].trim()); i++; }
     blocks.push({ type: 'paragraph', children: inlineMarkdown(body.join('\n')) });
   }
   return blocks;

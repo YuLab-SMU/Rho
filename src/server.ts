@@ -803,6 +803,10 @@ export class RhoService {
       if (method === 'conversation.read') return this.conversations.read(p, b);
       if (method === 'conversation.permission') return this.conversations.permission(p, principal.id, b);
       if (method === 'conversation.stop') return this.conversations.stop(p, principal.id, b);
+      if (method === 'conversation.list') return { conversations: await this.conversations.list(p, b) };
+      if (method === 'conversation.trash') return this.conversations.trash(p, principal.id, b);
+      if (method === 'conversation.restore') return this.conversations.restore(p, b);
+      if (method === 'conversation.delete') return this.conversations.delete(p, principal.id, b);
       if (method === 'conversation.settings.read') return this.conversations.settings();
       this.plugins.need('agent');
       if (method === 'conversation.start') return this.conversations.start(p, principal.id, b);
