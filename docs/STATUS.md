@@ -68,7 +68,7 @@ Git retains them at `24d9998b`; they are not requirements or reference designs.
   button (`session.connect`) and shows the access, the entry and the first call.
 - Documents 0.4.3 adopts a changed file into a buffer with no unsaved text. Agent
   0.4.12 captures one named file; 0.4.13 applies, changes and inspects ACP settings;
-  0.4.14 draws Host activity as cards (a lost Host, counts, actions, outputs).
+  0.4.14 draws Host activity as cards and 0.4.15 shows project paths relative.
 
 Evidence: Rho 218/218 (serial) and Plugins 92/92 ([ledger](VERIFICATION.json));
 `acceptance:agent-page` 7/7, `graph` 8/8 and `agent-canvas` 10/10 (controlled peers),
@@ -128,15 +128,14 @@ connection failure keeps received actions, and Reconnect reads the same cursor.
 Opening a CSV or image captures its observed digest through Files and opens an
 existing owner view. Original and later file snapshots remain independent.
 
-- Real final runs: Claude Code 2.1.310 and dsh 0.2.1-rc.2 through WestlakeHPC
-  retained 7 pending / 10 final and 15 / 24 events; each analysis entered once,
-  showed diagnostic exit 7, and repeat collection added none. Chrome checked
-  pending/Host loss/reconnect, CSV/SVG opening, 1440/390 widths, reload and both
-  sessions after the text-file wording/PDF refusal fix.
-- Rho 182/182 and Plugins 76/76 passed then; `work/agent-activity/run-6/` records exact
-  hashes, failures and reviews. This demonstrates the flow, not human usability.
-- Source selection: Agent 0.4.7, Tables 0.4.3, Core unchanged at
-  `4f5bed8631e15acad44cc86b63ea4779ab8af342`. External sessions need an explicit
+- Run 6 (Claude Code 2.1.310, dsh 0.2.1-rc.2, WestlakeHPC): 7/10 and 15/24 events,
+  each analysis once, exit 7, none added on repeat; pending, Host loss, reconnect,
+  CSV/SVG, 1440/390 and reload checked in Chrome (`work/agent-activity/run-6/`).
+- Runs 7–8 (2026-10-28, Claude Code 2.1.312): both flows passed again on Agent 0.4.14's
+  cards; run 7 found the opened section below the fold and absolute paths, so opening
+  scrolls to it and 0.4.15 shows project paths relative ([record](AGENT-ACTIVITY.md#real-episode-and-review)).
+- Source selection: Agent 0.4.15, Tables 0.4.3 (runs 1–6: Agent 0.4.7, Core
+  `4f5bed86`). This shows the flow, not human usability. External sessions need an explicit
   collector; the UI does not discover or start every native session. Native
   completion, producer attribution and validity remain unknown unless their
   evidence supplies them; export does not archive activity.

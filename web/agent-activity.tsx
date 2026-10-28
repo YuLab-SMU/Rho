@@ -4,7 +4,7 @@ import { BrowserApiError, type BrowserClient } from '../src/browser.js';
 
 // Application scope and layout only; interpretation and the actual view belong
 // to Agent, with Files/Tables/Media retaining exact artifact bytes and semantics.
-export function AgentActivity({ client, projectId, onOpened }: { client: BrowserClient; projectId: string; onOpened: (compositionId: string, viewId?: string) => void }) {
+export function AgentActivity({ client, projectId, root, onOpened }: { client: BrowserClient; projectId: string; root?: string; onOpened: (compositionId: string, viewId?: string) => void }) {
   const read: ActivityFeedProps['read'] = useCallback((streamId, after, signal) => client.call('agent.activity.read', { projectId, ...(streamId ? { streamId, after } : {}) }, signal), [client, projectId]);
   const outputs: ActivityFeedProps['outputs'] = useCallback((directory, signal) => client.call('agent.activity.outputs', { projectId, directory }, signal), [client, projectId]);
   const open: ActivityFeedProps['open'] = async file => {
@@ -31,5 +31,5 @@ export function AgentActivity({ client, projectId, onOpened }: { client: Browser
     }
     onOpened(compositionId, viewId);
   };
-  return <ActivityFeed key={projectId} read={read} outputs={outputs} open={open} />;
+  return <ActivityFeed key={projectId} read={read} outputs={outputs} open={open} root={root} />;
 }

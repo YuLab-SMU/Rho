@@ -1,21 +1,21 @@
 # Agent activity in Rho
 
-The project **Activity** page shows selected Claude Code and dsh observations
-retained by Core. The **Agent** panel's **View live activity** button opens the
-same page. It shows tool requests, corresponding returns, refusals, native exit
-codes and output files. External sessions keep their input in their original
+**Activity from the project Host**, at the foot of the Agent page's Outside Rho tab,
+shows selected Claude Code and dsh observations retained by Core; it is read only
+while open, and opening it brings it into view. It shows tool requests,
+corresponding returns, refusals, native exit codes and output files. External sessions keep their input in their original
 window; opening this view sends no message and starts no Agent or Host.
 
 ## Connect an existing session
 
 Select an activity-capable Core build and the Agent collector described in
 [the owner guide](https://github.com/YuLab-SMU/Rho-plugins/blob/main/examples/agent-observation/README.md).
-The application selects Agent 0.4.7 and Tables 0.4.3. Core state format 4 is
+The application selects Agent 0.4.15 and Tables 0.4.3. Core state format 4 is
 required for this stream; old state is refused intact. Do not replace an existing
 project's Host or remove its state to make the view connect.
 
-The selected owner source is [Plugins 0a755161](https://github.com/YuLab-SMU/Rho-plugins/commit/0a7551617299f6c7464c79a5e1904ac7d2d32df2),
-with unchanged [Core 4f5bed86](https://github.com/YuLab-SMU/Rho-core/commit/4f5bed8631e15acad44cc86b63ea4779ab8af342).
+Runs 1–6 used Agent 0.4.7 from [Plugins 0a755161](https://github.com/YuLab-SMU/Rho-plugins/commit/0a7551617299f6c7464c79a5e1904ac7d2d32df2)
+with [Core 4f5bed86](https://github.com/YuLab-SMU/Rho-core/commit/4f5bed8631e15acad44cc86b63ea4779ab8af342); runs 7–8 below record theirs.
 
 Rho reads the project's existing `.rho/host.sock`, in the fixed Core caller
 namespace `rho-agent-observe`. The operator attaches a collector to that same
@@ -51,7 +51,7 @@ R executor under the existing lifecycle contract.
 
 ## Reading and opening results
 
-Choose a session in Activity. The view polls retained activity every 1.5 seconds
+Choose a session in the section. The view polls retained activity every 1.5 seconds
 while open. Its connection label describes the observation store, not whether
 the external Agent or collector is alive. The last receipt time remains visible.
 A request with no observed return says **Awaiting result**. A successful tool
@@ -130,6 +130,8 @@ Iteration evidence is retained under `work/agent-activity/`:
 | 4, dsh | Live/recovery/error checks and actual table opening worked; an obsolete `.ag-body` selector stopped the harness. It now reads the actual grid root. |
 | 5, dsh | The table and decoded SVG opened. Reload restored both tabs but selected the first, the existing workspace behavior. The check now explicitly reopens the retained figure tab rather than asserting an unimplemented active-tab restore. |
 | 6, both | Both full flows passed: pending calls, retained actions during disconnection, same-session recovery, diagnostic exit 7, table/image opening and reload. Each analysis ran once; repeat collection appended zero events. |
+| 7, both (2026-10-28) | The cards of Agent 0.4.14 under Outside Rho. Both flows passed (Claude Code 2.1.312: 7 then 10 events; dsh 0.2.1-rc.2: 9 then 18; each analysis once, repeat collection added none, no page errors). Read: the pending and disconnected screenshots showed only the setup steps, because the opened section unfolded below the fold; Read/Edit cards gave absolute paths such as `/private/tmp/rho-act-…/claude-activity/analysis.py`, two lines at 390 px. Opening the section now scrolls it into view; Agent 0.4.15 shows a path inside the project relative to it. |
+| 8, both | Same flows passed (9 then 14 and 11 then 18 events, one run each, none added on repeat). The pending action and the Host-lost card are now on the first screen; cards read `analysis.py` and `outputs/summary.csv`. A command keeps the path the Agent wrote in it. |
 
 Visual review of run 6 covered pending/empty outputs, disconnected actions,
 recovered errors, the table and decoded SVG at 1440 pixels, plus actions and
@@ -158,3 +160,13 @@ The local episode report records Core binary/source identities, browser asset
 hashes, source input hashes and explicit local overrides. This is application
 integration evidence; source publication, installation and signed distribution
 have separate scopes in [Release](RELEASE.md).
+
+Runs 7–8 used application `becb9373`, Plugins `078aa074` (run 8 with the 0.4.15 change, since
+committed as `977638a`) and Core source `1e95dd79` with Chrome 155; the application checkout also
+held unrelated untracked files, so both reports mark it locally overridden. Opening
+scrolls before the first read arrives, so the section lands part-way down rather than at
+the top. Evidence: `work/agent-activity/run-7/`, `run-8/` (ignored by Git). Checks after
+run 8: Rho 218/218 and Plugins 92/92 ([ledger](VERIFICATION.json)), `frontend` 13/13,
+pages at four widths and plugin UI. In that serial batch `agent-page` met a Codex row still
+Working and `continuity` waited over 30 s for Connected after its restart; each passed 7/7
+when run again alone.

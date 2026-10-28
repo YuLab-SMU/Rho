@@ -215,7 +215,7 @@ export function ProjectOverview({ project, snapshot, client, section, workspace,
       {/* A tab from a narrower link sees the sessions with access; this machine's tab has them under Outside Rho. */}
       {linked && <details className="agent-outside" open={outsideOpen} onToggle={event => setOutsideOpen(event.currentTarget.open)}>
         <summary>Agent sessions with access</summary>
-        {outsideOpen && <><AgentAccess snapshot={snapshot} /><AgentActivity client={client} projectId={project.id} onOpened={onOpened} /></>}
+        {outsideOpen && <><AgentAccess snapshot={snapshot} /><AgentActivity client={client} projectId={project.id} root={project.root} onOpened={onOpened} /></>}
       </details>}
       </>;
       return linked ? extra : <AgentPage client={client} snapshot={snapshot} exists={path => !!files?.files.some(file => file.path === path)} onContinue={id => onAgent(id)} onPath={path => onPath?.(path)} onNew={() => onNewConversation?.()} onOpened={onOpened} extra={extra} />;

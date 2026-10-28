@@ -222,6 +222,7 @@ Limits:
   Files and a registered result is read at its version; at most 16 per page, two at
   once, figures up to 2 MiB and tables to 3 rows by 4 columns. A file that cannot be
   previewed shows its kind.
-- The activity feed was seen only with a lost Host and an empty outputs folder;
-  `scripts/agent-activity-episode.mjs` with a live collector was not run again.
+- The activity feed was then run with real Claude Code and dsh through the collector
+  ([runs 7–8](AGENT-ACTIVITY.md#real-episode-and-review)): paths now read relative to the
+  project and opening the section brings it into view.
 - No person other than the builder has used these pages.

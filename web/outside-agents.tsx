@@ -134,7 +134,12 @@ export function OutsideAgents({ client, snapshot, onOpened }: { client: BrowserC
     </div>
     {others.length > 0 && <div className="outside-others"><h3>Other sessions with access</h3><ul>{others.map((agent: Agent) => <li key={agent.principal} data-rho-agent-session={agent.ended ? 'ended' : 'granted'}>
       <strong>{agent.label ?? 'Agent session'}</strong><span>{agent.ended ? 'Access ended' : abilities(agent, snapshot)}</span><small>{agent.last ? 'last call ' + day(agent.last.at).toLowerCase() : 'no calls yet'}</small></li>)}</ul></div>}
-    {/* The project Host's activity is read only while this is open. */}
-    <details className="outside-host" open={hostOpen} onToggle={event => setHostOpen(event.currentTarget.open)}><summary>Activity from the project Host</summary>{hostOpen && <AgentActivity client={client} projectId={project.id} onOpened={onOpened} />}</details>
+    {/* The project Host's activity is read only while this is open; opening it brings it into view
+        rather than unfolding below the fold. */}
+    <details className="outside-host" open={hostOpen} onToggle={event => {
+      const details = event.currentTarget, open = details.open;
+      setHostOpen(open);
+      if (open) requestAnimationFrame(() => details.scrollIntoView({ block: 'start' }));
+    }}><summary>Activity from the project Host</summary>{hostOpen && <AgentActivity client={client} projectId={project.id} root={project.root} onOpened={onOpened} />}</details>
   </section>;
 }
