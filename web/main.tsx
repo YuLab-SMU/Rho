@@ -85,6 +85,8 @@ function App() {
   const confirmDialog = useRef<HTMLDialogElement>(null), disconnectTrigger = useRef<HTMLButtonElement>(null), confirmReturn = useRef<HTMLElement | null>(null);
   const navigationTrigger = useRef<HTMLButtonElement>(null), contextTrigger = useRef<HTMLButtonElement>(null);
   const agentTrigger = useRef<HTMLButtonElement>(null);
+  // Closing the Agent panel returns focus to the button that shows it: the sidebar's, or the topbar's while the sidebar is hidden.
+  const agentReturn = () => (agentTrigger.current ?? document.querySelector<HTMLButtonElement>('.project-nav .nav-panel'))?.focus();
 
   // Elements behind the open palette are inert, so a command that moves focus waits for it to close.
   const afterCommands = useRef<(() => void) | null>(null);
@@ -163,7 +165,7 @@ function App() {
     function close(event: KeyboardEvent) {
       if (event.key !== 'Escape' || commands || confirming) return;
       if (context) { setContext(false); contextTrigger.current?.focus(); }
-      else if (agentOpen) { setAgentOpen(false); agentTrigger.current?.focus(); }
+      else if (agentOpen) { setAgentOpen(false); agentReturn(); }
       else if (narrow && navigation) { setNavigation(false); navigationTrigger.current?.focus(); }
     }
     window.addEventListener('keydown', close);
@@ -195,6 +197,18 @@ function App() {
   function showSection(next: Section) { showOverview(); setScreen('project'); setSection(next); }
   function showSources(next: SourceRow) { setCategory(next); showSection('sources'); }
   function showFile(row: SourceRow, item: SourceItem) { setShownFile({ row, key: item.key }); setCategory(row); showSection('file'); }
+  // A file the Agent named: shown in place among its kind, or in the workspace when it has no kind.
+  function showPath(path: string) {
+    for (const row of ['results', 'data', 'code', 'notes'] as const) {
+      const item = sources?.[row].find(entry => entry.path === path);
+      if (item) { showFile(row, item); return; }
+    }
+    if (!snapshot) return;
+    openInWorkspace(client, snapshot, 'workspace', path).then(placed => placed ? layout(placed.compositionId, placed.viewId) : setNotice(path + ' · Rho has no viewer for this kind of file yet.'),
+      error => setNotice(path + ' · ' + (error instanceof Error ? error.message : 'It could not be opened.')));
+  }
+  // The Agent panel, ready for a new conversation or showing the one chosen.
+  function talk(conversationId = 'new') { setSelectedConversation(conversationId); setAgentOpen(true); setContext(false); }
   // Studio opens the workspace last open here, the Agent canvas, or the first one.
   function studio() {
     const kept = project ? sessionStorage.getItem('rho.layout.v1:' + connection?.principalId + ':' + project.id) : null;
@@ -343,9 +357,9 @@ function App() {
         </div>
       </details>
       {screen === 'plugins' ? <><button className="nav-row" onClick={pick(showOverview)}><Icon name="back" size={14} /><span>Back to project</span></button><PluginNavigation catalog={snapshot?.catalog} pluginId={pluginId} onSelect={id => pick(() => choosePlugin(id))()} /></>
-      : <ProjectNavigation project={project} snapshot={snapshot} current={here} sources={sources} partial={files.truncated} runs={snapshot ? snapshot.operations.length : null}
+      : <ProjectNavigation project={project} snapshot={snapshot} current={here} sources={sources} partial={files.truncated}
           agent={{ running: !!agentNow?.running, waiting: !!agentNow?.waiting, conversations: snapshot?.conversations?.length ?? 0 }} agentOpen={agentOpen} adding={addingSource}
-          onOverview={pick(showOverview)} onStudio={pick(studio)} onAgent={pick(() => { setAgentOpen(true); setContext(false); })} onLayout={id => pick(() => layout(id))()}
+          onOverview={pick(showOverview)} onStudio={pick(studio)} onAgentPanel={pick(() => { setAgentOpen(v => !v); setContext(false); })} onLayout={id => pick(() => layout(id))()}
           onSection={next => pick(() => showSection(next))()} onSources={next => pick(() => showSources(next))()} onFile={(row, item) => pick(() => showFile(row, item))()} onAddSource={() => void addSource()} />}
     </> : <>
       <button className="brand" onClick={goHome} aria-label="Rho home"><span className="brand-mark">ρ</span><strong>Rho</strong></button>
@@ -358,12 +372,10 @@ function App() {
     </div>
   </>;
   const agentContents = <>
-    <div className="drawer-heading"><h2>Agent</h2><button className="icon-button" aria-label="Close Agent" onClick={() => { setAgentOpen(false); agentTrigger.current?.focus(); }}><Icon name="close" size={18} /></button></div>
-    {project && <div className="context-section"><button onClick={() => { showSection('activity'); setAgentOpen(false); }}>View live activity</button></div>}
+    <div className="drawer-heading"><h2>Agent</h2><button className="icon-button" aria-label="Close Agent" onClick={() => { setAgentOpen(false); agentReturn(); }}><Icon name="close" size={18} /></button></div>
     {snapshot && (link ? <AgentRequest key={snapshot.project.id} snapshot={snapshot} principalId={connection.principalId ?? 'local'} />
       : <AgentConversation key={snapshot.project.id} snapshot={snapshot} client={client} selectedId={selectedConversation} onSelected={() => setSelectedConversation(null)} onSent={follow} />)}
     <div ref={setAgentSlot} className="agent-slot" />
-    {!composition && <section className="context-section"><h3>{link ? 'Sessions' : 'Sessions started elsewhere'}</h3><AgentAccess snapshot={snapshot} outside={!link} /></section>}
   </>;
   // Where this tab is: the projects list, then the project, then the open workspace. The page
   // heading names the section itself, so the trail carries only the path back.
@@ -396,7 +408,8 @@ function App() {
               <span className="pulse-dot" aria-hidden="true" /><strong>{agentNow.waiting ? 'Needs your choice' : agentNow.agent}</strong><span className="agent-chip-what">{agentNow.waiting ?? doing(agentNow, project?.root)}</span></button>}
             <button ref={commandTrigger} className="command-trigger" aria-label="Commands · Type a command" aria-keyshortcuts="Meta+K Control+K" onClick={() => setCommands(true)}><Icon name="search" size={16} /><span>Commands</span><kbd>{shortcut}</kbd></button>
             <span className={'connection ' + phase} role="status" title={connectionNote}><span className="status-dot" /><span className="connection-label">{phase === 'live' ? 'Connected' : phase === 'offline' ? 'Offline' : 'Connecting'}</span></span>
-            {projectVisible && <button ref={agentTrigger} className="agent-toggle" aria-expanded={agentOpen} aria-label="Agent" onClick={() => { setAgentOpen(v => !v); setContext(false); }}><Icon name="prompt" size={17} /><span>Agent</span></button>}
+            {/* With the sidebar in view its Agent row holds the panel button; this one stands in while the sidebar is not shown. */}
+            {projectVisible && (narrow || !navigation) && <button ref={agentTrigger} className="agent-toggle" aria-expanded={agentOpen} aria-label="Agent panel" onClick={() => { setAgentOpen(v => !v); setContext(false); }}><Icon name="spark" size={17} /><span>Agent</span></button>}
             <button ref={contextTrigger} className="icon-button context-toggle" aria-label="Context & access" aria-expanded={context && !feedbackContext} onClick={() => { setFeedbackContext(false); setContext(v => feedbackContext || !v); setAgentOpen(false); }}><Icon name="context" size={18} /></button>
           </div>
         </header>
@@ -428,7 +441,7 @@ function App() {
                   onMove={item => showFile(shownFile.row, item)} onStudio={layout} onList={() => showSources(shownFile.row)} onAbout={about} /></Suspense>
                 : !sources ? <Loading text="Reading the project folders…" />
                 : <div className="studio-empty"><span className="empty-symbol"><Icon name="file" size={26} stroke={1.5} /></span><h2>This file is no longer in the project</h2><p>{shownFile.key.replace(/^\w+:/, '')} was not found when the folders were last read. It may have been moved or removed.</p><div className="empty-actions"><button onClick={() => showSources(shownFile.row)}>All {sourceLabels[shownFile.row].toLowerCase()}</button></div></div>)
-              : <Suspense fallback={<Loading text="Opening project…" />}><ProjectOverview key={project.id} section={section} category={category} files={files} sources={sources} onFile={showFile} onSection={showSection} onAgent={id => { if (id) setSelectedConversation(id); setAgentOpen(true); }} client={client!} onProjectChanged={next => { setProject(next); setProjects(list => list.map(p => p.id === next.id ? next : p)); }} project={project} snapshot={snapshot} onLayout={layout} onOpened={(id, view) => { layout(id, view); reread(); }} /></Suspense>}
+              : <Suspense fallback={<Loading text="Opening project…" />}><ProjectOverview key={project.id} section={section} category={category} files={files} sources={sources} onFile={showFile} linked={!!link} onPath={showPath} onNewConversation={() => talk()} onSection={showSection} onAgent={id => { if (id) setSelectedConversation(id); setAgentOpen(true); }} client={client!} onProjectChanged={next => { setProject(next); setProjects(list => list.map(p => p.id === next.id ? next : p)); }} project={project} snapshot={snapshot} onLayout={layout} onOpened={(id, view) => { layout(id, view); reread(); }} /></Suspense>}
           </main>
           {projectVisible && agentOpen && !narrow && <aside className="inspector-pane" aria-label="Agent panel">{agentContents}</aside>}
           {context && !narrow && <aside id="project-context" className="context-drawer inspector-pane" aria-label={feedbackContext ? 'Your question' : 'Context and access'}><div className="drawer-heading"><h2>{feedbackContext ? 'Your question' : 'Connection & access'}</h2><button className="icon-button" aria-label="Close context" onClick={() => { setContext(false); contextTrigger.current?.focus(); }}><Icon name="close" size={18} /></button></div>{contextSections}</aside>}

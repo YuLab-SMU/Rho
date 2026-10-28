@@ -74,7 +74,7 @@ const record = async () => JSON.parse(await fs.readFile(path.join(project.root, 
 const read = () => call('conversation.read', { conversationId });
 const panel = () => page.getByRole(page.viewportSize().width < 768 ? 'dialog' : 'complementary', { name: 'Agent panel', exact: true });
 async function snap(name) { const file = `${String(++shot).padStart(2, '0')}-${name}.png`; await page.screenshot({ path: path.join(evidence, file), fullPage: true }); report.screenshots.push(file); }
-async function openPanel() { if (!await panel().count()) await page.getByRole('button', { name: 'Agent', exact: true }).click(); await panel().locator('#conversation-input').waitFor(); }
+async function openPanel() { if (!await panel().count()) await page.getByRole('button', { name: 'Agent panel', exact: true }).click(); await panel().locator('#conversation-input').waitFor(); }
 async function say(text) { await panel().locator('#conversation-input').fill(text); await panel().getByRole('button', { name: /^(Start|Send)$/ }).click(); }
 async function approve() {
   const pending = await page.getByRole('group', { name: 'Agent permission' }).count();

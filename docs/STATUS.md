@@ -7,20 +7,18 @@ Updated: 2026-10-27.
 On 2026-10-27 the user found the project sidebar nearly empty and the main area
 still while the Agent worked. The sidebar now names its places and counts its Sources,
 the [Agent canvas](#project-sidebar-and-agent-canvas) opens the files the Agent reads
-and changes, and each Sources kind unfolds so a file shows in place and ←/→ move
-through the kind. Documents 0.4.3 and Agent 0.4.12 carry the owner repairs;
-[the record](AGENT-CANVAS-EPISODE.md) keeps the runs.
+and changes, each Sources kind unfolds so a file shows in place, and the one Agent
+entry opens a page of what the Agent did, with its panel a button beside it.
+Documents 0.4.3 and Agent 0.4.12 carry the owner repairs; [the record](AGENT-CANVAS-EPISODE.md)
+keeps the runs.
 
-Agent 0.4.11 adds each tool step's human title, ACP category and identifying input
-to the Claude/Codex ACP connections accepted at 0.4.10. Both Agents passed eight
-real Westlake HPC turns from the installed package, including cancellation,
-connection loss and original-session recovery. External Codex ACP loading, live
-observation across Rho restart and reconnect also passed. Core source/binary remain unchanged.
-At that point Rho 202/202, Plugins 89/89 and contract/type checks passed. The unsigned macOS arm64
-package passed install/start checks; [the record](ACP-MULTI-AGENT-EPISODE.md)
-distinguishes turn cancellation, native jobs and explicit external relay attachment.
-The Agent panel's streamed text, action rows, plan and permission treatment are in
-[Agent panel live activity](AGENT-UI-EPISODE.md).
+Agent 0.4.11 adds each tool step's title, ACP category and identifying input to the
+Claude/Codex ACP connections of 0.4.10. Both passed eight real Westlake HPC turns from
+the installed package, including cancellation, connection loss and session recovery;
+external Codex ACP loading and observation across restart and reconnect passed. Core
+is unchanged. Rho 202/202, Plugins 89/89 and contract/type checks passed then, and the
+unsigned macOS arm64 package passed install/start ([record](ACP-MULTI-AGENT-EPISODE.md);
+the panel's treatment is in [Agent panel live activity](AGENT-UI-EPISODE.md)).
 
 The 2026-10-27 home, projects and empty-project pass is in the
 [home and project episode](HOME-PROJECT-EPISODE.md) and
@@ -52,8 +50,8 @@ Git retains them at `24d9998b`; they are not requirements or reference designs.
 ## Project sidebar and Agent canvas
 
 - The sidebar shows All projects, the project and a menu to switch, then Overview,
-  Studio with its workspaces, Agent (Working or Needs you), Activity with its run
-  count, and Sources: Data, Code, Results & figures and Notes from one bounded walk
+  Studio with its workspaces, Agent (Working or Needs you; its page and panel
+  button), and Sources: Data, Code, Results & figures and Notes from one bounded walk
   (48 folders, 5 levels, 4000 files; partial counts say so), then Files. Each kind
   unfolds into its files by folder; one chosen shows in place with no layout written,
   ←/→ and ↑/↓ move through the kind, Open in Studio places it.
@@ -61,11 +59,13 @@ Git retains them at `24d9998b`; they are not requirements or reference designs.
   steps name, files a finished command names and outputs that appear on disk open
   once, code left and data/figures right; the tab of the last named file carries the
   Agent's verb. Choosing another view, typing or leaving stops following.
+- The Agent page lists each Rho conversation's latest messages (request, files changed
+  and looked at, commands, answer, ending), then runs and outside sessions.
 - Documents 0.4.3 adopts a changed file into a buffer with no unsaved text; Agent
   0.4.12 captures one named file without scanning its folder, digest optional.
 
 Evidence: Rho 202/202 (serial) and Plugins 90/90 ([ledger](VERIFICATION.json));
-`acceptance:agent-canvas` 8/8 (controlled peer), `acceptance:sources` 7/7, `frontend`
+`acceptance:agent-canvas` 9/9 (controlled peer), `acceptance:sources` 7/7, `frontend`
 11/11, `agent-ui` 7/7, pages, shell, person, objects, actions, continuity and plugin
 UI passed. Four real Westlake HPC Claude turns found and fixed five defects. This shows
 the paths work, not that a person can follow a fast Agent or browse faster there.
@@ -120,8 +120,8 @@ nor behavior, and existing execution/content boundaries do not prescribe the int
 
 ## External Agent activity
 
-Activity shows Claude Code/dsh sessions, calls, refusals, process exits and output
-files. The Agent panel links to this page. Core pages are read every 1.5 seconds;
+The Agent page's outside-sessions section shows Claude Code/dsh sessions, calls,
+refusals, process exits and output files. Core pages are read every 1.5 seconds;
 connection failure keeps received actions, and Reconnect reads the same cursor.
 Opening a CSV or image captures its observed digest through Files and opens an
 existing owner view. Original and later file snapshots remain independent.
@@ -229,7 +229,7 @@ plans, and the superseded `work/` evidence is gone; Git retains their history.
 
 The reset built one project sidebar, dedicated project sections, searchable projects
 and files, direct workspace controls and an optional Agent inspector; execution
-records remain reachable from Activity and exact artifact provenance.
+records remain reachable from the Agent page and exact artifact provenance.
 In a tab opened from a narrower link, the Agent request field uses an explicit
 clipboard handoff to the external Agent, while a tab on this machine holds
 conversations started in Rho; the draft survives panel closure, scoped by

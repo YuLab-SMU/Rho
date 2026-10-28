@@ -9,6 +9,8 @@ import { compositionName } from './canvas.js';
 import { walkLimits, type ProjectFiles, type SourceItem } from './sources.js';
 import { RunView } from './shell/facts.js';
 import { AgentActivity } from './agent-activity.js';
+import { AgentWork } from './agent-work.js';
+import { AgentAccess } from './agents.js';
 import { WorkProgress } from './work-progress.js';
 
 function shownPath(at: string, project: ProjectSummary) {
@@ -22,8 +24,12 @@ interface Props {
   onSection: (section: Section) => void; onAgent: (conversationId?: string) => void;
   onLayout: (id: string, view?: string) => void; onProjectChanged: (project: ProjectSummary) => void; onOpened: (id: string, view?: string) => void;
   category?: SourceRow; files?: ProjectFiles; sources?: Record<SourceRow, SourceItem[]> | null; onFile?: (row: SourceRow, item: SourceItem) => void;
+  // The Agent page: a tab opened from a narrower link has no conversations here, only its handoff.
+  linked?: boolean; onPath?: (path: string) => void; onNewConversation?: () => void;
 }
-export function ProjectOverview({ project, snapshot, client, section, onSection, onAgent, onLayout, onProjectChanged, onOpened, category, files, sources, onFile }: Props) {
+export function ProjectOverview({ project, snapshot, client, section, onSection, onAgent, onLayout, onProjectChanged, onOpened, category, files, sources, onFile, linked = false, onPath, onNewConversation }: Props) {
+  // Sessions started outside Rho are read only while their section is open.
+  const [outsideOpen, setOutsideOpen] = useState(false);
   const { runs, problem: runsProblem, readAgain } = useRuns(client, project.id, snapshot.cursor);
   const [inspecting, setInspecting] = useState<string | null>(null);
   const [folder, setFolder] = useState<{ entries: Entry[]; total: number; truncated: boolean; path: string } | null>(null);
@@ -117,16 +123,17 @@ export function ProjectOverview({ project, snapshot, client, section, onSection,
   })}</ul>;
   const visible = folder?.entries.filter(e => !query || e.name.toLocaleLowerCase().includes(query.toLocaleLowerCase())) ?? [];
   const sourceTitle = sourceLabels[category ?? 'data'];
-  const title = isFiles ? 'Files' : section === 'activity' ? 'Activity' : section === 'settings' ? 'Project settings' : section === 'sources' ? sourceTitle : projectName(project);
+  const title = isFiles ? 'Files' : section === 'agent' ? 'Agent' : section === 'settings' ? 'Project settings' : section === 'sources' ? sourceTitle : projectName(project);
   return <section className={'project-page overview' + (isFiles ? ' files-page' : '')} aria-labelledby="overview-title">
     <header className="page-heading">
       <div><h1 id="overview-title">{title}</h1>{section === 'overview' && <p title={where.full}>{where.text}</p>}</div>
       {section === 'overview' && !emptyProject && <button className="primary" onClick={() => onAgent()}><Icon name="prompt" size={17} /><span>Work with Agent</span></button>}
       {isFiles && <button onClick={() => void listFolder(folder?.path)} disabled={reading}><Icon name="refresh" size={15} />Refresh</button>}
       {section === 'sources' && files && <button onClick={files.refresh} disabled={files.reading}><Icon name="refresh" size={15} />Refresh</button>}
+      {section === 'agent' && (snapshot.conversations?.length || linked) ? <button className="primary" onClick={() => onNewConversation?.()}><Icon name="prompt" size={16} />{linked ? 'Write a request' : 'New conversation'}</button> : null}
     </header>
     {section === 'sources' && files && onFile && <SourceList category={category ?? 'data'} files={files} items={sources?.[category ?? 'data'] ?? null} artifacts={artifacts} onFile={onFile} />}
-    {section === 'overview' && snapshot.catalog.operations.some(o => o.method === 'project.work.read' && o.authorized) && <WorkProgress client={client} snapshot={snapshot} openFile={p => void open({ path: p })} openConversation={onAgent} openActivity={() => onSection('activity')} onPresence={setHasWork} />}
+    {section === 'overview' && snapshot.catalog.operations.some(o => o.method === 'project.work.read' && o.authorized) && <WorkProgress client={client} snapshot={snapshot} openFile={p => void open({ path: p })} openConversation={onAgent} openActivity={() => onSection('agent')} onPresence={setHasWork} />}
     {section === 'overview' && fileError && <p role="alert">{fileError}</p>}
     {emptyProject && <div className="empty-project">
       <span className="empty-symbol"><Icon name="grid" size={26} stroke={1.5} /></span>
@@ -143,7 +150,7 @@ export function ProjectOverview({ project, snapshot, client, section, onSection,
           </section>
           {snapshot.taskMap?.items.length ? <section className="project-section"><div className="section-heading"><h2>From your Agent</h2></div><ul className="agent-notes">{snapshot.taskMap.items.map(item => <li key={item.id} data-fact="agent"><strong>{item.title}</strong>{item.summary && <p>{item.summary}</p>}<small>{snapshot.taskMap!.vocabulary.states[item.state]?.label ?? item.state}</small></li>)}</ul></section> : null}
         </div>
-        {recent && <aside className="project-recent"><div className="section-heading"><h2>Recent activity</h2><button className="text-button" onClick={() => onSection('activity')}>View all</button></div>
+        {recent && <aside className="project-recent"><div className="section-heading"><h2>Recent activity</h2><button className="text-button" onClick={() => onSection('agent')}>View all</button></div>
           {error(runsProblem, readAgain)}{orderedRuns.length ? <div className="activity-list">{orderedRuns.slice(0, 5).map(runRow)}</div> : <p className="quiet-empty">No runs yet.</p>}
         </aside>}
       </div>
@@ -160,7 +167,14 @@ export function ProjectOverview({ project, snapshot, client, section, onSection,
       </section>
       {snapshot.resources.length > 0 && <section className="project-section"><div className="section-heading"><h2>Registered results</h2></div>{resultList}</section>}
     </>}
-    {section === 'activity' && <><section className="project-section"><AgentActivity client={client} projectId={project.id} onOpened={onOpened} /></section><section className="project-section"><h3>Managed runs</h3>{error(runsProblem, readAgain)}{runs === null ? <p role="status">Reading runs…</p> : orderedRuns.length ? <div className="activity-list">{orderedRuns.map(runRow)}</div> : <p className="muted">No managed runs yet.</p>}</section></>}
+    {section === 'agent' && <>
+      {!linked && <AgentWork client={client} snapshot={snapshot} exists={path => !!files?.files.some(file => file.path === path)} onContinue={id => onAgent(id)} onPath={path => onPath?.(path)} onNew={() => onNewConversation?.()} />}
+      {(orderedRuns.length > 0 || runsProblem) && <section className="project-section agent-runs"><div className="section-heading"><h2>Runs</h2></div>{error(runsProblem, readAgain)}<div className="activity-list">{orderedRuns.map(runRow)}</div></section>}
+      <details className="agent-outside" open={outsideOpen} onToggle={event => setOutsideOpen(event.currentTarget.open)}>
+        <summary>{linked ? 'Agent sessions with access' : 'Sessions started outside Rho'}</summary>
+        {outsideOpen && <><AgentAccess snapshot={snapshot} outside={!linked} /><AgentActivity client={client} projectId={project.id} onOpened={onOpened} /></>}
+      </details>
+    </>}
     {section === 'settings' && <div className="settings-sections"><section className="project-section"><h2>Source folders</h2><SourceFolders folders={project.sources ?? [{ id: project.id, root: project.root, name: projectName(project) }]} busy={adding} onAdd={() => void add()} />{error(sourceError, () => void add())}</section>
       <section className="project-section"><div className="section-heading"><h2>Project health</h2><button disabled={diagnosing} onClick={() => void diagnose()}>{diagnosing ? 'Checking…' : 'Check project'}</button></div>{doctor ? <ul className="health-list">{doctor.map(c => <li key={c.id}><span className={'state ' + c.state}>{c.state === 'ok' ? 'Ready' : c.state === 'fail' ? 'Blocked' : 'Check'}</span><div><p>{c.detail}</p>{c.remedy && <small>{c.remedy}</small>}</div></li>)}</ul> : <p className="muted">Check the tools and capabilities available to this project.</p>}{error(doctorError, () => void diagnose())}</section></div>}
     {inspecting && <dialog ref={runDialog} className="run-dialog" aria-label={inspecting} onClose={() => setInspecting(null)} onClick={event => { if (event.target === event.currentTarget) event.currentTarget.close(); }}><button className="icon-button run-dialog-close" aria-label="Close" onClick={() => runDialog.current?.close()}><Icon name="close" size={18} /></button><RunView key={inspecting} snapshot={snapshot} client={client} operationId={inspecting} runs={runs} readRuns={readAgain} onOpenRun={setInspecting} opener={ref => { const spot = places.get(ref.id + '@' + ref.version); return spot ? () => onLayout(spot.compositionId, spot.viewId) : null; }} /></dialog>}

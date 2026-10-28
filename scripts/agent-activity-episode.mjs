@@ -90,7 +90,10 @@ raise SystemExit(7)
     await page.goto(service.url); await page.locator('.project-row').filter({ hasText: producer + '-activity' }).click();
     const navigateActivity = async () => {
       if (!await page.locator('.project-nav').isVisible()) await page.getByRole('button', { name: 'Open navigation', exact: true }).click();
-      await page.locator('.project-nav, dialog.drawer').getByRole('button', { name: 'Activity', exact: true }).click();
+      await page.locator('.project-nav, dialog.drawer').getByRole('button', { name: 'Agent', exact: true }).click();
+      // Sessions started outside Rho are read only while their section is open.
+      const outside = page.locator('details.agent-outside');
+      if (!await outside.evaluate(d => d.open)) await outside.locator('summary').click();
     };
     await navigateActivity();
     await until(() => fs.access(path.join(project.root, 'started')).then(() => true, () => false), Boolean, producer + ' analysis gate');

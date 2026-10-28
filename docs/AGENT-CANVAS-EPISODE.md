@@ -239,3 +239,86 @@ that another person finds browsing faster.
 - There are no swipe gestures; on a touch screen the buttons move.
 - The Tables toolbar touches the view's left edge here and in Studio; that spacing
   belongs to the Tables owner.
+
+## One Agent entry and the Agent page
+
+### Question
+
+The user found two Agent entries confusing. The sidebar's Agent row and the topbar's
+Agent button opened the same panel, with different marks. They also found the Agent
+interface empty: Activity, where the panel's "View live activity" led, showed nothing
+useful. Yet the project held two conversations with real work.
+
+### Observed before
+
+Evidence: a copy of the user's `test` project with its retained records, its root
+rewritten to the copy (`work/agent-page-20261027/`, ignored by Git; `before/`).
+
+- Four ways in: the sidebar row, the topbar button, the Overview's Work with Agent,
+  and the panel's View live activity.
+- Activity showed:
+  - Core's feed, "Observation disconnected";
+  - an output-folder field with "No output files observed yet";
+  - "No managed runs yet".
+- The records: in "hi", the last message wrote `ggplot2-demo/analysis.R`, edited it
+  nine times, ran eight commands (two refused at permission), read four of the six
+  figures and answered. "这个项目在做什么" failed after 5 s on a model configuration
+  error. Activity showed none of it. The panel showed one conversation at a time.
+
+### Changed
+
+Rho only (`web/agent-work.tsx`, `web/overview.tsx`, `web/project.tsx`, `web/main.tsx`,
+`web/conversation.tsx`, `web/theme.css`):
+
+- **One entry.** The sidebar's Agent row opens the Agent page. A button at its right
+  edge shows or hides the Agent panel beside any page. The topbar's button, named the
+  same ("Agent panel") and with the same mark, appears only while the sidebar is
+  hidden. Activity is no longer a separate row, and the panel no longer carries View
+  live activity or the outside-sessions list.
+- **The Agent page.** Up to six conversations at a time, a running one first, then
+  newest, each with its latest four messages:
+  - the request;
+  - Changed: files written or edited, with counts;
+  - Looked at: files read;
+  - Ran: commands, refused ones marked, and existing files they name;
+  - the answer, folded past six lines, or the Agent's error;
+  - how the message ended and how long it took.
+
+  A file shows in place among its kind, or in the workspace if it has no kind.
+  Continue (Follow while running) opens the panel at that conversation; New
+  conversation opens its composer.
+- Runs follow, only when there are any. Sessions started outside Rho (their access
+  list and Core's feed) sit in a closed section that reads only while open.
+
+### Runs
+
+| Run | What happened | Cause | Change |
+| --- | --- | --- | --- |
+| `before` | As above. | Activity read Core streams, an output folder and managed runs; Rho's own conversation records reached only the panel. | The Agent page. |
+| `after` | Both conversations: the model error; `analysis.R` "wrote, edited 9×"; four figures; "8 commands · 2 refused"; the folded answer. A figure showed in place as 5 of 6. A `Solar.R` chip appeared. | Commands are matched by file extension; `Solar.R` is an airquality column in an R call. | Files named only by a command are listed when the folder walk found them. |
+| Updating the scripts | With the topbar button hidden, nothing opened the panel from Studio or a preview; the scripts had used that button. | The row's click now opens the page. | A panel button on the Agent row; the scripts use "Agent panel". |
+| `agent-canvas` | After the new page check, choosing `airquality.csv` did not stop following. | Coming back from the page remounts the canvas with its first data view in front, so the click was no move. | The check chooses the data view not in front. |
+
+### Checks
+
+- `acceptance:agent-canvas` passed 9 checks. The new one, after the controlled turn,
+  finds no topbar Agent button beside the sidebar. The turn's card lists Changed
+  `analysis.R` (edited), Looked at `airquality.csv`, Ran 1 command and the answer,
+  and the CSV chip shows the table in place.
+- `frontend` 11/11, `agent-ui` 7/7, `sources` 7/7, pages, person, objects, actions,
+  continuity and the plugin UI check passed after their scripts opened the panel by
+  "Agent panel" and runs through the Agent page. `shell` passed once its focus check
+  looked for "Agent panel".
+- Rho unit tests 202/202, serially.
+
+### Limits
+
+- The page lists what the Agent reported. Outputs a command wrote and the Agent did
+  not read back (here two of the six figures) are not under the message; Results &
+  figures has them.
+- Earlier messages than the latest four are in the panel. A running conversation
+  is read again at most once a second.
+- The Overview's Work progress still lists the same conversations with observation
+  details. Whether it should only point to the Agent page is open.
+- When the Host is unavailable, the outside-sessions section shows the feed's own
+  disconnected state, once opened.

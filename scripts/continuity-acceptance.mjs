@@ -112,7 +112,7 @@ try {
   await until(() => agent('action.lookup', { operationId: 'w6-export' }), r => r.execution === 'completed', 'the analysis completes');
   const code = await agent('document.open', { path: 'analysis.R' });
   await call('document.edit', { documentId: code.id, expectedVersion: code.version, edits: [{ from: 0, to: 0, insert: '# next idea\n' }], undoGroup: 'later' });
-  await page.locator('.project-nav').getByRole('button', { name: 'Activity', exact: true }).click();
+  await page.locator('.project-nav').getByRole('button', { name: 'Agent', exact: true }).click();
   await page.locator('.activity-row').filter({ hasText: 'w6-export' }).click();
   await dialog.locator('[data-rho-execution="completed"]').waitFor();
   await dialog.getByRole('button', { name: 'Export files…', exact: true }).click();

@@ -206,7 +206,7 @@ try {
     await inspector.getByRole('region', { name: 'Recorded activity', exact: true }).locator('li').first().waitFor();
     await page.keyboard.press('Escape');
     await inspector.waitFor({ state: 'detached' });
-    await poll(() => page.getByRole('button', { name: 'Agent', exact: true }).evaluate(el => el === document.activeElement), Boolean, 'focus returns to Agent trigger');
+    await poll(() => page.getByRole('button', { name: 'Agent panel', exact: true }).evaluate(el => el === document.activeElement), Boolean, 'focus returns to Agent trigger');
   }
   await page.setViewportSize({ width: 1440, height: 900 });
   check('Agent panel exposes its calls at desktop and phone widths and Escape returns focus');

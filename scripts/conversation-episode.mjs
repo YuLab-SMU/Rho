@@ -50,9 +50,9 @@ const panel = () => page.getByRole(page.viewportSize().width < 768 ? 'dialog' : 
 async function openProject() {
   await page.goto(ready.url);
   await page.locator('.project-row').filter({ hasText: 'air-quality' }).click();
-  await page.getByRole('button', { name: 'Agent', exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Agent panel', exact: true }).waitFor();
 }
-async function openPanel() { if (!(await panel().count())) await page.getByRole('button', { name: 'Agent', exact: true }).click(); await panel().waitFor(); await panel().locator('#conversation-input').waitFor(); }
+async function openPanel() { if (!(await panel().count())) await page.getByRole('button', { name: 'Agent panel', exact: true }).click(); await panel().waitFor(); await panel().locator('#conversation-input').waitFor(); }
 // Waits for the newest message to end and returns what the screen says about it.
 async function waitTurn(label, maxMs = 600000) {
   const started = Date.now(); let sawWorking = false, sawSteps = false;
@@ -87,11 +87,11 @@ try {
   await say('Which column in data.csv has the most missing values, and how many are missing?');
   await waitTurn('t2');
   // Reload: the open conversation and its messages come back from the record.
-  await page.reload(); await page.getByRole('button', { name: 'Agent', exact: true }).waitFor(); await openPanel();
+  await page.reload(); await page.getByRole('button', { name: 'Agent panel', exact: true }).waitFor(); await openPanel();
   await panel().locator('.conversation-turns > .turn').nth(1).waitFor(); await snap('after-reload');
   // Restart the service on the same state and port, then continue the same conversation.
   await stopService('restart'); await startService('second');
-  await page.reload(); await page.getByRole('button', { name: 'Agent', exact: true }).waitFor(); await openPanel();
+  await page.reload(); await page.getByRole('button', { name: 'Agent panel', exact: true }).waitFor(); await openPanel();
   await panel().locator('.conversation-turns > .turn').nth(1).waitFor(); await snap('after-restart');
   await say('Add one line at the end of notes.md that records your answer about missing values, then save it.');
   await waitTurn('t3');
@@ -109,7 +109,7 @@ try {
   await outside.call('project.entries', { projectId: project.id }).then(r => log('outside.entries', { names: r.entries.map(e => e.name) }), e => log('outside.entries', { error: e.message }));
   await panel().getByRole('button', { name: 'All conversations', exact: true }).click();
   await page.waitForTimeout(1500); await snap('list-and-outside-session');
-  await page.setViewportSize({ width: 390, height: 844 }); await page.reload(); await page.getByRole('button', { name: 'Agent', exact: true }).waitFor(); await openPanel();
+  await page.setViewportSize({ width: 390, height: 844 }); await page.reload(); await page.getByRole('button', { name: 'Agent panel', exact: true }).waitFor(); await openPanel();
   await snap('phone-list');
   await panel().locator('.conversation-list button').first().click(); await page.waitForTimeout(1000); await snap('phone-conversation');
   await log('browser.errors', { errors });

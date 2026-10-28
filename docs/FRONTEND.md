@@ -36,10 +36,15 @@ inspect what happened. The application gives those actions direct places:
 - **Files** opens documents, browses the project's folder and the source folders it
   works in, and filters the current folder. A source folder is named as the person
   named it and opens one level at a time, the same way any other folder does.
-- **Activity** opens actual execution records, output, repair context and exports.
-  It also shows the selected Core-backed Claude Code/dsh activity streams, native
-  errors and observed output files. The [activity episode](AGENT-ACTIVITY.md)
-  describes attachment, bounded polling, reconnect and exact output snapshots.
+- **Agent** (the sidebar row) is the page of what Agents did here. Each conversation
+  started in Rho lists its latest messages: what the person asked, the files the
+  Agent changed and looked at (each shown in place when chosen), the commands it ran
+  and which were refused, its answer, how the message ended and how long it took.
+  Runs follow when there are any, with their execution records, output, repair
+  context and exports. Sessions started outside Rho — Core-backed Claude Code/dsh
+  activity streams, native errors and observed output files — sit in a section read
+  only while it is open ([activity episode](AGENT-ACTIVITY.md),
+  [Agent page pass](AGENT-CANVAS-EPISODE.md#one-agent-entry-and-the-agent-page)).
 - **Project settings** manages source folders and explicitly checks available tools.
 - **Studio** shows the workspaces as tabs, each with its view count; the sidebar lists
   them under Studio. The **Agent canvas** (`agent-canvas`) is the workspace the Agent's
@@ -52,7 +57,9 @@ inspect what happened. The application gives those actions direct places:
   following until the person follows again ([episode](AGENT-CANVAS-EPISODE.md)).
 - **Workspaces** hold real owner views in tabs and splits. Arrange views exposes
   split, move, close and undo operations; the command palette offers the same actions.
-- **Agent** opens on request. In a tab on this machine it holds conversations with
+- **The Agent panel** opens beside any page from the button at the right of the
+  sidebar's Agent row, from New conversation or Continue on the Agent page, or from
+  the topbar while the sidebar is hidden. In a tab on this machine it holds conversations with
   Claude Code or Codex started in Rho: select one for a new conversation, follow its streaming
   reply and its actions, reply, stop its turn and return to it after a reload
   ([conversation episode](CONVERSATION-EPISODE.md)). The panel renders the retained
@@ -74,8 +81,8 @@ inspect what happened. The application gives those actions direct places:
 The topbar names the way back — the projects list, then the project, then the open
 workspace — and keeps only the current place below 768 CSS px. The project sidebar
 starts with All projects and the project (its menu switches to another open project),
-then Overview, Studio, Agent (Working or Needs you while a turn runs) and Activity,
-then Sources. Project settings and Plugins sit together at its foot. The sidebar and optional
+then Overview, Studio, and Agent (Working or Needs you while a turn runs) with its
+panel button, then Sources. Project settings and Plugins sit together at its foot. The sidebar and optional
 inspector adapt to available space. Narrow screens show one workspace view at a time.
 Closing a panel does not cancel work.
 
@@ -100,7 +107,10 @@ with one conditional `composition.apply`, through `document.open` for text and `
 for a CSV or image. Following is a tab-local choice; the canvas layout is saved.
 `web/work-progress.tsx` reads `project.work.read` for the local person's project
 Overview: Agent-reported plans/usage, retained native source identities and current
-referenced files. It links back to the original conversation or Activity view.
+referenced files. It links back to the original conversation or the Agent page.
+`web/agent-work.tsx` draws the Agent page's conversations from `conversation.read`
+(the latest four messages of up to six conversations at a time) through the same
+step model as the panel.
 Shared notes opens `project-notes.md` in the existing Documents owner; saving is
 explicit before asking Agent to read it. A failed work read keeps the previous
 view and offers Refresh. The cursor invalidates the read model; individual sources
@@ -163,8 +173,8 @@ control names. The report and images go to `work/frontend-reset/browser/` by def
 runs project files and writes an output no step names. It checks the sidebar counts,
 that Start opens the following Agent canvas, the table, editor and media views it
 opens with the Agent's place on their tabs, the edited text on disk, the saved
-canvas, that choosing another view stops following until Follow, and overflow at
-1024/390. Evidence goes to `work/agent-canvas-acceptance/` by default.
+canvas, the Agent page's record of the turn and a file it names shown in place, that
+choosing another view stops following until Follow, and overflow at 1024/390. Evidence goes to `work/agent-canvas-acceptance/` by default.
 
 `npm run acceptance:sources` browses a project of data, scripts in two folders and
 figures in two output folders from the sidebar, without a model. It checks the

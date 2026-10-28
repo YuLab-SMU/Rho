@@ -144,7 +144,8 @@ export function AgentConversation({ snapshot, client, selectedId, onSelected, on
   const agentName = (summary?.client ?? read?.conversation.client) === 'codex' || (!openId && backend === 'codex-acp') ? 'Codex' : (summary?.client ?? read?.conversation.client) === 'claude-code' || (!openId && backend === 'claude-acp') ? 'Claude Code' : 'Agent';
   const end = useRef<HTMLDivElement>(null), input = useRef<HTMLTextAreaElement>(null);
   useEffect(() => { setDraft(stored(draftKey) ?? ''); }, [draftKey]);
-  useEffect(() => { if (selectedId) { open(selectedId); onSelected?.(); } }, [selectedId]);
+  // 'new' asks for the composer of a new conversation.
+  useEffect(() => { if (selectedId) { open(selectedId === 'new' ? null : selectedId); onSelected?.(); if (selectedId === 'new') setTimeout(() => input.current?.focus()); } }, [selectedId]);
   // The open conversation is read again whenever its recorded version changes.
   useEffect(() => {
     if (!openId) { setRead(null); return; }

@@ -85,13 +85,13 @@ try {
   const nav = page.locator('.project-nav');
   const counts = () => page.evaluate(() => Object.fromEntries([...document.querySelectorAll('.project-nav .nav-row')].map(row => [row.querySelector('.nav-row-name')?.textContent ?? '', row.querySelector('.nav-row-count')?.textContent ?? null])));
   await until(counts, c => c.Data === '1' && c.Code === '1' && c.Notes === '1' && c['Results & figures'] === '0', 'sidebar counts by kind');
-  for (const name of ['Overview', 'Studio', 'Activity', 'Data', 'Code', 'Results & figures', 'Notes', 'Files']) await nav.getByRole('button', { name, exact: true }).waitFor();
+  for (const name of ['Overview', 'Studio', 'Agent', 'Data', 'Code', 'Results & figures', 'Notes', 'Files']) await nav.getByRole('button', { name, exact: true }).waitFor();
   await nav.getByRole('button', { name: 'Data', exact: true }).click();
   await nav.locator('.nav-file').filter({ hasText: 'airquality.csv' }).waitFor();
   await shot('01-sidebar-data');
   passed('the sidebar names the project places and counts its data, code, results and notes');
 
-  await page.getByRole('button', { name: 'Agent', exact: true }).click();
+  await page.getByRole('button', { name: 'Agent panel', exact: true }).click();
   await page.getByRole('textbox', { name: 'Start a conversation' }).fill('Fit ozone on temperature and draw it.');
   await page.getByRole('button', { name: 'Start', exact: true }).click();
   await page.locator('.location-name').filter({ hasText: 'Agent canvas' }).waitFor();
@@ -126,15 +126,32 @@ try {
   await until(counts, c => c['Results & figures'] === '1', 'the new output counted');
   passed('the canvas is one saved layout: code on the left, data and figures on the right, each file once');
 
+  // The Agent page keeps what the turn did; the sidebar's Agent row is the one Agent entry.
+  assert.equal(await page.locator('.topbar').getByRole('button', { name: 'Agent panel' }).count(), 0, 'no second Agent entry beside the sidebar');
+  await nav.getByRole('button', { name: 'Agent', exact: true }).click();
+  const card = page.locator('.work-card').filter({ hasText: 'Fit ozone on temperature and draw it.' });
+  await card.locator('.work-answer').filter({ hasText: 'I fitted ozone on temperature' }).waitFor();
+  const lines = await card.locator('.work-line').evaluateAll(rows => rows.map(row => row.textContent));
+  assert.deepEqual(lines, ['Changedanalysis.Redited', 'Looked atairquality.csv']);
+  assert.match(await card.locator('.work-commands summary').textContent(), /Ran1 command/);
+  assert.match(await card.locator('.work-ending').textContent(), /^Answered/);
+  await shot('05a-agent-page');
+  await card.locator('.work-file').filter({ hasText: 'airquality.csv' }).click();
+  await page.locator('.preview-body .ag-row[row-index="0"]').first().waitFor();
+  assert.equal(await page.locator('#preview-title').textContent(), 'airquality.csv');
+  passed('the Agent page keeps what the turn changed, read, ran and answered; a file it names shows in place');
+
   // The person chooses another view: following stops, and the Agent's next file waits.
   await page.getByRole('textbox', { name: /Message|Reply/ }).fill('Now read the notes.');
   await page.getByRole('button', { name: 'Send', exact: true }).click();
   await page.locator('.follow-toggle[aria-pressed=true]').waitFor();
-  await page.getByRole('tab', { name: 'airquality.csv' }).click();
+  // Whichever data view is not in front: choosing it is the person's move.
+  const chosen = (await tabs()).find(tab => ['airquality.csv', 'ozone.svg'].includes(tab.name) && !tab.selected).name;
+  await page.getByRole('tab', { name: chosen }).click();
   await page.locator('.follow-toggle[aria-pressed=false]').waitFor();
   await page.waitForTimeout(5500);
   let now = await tabs();
-  assert.ok(now.find(tab => tab.name === 'airquality.csv')?.selected, 'the person keeps the view they chose');
+  assert.ok(now.find(tab => tab.name === chosen)?.selected, 'the person keeps the view they chose');
   assert.ok(!now.some(tab => tab.name === 'notes.md'), 'nothing is opened while not following');
   await shot('05-person-chose');
   await page.locator('.follow-toggle[aria-pressed=false]').click();

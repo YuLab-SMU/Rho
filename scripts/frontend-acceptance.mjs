@@ -120,7 +120,7 @@ writeLines(jsonlite::toJSON(list(schemaVersion=1L,complete=TRUE,artifacts=items)
   await page.getByRole('tab', { name: 'Ozone & temperature', exact: true }).click();
   await page.locator('[data-owner-view="plot"] img').waitFor();
   await inspect('figure');
-  await page.getByRole('button', { name: 'Agent', exact: true }).click();
+  await page.getByRole('button', { name: 'Agent panel', exact: true }).click();
   const output = page.getByRole('region', { name: 'Outputs of air-quality-fit' }).getByRole('button', { name: 'coefficients.csv', exact: true });
   await output.click();
   await page.locator('.ag-row[row-index="0"] [col-id="estimate"]').waitFor();
@@ -130,7 +130,7 @@ writeLines(jsonlite::toJSON(list(schemaVersion=1L,complete=TRUE,artifacts=items)
   await message.fill('Check the effect of Wind. 检查风速。');
   await page.screenshot({ path: path.join(evidence, 'agent-1440.png') });
   await page.getByRole('button', { name: 'Close Agent' }).click();
-  await page.getByRole('button', { name: 'Agent', exact: true }).click();
+  await page.getByRole('button', { name: 'Agent panel', exact: true }).click();
   assert.match(await message.inputValue(), /检查风速/);
   assert.equal(await page.locator('.conversation-list').count(), 0);
   await page.getByRole('button', { name: 'Close Agent' }).click();
@@ -139,14 +139,14 @@ writeLines(jsonlite::toJSON(list(schemaVersion=1L,complete=TRUE,artifacts=items)
   const linkTab = await context.newPage(); linkTab.setDefaultTimeout(15000);
   await linkTab.goto(service.url + '/#pair=' + (await admin.call('session.browser.pair', {})).code);
   await linkTab.locator('.project-row').filter({ hasText: project.name }).click();
-  await linkTab.getByRole('button', { name: 'Agent', exact: true }).click();
+  await linkTab.getByRole('button', { name: 'Agent panel', exact: true }).click();
   await linkTab.getByRole('textbox', { name: 'Work with your Agent' }).fill('Check the effect of Wind. 检查风速。');
   await linkTab.getByRole('button', { name: 'Copy request', exact: true }).click();
   assert.match(await linkTab.evaluate(() => navigator.clipboard.readText()), /Check the effect of Wind/);
   await linkTab.getByText('Copied. Paste it into your Agent to send.').waitFor();
   await linkTab.screenshot({ path: path.join(evidence, 'agent-link-1440.png') });
   await linkTab.getByRole('button', { name: 'Close Agent' }).click();
-  await linkTab.getByRole('button', { name: 'Agent', exact: true }).click();
+  await linkTab.getByRole('button', { name: 'Agent panel', exact: true }).click();
   assert.match(await linkTab.getByRole('textbox', { name: 'Work with your Agent' }).inputValue(), /检查风速/);
   await linkTab.close();
   passed('a link tab keeps its request draft across closing the panel; the clipboard is explicitly a handoff');
@@ -159,7 +159,7 @@ writeLines(jsonlite::toJSON(list(schemaVersion=1L,complete=TRUE,artifacts=items)
   await page.locator('.shell-split[data-axis="horizontal"]').waitFor();
   assert.match(await editorContent.innerText(), /Ozone/);
   passed('visible Arrange views menu creates a real split and reload restores it');
-  await navigate('Activity');
+  await navigate('Agent');
   await page.locator('.activity-row').filter({ hasText: 'air-quality-fit' }).click();
   await page.getByRole('dialog', { name: 'air-quality-fit' }).waitFor();
   await page.screenshot({ path: path.join(evidence, 'run-1440.png') });
@@ -194,7 +194,7 @@ writeLines(jsonlite::toJSON(list(schemaVersion=1L,complete=TRUE,artifacts=items)
   await page.screenshot({ path: path.join(evidence, 'navigation-390.png') });
   await page.keyboard.press('Escape');
   assert.equal(await page.getByRole('dialog', { name: 'Navigation', exact: true }).count(), 0);
-  await page.getByRole('button', { name: 'Agent', exact: true }).click();
+  await page.getByRole('button', { name: 'Agent panel', exact: true }).click();
   await page.screenshot({ path: path.join(evidence, 'agent-390.png') });
   await page.keyboard.press('Escape');
   await page.setViewportSize({ width: 1440, height: 900 });

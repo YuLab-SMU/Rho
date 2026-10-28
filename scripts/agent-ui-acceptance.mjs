@@ -84,7 +84,7 @@ try {
   await page.goto(service.url);
   await page.getByRole('heading', { name: 'Your projects' }).waitFor();
   await page.locator('.project-row').first().click();
-  await page.getByRole('button', { name: 'Agent', exact: true }).click();
+  await page.getByRole('button', { name: 'Agent panel', exact: true }).click();
   const panel = page.locator('[aria-label="Agent panel"]');
   await panel.locator('#conversation-input').fill('Analyse the air quality table and write the main findings to the shared notes.');
   await panel.getByRole('button', { name: 'Start', exact: true }).click();
