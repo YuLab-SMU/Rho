@@ -1,4 +1,4 @@
-export type IconName = 'home' | 'project' | 'plugins' | 'sidebar' | 'context' | 'lock' | 'folder' | 'folder-plus' | 'plus' | 'chevron' | 'info' | 'close' | 'overview' | 'layout' | 'document' | 'table' | 'image' | 'file' | 'offline' | 'prompt' | 'refresh' | 'unlink' | 'enter' | 'check' | 'grid' | 'copy' | 'eye' | 'run' | 'search' | 'code' | 'spark' | 'chart' | 'back' | 'updown' | 'follow' | 'pause' | 'graph' | 'fit' | 'minus' | 'question' | 'download' | 'trash' | 'restore';
+export type IconName = 'home' | 'project' | 'plugins' | 'sidebar' | 'context' | 'lock' | 'folder' | 'folder-plus' | 'plus' | 'chevron' | 'info' | 'close' | 'overview' | 'layout' | 'document' | 'table' | 'image' | 'file' | 'offline' | 'prompt' | 'refresh' | 'unlink' | 'enter' | 'check' | 'grid' | 'copy' | 'eye' | 'run' | 'search' | 'code' | 'spark' | 'chart' | 'back' | 'updown' | 'follow' | 'pause' | 'graph' | 'fit' | 'minus' | 'question' | 'download' | 'trash' | 'restore' | 'pencil' | 'globe' | 'arrow-up' | 'arrow-down' | 'list' | 'tool' | 'move';
 export function Icon({ name, size = 20, stroke = 1.6 }: { name: IconName; size?: number; stroke?: number }) {
   const paths = {
     home: 'm3 10 9-7 9 7v10h-6v-7H9v7H3z',
@@ -44,6 +44,13 @@ export function Icon({ name, size = 20, stroke = 1.6 }: { name: IconName; size?:
     download: 'M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19.5h14',
     trash: 'M4.5 7h15M10 4h4M6.5 7l1 12.5a1.5 1.5 0 0 0 1.5 1.5h6a1.5 1.5 0 0 0 1.5-1.5L17.5 7M10 11v6M14 11v6',
     restore: 'M4.5 12a7.5 7.5 0 1 0 2.25-5.4M4.5 4.2v3.9h3.9M12 8.5V12l2.5 1.5',
+    pencil: 'M4.5 19.5h4l10-10a2.83 2.83 0 0 0-4-4l-10 10zM13 7l4 4',
+    globe: 'M12 3a9 9 0 1 0 0 18 9 9 0 1 0 0-18zM3.5 12h17M12 3c2.4 2.6 3.6 5.6 3.6 9s-1.2 6.4-3.6 9c-2.4-2.6-3.6-5.6-3.6-9S9.6 5.6 12 3z',
+    'arrow-up': 'M12 19V5.5M6 11.5l6-6 6 6',
+    'arrow-down': 'M12 5v13.5M6 12.5l6 6 6-6',
+    list: 'M9 6.5h11M9 12h11M9 17.5h11M4.5 6.5h.01M4.5 12h.01M4.5 17.5h.01',
+    tool: 'M14.7 6.3a4 4 0 0 0-5.1 5.1L4 17l3 3 5.6-5.6a4 4 0 0 0 5.1-5.1l-2.6 2.6-2.4-.6-.6-2.4z',
+    move: 'M4.5 12h15M13.5 6l6 6-6 6',
   };
   return <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth={stroke} strokeLinejoin="round" strokeLinecap="round"><path d={paths[name]} /></svg>;
 }

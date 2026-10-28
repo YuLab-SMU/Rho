@@ -88,14 +88,18 @@ inspect what happened. The application gives those actions direct places:
   names the Agent, model and effort, the saved choices for a new conversation and the
   open conversation's own, changed between messages; each ending names the model
   that answered ([settings pass](AGENT-CANVAS-EPISODE.md#choosing-the-agent-and-its-model)). The panel renders the retained
-  record rather than protocol events: the Agent's Markdown is prose, lists and code;
-  each tool step names what it did (`Read data.csv`, `Ran Rscript analysis.R`,
-  `Wrote results/summary.csv`, `Called data.page`) with the Agent's title and reported
-  path behind a disclosure; short runs stay visible and longer ones fold into what
-  they accomplished. The current plan entry sits above the composer, a native
-  permission request is an amber choice card, and an answered choice stays in the
-  turn. New activity is followed only while the person is at the end; scrolling up
-  keeps the position and offers "Jump to latest". The Agent's tool status and
+  record rather than protocol events ([panel pass](AGENT-PANEL-EPISODE.md)): the
+  Agent's last words stay open as Markdown prose, lists, code with Copy and tables
+  that wrap; what it did before them folds into one line ("Worked · Ran 8 commands ·
+  Edited 1 file · 6 choices"), open while it works. Inside, each tool step names what it
+  did (`Read data.csv`, `Ran Rscript analysis.R`, `Wrote results/summary.csv`,
+  `Called data.page`) with an icon for its kind and the Agent's title and reported path
+  behind a disclosure; files are counted once; answered choices stay in the fold. Each
+  message ends with its outcome, model, time and Copy. A native permission request is
+  an amber choice card. The message box is one rounded surface with the model chip and
+  a round Send or Stop; under it, the plan entry in progress and the context and cost
+  the Agent reported open the session's record. New activity is followed only while
+  the person is at the end; scrolling up keeps the position and offers "Jump to latest". The Agent's tool status and
   reported path are distinct from Work progress's independently observed files.
   Sessions started elsewhere are listed with where to continue them. In an open
   workspace it also shows the Agent's recorded work and linked questions. A tab
@@ -238,7 +242,8 @@ Studio, unfolded kinds after a reload, and the 390 px drawer. Evidence goes to
 and Chrome; it uses no model credentials. It checks that reply text arrives in more
 than one visible piece, that read/command/write actions name their target while they
 run, that the plan line follows the entry in progress, that a native permission is
-shown, answered and retained, that the Agent's Markdown renders, and that reading
+shown, answered and retained in the work that folds when the message ends, that the
+Agent's Markdown renders, and that reading
 earlier lines is not interrupted by new activity. Evidence and screenshots go to
 `work/agent-ui-acceptance/` by default.
 

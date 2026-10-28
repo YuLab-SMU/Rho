@@ -212,7 +212,9 @@ export function refreshAgentSettings(client: BrowserClient, projectId: string) {
 // that conversation's own settings, changed between messages.
 function Summary({ agent, model, effort }: { agent?: string; model: string; effort?: string }) {
   const brand = agent ? brandOf(agent) : null;
-  return <span className="setting-summary">{agent && <span className="summary-agent">{brand && <BrandMark brand={brand} size={13} />}{agent}</span>}<span className="summary-model">{model}</span>{effort && <span className="summary-effort">{effort}</span>}</span>;
+  // The provider a model is offered through reads second, so the model's own name leads.
+  const { name, group } = split(model);
+  return <span className="setting-summary">{agent && <span className="summary-agent">{brand && <BrandMark brand={brand} size={13} />}<span className="summary-agent-name">{agent}</span></span>}<span className="summary-model">{name}</span>{group && <span className="summary-group">{group}</span>}{effort && <span className="summary-effort">{effort}</span>}</span>;
 }
 export function ComposerSettings({ state }: { state: AgentSettingsState }) {
   const { backend } = state, offered = state.offered(backend), choices = state.choices(backend), agent = agentLabel[backend];

@@ -1,0 +1,109 @@
+# The Agent panel
+
+Updated 2026-10-28.
+
+## Question
+
+The user found the Agent panel's conversation window too primitive, "as if an intern
+made it", and gave ten screens of other Agent applications as references
+(`work/chat-windows-ref/`, ignored by Git). What they share: the person's message as
+a rounded bubble; the work before the answer folded into one line ("Worked for 31s")
+with each step a muted line under it; the answer set as readable prose with headings,
+lists, code blocks and tables; one rounded message box holding the model and a round
+send button; and a small line under it with context and usage.
+
+The references set the kind of window, not values to copy. The question: can a person
+read what the Agent answered, see what it did and what it cost, and write the next
+message, without the window getting in the way?
+
+## Observed before
+
+Looked at with the real records of the local service's test project, on a copy
+(`work/chat-panel-20261028/before/`, panel 640 px):
+
+- Every tool step was a 50 px row with a rule under it. A style meant for the Project
+  page's run buttons (`.activity-row`) also matched the panel's rows. A message with
+  20 steps filled several screens before its answer.
+- The answer's headings, lists, paragraphs and tables ran into each other; the table
+  was cut at the panel's edge and scrolled sideways.
+- Six permission choices, each with its whole command, followed the answer as grey
+  lines ("You chose “Yes” · Rscript -e …").
+- A grey band, "Session plan & usage", sat between the messages and the box.
+- The box was three rows: a text area with a resize grip; a select reading
+  `group/auto-claude-opus-5-5 · magpie-server Xhigh effort`; then "Resumes this
+  conversation." beside a pale Send.
+- The header read "All conversations · hi · Claude Code": the first message, not the
+  title Claude Code gave the session.
+
+## Changed
+
+Rho only (`web/conversation.tsx`, `web/markdown.tsx`, `web/theme.css`,
+`web/agent-settings.tsx`, `web/icons.tsx`, `src/conversation-presentation.ts`):
+
+- **Each message folds its work.** The Agent's last words stay in the open. What it did
+  before them, with what it said along the way and the choices made for it, is one
+  line: "Worked · Ran 8 commands · Wrote 1 file · Edited 1 file · Read 4 files · 2
+  refused · 6 choices". It is open while the Agent works and folds when the message
+  ends; the person's own opening or closing is kept. Inside, each step is one line with
+  an icon for its kind (read, edit, command, search, fetch, plan); refused steps are
+  red. A pending permission stays outside the fold as the amber card.
+- **Files are counted once.** Nine edits of one script are "Edited 1 file"; commands
+  still count each run.
+- **The answer reads as text.** 14 px with room between paragraphs, headings set apart,
+  first-level list markers, code blocks with their language and Copy, inline code as
+  quiet chips, and tables that wrap inside the panel before they scroll.
+- **Each message ends with one line**: how it ended, the model that answered, the time,
+  and Copy for the answer.
+- **The header** has a back arrow, the Agent's mark, the session's title and New
+  conversation, and stays at the top while the messages scroll.
+- **The message box** is one rounded surface: the text grows to about ten lines; under
+  it the model chip (the model's name, then the provider it comes through, then effort;
+  the provider yields first when the panel is narrow) and a round Send, which becomes
+  Stop while the Agent answers. ⌘/Ctrl Enter still sends. "Jump to latest" is a round
+  button above the box, with a dot when something new arrived.
+- **Under the box**, the plan entry in progress and the context ring, tokens and cost
+  the Agent reported. It opens the session's record above the box; Escape closes it
+  and leaves the panel open.
+- **The start screen** names the Agent with its mark, and lists conversations by
+  their titles.
+
+## Runs
+
+Evidence: `work/chat-panel-20261028/` and `work/agent-ui-acceptance/` (ignored by Git).
+
+| Run | What was looked at | Observed | Change |
+| --- | --- | --- | --- |
+| `look.mjs` before | The real ggplot2 conversation at 640 px | As above | The fold, the answer's type, the box |
+| `look.mjs` after1 | The same | "Edited 9 files" for one script edited nine times; the model name cut with room to spare; a bare "Session" label | Files counted once; the label went |
+| `look.mjs` after1, opened | The fold, the record, the model list | Escape on the record also closed the panel | Escape stops at the record |
+| `look.mjs` 390 | A phone | Escape on the record also closed the sheet | Its default stopped too |
+| `look.mjs` 340 | The default width | The effort clipped to "Xhigh effo" | The model's width follows the panel's |
+| `acceptance:agent-ui` | A controlled peer: streaming, permission, plan | "Mod" cut in the chip: its −8 px margin made it 8 px narrower than its holder; list markers were hollow circles inside the list of messages | The margin moved to the holder; first-level markers |
+| `chipdebug.mjs` | The chip's widths | The deficit was always 8 px, the margin | — |
+
+## Checks
+
+Run serially on 2026-10-28 (`work/chat-panel-20261028/final/`):
+
+- `build:service`, `build:web`, the web type check and `check:contracts` passed.
+- Rho 215/215 and Plugins 92/92 ([ledger](VERIFICATION.json)), including "a file the
+  Agent touched several times is counted once; commands count each time".
+- `acceptance:agent-ui` 7/7 with a controlled peer: text streams into the open
+  message; each action names its file, command or operation while it runs; the plan
+  line follows the entry in progress; a native permission is answered and the choice
+  kept in the work that folds when the message ends; Markdown renders; reading earlier
+  lines is not interrupted and the round "Jump to latest" names new activity.
+- `agent-page` 5/5, `graph` 8/8, `agent-canvas` 10/10, `frontend` 13/13, `continuity`
+  7/7, `sources` 7/7, `objects` 5/5, `actions` 6/6, and shell, pages, person and plugin
+  UI passed.
+
+## Limits
+
+- The fold hides what the Agent said along the way once a message ends; it is one
+  click away, and the last words never fold.
+- The usage line shows what the Agent reported for its session; an Agent that reports
+  none shows no ring.
+- A message whose stream joins two sentences without a break shows them joined: Rho
+  shows what the Agent sent.
+- Tables wrap; on a phone a four-column table grows tall rather than scrolling.
+- No person other than the builder has used the window.

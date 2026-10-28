@@ -8,9 +8,9 @@ On 2026-10-27 the user found the project sidebar nearly empty and the main area
 still while the Agent worked. The sidebar now names its places and counts its Sources,
 one Agent entry opens its page, the Agent and model can be chosen, and the person
 arranges views as the Agent can ([record](AGENT-CANVAS-EPISODE.md)). Then came one
-shared workspace and a Graph of what the Agent did ([record](GRAPH-EPISODE.md)), and
-Agent settings with conversation management ([record](AGENT-PAGE-EPISODE.md)); all
-run ([section](#project-sidebar-workspace-and-graph)).
+shared workspace and a Graph of what the Agent did ([record](GRAPH-EPISODE.md)), Agent
+settings with conversation management ([record](AGENT-PAGE-EPISODE.md)) and the
+conversation window ([record](AGENT-PANEL-EPISODE.md)); all run ([section](#project-sidebar-workspace-and-graph)).
 
 Agent 0.4.11 adds each tool step's title, ACP category and input to the Claude/Codex
 ACP connections of 0.4.10. Eight real Westlake HPC turns from the installed package
@@ -31,7 +31,7 @@ evidence, not the target interface or design acceptance criteria.
 | Question → Agent → linked result | Runs; not yet usable from the screens | [Base-R episode](BASE-R-EPISODE.md) | Can the answer be read from one screen? |
 | Comparing two results | Runs | Two views split by hand | Can the differences be read by key? |
 | Claude/Codex and shared workspace | Both installed loops and external Codex relay run | [ACP acceptance](ACP-MULTI-AGENT-EPISODE.md) | Human usability and passive attachment to uninstrumented clients remain unproven |
-| Agent panel presentation | Streams; controlled peer and one real turn observed | [Agent UI episode](AGENT-UI-EPISODE.md) | Can a person scan a long trace and act on it? |
+| Agent panel presentation | Streams; work folds under each answer; real records and a controlled peer observed | [Agent panel](AGENT-PANEL-EPISODE.md) | Can a person scan a long trace and act on it? |
 | Project sidebar, workspace and Graph | Runs; real Claude turns and controlled peers | [Graph episode](GRAPH-EPISODE.md) | Can a person read from the Graph what the Agent did, and step in? |
 | Project shell and navigation | Runs | Frontend browser suite below | Does it hold up around the reworked episode? |
 | Plugin UI extensions | Runs | Authoring checks below | Does a view built with it serve a real episode? |
@@ -67,7 +67,7 @@ Git retains them at `24d9998b`; they are not requirements or reference designs.
 - Documents 0.4.3 adopts a changed file into a buffer with no unsaved text. Agent
   0.4.12 captures one named file; 0.4.13 applies, changes and inspects ACP settings.
 
-Evidence: Rho 214/214 (serial) and Plugins 92/92 ([ledger](VERIFICATION.json));
+Evidence: Rho 215/215 (serial) and Plugins 92/92 ([ledger](VERIFICATION.json));
 `acceptance:agent-page` 5/5, `graph` 8/8 and `agent-canvas` 10/10 (controlled peers),
 `sources`, `frontend`, `agent-ui`, pages, shell, person, objects, actions, continuity and
 plugin UI passed. Real Claude and Codex runs found defects in following, settings, the
@@ -180,12 +180,12 @@ protocol/session behavior. Existing CLI conversations retain their original driv
 Rho MCP calls keep their project grant; native tools keep their Agent's permissions.
 Only this machine's browser can answer a native permission request.
 
-The panel renders the retained record as it arrives: Markdown prose, a caret and
-elapsed time on the live message, one line per action with its file, command,
-pattern or project operation, open short runs and folded longer runs, the live plan
-entry, an amber permission card and a retained human choice. It follows new activity
-only at the end and offers Jump to latest after the person scrolls up. Tool status
-and the ACP path are labelled as Agent reports; observed files remain in Work progress.
+The panel renders the retained record as it arrives: Markdown, a caret and elapsed
+time on the live message, one line per action with its kind and target, and an amber
+permission card. When a message ends, its work and choices fold into one line above
+the answer ([panel pass](AGENT-PANEL-EPISODE.md)); plan, context and cost sit under the
+box. It follows new activity only at the end and offers Jump to latest after the
+person scrolls up. Tool status and the ACP path are labelled as Agent reports.
 
 - [Agent UI episode](AGENT-UI-EPISODE.md): `acceptance:agent-ui` 7/7,
   `acceptance:frontend` 11/11, Rho 202/202 (one earlier full run cancelled the known

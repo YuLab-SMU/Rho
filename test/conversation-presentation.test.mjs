@@ -67,3 +67,10 @@ test('paths inside the project are named relative to it; other files keep their 
   assert.equal(shortPath('/opt/shared/reference/genome.fa', '/tmp/work/project'), '…/reference/genome.fa');
   assert.equal(activitySummary([toolActivity(step({ tool: 'Task' }), null)]), 'Used 1 Agent tool');
 });
+
+test('a file the Agent touched several times is counted once; commands count each time', () => {
+  const edits = [1, 2, 3].map(i => toolActivity(step({ id: 'e' + i, tool: 'Edit', detail: '/tmp/p/analysis.R' }), null, '/tmp/p'));
+  const runs = [1, 2].map(i => toolActivity(step({ id: 'r' + i, tool: 'Bash', detail: 'Rscript analysis.R' }), null, '/tmp/p'));
+  const read = toolActivity(step({ id: 'x', tool: 'Read', detail: '/tmp/p/out/a.png' }), null, '/tmp/p');
+  assert.equal(activitySummary([...edits, ...runs, read, toolActivity(step({ id: 'y', tool: 'Read', detail: '/tmp/p/out/b.png' }), null, '/tmp/p')]), 'Edited 1 file · Ran 2 commands · Read 2 files');
+});

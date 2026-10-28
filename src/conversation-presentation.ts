@@ -96,10 +96,18 @@ export function toolActivity(step: ConversationStep, location: string | null, ro
   return { key: key ?? step.id ?? tool + '-' + step.at, step, action, verb, target, targetKind, title, location, outcome };
 }
 
+// Files are counted once however often the Agent touched them: nine edits of one script
+// are "Edited 1 file". Other actions count each time they happened.
+const onFiles = new Set<AgentAction>(['read', 'edit', 'write', 'delete', 'move']);
 export function activitySummary(activities: Activity[]) {
-  const counts = new Map<AgentAction, number>();
-  for (const activity of activities) counts.set(activity.action, (counts.get(activity.action) ?? 0) + 1);
-  const parts = [...counts].map(([action, n]) => summaries[action][n === 1 ? 0 : 1].replace('{n}', String(n)));
+  const seen = new Map<AgentAction, Set<string>>();
+  activities.forEach((activity, i) => {
+    const file = onFiles.has(activity.action) ? activity.location ?? activity.step.detail ?? activity.target : null;
+    const named = seen.get(activity.action) ?? new Set<string>();
+    named.add(file ?? '#' + i);
+    seen.set(activity.action, named);
+  });
+  const parts = [...seen].map(([action, named]) => summaries[action][named.size === 1 ? 0 : 1].replace('{n}', String(named.size)));
   const refused = activities.filter(a => a.outcome === 'rejected').length, unknown = activities.filter(a => a.outcome === 'unknown').length;
   if (refused) parts.push(refused + ' refused');
   if (unknown) parts.push(unknown + ' with unknown outcome');

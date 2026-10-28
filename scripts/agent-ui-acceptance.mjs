@@ -124,7 +124,14 @@ try {
   await snap('permission');
   await permission.getByRole('button', { name: 'Allow once', exact: true }).click();
   await panel.locator('.turn-ending').last().getByText(/Done in/).waitFor({ timeout: 20000 });
+  // Once the message ends, what the Agent did folds into one line above its answer; the
+  // person's choice is kept inside it.
+  const work = panel.locator('.turn-work').last();
+  assert.equal(await work.evaluate(el => el.open), false, 'the finished work folds');
+  assert.match(await work.locator(':scope > summary').innerText(), /Worked[\s\S]*1 choice/);
+  await work.locator(':scope > summary').click();
   await panel.getByText(/You chose “Allow once”/).waitFor();
+  await snap('work-open');
   passed('a native permission choice is shown, answered and retained as a human decision');
 
   assert.match(await plan.innerText(), /Plan · complete/);
@@ -148,7 +155,7 @@ try {
   assert.ok(held <= scrolled + 2, 'streaming does not pull the reader back to the end');
   const jump = panel.getByRole('button', { name: /Jump to latest/ });
   await jump.waitFor();
-  assert.match(await panel.locator('.conversation-actions > span').innerText(), /New activity below/);
+  assert.match(await jump.getAttribute('aria-label'), /New activity/);
   await snap('reading-earlier');
   await jump.click(); await page.waitForTimeout(400);
   const atEnd = await pane.evaluate(el => Math.abs(el.scrollHeight - el.clientHeight - el.scrollTop) < 4);

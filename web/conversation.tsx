@@ -1,11 +1,14 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { BrowserApiError, type BrowserClient, type WorkspaceSnapshot } from '../src/browser.js';
 import type { RhoOutput } from '../src/contract.generated.js';
-import { conversationBlocks, currentPlanEntry, type Activity } from '../src/conversation-presentation.js';
+import { activitySummary, conversationBlocks, currentPlanEntry, type Activity, type AgentAction, type Block } from '../src/conversation-presentation.js';
 import { projectName } from './home.js';
-import { AgentMarkdown } from './markdown.js';
+import { AgentMarkdown, CopyButton } from './markdown.js';
 import { SessionProgress } from '@rho-workspace/plugin-agent/ui';
-import { ComposerSettings, OpenSettings, agentLabel, backendOf, modelSetting, useAgentSettings, valueName, type SettingValue } from './agent-settings.js';
+import { ComposerSettings, OpenSettings, agentLabel, backendOf, modelSetting, split, useAgentSettings, valueName, type SettingValue } from './agent-settings.js';
+import { BrandMark, brandOf } from './brand-marks.js';
+import { money, tokens } from './agent-manage.js';
+import { Icon, type IconName } from './icons.js';
 
 // A conversation the person starts here. Rho holds its input, so this panel is where it
 // continues: the person's messages, the Agent's words as they arrive, the actions it takes
@@ -20,6 +23,7 @@ const clock = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: '2-d
 const seconds = (ms: number) => ms < 60000 ? Math.max(1, Math.round(ms / 1000)) + ' s' : Math.round(ms / 60000) + ' min';
 const liveTime = (s: number) => s < 60 ? s + ' s' : Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
 const clientName = (client?: string | null) => client === 'codex' ? 'Codex' : client === 'claude-code' ? 'Claude Code' : '';
+const actionIcon: Record<AgentAction, IconName> = { read: 'file', edit: 'pencil', write: 'pencil', delete: 'trash', move: 'move', search: 'search', execute: 'prompt', fetch: 'globe', project: 'spark', agents: 'spark', plan: 'list', other: 'tool' };
 function ending(turn: Turn) {
   if (turn.state === 'running') {
     if (turn.stop) return 'Stopping…';
@@ -60,11 +64,10 @@ function scrollParent(node: HTMLElement | null) {
   }
   return document.scrollingElement as HTMLElement | null;
 }
-
 function ActivityRow({ activity }: { activity: Activity }) {
   const outcome = activity.outcome;
   const summary = <>
-    <span className={'activity-dot ' + outcome} aria-hidden="true" />
+    <span className={'activity-icon ' + outcome} aria-hidden="true"><Icon name={actionIcon[activity.action]} size={13} /></span>
     <span className="activity-verb">{activity.verb}</span>
     {activity.target && <span className={'activity-target ' + (activity.targetKind ?? 'text')} title={activity.target}>{activity.target}</span>}
     {outcome === 'rejected' && <span className="activity-flag">refused</span>}
@@ -95,6 +98,16 @@ function ActivityRun({ activities, running, summary }: { activities: Activity[];
   if (activities.length <= 3) return list;
   return <details className="activity-group"><summary>{summary}</summary>{list}</details>;
 }
+function BlockView({ block }: { block: Block }) {
+  if (block.kind === 'text') return <div className="turn-text-block">
+    <AgentMarkdown text={block.step.text ?? ''} streaming={block.streaming} />
+    {block.step.cut && <p className="turn-note">… the rest of this message was not kept.</p>}
+  </div>;
+  if (block.kind === 'error') return <p className="turn-error">{block.step.text}</p>;
+  return block.activities.length === 1
+    ? <ul className="activity-list single"><ActivityRow activity={block.activities[0]} /></ul>
+    : <ActivityRun activities={block.activities} running={block.running} summary={block.summary} />;
+}
 
 function TurnView({ turn, running, observation, projectRoot, choose, choosing, askAgain }: {
   turn: Turn; running: boolean; observation?: Observation; projectRoot?: string;
@@ -102,17 +115,33 @@ function TurnView({ turn, running, observation, projectRoot, choose, choosing, a
 }) {
   const blocks = conversationBlocks(turn, observation, projectRoot);
   const elapsed = useElapsed(running, turn.startedAt ?? turn.sentAt);
+  // The Agent's last words stay in the open. What it did before them, with the words it said
+  // along the way and the choices made for it, folds into one line once the message ends;
+  // while it works, that part stays open so the person can follow it.
+  let cut = blocks.length;
+  while (cut > 0 && blocks[cut - 1].kind === 'text') cut--;
+  const work = blocks.slice(0, cut), answer = blocks.slice(cut);
+  const choices = turn.permissions?.filter(p => p.state !== 'pending') ?? [];
+  const activities = work.flatMap(block => block.kind === 'activity' ? block.activities : []);
+  const errors = work.filter(block => block.kind === 'error').length;
+  const [shown, setShown] = useState<boolean | null>(null);
+  const open = shown ?? running;
+  const said = [activitySummary(activities), choices.length ? choices.length + (choices.length === 1 ? ' choice' : ' choices') : '', errors ? errors + (errors === 1 ? ' error' : ' errors') : ''].filter(Boolean).join(' · ');
+  const answerText = answer.map(block => block.kind === 'text' ? block.step.text ?? '' : '').join('\n\n').trim();
+  const model = turn.model ? valueName(modelSetting(observation?.config?.options), turn.model) : '';
   return <li className={'turn ' + turn.state}>
-    <div className="turn-person"><p data-user-text="">{turn.text}</p><span>{clock(turn.sentAt)}</span></div>
-    {blocks.map(block => block.kind === 'text'
-      ? <div key={block.key} className="turn-text-block">
-        <AgentMarkdown text={block.step.text ?? ''} streaming={block.streaming} />
-        {block.step.cut && <p className="turn-note">… the rest of this message was not kept.</p>}
+    <div className="turn-person"><p data-user-text="">{turn.text}</p></div>
+    {(work.length > 0 || choices.length > 0) && <details className="turn-work" open={open} onToggle={event => { const next = event.currentTarget.open; if (next !== open) setShown(next); }}>
+      <summary><span className="turn-work-label">{running ? 'Working' : 'Worked'}</span>{said && <span className="turn-work-said">{said}</span>}</summary>
+      <div className="turn-work-body">
+        {work.map(block => <BlockView key={block.key} block={block} />)}
+        {choices.length > 0 && <ul className="turn-choices">{choices.map(permission => <li key={permission.id} className="turn-choice" title={permission.title}>
+          <Icon name={permission.state === 'cancelled' ? 'close' : 'check'} size={12} />
+          {permission.state === 'cancelled' ? <span>The Agent request was cancelled.</span> : <><span className="turn-choice-option">You chose “{permission.options.find(option => option.id === permission.selected)?.name ?? 'an option'}”</span><span className="turn-choice-what">{permission.title}</span></>}
+        </li>)}</ul>}
       </div>
-      : block.kind === 'error' ? <p key={block.key} className="turn-error">{block.step.text}</p>
-        : block.activities.length === 1
-          ? <ul key={block.key} className="activity-list single"><ActivityRow activity={block.activities[0]} /></ul>
-          : <ActivityRun key={block.key} activities={block.activities} running={block.running} summary={block.summary} />)}
+    </details>}
+    {answer.map(block => <BlockView key={block.key} block={block} />)}
     {turn.omitted > 0 && <p className="turn-note">{turn.omitted} later {turn.omitted === 1 ? 'step was' : 'steps were'} not kept.</p>}
     {running && turn.permissions?.filter(p => p.state === 'pending').map(permission => <div key={permission.id} className="turn-permission" role="group" aria-label="Agent permission">
       <p className="permission-caption"><span aria-hidden="true" />Needs your choice</p>
@@ -120,14 +149,41 @@ function TurnView({ turn, running, observation, projectRoot, choose, choosing, a
       {permission.details && <pre>{permission.details}</pre>}
       <div>{permission.options.map(option => <button key={option.id} className="small-button" disabled={choosing === permission.id} onClick={() => choose(turn.id, permission.id, option.id)}>{option.name}</button>)}</div>
     </div>)}
-    {turn.permissions?.filter(p => p.state !== 'pending').map(permission => <p key={permission.id} className="turn-choice">
-      {permission.state === 'cancelled' ? 'The Agent request was cancelled.' : <>You chose “{permission.options.find(option => option.id === permission.selected)?.name ?? 'an option'}”<span className="turn-choice-what"> · {permission.title}</span></>}
-    </p>)}
-    <div className="turn-ending-line">
-      <p className={'turn-ending ' + turn.state} role={turn.state === 'running' ? 'status' : undefined}>{ending(turn)}{running && elapsed !== null && <span className="turn-elapsed" aria-hidden="true"> · {liveTime(elapsed)}</span>}{turn.model && <span className="turn-model" title={turn.model}> · {valueName(modelSetting(observation?.config?.options), turn.model)}</span>}</p>
+    <div className="turn-foot">
+      <p className={'turn-ending ' + turn.state} role={turn.state === 'running' ? 'status' : undefined}>{running && <span className="turn-spinner" aria-hidden="true" />}{ending(turn)}{running && elapsed !== null && <span className="turn-elapsed" aria-hidden="true"> · {liveTime(elapsed)}</span>}</p>
+      <span className="turn-meta">{model && <span className="turn-model" title={model}>{split(model).name}</span>}<span title={new Date(turn.sentAt).toLocaleString()}>{clock(turn.sentAt)}</span></span>
+      {!running && answerText && <CopyButton text={answerText} label="Copy answer" />}
       {turn.state === 'failed' && !running && <button className="text-button" onClick={() => askAgain(turn.text)}>Ask again</button>}
     </div>
   </li>;
+}
+
+// Below the message box: the session's plan and how much of its context it has used, as the
+// Agent reported them. The whole record opens above it.
+function SessionStrip({ observation }: { observation: NonNullable<Observation> }) {
+  const ref = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    const away = (event: MouseEvent) => { const box = ref.current; if (box?.open && !box.contains(event.target as Node)) box.open = false; };
+    document.addEventListener('mousedown', away);
+    return () => document.removeEventListener('mousedown', away);
+  }, []);
+  const plan = currentPlanEntry(observation), entries = observation.plan?.entries ?? [];
+  const usage = observation.usage, share = usage && usage.size > 0 ? Math.min(1, usage.used / usage.size) : null;
+  const spent = usage?.cost ? money(usage.cost.amount, usage.cost.currency) : null;
+  // Escape closes the record and stays here: it does not also close the panel.
+  return <details ref={ref} className="conversation-plan" onKeyDown={event => { if (event.key === 'Escape' && ref.current?.open) { event.preventDefault(); event.stopPropagation(); ref.current.open = false; ref.current.querySelector('summary')?.focus(); } }}>
+    <summary title={plan?.content ?? 'Session details'}>
+      <span className="strip-plan">{plan ? <><span className={'plan-state ' + plan.status} aria-hidden="true" />Plan · {plan.content}</>
+        : entries.length ? <><span className="plan-state completed" aria-hidden="true" />Plan · complete</> : !usage ? 'Session details' : <span className="visually-hidden">Session details</span>}</span>
+      {usage && <span className="strip-usage" aria-label={`Context ${tokens(usage.used)} of ${tokens(usage.size)} tokens${spent ? ', ' + spent : ''}`}>
+        {share !== null && <svg className={'context-ring' + (share >= 0.8 ? ' high' : '')} width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6" /><circle cx="8" cy="8" r="6" strokeDasharray={`${Math.max(0.5, share * 37.7)} 37.7`} transform="rotate(-90 8 8)" /></svg>}
+        {share !== null && <span>{Math.round(share * 100)}%</span>}
+        <span className="strip-tokens">{tokens(usage.used)} / {tokens(usage.size)}</span>
+        {spent && <span>{spent}</span>}
+      </span>}
+    </summary>
+    <div className="session-popover"><SessionProgress observation={observation} /></div>
+  </details>;
 }
 
 export function AgentConversation({ snapshot, client, selectedId, onSelected, onSent }: { snapshot: WorkspaceSnapshot; client: BrowserClient; selectedId?: string | null; onSelected?: () => void; onSent?: () => void }) {
@@ -144,6 +200,7 @@ export function AgentConversation({ snapshot, client, selectedId, onSelected, on
   const summary = list.find(c => c.conversationId === openId);
   const openClient = summary?.client ?? read?.conversation.client;
   const agentName = openId ? (openClient ? agentLabel[backendOf(openClient)] : 'Agent') : agentLabel[settings.backend];
+  const brand = brandOf(agentName);
   const end = useRef<HTMLDivElement>(null), input = useRef<HTMLTextAreaElement>(null);
   useEffect(() => { setDraft(stored(draftKey) ?? ''); }, [draftKey]);
   // 'new' asks for the composer of a new conversation.
@@ -185,7 +242,6 @@ export function AgentConversation({ snapshot, client, selectedId, onSelected, on
   function edit(text: string) { setDraft(text); if (!store(draftKey, text)) setProblem('This draft could not be stored. Send or copy it before closing this panel.'); }
   function askAgain(text: string) { setFollowing(true); edit(text); input.current?.focus(); }
   const last = read?.turns.at(-1), answering = !!openId && (last?.state === 'running' || summary?.state === 'running');
-  const plan = currentPlanEntry(read?.observation ?? null), planEntries = read?.observation?.plan?.entries ?? [];
   // The request identity is chosen once, kept until the service answers, and reused by Retry,
   // so a lost reply never turns one message into two.
   async function deliver(next: Pending) {
@@ -228,11 +284,22 @@ export function AgentConversation({ snapshot, client, selectedId, onSelected, on
     catch (error) { setProblem(error instanceof Error ? error.message : 'The stop request could not be confirmed. Refresh to see whether it stopped.'); }
   }
   const waiting = pending && (pending.kind === 'start' ? !openId : pending.conversationId === openId) ? pending : null;
+  const text = waiting ? waiting.text : draft;
+  // The box grows with what is written, up to about ten lines, then scrolls.
+  useLayoutEffect(() => {
+    const box = input.current;
+    if (!box) return;
+    box.style.height = 'auto';
+    box.style.height = Math.min(box.scrollHeight + 2, 240) + 'px';
+  }, [text, openId]);
+  const title = summary?.agentTitle || summary?.title || read?.conversation.title || 'Conversation';
+  const canSend = !busy && !waiting && !!draft.trim();
   return <section className="conversation" aria-label={openId ? 'Conversation' : 'New conversation'}>
     {openId ? <header className="conversation-head">
-      <button className="text-button" onClick={() => open(null)}>All conversations</button>
-      <strong title={summary?.title ?? read?.conversation.title}>{summary?.title ?? read?.conversation.title ?? 'Conversation'}</strong>
-      {clientName(summary?.client ?? read?.conversation.client) && <span className="conversation-client">{clientName(summary?.client ?? read?.conversation.client)}</span>}
+      <button className="icon-button" aria-label="All conversations" title="All conversations" onClick={() => open(null)}><Icon name="back" size={16} /></button>
+      {brand && <span className="conversation-mark" title={clientName(openClient)}><BrandMark brand={brand} size={15} /></span>}
+      <strong title={title}>{title}</strong>
+      <button className="icon-button" aria-label="New conversation" title="New conversation" onClick={() => { open(null); setTimeout(() => input.current?.focus()); }}><Icon name="plus" size={16} /></button>
     </header> : null}
     {openId ? <ol className="conversation-turns" aria-label="Messages">
       {(read?.first ?? 0) > 0 && <li className="turn-note">{read!.first} earlier {read!.first === 1 ? 'message is' : 'messages are'} kept but not shown.</li>}
@@ -243,32 +310,43 @@ export function AgentConversation({ snapshot, client, selectedId, onSelected, on
         }, error => setProblem(error instanceof Error ? error.message : 'The choice could not be confirmed.')).finally(() => setChoosing(null));
       }} />)}
     </ol> : <div className="conversation-intro">
-      <p>Ask {agentName} to explore or change {projectName(snapshot.project)}. It runs on this machine with access to this project, and its replies appear here.</p>
-      {list.length > 0 && <ul className="conversation-list" aria-label="Conversations">{list.map(c => <li key={c.conversationId}>
-        <button onClick={() => open(c.conversationId)}><strong>{c.title}</strong><span>{c.state === 'running' ? 'Answering now' : c.state === 'unknown' ? 'Last message: outcome unknown' : clock(c.lastAt)} · {[clientName(c.client), c.turns + ' ' + (c.turns === 1 ? 'message' : 'messages')].filter(Boolean).join(' · ')}</span></button>
-      </li>)}</ul>}
+      <div className="intro-lead">
+        {brand && <BrandMark brand={brand} size={24} />}
+        <p>Ask {agentName} to explore or change {projectName(snapshot.project)}.</p>
+        <small>It runs on this machine with access to this project, and its replies appear here.</small>
+      </div>
+      {list.length > 0 && <>
+        <h3 className="intro-heading">Conversations</h3>
+        <ul className="conversation-list" aria-label="Conversations">{list.map(c => {
+          const mark = brandOf(clientName(c.client));
+          return <li key={c.conversationId}>
+            <button onClick={() => open(c.conversationId)}>
+              {mark ? <BrandMark brand={mark} size={15} /> : <span className="conversation-list-mark" aria-hidden="true" />}
+              <span className="conversation-list-text"><strong>{c.agentTitle || c.title}</strong><span>{c.state === 'running' ? 'Answering now' : c.state === 'unknown' ? 'Last message: outcome unknown' : clock(c.lastAt)} · {[clientName(c.client), c.turns + ' ' + (c.turns === 1 ? 'message' : 'messages')].filter(Boolean).join(' · ')}</span></span>
+            </button>
+          </li>;
+        })}</ul>
+      </>}
     </div>}
-    {read?.observation && <details className="conversation-plan">
-      <summary title={plan?.content}>{plan ? <><span className={'plan-state ' + plan.status} aria-hidden="true" />Plan · {plan.content}</>
-        : planEntries.length ? <><span className="plan-state completed" aria-hidden="true" />Plan · complete</> : 'Session plan & usage'}</summary>
-      <SessionProgress observation={read.observation} />
-    </details>}
     <div className="conversation-composer">
+      {!following && <button className={'jump-latest' + (unseen ? ' unseen' : '')} aria-label={(unseen ? 'New activity · ' : '') + 'Jump to latest'} title={unseen ? 'New activity below' : 'Jump to latest'} onClick={() => setFollowing(true)}><Icon name="arrow-down" size={15} /></button>}
       {waiting && unconfirmed && <p role="alert">Your message was not confirmed. Retry sends the same message once.<button className="small-button" disabled={busy} onClick={() => void deliver(waiting)}>Retry</button></p>}
       {problem && <p role="alert">{problem}</p>}
-      <label htmlFor="conversation-input" className="visually-hidden">{openId ? 'Message ' + agentName : 'Start a conversation'}</label>
-      <textarea id="conversation-input" ref={input} rows={3} value={waiting ? waiting.text : draft} readOnly={!!waiting} placeholder={openId ? 'Reply to ' + agentName + '…' : 'What should the Agent look at or change?'} onChange={e => edit(e.target.value)}
-        onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !answering && !busy && !waiting) { e.preventDefault(); send(); } }} />
-      {openId ? (openClient && <OpenSettings options={read?.observation?.config?.options ?? settings.offered(backendOf(openClient))?.options ?? null} values={read?.config ?? {}} agent={agentName}
-        disabled={answering || configuring || !read} checking={settings.checking.has(backendOf(openClient))} checkProblem={settings.checkProblem[backendOf(openClient)]} onCheck={() => void settings.check(backendOf(openClient))}
-        onChoose={(id, value) => void configure(id, value)} />)
-        : !waiting && <ComposerSettings state={settings} />}
-      <div className="conversation-actions">
-        <span>{answering ? agentName + ' is answering. You can write your next message.' : openId ? 'Resumes this conversation.' : 'Starts a new conversation.'}{!following && unseen && <span className="following-note"> New activity below.</span>}</span>
-        {!following && <button className="small-button jump-latest" onClick={() => setFollowing(true)}>{unseen ? 'New activity · ' : ''}Jump to latest</button>}
-        {answering ? <button onClick={() => void stop()} disabled={!!last?.stop}>{last?.stop ? 'Stopping…' : 'Stop'}</button>
-          : <button className="primary" disabled={busy || !!waiting || !draft.trim()} onClick={send}>{busy ? 'Sending…' : openId ? 'Send' : 'Start'}</button>}
+      <div className="composer-box" onMouseDown={event => { if (event.target === event.currentTarget) { event.preventDefault(); input.current?.focus(); } }}>
+        <label htmlFor="conversation-input" className="visually-hidden">{openId ? 'Message ' + agentName : 'Start a conversation'}</label>
+        <textarea id="conversation-input" ref={input} rows={2} value={text} readOnly={!!waiting}
+          placeholder={answering ? agentName + ' is answering. You can write your next message.' : openId ? 'Reply to ' + agentName + '…' : 'What should ' + agentName + ' look at or change?'} onChange={e => edit(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !answering && canSend) { e.preventDefault(); send(); } }} />
+        <div className="composer-bar">
+          {openId ? (openClient && <OpenSettings options={read?.observation?.config?.options ?? settings.offered(backendOf(openClient))?.options ?? null} values={read?.config ?? {}} agent={agentName}
+            disabled={answering || configuring || !read} checking={settings.checking.has(backendOf(openClient))} checkProblem={settings.checkProblem[backendOf(openClient)]} onCheck={() => void settings.check(backendOf(openClient))}
+            onChoose={(id, value) => void configure(id, value)} />)
+            : !waiting && <ComposerSettings state={settings} />}
+          {answering ? <button className="composer-send stop" aria-label={last?.stop ? 'Stopping…' : 'Stop'} title={last?.stop ? 'Stopping…' : 'Stop this message'} onClick={() => void stop()} disabled={!!last?.stop}><span className="stop-square" aria-hidden="true" /></button>
+            : <button className="composer-send" aria-label={busy ? 'Sending…' : openId ? 'Send' : 'Start'} title={(openId ? 'Send' : 'Start') + ' (⌘ Enter)'} disabled={!canSend} onClick={send}><Icon name="arrow-up" size={16} stroke={2} /></button>}
+        </div>
       </div>
+      {read?.observation && <SessionStrip observation={read.observation} />}
     </div>
     {/* After the composer, so the newest lines end above it rather than behind it. */}
     <div ref={end} />
