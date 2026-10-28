@@ -137,6 +137,58 @@ Changed (`web/main.tsx`, `web/project.tsx`, `web/overview.tsx`,
 | `look.mjs` again, and at 390 px | The same, and the phone sheet | One Agent button; no list on the start screen; Escape closes the list and keeps the panel; All conversations shows the Agent page (and closes the sheet on a phone); no overflow or page errors | — |
 | The Overview at 1440 and 390 px | Work progress | Two finished conversations as cards headed "hi" | Finished ones are counted and linked |
 
+## Agents outside Rho
+
+The user asked what Connection & access is for, and said the Agent page's sessions
+started outside Rho were plain text with no design, where other products' "connect
+your agent" pages are designed. They chose that the Agent connects itself, with steps
+a person can see and buttons a person can press, and kept Connection & access at the
+sidebar's foot.
+
+Observed before (the same copy, 1440 px):
+
+- Connection & access held the connection's state (also in the topbar), this tab's
+  access (which matters only for a tab opened from a link), the Agents with access
+  (also on the Agent page) and a document's Changes.
+- Sessions started outside Rho was a closed section of sentences: each grant's label,
+  abilities and last call, then the project Host's activity. Work progress had its own
+  "Connect an external ACP client" with a placeholder folder. Nothing on the page added
+  Rho to an Agent: `rho --grant` printed a `claude mcp add` line to paste.
+
+Decided: an Agent that connects itself through a Skill would need the operator's
+connection, which opens every project. Instead the person at this machine presses one
+button; the service gives that Agent access to this project only and runs the Agent's
+own `mcp add` with that narrower connection. Nothing is sent to the Agent.
+
+Changed (`src/agent-connect.ts`, `src/server.ts`, `src/protocol.ts`, `src/state.ts`,
+`src/cli.ts`, `web/outside-agents.tsx`, `web/outside-agents.css`,
+`web/agent-manage.tsx`, `web/main.tsx`, `web/overview.tsx`, `web/work-progress.tsx`):
+
+- **`session.connect`**, for the person at this machine only, grants Claude Code or
+  Codex access to the project and runs `claude mcp add -s local rho-<folder>` in the
+  project folder or `codex mcp add rho-<folder>`, after removing an earlier entry of
+  that name, then records what was added. A grant whose connection still reaches this
+  service with its token is kept; one written for another address is replaced; a new
+  grant the Agent then refuses is removed. Each CLI call may take 20 s and keep 8 KiB of
+  output; past either it is stopped and the step fails with what it printed. `rho
+  --grant` uses the same name and command.
+- **Outside Rho**, the Agent page's third tab: Claude Code, Codex and Other ACP clients
+  on the left with their state (Added, Connected, Access ended); on the right three
+  steps in the state Rho observes, access to this project, Rho in that Agent (the
+  button, what it ran and when) and its first call (when, which operation), then
+  prompts to copy. Other ACP clients has the `rho --acp` commands with this project's
+  folder and the sessions such a client started. The project Host's activity is a
+  closed section below, read only while open. Work progress's ACP help went.
+- **Connection & access** holds the connection, this tab's access and a document's
+  Changes; its Agents list went.
+
+| Run | What was looked at | Observed | Change |
+| --- | --- | --- | --- |
+| `work/outside-20261028/look.mjs` at 1440 px, stand-in `claude` and `codex` | Before and after Add, the first call, a refused Codex, ACP, Host activity | Steps 1 and 2 both marked as next before anything was added; a refusal left step 2 unmarked; the ACP panel kept an empty height | Step 1 waits on the button; a refusal marks step 2; a lower minimum height |
+| The same at 390 px | The tab and its Agents | "Outside Rho" broke over two lines; the third Agent was cut off in a scrolling row | Tab names do not wrap; the Agents share the row in three columns |
+| Again, after the copy's service started on a new port | Add again, Codex refused | The kept connection named the previous port, so Add again repaired nothing; the refused Codex was left as "Access only" | Kept only while it reaches this service; a refused new grant is removed |
+| Both widths again, and `work/layout-20261028/look.mjs` | The tab; Connection & access | The steps follow the state; the drawer shows the connection and this tab; no overflow or page errors | — |
+
 ## Checks
 
 Run serially on 2026-10-28 (`work/chat-panel-20261028/final/`):
@@ -170,6 +222,15 @@ Run serially on 2026-10-28 (`work/chat-panel-20261028/final/`):
   Documents plugin names the person "You". `acceptance:acp` and the conversation
   episode reach a finished conversation through the recent list; they need a real
   Agent and were not run.
+- After Outside Rho, the batch passed again: Rho 218/218, with `agent-connect.test.mjs`
+  (both Agents' `mcp add`, a kept and a replaced connection, a `rho --grant` grant as
+  the same session, an Agent refused, and a refusing, missing or stalled CLI), Plugins
+  92/92, `agent-page` 7/7 with "Outside Rho adds Rho to Claude Code with its own mcp add
+  and shows its first call; a refused Codex leaves no access", `graph` 8/8, `frontend`
+  13/13, `agent-canvas` 10/10, `agent-ui` 7/7, `continuity` 7/7, `sources` 7/7,
+  `objects` 5/5, `actions` 6/6, and shell, person and plugin UI. `pages` looked for the
+  Agents list in Connection & access; it now finds the session under Outside Rho and
+  passed, with no overflow at four widths.
 
 ## Limits
 
@@ -190,4 +251,12 @@ Run serially on 2026-10-28 (`work/chat-panel-20261028/final/`):
   on the Agent page.
 - The recent list's search appears past six conversations; the copy has two, so it
   was not seen with real records.
+- Only stand-in CLIs ran `mcp add`; the real ones were read through `--help`, so the
+  user's Claude Code and Codex configurations were not changed. A session already
+  open does not load the new server; a new one does, as the page says.
+- Codex keeps one entry per folder name for every folder: two projects in folders of
+  the same name share `rho-<folder>`, and the later replaces the earlier.
+- With no project Host running, Host activity reads "Observation disconnected" (the
+  Agent plugin's wording). `acceptance:agent-activity`, which now opens it from Outside
+  Rho, drives real Claude Code and dsh and was not rerun.
 - No person other than the builder has used the window.

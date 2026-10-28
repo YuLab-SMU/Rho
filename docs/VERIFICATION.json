@@ -3,15 +3,15 @@
   "checks": {
     "rho-tests": {
       "command": "node --test --test-concurrency=1 test/*.test.mjs",
-      "checkedAt": "2026-10-28T08:17:29.238Z",
+      "checkedAt": "2026-10-28T09:24:25.083Z",
       "exitCode": 0,
-      "tests": 215,
-      "passing": 215,
+      "tests": 218,
+      "passing": 218,
       "passed": true
     },
     "plugin-tests": {
       "command": "node --test test/*.test.mjs",
-      "checkedAt": "2026-10-28T08:17:31.389Z",
+      "checkedAt": "2026-10-28T09:24:27.219Z",
       "exitCode": 0,
       "tests": 92,
       "passing": 92,

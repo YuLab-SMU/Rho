@@ -53,8 +53,8 @@ if (values.acp) {
     const project = await client.call('project.open', { path: values.project });
     const session = values.session ?? 'claude-code';
     const granted = await client.call('session.grant', { projectId: project.id, externalSessionId: session });
-    const command = [process.execPath, fileURLToPath(import.meta.url), '--mcp', granted.connectionFile];
-    const name = 'rho-' + (path.basename(project.root).toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '') || 'project');
+    const { mcpCommand, mcpName } = await import('./agent-connect.js');
+    const command = mcpCommand(granted.connectionFile), name = mcpName(project.root);
     const quote = (value: string) => /^[A-Za-z0-9_./:@=-]+$/.test(value) ? value : `'${value.replace(/'/g, `'\\''`)}'`;
     process.stdout.write(JSON.stringify({ projectId: project.id, session, connectionFile: granted.connectionFile, methods: granted.methods.length,
       mcp: { name, command: command[0], args: command.slice(1) }, claude: ['claude', 'mcp', 'add', name, '--', ...command].map(quote).join(' ') }) + '\n');

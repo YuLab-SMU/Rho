@@ -30,7 +30,7 @@ interface Props {
   linked?: boolean; onPath?: (path: string) => void; onNewConversation?: () => void;
 }
 export function ProjectOverview({ project, snapshot, client, section, workspace, onSection, onAgent, onLayout, onProjectChanged, onOpened, category, files, sources, onFile, linked = false, onPath, onNewConversation }: Props) {
-  // Sessions started outside Rho are read only while their section is open.
+  // A linked tab's Agent sessions with access are read only while their section is open.
   const [outsideOpen, setOutsideOpen] = useState(false);
   const { runs, problem: runsProblem, readAgain } = useRuns(client, project.id, snapshot.cursor);
   const [inspecting, setInspecting] = useState<string | null>(null);
@@ -170,12 +170,13 @@ export function ProjectOverview({ project, snapshot, client, section, workspace,
     {section === 'agent' && (() => {
       const extra = <>
       {(orderedRuns.length > 0 || runsProblem) && <section className="project-section agent-runs"><div className="section-heading"><h2>Runs</h2></div>{error(runsProblem, readAgain)}<div className="activity-list">{orderedRuns.map(runRow)}</div></section>}
-      <details className="agent-outside" open={outsideOpen} onToggle={event => setOutsideOpen(event.currentTarget.open)}>
-        <summary>{linked ? 'Agent sessions with access' : 'Sessions started outside Rho'}</summary>
-        {outsideOpen && <><AgentAccess snapshot={snapshot} outside={!linked} /><AgentActivity client={client} projectId={project.id} onOpened={onOpened} /></>}
-      </details>
+      {/* A tab from a narrower link sees the sessions with access; this machine's tab has them under Outside Rho. */}
+      {linked && <details className="agent-outside" open={outsideOpen} onToggle={event => setOutsideOpen(event.currentTarget.open)}>
+        <summary>Agent sessions with access</summary>
+        {outsideOpen && <><AgentAccess snapshot={snapshot} /><AgentActivity client={client} projectId={project.id} onOpened={onOpened} /></>}
+      </details>}
       </>;
-      return linked ? extra : <AgentPage client={client} snapshot={snapshot} exists={path => !!files?.files.some(file => file.path === path)} onContinue={id => onAgent(id)} onPath={path => onPath?.(path)} onNew={() => onNewConversation?.()} extra={extra} />;
+      return linked ? extra : <AgentPage client={client} snapshot={snapshot} exists={path => !!files?.files.some(file => file.path === path)} onContinue={id => onAgent(id)} onPath={path => onPath?.(path)} onNew={() => onNewConversation?.()} onOpened={onOpened} extra={extra} />;
     })()}
     {section === 'settings' && <div className="settings-sections"><section className="project-section"><h2>Source folders</h2><SourceFolders folders={project.sources ?? [{ id: project.id, root: project.root, name: projectName(project) }]} busy={adding} onAdd={() => void add()} />{error(sourceError, () => void add())}</section>
       <section className="project-section"><div className="section-heading"><h2>Project health</h2><button disabled={diagnosing} onClick={() => void diagnose()}>{diagnosing ? 'Checking…' : 'Check project'}</button></div>{doctor ? <ul className="health-list">{doctor.map(c => <li key={c.id}><span className={'state ' + c.state}>{c.state === 'ok' ? 'Ready' : c.state === 'fail' ? 'Blocked' : 'Check'}</span><div><p>{c.detail}</p>{c.remedy && <small>{c.remedy}</small>}</div></li>)}</ul> : <p className="muted">Check the tools and capabilities available to this project.</p>}{error(doctorError, () => void diagnose())}</section></div>}

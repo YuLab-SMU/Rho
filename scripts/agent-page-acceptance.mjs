@@ -70,7 +70,15 @@ try {
   await fs.mkdir(path.join(project, 'data'), { recursive: true });
   await fs.writeFile(path.join(project, 'data/ozone.csv'), 'Month,Ozone\n5,41\n7,97\n');
   const command = { file: process.execPath, args: [path.join(root, 'peer.mjs')] };
-  service = await new RhoService({ root, stateDir: path.join(root, '.service'), coreBinary: path.join(root, 'absent-core'), rscript: 'Rscript',
+  // Stand-ins for the person's own `claude` and `codex` CLIs: they record each `mcp` command.
+  const cliLog = path.join(root, 'mcp-calls.jsonl'); process.env.RHO_CONNECT_LOG = cliLog;
+  for (const name of ['claude', 'codex']) {
+    await fs.writeFile(path.join(root, name), `#!/usr/bin/env node
+require('node:fs').appendFileSync(process.env.RHO_CONNECT_LOG, JSON.stringify({ args: process.argv.slice(2), cwd: process.cwd() }) + '\\n');
+if (process.env.RHO_CONNECT_FAIL && !process.argv.includes('remove')) { process.stderr.write('config is locked\\n'); process.exit(1); }
+`, { mode: 0o755 });
+  }
+  service = await new RhoService({ root, stateDir: path.join(root, '.service'), coreBinary: path.join(root, 'absent-core'), rscript: 'Rscript', claude: path.join(root, 'claude'), codex: path.join(root, 'codex'),
     claudeAcp: { command, env: { PEER_AGENT: 'claude' } }, codexAcp: { command, env: { PEER_AGENT: 'codex' } }, conversations: { stopGraceMs: 500 } }).start();
   const admin = new RhoClient({ url: service.url, token: service.adminToken }), person = new BrowserClient({ url: service.url });
   const opened = await admin.call('project.open', { path: 'ozone' });
@@ -216,9 +224,31 @@ try {
   await assert.rejects(call('conversation.read', { conversationId: second }), error => error.error?.kind === 'not_found');
   passed('the trash keeps a conversation until restored or deleted, with Undo, and never takes one the Agent is answering');
 
+  // Outside Rho: the person adds Rho to their own Claude Code with its own `mcp add`, and the
+  // steps say what happened; a refusal says why and leaves no access behind.
+  await page.getByRole('tab', { name: /^Outside Rho/ }).click();
+  const outside = page.locator('.outside-agents');
+  assert.deepEqual(await outside.locator('.connect-step').evaluateAll(steps => steps.map(step => step.className)), ['connect-step waiting', 'connect-step next', 'connect-step waiting']);
+  await outside.getByRole('button', { name: /Add to Claude Code/ }).click();
+  await until(() => outside.locator('.connect-step.done').count(), n => n === 2, 'access and Rho in Claude Code done');
+  const [, add] = (await fs.readFile(cliLog, 'utf8')).trim().split('\n').map(line => JSON.parse(line));
+  assert.deepEqual(add.args.slice(0, 6), ['mcp', 'add', '-s', 'local', 'rho-ozone', '--']); assert.equal(add.cwd, opened.root);
+  await new RhoClient(JSON.parse(await fs.readFile(add.args.at(-1), 'utf8'))).call('observation.snapshot', { projectId: opened.id });
+  await until(() => outside.locator('.connect-step.done').count(), n => n === 3, 'the first call shown');
+  assert.match(await outside.getByRole('tab', { name: /^Claude Code/ }).innerText(), /Connected/);
+  await shot('04b-outside');
+  await outside.getByRole('tab', { name: /^Codex/ }).click();
+  process.env.RHO_CONNECT_FAIL = '1';
+  await outside.getByRole('button', { name: /Add to Codex/ }).click();
+  await outside.locator('.inline-error').filter({ hasText: 'Codex could not add Rho: config is locked.' }).waitFor();
+  delete process.env.RHO_CONNECT_FAIL;
+  assert.equal(await outside.locator('.connect-step.warn').count(), 1);
+  assert.equal((await call('observation.snapshot')).agents.some(agent => agent.label === 'Codex'), false);
+  passed('Outside Rho adds Rho to Claude Code with its own mcp add and shows its first call; a refused Codex leaves no access');
+
   for (const width of [1024, 390]) {
     await page.setViewportSize({ width, height: width === 390 ? 844 : 768 });
-    for (const tab of ['Agents', /^Conversations/]) {
+    for (const tab of [/^Outside Rho/, 'Agents', /^Conversations/]) {
       if (width === 390 && !(await page.getByRole('tab', { name: tab }).isVisible())) continue;
       await page.getByRole('tab', { name: tab }).click();
       await page.waitForTimeout(300);

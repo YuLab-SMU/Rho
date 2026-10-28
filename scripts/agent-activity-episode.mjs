@@ -91,8 +91,9 @@ raise SystemExit(7)
     const navigateActivity = async () => {
       if (!await page.locator('.project-nav').isVisible()) await page.getByRole('button', { name: 'Open navigation', exact: true }).click();
       await page.locator('.project-nav, dialog.drawer').getByRole('button', { name: 'Agent', exact: true }).click();
-      // Sessions started outside Rho are read only while their section is open.
-      const outside = page.locator('details.agent-outside');
+      // The project Host's activity is under Outside Rho, read only while its section is open.
+      await page.getByRole('tab', { name: /^Outside Rho/ }).click();
+      const outside = page.locator('details.outside-host');
       if (!await outside.evaluate(d => d.open)) await outside.locator('summary').click();
     };
     await navigateActivity();

@@ -36,8 +36,9 @@ export const browserMethods = ['protocol.describe', 'protocol.validate', 'projec
   // current file version chosen by the person. No Agent/Host lifecycle authority.
   'agent.activity.read', 'agent.activity.outputs', 'agent.activity.capture'];
 // Only the person at this machine talks to a conversation Rho starts: it runs their own Claude
-// Code with their model credentials. A narrower, expiring link never receives these.
-export const conversationMethods = ['conversation.start', 'conversation.send', 'conversation.stop', 'conversation.read', 'conversation.list', 'conversation.trash', 'conversation.restore', 'conversation.delete', 'conversation.permission', 'conversation.configure', 'conversation.settings.read', 'conversation.settings.update', 'conversation.settings.check', 'project.work.read'];
+// Code with their model credentials. Only they add Rho to their own Agent's configuration. A
+// narrower, expiring link never receives these.
+export const conversationMethods = ['session.connect', 'conversation.start', 'conversation.send', 'conversation.stop', 'conversation.read', 'conversation.list', 'conversation.trash', 'conversation.restore', 'conversation.delete', 'conversation.permission', 'conversation.configure', 'conversation.settings.read', 'conversation.settings.update', 'conversation.settings.check', 'project.work.read'];
 // The person at this machine. A tab this service served is authorized by the request itself:
 // same origin, loopback only, no link, no code and no expiry. `--pair` stays an explicit,
 // narrower grant for a shared or subfolder-scoped tab.

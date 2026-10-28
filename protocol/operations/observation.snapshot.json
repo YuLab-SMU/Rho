@@ -4468,6 +4468,45 @@
                 }
               ]
             },
+            "added": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "agent": {
+                      "enum": [
+                        "claude-code",
+                        "codex"
+                      ]
+                    },
+                    "name": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "scope": {
+                      "enum": [
+                        "folder",
+                        "user"
+                      ]
+                    },
+                    "at": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "agent",
+                    "name",
+                    "scope",
+                    "at"
+                  ],
+                  "additionalProperties": true
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "last": {
               "anyOf": [
                 {

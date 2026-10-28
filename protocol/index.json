@@ -395,8 +395,8 @@
     "observation.snapshot": {
       "summary": "observation.snapshot",
       "path": "operations/observation.snapshot.json",
-      "bytes": 163581,
-      "sha256": "ba03b0114467dfa667fa5564bc0d2170b569761496583e8e21a5d30d3871eb85"
+      "bytes": 164681,
+      "sha256": "f374989e2105abab3218a0a5f3019659df3abff420174afc9e74e3e61ecdad63"
     },
     "project.create": {
       "summary": "project.create",
@@ -529,6 +529,12 @@
       "path": "operations/session.browser.revoke.json",
       "bytes": 591,
       "sha256": "87d867bede7a77a4da3552ed3a94eae48b098e0d5355ec7109b9a0dca22bb1a6"
+    },
+    "session.connect": {
+      "summary": "Person at this machine only: give Claude Code or Codex running outside Rho access to this project, then add Rho's MCP server with that Agent's own `mcp add` (Claude Code: for this project folder; Codex: in its user configuration). A grant whose connection still reaches this service is kept, so a connected session keeps working; a new grant the Agent refuses is removed. No message is sent and no Agent session starts.",
+      "path": "operations/session.connect.json",
+      "bytes": 1976,
+      "sha256": "cf1e8d1024f68570a8d64d1327c843620b79a8c73e94eaddb6d7269df443c8ac"
     },
     "session.grant": {
       "summary": "session.grant",

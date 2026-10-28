@@ -1,9 +1,10 @@
 /* The Agent page: conversations to find, continue, export or clear away, and the Agents. */
 .agent-page { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 .agent-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--color-divider); }
-.agent-tabs button { min-height: 36px; margin-bottom: -1px; padding: 6px 12px; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; color: var(--color-muted); font-size: 13.5px; }
+.agent-tabs button { min-height: 36px; margin-bottom: -1px; padding: 6px 12px; white-space: nowrap; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; color: var(--color-muted); font-size: 13.5px; }
 .agent-tabs button:hover { background: transparent; color: var(--color-ink); }
 .agent-tabs button[aria-selected=true] { border-bottom-color: var(--color-accent); color: var(--color-ink); font-weight: 600; }
+@media (max-width: 480px) { .agent-tabs { gap: 0; } .agent-tabs button { padding: 6px 9px; } }
 .tab-count { margin-left: 2px; padding: 0 6px; border-radius: 999px; background: var(--color-well); color: var(--color-meta); font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; }
 
 /* Conversations */

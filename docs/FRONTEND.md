@@ -37,18 +37,21 @@ inspect what happened. The application gives those actions direct places:
 - **Files** opens documents, browses the project's folder and the source folders it
   works in, and filters the current folder. A source folder is named as the person
   named it and opens one level at a time, the same way any other folder does.
-- **Agent** (the sidebar row) has two tabs. Conversations lists those started in Rho
+- **Agent** (the sidebar row) has three tabs. Conversations lists those started in Rho
   by day, searchable and by Agent: each row its title, model, effort, messages, state,
   context use and cost, with Continue, export as Markdown and the trash; opened, its
   facts beside what its latest messages did (the files changed and looked at, each
   shown in place when chosen, the commands and the answer). The trash restores or
   deletes. Runs follow when there are any, with their execution records, output,
-  repair context and exports. Sessions started outside Rho — Core-backed Claude
-  Code/dsh activity streams, native errors and observed output files — sit in a
-  section read only while it is open. Agents shows Claude Code and Codex: version,
-  whether asked, the default, model, settings, Claude Code's own model names and the
-  providers with their models ([activity episode](AGENT-ACTIVITY.md),
-  [Agents and conversations](AGENT-PAGE-EPISODE.md)).
+  repair context and exports. Agents shows Claude Code and Codex: version, whether
+  asked, the default, model, settings, Claude Code's own model names and the providers
+  with their models. Outside Rho adds Rho to the person's own Claude Code or Codex with
+  one button (`session.connect`) and shows three steps in the state Rho observes:
+  access to this project, Rho in that Agent, its first call; Other ACP clients gives
+  the `rho --acp` commands. Core-backed Claude Code/dsh activity streams, native errors
+  and observed output files sit below in a section read only while it is open
+  ([activity episode](AGENT-ACTIVITY.md), [Agents and conversations](AGENT-PAGE-EPISODE.md),
+  [Agents outside Rho](AGENT-PANEL-EPISODE.md#agents-outside-rho)).
 - **Project settings** manages source folders and explicitly checks available tools.
 - **Studio** shows the workspaces as tabs, each with its view count; the sidebar lists
   them under Studio. The person and the Agent share one workspace: the one on screen,

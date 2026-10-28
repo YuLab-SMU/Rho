@@ -9,8 +9,8 @@ still while the Agent worked. The sidebar now names its places and counts its So
 one Agent entry opens its page, the Agent and model can be chosen, and the person
 arranges views as the Agent can ([record](AGENT-CANVAS-EPISODE.md)). Then came one
 shared workspace and a Graph of what the Agent did ([record](GRAPH-EPISODE.md)), Agent
-settings with conversation management ([record](AGENT-PAGE-EPISODE.md)) and the
-conversation window ([record](AGENT-PANEL-EPISODE.md)); all run ([section](#project-sidebar-workspace-and-graph)).
+settings with conversation management ([record](AGENT-PAGE-EPISODE.md)), the conversation
+window and Agents outside Rho ([record](AGENT-PANEL-EPISODE.md)); all run ([section](#project-sidebar-workspace-and-graph)).
 
 Agent 0.4.11 adds each tool step's title, ACP category and input to the Claude/Codex
 ACP connections of 0.4.10. Eight real Westlake HPC turns from the installed package
@@ -45,11 +45,10 @@ Git retains them at `24d9998b`; they are not requirements or reference designs.
 ## Project sidebar, workspace and Graph
 
 - The sidebar shows All projects, the project and a menu to switch, then Overview,
-  Studio with its workspaces, Agent (Working or Needs you; its page and panel
-  button), and Sources: Data, Code, Results & figures and Notes from one bounded walk
-  (48 folders, 5 levels, 4000 files; partial counts say so), then Files. Each kind
-  unfolds into its files by folder; one chosen shows in place with no layout written,
-  ←/→ and ↑/↓ move through the kind, Open in Studio places it.
+  Studio with its workspaces, Agent (Working or Needs you), and Sources: Data, Code,
+  Results & figures and Notes from one bounded walk (48 folders, 5 levels, 4000 files;
+  partial counts say so), then Files. Each kind unfolds into its files by folder; one
+  shown in place writes no layout; ←/→ and ↑/↓ move through it; Open in Studio places it.
 - Following, Open in Studio and Files use one workspace the person and the Agent share:
   named files and outputs that appear on disk open once, code and data/figures each in
   its group wherever the person moved it; the last named file's tab carries the Agent's
@@ -62,13 +61,15 @@ Git retains them at `24d9998b`; they are not requirements or reference designs.
   drags; each drop is the conditional `composition.apply` the Agent's grant also holds.
 - The Agent page's Conversations tab lists conversations by day with model, effort,
   context, cost, search, Markdown export and a trash (restore; delete only from there);
-  a row opens to its facts and work. Its Agents tab shows each Agent's version, models
-  by provider, own names and settings, and the default; asking is the person's click.
+  a row opens to its facts and work. Agents shows each Agent's version, models by
+  provider, own names, settings and the default, asked on the person's click. Outside
+  Rho runs the person's own Claude Code or Codex `mcp add` for this project with one
+  button (`session.connect`) and shows the access, the entry and the first call.
 - Documents 0.4.3 adopts a changed file into a buffer with no unsaved text. Agent
   0.4.12 captures one named file; 0.4.13 applies, changes and inspects ACP settings.
 
-Evidence: Rho 215/215 (serial) and Plugins 92/92 ([ledger](VERIFICATION.json));
-`acceptance:agent-page` 6/6, `graph` 8/8 and `agent-canvas` 10/10 (controlled peers),
+Evidence: Rho 218/218 (serial) and Plugins 92/92 ([ledger](VERIFICATION.json));
+`acceptance:agent-page` 7/7, `graph` 8/8 and `agent-canvas` 10/10 (controlled peers),
 `sources`, `frontend`, `agent-ui`, pages, shell, person, objects, actions, continuity and
 plugin UI passed. Real Claude and Codex runs found defects in following, settings, the
 Graph and the Agent page; each was fixed and run again. No other person has used them.
@@ -92,7 +93,6 @@ the setup, the observations before and after, and the limits.
 
 The first pass could not list a project's source folders; `project.entries` now lists
 the folder and an `@<sourceId>` entry per source and descends into them.
-`State.openSelected` no longer demands an expiry, which refused this machine's "Open folder…".
 
 Evidence: Rho 185/185 unit checks, including source-folder listing and this machine's
 tab picking a folder; `acceptance:frontend` 11 checks, pages, shell and person; six
@@ -120,7 +120,7 @@ nor behavior, and existing execution/content boundaries do not prescribe the int
 
 ## External Agent activity
 
-The Agent page's outside-sessions section shows Claude Code/dsh sessions, calls,
+Outside Rho's Host activity section shows Claude Code/dsh sessions, calls,
 refusals, process exits and output files. Core pages are read every 1.5 seconds;
 connection failure keeps received actions, and Reconnect reads the same cursor.
 Opening a CSV or image captures its observed digest through Files and opens an

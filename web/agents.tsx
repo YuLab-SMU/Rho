@@ -8,7 +8,7 @@ import { projectName } from './home.js';
 type Agent = NonNullable<WorkspaceSnapshot['agents']>[number];
 const clock = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 const runsCode = new Set(['action.submit', 'action.retry', 'requirements.prepare']);
-function abilities(agent: Agent, snapshot: WorkspaceSnapshot) {
+export function abilities(agent: Agent, snapshot: WorkspaceSnapshot) {
   const presentation = new Map(snapshot.catalog.operations.map(o => [o.method, o.presentation as { readOnly?: boolean; runsCode?: boolean } | undefined]));
   let reads = false, changes = false, runs = false;
   for (const method of agent.methods) {

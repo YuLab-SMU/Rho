@@ -2,7 +2,7 @@ import { lazy, Fragment, Suspense, useEffect, useLayoutEffect, useMemo, useRef, 
 import { createRoot } from 'react-dom/client';
 import { BrowserClient, type BrowserConnection, type ProjectSummary, type WorkspaceSnapshot } from '../src/browser.js';
 import { Home, projectHue, projectName as name, trapTab } from './home.js';
-import { AgentAccess, AgentRequest } from './agents.js';
+import { AgentRequest } from './agents.js';
 import { AgentConversation } from './conversation.js';
 import { ProjectNavigation, sourceLabels, type Section, type SourceRow } from './project.js';
 import { capturable, sourceItems, useProjectFiles, type SourceItem } from './sources.js';
@@ -350,10 +350,6 @@ function App() {
       {link
         ? <button ref={disconnectTrigger} className="danger-link" onClick={() => askDisconnect(disconnectTrigger.current)}>Use this machine's access instead</button>
         : <p className="context-note">This tab was opened directly on this machine, so nothing has to be sent to it. The folder is set by whoever runs Rho.</p>}
-    </section>
-    <section className="context-section">
-      <h3 className="caption">Agents</h3>
-      <AgentAccess snapshot={projectVisible ? snapshot : null} />
     </section>
     </>}
   </>;

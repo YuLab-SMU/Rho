@@ -57,7 +57,6 @@ export function WorkProgress({ client, snapshot, openFile, openConversation, ope
       </li>)}</ul></div>}
       {work.omitted.fileReferences > 0 && <p className="muted">{work.omitted.fileReferences} file references were outside project scope or observation limits.</p>}
       {work.omitted.external > 0 && <p className="muted">{work.omitted.external} external ACP observations are unavailable or outside retention limits.</p>}
-      <details className="external-acp-help"><summary>Connect an external ACP client</summary><p>Use this Agent plugin command in your client's agent configuration, with this project's absolute folder:</p><code>rho --acp /absolute/project --acp-agent codex</code><p>Choose claude for Claude Code. Reopen or load the session through that client. Rho observes its updates; prompts and permissions stay there.</p></details>
       <p className="work-native-note">{work.native.message}{work.native.state === 'available' && <button className="text-button" onClick={openActivity}>View native activity</button>}</p>
     </>}
   </section>;

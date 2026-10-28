@@ -4,10 +4,11 @@ import { spawn, spawnSync } from 'node:child_process';
 import { once } from 'node:events';
 import { randomUUID } from 'node:crypto';
 import { atomicJson, confined, digest, readJson, requireThat, stateDirectory } from '@rho-workspace/plugin-contracts';
+import type { AddedTo } from './agent-connect.js';
 export interface SourceFolder { id: string; root: string; name: string }
 export interface FolderSelection extends SourceFolder { principalId: string; expiresAt: number }
 export interface Project { id: string; root: string; openedAt: string; nativeSelected?: true; name?: string; sources?: SourceFolder[]; workspace?: true; visibilityRoot?: string; creation?: { id: string; digest: string; author: string } }
-export interface Principal { id: string; tokenHash: string; projectId?: string; methods: string[]; kind?: 'browser'; profile?: 'layered-business' | 'layered-presentation'; pluginFilter?: string[]; projectRoot?: string; selectedProjects?: string[]; expiresAt?: string; label?: string; conversationId?: string }
+export interface Principal { id: string; tokenHash: string; projectId?: string; methods: string[]; kind?: 'browser'; profile?: 'layered-business' | 'layered-presentation'; pluginFilter?: string[]; projectRoot?: string; selectedProjects?: string[]; expiresAt?: string; label?: string; conversationId?: string; added?: AddedTo }
 export async function lease(directory: string) {
   // Best effort: say who holds it when the platform can tell us. Never a failure.
   const holder = (file: string) => {
@@ -67,6 +68,9 @@ export class State {
     this.principalWrites = write; return write;
   }
   async addPrincipal(principal: Principal) { this.principals.push(principal); await this.persistPrincipals(); }
+  async removePrincipal(id: string) { this.principals = this.principals.filter(p => p.id !== id); await this.persistPrincipals(); }
+  // Which Agent outside Rho a grant was added to, kept with the grant it serves.
+  async markAdded(id: string, added: AddedTo) { const principal = this.principals.find(p => p.id === id); if (principal) { principal.added = added; await this.persistPrincipals(); } }
   async revokeBrowser(id: string) {
     // This machine's own identity is not a session to revoke: the person can simply reopen the
     // url. Refusing keeps one typo from locking the page out until the service restarts.

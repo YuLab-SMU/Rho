@@ -16,6 +16,7 @@ import { Interactions, interactionLimits } from './interactions.js';
 import { TaskMap, taskMapLimits } from './task-map.js';
 import { Capabilities } from './capabilities.js';
 import { BrowserAccess, browserLimits, localBrowserId, localBrowserPrincipal } from './browser-access.js';
+import { addToAgent, connectLimits, mcpCommand, mcpName, outsideLabel, type OutsideAgent } from './agent-connect.js';
 import { NativeFolderPicker, nativeFolderLimits } from './native-folders.js';
 import { homedir } from 'node:os';
 import { serveWeb, webRoot, installedWebEntries } from './web-assets.js';
@@ -39,7 +40,7 @@ export interface NativeAdapterRegistration {
   proof: { kind: 'claude-code-init'; sessionId: string; clientVersion: string };
 }
 export const serviceLimits = { maxRequestBytes: 1024 * 1024, maxEventBytes: 65536, eventRetention: 256, maxSubscriptions: 8, maxQueue: 32, maxContexts: 128, maxBindings: 64, maxActivities: 256, maxContextBytes: 1024 * 1024, maxRetainedMetadataBytes: 32 * 1024 * 1024 };
-export interface ServiceConfig extends Partial<typeof serviceLimits>, Partial<typeof requestLimits>, PluginConfig { root: string; stateDir: string; coreBinary: string; rscript: string; port?: number; nativeFolders?: Partial<typeof nativeFolderLimits>; workspace?: Partial<typeof workspaceLimits>; interactions?: Partial<typeof interactionLimits>; taskMap?: Partial<typeof taskMapLimits>; browser?: Partial<typeof browserLimits>; webRoot?: string; agentNativeActivity?: Partial<typeof nativeActivityLimits>; presentationWitness?: Partial<typeof presentationWitnessLimits>; visibility?: Partial<typeof visibilityLimits>; agentDelivery?: Partial<typeof agentDeliveryLimits>; deliveryTransportTimeoutMs?: number; claude?: string; agentBackend?: ConversationConfig['backend']; claudeAcp?: ConversationConfig['claudeAcp']; codex?: string; codexAcp?: ConversationConfig['codexAcp']; conversations?: Partial<typeof conversationLimits> }
+export interface ServiceConfig extends Partial<typeof serviceLimits>, Partial<typeof requestLimits>, PluginConfig { root: string; stateDir: string; coreBinary: string; rscript: string; port?: number; nativeFolders?: Partial<typeof nativeFolderLimits>; workspace?: Partial<typeof workspaceLimits>; interactions?: Partial<typeof interactionLimits>; taskMap?: Partial<typeof taskMapLimits>; browser?: Partial<typeof browserLimits>; webRoot?: string; agentNativeActivity?: Partial<typeof nativeActivityLimits>; presentationWitness?: Partial<typeof presentationWitnessLimits>; visibility?: Partial<typeof visibilityLimits>; agentDelivery?: Partial<typeof agentDeliveryLimits>; deliveryTransportTimeoutMs?: number; claude?: string; agentBackend?: ConversationConfig['backend']; claudeAcp?: ConversationConfig['claudeAcp']; codex?: string; codexAcp?: ConversationConfig['codexAcp']; conversations?: Partial<typeof conversationLimits>; connect?: Partial<typeof connectLimits> }
 const ajv = new Ajv({ allErrors: true, strict: false, allowUnionTypes: true });
 // The same timestamp check every published contract uses; an unknown format would be skipped silently.
 ajv.addFormat('date-time', { type: 'string', validate: isNativeTime });
@@ -552,7 +553,7 @@ export class RhoService {
     const activity = await this.projectActivity(p);
     return this.state.principals.filter(x => x.projectId === p.id && x.kind !== 'browser' && x.id !== 'operator').map(x => {
       const last = activity.entries.filter((e: any) => e.principal === x.id).at(-1);
-      return { principal: x.id, label: x.label ?? null, profile: x.profile ?? null, methods: x.methods, expiresAt: x.expiresAt ?? null, ended: !!x.expiresAt && Date.parse(x.expiresAt) <= Date.now(), conversationId: x.conversationId ?? null,
+      return { principal: x.id, label: x.label ?? null, profile: x.profile ?? null, methods: x.methods, expiresAt: x.expiresAt ?? null, ended: !!x.expiresAt && Date.parse(x.expiresAt) <= Date.now(), conversationId: x.conversationId ?? null, added: x.added ?? null,
         last: last ? { at: String(last.at), method: String(last.method), outcome: last.outcome === 'rejected' ? 'rejected' as const : 'returned' as const, ...(last.operationId ? { operationId: String(last.operationId) } : {}) } : null };
     });
   }
@@ -777,6 +778,26 @@ export class RhoService {
       const file = path.join(this.state.directory, 'agent-' + digest(p.id + ':' + b.externalSessionId) + '.json');
       const connection = await this.agentConnection(p.id, b.externalSessionId, file, b.methods, undefined, b.profile);
       return { profile: connection.profile, connectionFile: file, projectId: p.id, methods: connection.methods, transport: 'stdio-mcp', externalSessionId: b.externalSessionId };
+    }
+    // The person's own Claude Code or Codex, outside Rho: the same grant the operator gives, kept
+    // when it already exists so a connected session keeps its token, then the Agent's own `mcp add`.
+    if (method === 'session.connect') {
+      requireThat(principal.id === localBrowserId, 'unauthorized', 'Only the person at this machine can add Rho to their own Agent.');
+      const agent = b.agent as OutsideAgent, file = path.join(this.state.directory, 'agent-' + digest(p.id + ':' + agent) + '.json');
+      const id = 'agent:' + digest(p.id + ':' + agent).slice(0, 32), existing = this.state.principals.find(x => x.id === id);
+      // A grant is kept while its connection still reaches this service with its token; otherwise
+      // it is replaced, and a replacement the Agent then refuses is removed again.
+      const connection = await fs.readFile(file, 'utf8').then(text => JSON.parse(text), () => null);
+      const kept = !!existing && !(existing.expiresAt && Date.parse(existing.expiresAt) <= Date.now()) && connection?.url === this.url && typeof connection?.token === 'string' && digest(connection.token) === existing.tokenHash;
+      const methods = kept ? existing!.methods.length : (await this.agentConnection(p.id, agent, file, undefined, undefined, 'layered-business', { label: outsideLabel[agent] })).methods.length;
+      const binary = agent === 'codex' ? this.config.codex ?? process.env.RHO_CODEX ?? 'codex' : this.config.claude ?? process.env.RHO_CLAUDE ?? 'claude';
+      const added = await addToAgent(agent, binary, p.root, mcpName(p.root), mcpCommand(file), { ...connectLimits, ...this.config.connect }).catch(async error => {
+        if (!kept) { await this.state.removePrincipal(id); await fs.rm(file, { force: true }); await this.emit(p, 'activity.changed', method); }
+        throw error;
+      });
+      await this.state.markAdded(id, added);
+      await this.emit(p, 'activity.changed', method);
+      return { principal: id, label: outsideLabel[agent], methods, granted: !kept, added };
     }
     // The person at this machine talks to a conversation Rho started; Agents and narrower links
     // cannot start one, and an Agent started this way cannot start another.

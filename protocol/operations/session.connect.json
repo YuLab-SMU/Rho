@@ -1,0 +1,84 @@
+{
+  "method": "session.connect",
+  "inputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "projectId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "agent": {
+        "enum": [
+          "claude-code",
+          "codex"
+        ]
+      }
+    },
+    "required": [
+      "projectId",
+      "agent"
+    ]
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "principal": {
+        "type": "string",
+        "minLength": 1
+      },
+      "label": {
+        "type": "string",
+        "minLength": 1
+      },
+      "methods": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "granted": {
+        "type": "boolean"
+      },
+      "added": {
+        "type": "object",
+        "properties": {
+          "agent": {
+            "enum": [
+              "claude-code",
+              "codex"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "scope": {
+            "enum": [
+              "folder",
+              "user"
+            ]
+          },
+          "at": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "agent",
+          "name",
+          "scope",
+          "at"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "required": [
+      "principal",
+      "label",
+      "methods",
+      "granted",
+      "added"
+    ],
+    "additionalProperties": true
+  },
+  "description": "Person at this machine only: give Claude Code or Codex running outside Rho access to this project, then add Rho's MCP server with that Agent's own `mcp add` (Claude Code: for this project folder; Codex: in its user configuration). A grant whose connection still reaches this service is kept, so a connected session keeps working; a new grant the Agent refuses is removed. No message is sent and no Agent session starts."
+}

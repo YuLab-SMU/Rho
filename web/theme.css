@@ -827,4 +827,3 @@ dialog::backdrop { background: #13231c45; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; scroll-behavior: auto !important; transition: none !important; } }
 
 .external-reply { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; }
-.external-acp-help { color: var(--color-muted); font-size: 12px; overflow-wrap: anywhere; }

@@ -5,13 +5,14 @@ import { agentLabel, backends, effortSetting, modelSetting, ModelPicker, ordered
 import { ConversationTurns, day } from './agent-work.js';
 import { BrandMark, ProviderMark } from './brand-marks.js';
 import { Icon } from './icons.js';
+import { OutsideAgents } from './outside-agents.js';
 import './agent-manage.css';
 
 // The Agent page: the conversations started in Rho in this project, to find, continue, export
 // or clear away; and the Agents themselves, with the model and settings new conversations use.
 type Summary = NonNullable<WorkspaceSnapshot['conversations']>[number];
 type Listed = RhoOutput<'conversation.list'>['conversations'][number];
-type Tab = 'conversations' | 'agents';
+type Tab = 'conversations' | 'agents' | 'outside';
 
 const tabKey = 'rho.agent.tab.v1';
 const backendOf = (summary: Pick<Summary, 'backend' | 'client'>): Backend | null => summary.backend === 'codex-acp' || summary.backend === 'claude-acp' ? summary.backend : summary.client === 'codex' ? 'codex-acp' : summary.backend === 'claude-cli' ? null : 'claude-acp';
@@ -46,25 +47,26 @@ function names(summary: Summary | Listed, settings: AgentSettingsState) {
   return { model: split(modelName).name, modelFull: modelName, effort: effort && effortValue !== null ? valueName(effort, effortValue) : '' };
 }
 
-export function AgentPage({ client, snapshot, exists, onContinue, onPath, onNew, extra }: { client: BrowserClient; snapshot: WorkspaceSnapshot; exists: (path: string) => boolean; onContinue: (id: string) => void; onPath: (path: string) => void; onNew: () => void; extra?: ReactNode }) {
+export function AgentPage({ client, snapshot, exists, onContinue, onPath, onNew, onOpened, extra }: { client: BrowserClient; snapshot: WorkspaceSnapshot; exists: (path: string) => boolean; onContinue: (id: string) => void; onPath: (path: string) => void; onNew: () => void; onOpened: (compositionId: string, viewId?: string) => void; extra?: ReactNode }) {
   const settings = useAgentSettings(client, snapshot.project.id);
   useEffect(() => refreshAgentSettings(client, snapshot.project.id), [client, snapshot.project.id]);
   // A conversation's first session tells Rho what its Agent offers: while a row's Agent has no
   // names here, they are read again each time that conversation changes.
   const unnamed = (snapshot.conversations ?? []).filter(c => { const backend = backendOf(c); return backend && !settings.offered(backend); }).map(c => c.conversationId + '@' + c.version).join();
   useEffect(() => { if (unnamed) refreshAgentSettings(client, snapshot.project.id); }, [client, snapshot.project.id, unnamed]);
-  const [tab, setTab] = useState<Tab>(() => { try { return sessionStorage.getItem(tabKey) === 'agents' ? 'agents' : 'conversations'; } catch { return 'conversations'; } });
+  const [tab, setTab] = useState<Tab>(() => { try { const kept = sessionStorage.getItem(tabKey); return kept === 'agents' || kept === 'outside' ? kept : 'conversations'; } catch { return 'conversations'; } });
   const choose = (next: Tab) => { setTab(next); try { sessionStorage.setItem(tabKey, next); } catch { /* The tab is remembered only while storage works. */ } };
-  const count = snapshot.conversations?.length ?? 0;
+  const count = snapshot.conversations?.length ?? 0, outside = (snapshot.agents ?? []).filter(agent => !agent.conversationId && !agent.ended).length;
   return <div className="agent-page">
     <div className="agent-tabs" role="tablist" aria-label="Agent page">
       <button role="tab" aria-selected={tab === 'conversations'} onClick={() => choose('conversations')}>Conversations{count > 0 && <span className="tab-count">{count}</span>}</button>
       <button role="tab" aria-selected={tab === 'agents'} onClick={() => choose('agents')}>Agents</button>
+      <button role="tab" aria-selected={tab === 'outside'} onClick={() => choose('outside')}>Outside Rho{outside > 0 && <span className="tab-count">{outside}</span>}</button>
     </div>
     {tab === 'conversations' ? <>
       <Conversations client={client} snapshot={snapshot} settings={settings} exists={exists} onContinue={onContinue} onPath={onPath} onNew={onNew} />
       {extra}
-    </> : <AgentsPanel state={settings} />}
+    </> : tab === 'agents' ? <AgentsPanel state={settings} /> : <OutsideAgents client={client} snapshot={snapshot} onOpened={onOpened} />}
   </div>;
 }
 

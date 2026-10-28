@@ -88,12 +88,17 @@ try {
   await page.getByRole('button', { name: /^Back to / }).or(page.getByRole('complementary', { name: 'Plugin navigation', exact: true })).first().waitFor();
   failing.push(...await measure('plugin'));
 
-  // The context panel names the Agent session with access, what it may do and when it last acted.
+  // The Agent page's Outside Rho names the Agent session with access, what it may do and when
+  // it last acted.
   await page.locator('.project-nav').getByRole('button', { name: 'Back to project', exact: true }).click();
-  await page.getByRole('button', { name: 'Connection & access', exact: true }).click();
+  await page.locator('.project-nav').getByRole('button', { name: /^Agent(,|$)/ }).click();
+  await page.getByRole('tab', { name: /^Outside Rho/ }).click();
   const session = page.locator('[data-rho-agent-session="granted"]').filter({ hasText: 'pages-agent' });
   await session.waitFor();
-  assert.match(await session.innerText(), /Can read, change and run code[\s\S]*Last active \d\d:\d\d/);
+  assert.match(await session.innerText(), /Can read, change and run code[\s\S]*last call today \d\d:\d\d/);
+  failing.push(...await measure('outside'));
+  await page.getByRole('button', { name: 'Connection & access', exact: true }).click();
+  await page.locator('#project-context').waitFor();
   failing.push(...await measure('context'));
   // This tab was opened on this machine, so it has no link to leave: the panel says where the
   // access comes from instead of offering a disconnect it cannot perform.
