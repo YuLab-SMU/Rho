@@ -98,7 +98,7 @@ inspect what happened. The application gives those actions direct places:
   message ends with its outcome, model, time and Copy. A native permission request is
   an amber choice card. The message box is one rounded surface with the model chip and
   a round Send or Stop; under it, the plan entry in progress and the context and cost
-  the Agent reported open the session's record. New activity is followed only while
+  the Agent reported open a card with context as a bar, the cost and the whole plan. New activity is followed only while
   the person is at the end; scrolling up keeps the position and offers "Jump to latest". The Agent's tool status and
   reported path are distinct from Work progress's independently observed files.
   Sessions started elsewhere are listed with where to continue them. In an open

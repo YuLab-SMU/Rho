@@ -113,7 +113,17 @@ try {
 
   const plan = panel.locator('.conversation-plan > summary');
   assert.match(await plan.innerText(), /Plan · Inspect the input table/);
-  passed('the plan line follows the entry in progress');
+  // The session's record opens above the box with the whole plan; Escape closes only it.
+  await plan.click();
+  const record = panel.locator('.session-popover');
+  await record.waitFor();
+  assert.ok(await record.locator('.session-plan-list li').count() >= 2, 'the record lists the plan');
+  assert.match(await record.innerText(), /Rho does not measure these/);
+  await snap('session-record');
+  await page.keyboard.press('Escape');
+  await record.waitFor({ state: 'hidden' });
+  assert.ok(await page.locator('aside[aria-label="Agent panel"]').isVisible(), 'Escape closes the record, not the panel');
+  passed('the plan line follows the entry in progress, and its record opens and closes in place');
 
   // A blocking permission request is its own surface, not a line in the transcript.
   const permission = panel.locator('.turn-permission');

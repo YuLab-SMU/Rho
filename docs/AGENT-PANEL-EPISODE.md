@@ -62,8 +62,10 @@ Rho only (`web/conversation.tsx`, `web/markdown.tsx`, `web/theme.css`,
   Stop while the Agent answers. ⌘/Ctrl Enter still sends. "Jump to latest" is a round
   button above the box, with a dot when something new arrived.
 - **Under the box**, the plan entry in progress and the context ring, tokens and cost
-  the Agent reported. It opens the session's record above the box; Escape closes it
-  and leaves the panel open.
+  the Agent reported. It opens a small card above the box: context used as a bar with
+  its tokens, the cost, the plan as a list of entries, and one line saying the Agent
+  reported these and Rho does not measure them. Escape closes it and leaves the panel
+  open.
 - **The start screen** names the Agent with its mark, and lists conversations by
   their titles.
 
@@ -80,6 +82,7 @@ Evidence: `work/chat-panel-20261028/` and `work/agent-ui-acceptance/` (ignored b
 | `look.mjs` 340 | The default width | The effort clipped to "Xhigh effo" | The model's width follows the panel's |
 | `acceptance:agent-ui` | A controlled peer: streaming, permission, plan | "Mod" cut in the chip: its −8 px margin made it 8 px narrower than its holder; list markers were hollow circles inside the list of messages | The margin moved to the holder; first-level markers |
 | `chipdebug.mjs` | The chip's widths | The deficit was always 8 px, the margin | — |
+| The user, after the first pass | The record above the box | "Still a lump": the plugin's session view as prose, a title, a context sentence and four paragraphs of observation notes; the trigger a grey band when open | Rho draws the card from the same report; the notes went; no band |
 
 ## Checks
 
@@ -90,19 +93,22 @@ Run serially on 2026-10-28 (`work/chat-panel-20261028/final/`):
   Agent touched several times is counted once; commands count each time".
 - `acceptance:agent-ui` 7/7 with a controlled peer: text streams into the open
   message; each action names its file, command or operation while it runs; the plan
-  line follows the entry in progress; a native permission is answered and the choice
+  line follows the entry in progress and its record lists the plan and closes on
+  Escape without closing the panel; a native permission is answered and the choice
   kept in the work that folds when the message ends; Markdown renders; reading earlier
   lines is not interrupted and the round "Jump to latest" names new activity.
 - `agent-page` 5/5, `graph` 8/8, `agent-canvas` 10/10, `frontend` 13/13, `continuity`
   7/7, `sources` 7/7, `objects` 5/5, `actions` 6/6, and shell, pages, person and plugin
-  UI passed.
+  UI passed. After the record changed, `agent-ui` 7/7, `frontend` 13/13, `agent-canvas`
+  10/10, `agent-page` 5/5 and the stylesheet token test passed again.
 
 ## Limits
 
 - The fold hides what the Agent said along the way once a message ends; it is one
   click away, and the last words never fold.
 - The usage line shows what the Agent reported for its session; an Agent that reports
-  none shows no ring.
+  none shows no ring. The observation counts the Agent plugin keeps (updates seen, not
+  displayed) are no longer shown in the panel; Work progress still shows them.
 - A message whose stream joins two sentences without a break shows them joined: Rho
   shows what the Agent sent.
 - Tables wrap; on a phone a four-column table grows tall rather than scrolling.

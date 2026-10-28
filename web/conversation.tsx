@@ -4,7 +4,6 @@ import type { RhoOutput } from '../src/contract.generated.js';
 import { activitySummary, conversationBlocks, currentPlanEntry, type Activity, type AgentAction, type Block } from '../src/conversation-presentation.js';
 import { projectName } from './home.js';
 import { AgentMarkdown, CopyButton } from './markdown.js';
-import { SessionProgress } from '@rho-workspace/plugin-agent/ui';
 import { ComposerSettings, OpenSettings, agentLabel, backendOf, modelSetting, split, useAgentSettings, valueName, type SettingValue } from './agent-settings.js';
 import { BrandMark, brandOf } from './brand-marks.js';
 import { money, tokens } from './agent-manage.js';
@@ -160,7 +159,7 @@ function TurnView({ turn, running, observation, projectRoot, choose, choosing, a
 
 // Below the message box: the session's plan and how much of its context it has used, as the
 // Agent reported them. The whole record opens above it.
-function SessionStrip({ observation }: { observation: NonNullable<Observation> }) {
+function SessionStrip({ observation, agent }: { observation: NonNullable<Observation>; agent: string }) {
   const ref = useRef<HTMLDetailsElement>(null);
   useEffect(() => {
     const away = (event: MouseEvent) => { const box = ref.current; if (box?.open && !box.contains(event.target as Node)) box.open = false; };
@@ -182,7 +181,21 @@ function SessionStrip({ observation }: { observation: NonNullable<Observation> }
         {spent && <span>{spent}</span>}
       </span>}
     </summary>
-    <div className="session-popover"><SessionProgress observation={observation} /></div>
+    <div className="session-popover" role="group" aria-label="Session">
+      {usage && <section className="session-context">
+        <p className="session-row"><span>Context used</span><strong>{share !== null ? Math.round(share * 100) + '%' : '—'}</strong></p>
+        {share !== null && <span className={'session-bar' + (share >= 0.8 ? ' high' : '')} aria-hidden="true"><span style={{ width: Math.max(0.5, share * 100) + '%' }} /></span>}
+        <p className="session-note">{usage.used.toLocaleString()} of {usage.size.toLocaleString()} tokens</p>
+        {spent && <p className="session-row"><span>Cost</span><strong>{spent}</strong></p>}
+      </section>}
+      {entries.length > 0 && <section className="session-plan-list">
+        <p className="session-row"><span>Plan</span><strong>{entries.filter(e => e.status === 'completed').length} of {entries.length} done</strong></p>
+        <ol>{entries.map((entry, i) => <li key={i} data-status={entry.status}><span className={'plan-state ' + entry.status} aria-label={entry.status.replace('_', ' ')} /><span>{entry.content}</span></li>)}</ol>
+        {(observation.plan?.omitted ?? 0) > 0 && <p className="session-note">{observation.plan!.omitted} more entries were not kept.</p>}
+      </section>}
+      {!usage && !entries.length && <p className="session-note">{agent} has not reported its context, cost or a plan for this session.</p>}
+      {(usage || entries.length > 0) && <p className="session-source">As {agent} reported them at {clock(usage?.at ?? observation.plan?.at ?? observation.at)}. Rho does not measure these.</p>}
+    </div>
   </details>;
 }
 
@@ -346,7 +359,7 @@ export function AgentConversation({ snapshot, client, selectedId, onSelected, on
             : <button className="composer-send" aria-label={busy ? 'Sending…' : openId ? 'Send' : 'Start'} title={(openId ? 'Send' : 'Start') + ' (⌘ Enter)'} disabled={!canSend} onClick={send}><Icon name="arrow-up" size={16} stroke={2} /></button>}
         </div>
       </div>
-      {read?.observation && <SessionStrip observation={read.observation} />}
+      {read?.observation && <SessionStrip observation={read.observation} agent={agentName} />}
     </div>
     {/* After the composer, so the newest lines end above it rather than behind it. */}
     <div ref={end} />
