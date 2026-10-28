@@ -8,17 +8,15 @@ On 2026-10-27 the user found the project sidebar nearly empty and the main area
 still while the Agent worked. The sidebar now names its places and counts its Sources,
 the [Agent canvas](#project-sidebar-and-agent-canvas) opens the files the Agent reads
 and changes, each Sources kind unfolds so a file shows in place, and the one Agent
-entry opens a page of what the Agent did, with its panel a button beside it.
-Documents 0.4.3 and Agent 0.4.12 carry the owner repairs; [the record](AGENT-CANVAS-EPISODE.md)
-keeps the runs.
+entry opens a page of what the Agent did, with its panel a button beside it. The user
+then asked to choose the Agent and its model; the Agent page and panel now offer it. Documents
+0.4.3 and Agent 0.4.13 carry the owner changes; [the record](AGENT-CANVAS-EPISODE.md) keeps the runs.
 
 Agent 0.4.11 adds each tool step's title, ACP category and identifying input to the
-Claude/Codex ACP connections of 0.4.10. Both passed eight real Westlake HPC turns from
-the installed package, including cancellation, connection loss and session recovery;
-external Codex ACP loading and observation across restart and reconnect passed. Core
-is unchanged. Rho 202/202, Plugins 89/89 and contract/type checks passed then, and the
-unsigned macOS arm64 package passed install/start ([record](ACP-MULTI-AGENT-EPISODE.md);
-the panel's treatment is in [Agent panel live activity](AGENT-UI-EPISODE.md)).
+Claude/Codex ACP connections of 0.4.10. Eight real Westlake HPC turns from the installed
+package passed, with cancellation, connection loss and session recovery, as did external
+Codex ACP observation across restart; the unsigned macOS arm64 package installed and
+started ([record](ACP-MULTI-AGENT-EPISODE.md); panel: [Agent UI](AGENT-UI-EPISODE.md)).
 
 The 2026-10-27 home, projects and empty-project pass is in the
 [home and project episode](HOME-PROJECT-EPISODE.md) and
@@ -60,15 +58,19 @@ Git retains them at `24d9998b`; they are not requirements or reference designs.
   once, code left and data/figures right; the tab of the last named file carries the
   Agent's verb. Choosing another view, typing or leaving stops following.
 - The Agent page lists each Rho conversation's latest messages (request, files changed
-  and looked at, commands, answer, ending), then runs and outside sessions.
-- Documents 0.4.3 adopts a changed file into a buffer with no unsaved text; Agent
-  0.4.12 captures one named file without scanning its folder, digest optional.
+  and looked at, commands, answer, ending and model), then runs and outside sessions.
+  Its card chooses the Agent, model, effort and mode for new conversations among what
+  the Agent last offered. Asking the Agent is the person's click and sends no message.
+  The panel's chip changes an open conversation's model and effort between messages.
+- Documents 0.4.3 adopts a changed file into a buffer with no unsaved text. Agent
+  0.4.12 captures one named file; 0.4.13 applies, changes and inspects ACP settings.
 
-Evidence: Rho 202/202 (serial) and Plugins 90/90 ([ledger](VERIFICATION.json));
+Evidence: Rho 203/203 (serial) and Plugins 92/92 ([ledger](VERIFICATION.json));
 `acceptance:agent-canvas` 9/9 (controlled peer), `acceptance:sources` 7/7, `frontend`
 11/11, `agent-ui` 7/7, pages, shell, person, objects, actions, continuity and plugin
-UI passed. Four real Westlake HPC Claude turns found and fixed five defects. This shows
-the paths work, not that a person can follow a fast Agent or browse faster there.
+UI passed. Four real Westlake HPC Claude turns found and fixed five defects; a test
+Agent found six in the settings, and one real Claude run chose and switched models.
+This shows the paths work, not that a person can follow a fast Agent or choose well.
 
 ## Home, projects and empty project
 
@@ -92,12 +94,10 @@ lists the folder and an `@<sourceId>` entry per source and descends into them.
 Fixing it surfaced that `State.openSelected` demanded an expiry, refusing "Open
 folder…" for this machine's non-expiring access; it now uses the same rule.
 
-Evidence: `npm run build`; Rho 185/185 unit checks, including source-folder listing
-and this machine's own tab picking a folder; `acceptance:frontend` 11 checks;
-`acceptance:pages`, `acceptance:shell` and `acceptance:person` passed; six
-interaction and five source-folder checks in real Chrome, no page errors.
-Screenshots and scripts are in `work/ui-review-20261027/`; this shows the paths work
-to the builder, not that another person can follow them.
+Evidence: Rho 185/185 unit checks, including source-folder listing and this machine's
+tab picking a folder; `acceptance:frontend` 11 checks, pages, shell and person; six
+interaction and five source-folder checks in Chrome, no page errors
+(`work/ui-review-20261027/`). Paths work for the builder; others' use is unobserved.
 
 ## From-scratch design requirements
 

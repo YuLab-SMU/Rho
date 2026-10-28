@@ -1,0 +1,540 @@
+{
+  "method": "conversation.configure",
+  "inputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "projectId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "conversationId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "configId": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 512
+      },
+      "value": {
+        "anyOf": [
+          {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          {
+            "type": "boolean"
+          }
+        ]
+      }
+    },
+    "required": [
+      "projectId",
+      "conversationId",
+      "configId",
+      "value"
+    ]
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "conversation": {
+        "type": "object",
+        "properties": {
+          "conversationId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "client": {
+            "type": "string",
+            "minLength": 1
+          },
+          "principal": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "updatedAt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "turns": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "state": {
+            "enum": [
+              "idle",
+              "running",
+              "completed",
+              "failed",
+              "stopped",
+              "unknown"
+            ]
+          },
+          "lastAt": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "conversationId",
+          "title",
+          "client",
+          "principal",
+          "createdAt",
+          "updatedAt",
+          "version",
+          "turns",
+          "state",
+          "lastAt"
+        ],
+        "additionalProperties": true
+      },
+      "observation": {
+        "anyOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "at": {
+                "type": "string"
+              },
+              "config": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "at": {
+                        "type": "string"
+                      },
+                      "omitted": {
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "options": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "category": {
+                              "type": "string"
+                            },
+                            "current": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "boolean"
+                                }
+                              ]
+                            },
+                            "description": {
+                              "type": "string"
+                            },
+                            "id": {
+                              "type": "string"
+                            },
+                            "name": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "enum": [
+                                "select",
+                                "boolean"
+                              ]
+                            },
+                            "values": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "description": {
+                                    "type": "string"
+                                  },
+                                  "group": {
+                                    "type": "string"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "value": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "value",
+                                  "name"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 256,
+                              "type": "array"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "name",
+                            "type",
+                            "current"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 12,
+                        "type": "array"
+                      },
+                      "origin": {
+                        "enum": [
+                          "initial",
+                          "history",
+                          "live"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "at",
+                      "origin",
+                      "options",
+                      "omitted"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "connected": {
+                "type": "boolean"
+              },
+              "historyUpdates": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "info": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "at": {
+                        "type": "string"
+                      },
+                      "origin": {
+                        "enum": [
+                          "initial",
+                          "history",
+                          "live"
+                        ]
+                      },
+                      "title": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "updatedAt": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "required": [
+                      "at",
+                      "origin"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "omitted": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "plan": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "at": {
+                        "type": "string"
+                      },
+                      "entries": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "content": {
+                              "type": "string"
+                            },
+                            "priority": {
+                              "enum": [
+                                "high",
+                                "medium",
+                                "low"
+                              ]
+                            },
+                            "status": {
+                              "enum": [
+                                "pending",
+                                "in_progress",
+                                "completed"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "content",
+                            "status",
+                            "priority"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 64,
+                        "type": "array"
+                      },
+                      "omitted": {
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "origin": {
+                        "enum": [
+                          "initial",
+                          "history",
+                          "live"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "at",
+                      "origin",
+                      "entries",
+                      "omitted"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "sequence": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "sessionId": {
+                "type": "string"
+              },
+              "source": {
+                "const": "acp"
+              },
+              "tools": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "at": {
+                      "type": "string"
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "locations": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "line": {
+                            "minimum": 0,
+                            "type": "integer"
+                          },
+                          "path": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "path"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 16,
+                      "type": "array"
+                    },
+                    "operation": {
+                      "type": "string"
+                    },
+                    "origin": {
+                      "enum": [
+                        "initial",
+                        "history",
+                        "live"
+                      ]
+                    },
+                    "outcome": {
+                      "enum": [
+                        "requested",
+                        "returned",
+                        "rejected",
+                        "unknown"
+                      ]
+                    },
+                    "tool": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "at",
+                    "origin",
+                    "id",
+                    "locations"
+                  ],
+                  "type": "object"
+                },
+                "maxItems": 64,
+                "type": "array"
+              },
+              "unrepresented": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "updates": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "usage": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "at": {
+                        "type": "string"
+                      },
+                      "cost": {
+                        "anyOf": [
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "amount": {
+                                "type": "number"
+                              },
+                              "currency": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "amount",
+                              "currency"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "origin": {
+                        "enum": [
+                          "initial",
+                          "history",
+                          "live"
+                        ]
+                      },
+                      "size": {
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "used": {
+                        "minimum": 0,
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "at",
+                      "origin",
+                      "used",
+                      "size"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "source",
+              "sessionId",
+              "sequence",
+              "at",
+              "connected",
+              "updates",
+              "historyUpdates",
+              "omitted",
+              "unrepresented",
+              "plan",
+              "usage",
+              "info",
+              "tools"
+            ],
+            "type": "object"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "config": {
+        "type": "object",
+        "maxProperties": 12,
+        "propertyNames": {
+          "maxLength": 512
+        },
+        "additionalProperties": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            {
+              "type": "boolean"
+            }
+          ]
+        }
+      }
+    },
+    "required": [
+      "conversation",
+      "observation",
+      "config"
+    ],
+    "additionalProperties": true
+  },
+  "description": "Person at this machine only: change one setting the Agent offers (model, effort, mode…) for the next messages of a conversation started in Rho. An open session changes now; otherwise the choice is applied when the session next opens. Refused while a message is being answered."
+}

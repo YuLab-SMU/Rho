@@ -1,0 +1,368 @@
+{
+  "method": "conversation.settings.read",
+  "inputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "projectId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      }
+    },
+    "required": [
+      "projectId"
+    ]
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "version": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "updatedAt": {
+        "anyOf": [
+          {
+            "type": "string",
+            "minLength": 1
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "backend": {
+        "anyOf": [
+          {
+            "enum": [
+              "claude-acp",
+              "codex-acp"
+            ]
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "serviceBackend": {
+        "enum": [
+          "claude-acp",
+          "codex-acp",
+          "claude-cli"
+        ]
+      },
+      "choices": {
+        "type": "object",
+        "properties": {
+          "claude-acp": {
+            "type": "object",
+            "maxProperties": 12,
+            "propertyNames": {
+              "maxLength": 512
+            },
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 512
+                },
+                {
+                  "type": "boolean"
+                }
+              ]
+            }
+          },
+          "codex-acp": {
+            "type": "object",
+            "maxProperties": 12,
+            "propertyNames": {
+              "maxLength": 512
+            },
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 512
+                },
+                {
+                  "type": "boolean"
+                }
+              ]
+            }
+          }
+        },
+        "required": [],
+        "additionalProperties": true
+      },
+      "offered": {
+        "type": "object",
+        "properties": {
+          "claude-acp": {
+            "type": "object",
+            "properties": {
+              "at": {
+                "type": "string",
+                "minLength": 1
+              },
+              "source": {
+                "enum": [
+                  "check",
+                  "conversation"
+                ]
+              },
+              "adapter": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "version": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": [
+                      "name"
+                    ],
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "options": {
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "category": {
+                      "type": "string"
+                    },
+                    "current": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "boolean"
+                        }
+                      ]
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "enum": [
+                        "select",
+                        "boolean"
+                      ]
+                    },
+                    "values": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "description": {
+                            "type": "string"
+                          },
+                          "group": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "value": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "value",
+                          "name"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 256,
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "type",
+                    "current"
+                  ],
+                  "type": "object"
+                }
+              },
+              "omitted": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "at",
+              "source",
+              "adapter",
+              "options",
+              "omitted"
+            ],
+            "additionalProperties": true
+          },
+          "codex-acp": {
+            "type": "object",
+            "properties": {
+              "at": {
+                "type": "string",
+                "minLength": 1
+              },
+              "source": {
+                "enum": [
+                  "check",
+                  "conversation"
+                ]
+              },
+              "adapter": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "version": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": [
+                      "name"
+                    ],
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "options": {
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "category": {
+                      "type": "string"
+                    },
+                    "current": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "boolean"
+                        }
+                      ]
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "enum": [
+                        "select",
+                        "boolean"
+                      ]
+                    },
+                    "values": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "description": {
+                            "type": "string"
+                          },
+                          "group": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "value": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "value",
+                          "name"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 256,
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "type",
+                    "current"
+                  ],
+                  "type": "object"
+                }
+              },
+              "omitted": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "at",
+              "source",
+              "adapter",
+              "options",
+              "omitted"
+            ],
+            "additionalProperties": true
+          }
+        },
+        "required": [],
+        "additionalProperties": true
+      },
+      "checking": {
+        "type": "array",
+        "items": {
+          "enum": [
+            "claude-acp",
+            "codex-acp"
+          ]
+        }
+      }
+    },
+    "required": [
+      "version",
+      "updatedAt",
+      "backend",
+      "serviceBackend",
+      "choices",
+      "offered",
+      "checking"
+    ],
+    "additionalProperties": true
+  },
+  "description": "Person at this machine only: read the Agent and settings chosen for new conversations and what each Agent last offered. Reading starts nothing."
+}

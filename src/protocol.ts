@@ -32,6 +32,9 @@ const array = (items: any) => ({ type: 'array', items });
 const response = (properties: Record<string, any>, required = Object.keys(properties)) => ({ type: 'object', properties, required, additionalProperties: true });
 const changeId = { type: 'string', pattern: '^[A-Za-z0-9._:@-]{1,128}$' };
 const identity = changeId;
+const agentBackend = { enum: ['claude-acp', 'codex-acp'] };
+const choiceText = { type: 'string', minLength: 1, maxLength: 512 }, choiceValue = { anyOf: [choiceText, { type: 'boolean' }] };
+const choices = { type: 'object', maxProperties: 12, propertyNames: { maxLength: 512 }, additionalProperties: choiceValue };
 const digest = ref.properties.version;
 
 // The application's scope is the one field every owner operation gains here. Owner
@@ -78,11 +81,16 @@ export const operations: Record<string, any> = { ...base.operations,
   'data.compare': obj({ ...project, left: ref, right: ref, options: obj({ leftKey: text, rightKey: text, leftNamespace: text, rightNamespace: text, mapping: { const: 'equal-string' }, leftField: text, rightField: text, join: { enum: ['left', 'inner', 'full'] } }) }),
   'media.describe': obj({ ...project, resource: ref }),
   // A conversation the person starts in Rho: their words, under a request identity they hold.
-  'conversation.start': obj({ ...project, changeId, text: { type: 'string', minLength: 1, maxLength: 16384 }, backend: { enum: ['claude-acp', 'codex-acp'] } }, ['projectId', 'changeId', 'text']),
+  'conversation.start': obj({ ...project, changeId, text: { type: 'string', minLength: 1, maxLength: 16384 }, backend: agentBackend, config: choices }, ['projectId', 'changeId', 'text']),
   'conversation.send': obj({ ...project, conversationId: changeId, changeId, text: { type: 'string', minLength: 1, maxLength: 16384 } }),
   'conversation.permission': obj({ ...project, conversationId: changeId, turnId: changeId, permissionId: changeId, optionId: { type: 'string', minLength: 1, maxLength: 256 } }),
   'conversation.stop': obj({ ...project, conversationId: changeId, turnId: changeId }),
-  'conversation.read': obj({ ...project, conversationId: changeId, before: integer, limit: { type: 'integer', minimum: 1, maximum: 200 } }, ['projectId', 'conversationId'])
+  'conversation.read': obj({ ...project, conversationId: changeId, before: integer, limit: { type: 'integer', minimum: 1, maximum: 200 } }, ['projectId', 'conversationId']),
+  // The person's Agent and its settings (model, effort, mode…) among those the Agent offers.
+  'conversation.configure': obj({ ...project, conversationId: changeId, configId: choiceText, value: choiceValue }),
+  'conversation.settings.read': obj(project),
+  'conversation.settings.update': obj({ ...project, expectedVersion: integer, backend: { anyOf: [agentBackend, { type: 'null' }] }, choices: obj({ 'claude-acp': choices, 'codex-acp': choices }, []) }, ['projectId', 'expectedVersion']),
+  'conversation.settings.check': obj({ ...project, backend: agentBackend })
 };
 
 // Every owner-declared operation and response comes from the snapshot, scoped once.
@@ -189,6 +197,10 @@ const catalog = { ...contract.capabilityCatalogSchema };
 // text and tool steps in order, and how the message ended. Hidden reasoning is never kept.
 const conversationSummary = response({ conversationId: text, title: text, client: text, principal: { anyOf: [text, { type: 'null' }] }, createdAt: text, updatedAt: text, version: integer, turns: integer, state: { enum: ['idle', 'running', 'completed', 'failed', 'stopped', 'unknown'] }, lastAt: text });
 const sessionObservation = ownerSchema('agent-session', 'sessionObservationSchema');
+// What one Agent offered, from a check or a conversation's first session, and the person's choices.
+const offered = response({ at: text, source: { enum: ['check', 'conversation'] }, adapter: { anyOf: [response({ name: text, version: text }, ['name']), { type: 'null' }] }, options: array(ownerSchema('agent-session', 'configOptionSchema')), omitted: integer });
+const agentSettings = response({ version: integer, updatedAt: { anyOf: [text, { type: 'null' }] }, backend: { anyOf: [agentBackend, { type: 'null' }] }, serviceBackend: { enum: ['claude-acp', 'codex-acp', 'claude-cli'] },
+  choices: response({ 'claude-acp': choices, 'codex-acp': choices }, []), offered: response({ 'claude-acp': offered, 'codex-acp': offered }, []), checking: array(agentBackend) });
 // A tool step keeps its original identity, the Agent's bounded human title, its ACP
 // category and one identifying input (command, path, pattern or query). Raw tool
 // output and reasoning are never part of this record.
@@ -284,7 +296,11 @@ export const responses: Record<string, any> = { ...base.responses, ...ownerRespo
   'conversation.send': response({ conversation: conversationSummary, turn: conversationTurn }),
   'conversation.permission': response({ conversation: conversationSummary, turn: conversationTurn }),
   'conversation.stop': response({ conversation: conversationSummary, turn: conversationTurn }),
-  'conversation.read': response({ conversation: conversationSummary, observation: { anyOf: [sessionObservation, { type: 'null' }] }, first: integer, turns: array(conversationTurn) }, ['conversation', 'first', 'turns']),
+  'conversation.read': response({ conversation: conversationSummary, observation: { anyOf: [sessionObservation, { type: 'null' }] }, config: choices, first: integer, turns: array(conversationTurn) }, ['conversation', 'first', 'turns']),
+  'conversation.configure': response({ conversation: conversationSummary, observation: { anyOf: [sessionObservation, { type: 'null' }] }, config: choices }),
+  'conversation.settings.read': agentSettings,
+  'conversation.settings.update': agentSettings,
+  'conversation.settings.check': agentSettings,
   'protocol.describe': response({ apiVersion: { const: '2.0' }, schemaVersion: { const: 2 }, revision: digest, entries: array(response({ method: text, summary: text })), next: { type: ['string', 'null'] }, complete: { type: 'boolean' }, contract: response({ method: text, inputSchema: { type: 'object' }, outputSchema: { type: 'object' }, definitions: { type: 'object' }, description: text }) }, ['apiVersion', 'schemaVersion', 'revision', 'entries', 'next', 'complete']),
   'capability.list': { ...catalog, properties: { ...catalog.properties, host: contract.cliSchema }, required: [...(catalog.required ?? []), 'host'] },
   'capability.configure': response({ version: positive, enabled: array(text), receipt: response({ changeId: text, author: text, version: positive, enabled: array(text), at: text }) }),
@@ -344,10 +360,14 @@ export const descriptions = {
   'action.submit': 'Execute the explicitly selected project R script snapshot and requirements. Persist operationId before delivery; identical retries retain the original Core identity. Output directory is the first R argument, followed by explicit args or frozen resource paths. Artifact paths are output-relative; completion is run-directory-relative, returned as plan.completion, so an inventory can remain beside immutable producer artifacts.',
   'binding.activity.append': 'Registered native adapter only: retain original CLI tool and artifact-ready observations. This does not execute, validate, or present artifacts.',
   'task.routing.put': 'Control plane only: conditionally assign one task and business binding to this project without starting a native session.',
-  'conversation.start': 'Person at this machine only: start a conversation with the selected Claude Code or Codex Agent in this project. Rho selects the Agent plugin backend, attaches this project\'s MCP grant and records the message before sending it. A repeated changeId with the same text returns the original conversation and starts nothing.',
+  'conversation.start': 'Person at this machine only: start a conversation with the selected Claude Code or Codex Agent in this project. Rho selects the Agent plugin backend, attaches this project\'s MCP grant and records the message before sending it. Without backend or config, the person\'s saved Agent and settings are used and recorded with the conversation. A repeated changeId with the same text returns the original conversation and starts nothing.',
   'conversation.send': 'Person at this machine only: send the next message to a conversation started in Rho, which resumes the same Agent session. Refused while the previous message is being answered. A repeated changeId with the same text returns the original message.',
   'conversation.stop': 'Person at this machine only: ask the original Agent to stop answering one message. ACP cancellation is confirmed by the original prompt response; a lost connection keeps the outcome unknown. Legacy CLI conversations confirm process exit. Steps already taken stay done.',
   'conversation.permission': 'Person at this machine only: record an offered choice for a pending Agent permission request. The original request identity is retained; repeated identical choices do not respond twice.',
+  'conversation.configure': 'Person at this machine only: change one setting the Agent offers (model, effort, mode…) for the next messages of a conversation started in Rho. An open session changes now; otherwise the choice is applied when the session next opens. Refused while a message is being answered.',
+  'conversation.settings.read': 'Person at this machine only: read the Agent and settings chosen for new conversations and what each Agent last offered. Reading starts nothing.',
+  'conversation.settings.update': 'Person at this machine only: choose the Agent and its settings for new conversations, among the values that Agent last offered. A stale expectedVersion is refused.',
+  'conversation.settings.check': 'Person at this machine only: start the chosen Agent in this project to read the settings it offers, then remove that session and end the process. No message is sent; one check per Agent runs at a time.',
   'conversation.read': 'Read a conversation started in Rho: the person\'s messages, the Agent\'s visible text and tool steps, and how each message ended. Reading starts and resumes nothing.',
   'project.work.read': 'Person at this machine only: read linked Agent sessions, retained native activity identities, current referenced files and the shared notes document. Source cursors and resource versions remain independent. Does not start an Agent, collector or Host.',
   'resource.register': 'Declare scoped existing bytes and their type/schema at the supplied digest. This read and registration starts no runtime.',

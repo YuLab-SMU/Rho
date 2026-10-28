@@ -6,6 +6,7 @@ import { agentName, commandFiles, projectPath } from './agent-now.js';
 import { kindOf } from './sources.js';
 import { AgentMarkdown } from './markdown.js';
 import { Icon, type IconName } from './icons.js';
+import { modelSetting, valueName } from './agent-settings.js';
 
 // What the Agent did in this project, one conversation at a time: what the person asked,
 // the files it changed and looked at, the commands it ran and what it answered. These are
@@ -76,7 +77,7 @@ function Answer({ text, streaming }: { text: string; streaming: boolean }) {
     {long && <button className="text-button work-more" aria-expanded={open} onClick={() => setOpen(v => !v)}>{open ? 'Show less' : 'Show the whole answer'}</button>}
   </div>;
 }
-function TurnWork({ turn, snapshot, exists, onPath }: { turn: Turn; snapshot: WorkspaceSnapshot; exists: (path: string) => boolean; onPath: (path: string) => void }) {
+function TurnWork({ turn, snapshot, observation, exists, onPath }: { turn: Turn; snapshot: WorkspaceSnapshot; observation: Read['observation']; exists: (path: string) => boolean; onPath: (path: string) => void }) {
   const did = work(turn, snapshot.project.root, snapshot.project, exists);
   const refused = did.commands.filter(c => c.outcome === 'rejected').length;
   const failure = turn.state === 'failed' ? turn.result?.message ?? turn.problem ?? 'The Agent reported a failure.' : null;
@@ -93,7 +94,7 @@ function TurnWork({ turn, snapshot, exists, onPath }: { turn: Turn; snapshot: Wo
     </div>
     {failure ? <p className="work-problem" role="note"><Icon name="info" size={15} />{failure}</p>
       : did.answer ? <Answer text={did.answer} streaming={turn.state === 'running'} /> : null}
-    <p className="work-ending"><span className={'work-state ' + turn.state}>{ended[turn.state] ?? turn.state}</span>{turn.state !== 'running' && took(turn.startedAt ?? turn.sentAt, turn.endedAt) && <> · took {took(turn.startedAt ?? turn.sentAt, turn.endedAt)}</>}</p>
+    <p className="work-ending"><span className={'work-state ' + turn.state}>{ended[turn.state] ?? turn.state}</span>{turn.state !== 'running' && took(turn.startedAt ?? turn.sentAt, turn.endedAt) && <> · took {took(turn.startedAt ?? turn.sentAt, turn.endedAt)}</>}{turn.model && <span title={turn.model}> · {valueName(modelSetting(observation?.config?.options), turn.model)}</span>}</p>
   </li>;
 }
 
@@ -120,7 +121,7 @@ function Conversation({ client, snapshot, summary, exists, onContinue, onPath }:
     {!read && !problem && <p className="muted" role="status">Reading…</p>}
     {read && <ol className="work-turns">
       {earlier > 0 && <li className="work-earlier"><button className="text-button" onClick={() => onContinue(summary.conversationId)}>{earlier} earlier {earlier === 1 ? 'message' : 'messages'} in the conversation</button></li>}
-      {read.turns.map(turn => <TurnWork key={turn.id} turn={turn} snapshot={snapshot} exists={exists} onPath={onPath} />)}
+      {read.turns.map(turn => <TurnWork key={turn.id} turn={turn} snapshot={snapshot} observation={read.observation} exists={exists} onPath={onPath} />)}
     </ol>}
   </article>;
 }

@@ -60,9 +60,12 @@ inspect what happened. The application gives those actions direct places:
 - **The Agent panel** opens beside any page from the button at the right of the
   sidebar's Agent row, from New conversation or Continue on the Agent page, or from
   the topbar while the sidebar is hidden. In a tab on this machine it holds conversations with
-  Claude Code or Codex started in Rho: select one for a new conversation, follow its streaming
-  reply and its actions, reply, stop its turn and return to it after a reload
-  ([conversation episode](CONVERSATION-EPISODE.md)). The panel renders the retained
+  Claude Code or Codex started in Rho: follow a streaming reply and its actions, reply,
+  stop a turn and return to it after a reload
+  ([conversation episode](CONVERSATION-EPISODE.md)). One chip under the message box
+  names the Agent, model and effort, the saved choices for a new conversation and the
+  open conversation's own, changed between messages; each ending names the model
+  that answered ([settings pass](AGENT-CANVAS-EPISODE.md#choosing-the-agent-and-its-model)). The panel renders the retained
   record rather than protocol events: the Agent's Markdown is prose, lists and code;
   each tool step names what it did (`Read data.csv`, `Ran Rscript analysis.R`,
   `Wrote results/summary.csv`, `Called data.page`) with the Agent's title and reported
@@ -110,7 +113,10 @@ Overview: Agent-reported plans/usage, retained native source identities and curr
 referenced files. It links back to the original conversation or the Agent page.
 `web/agent-work.tsx` draws the Agent page's conversations from `conversation.read`
 (the latest four messages of up to six conversations at a time) through the same
-step model as the panel.
+step model as the panel. `web/agent-settings.tsx` keeps one copy of
+`conversation.settings.read` per tab for the Agent page's card and the panel's chip;
+asking an Agent what it offers (`conversation.settings.check`) is always the
+person's click.
 Shared notes opens `project-notes.md` in the existing Documents owner; saving is
 explicit before asking Agent to read it. A failed work read keeps the previous
 view and offers Refresh. The cursor invalidates the read model; individual sources

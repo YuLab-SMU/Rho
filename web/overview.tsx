@@ -10,6 +10,7 @@ import { walkLimits, type ProjectFiles, type SourceItem } from './sources.js';
 import { RunView } from './shell/facts.js';
 import { AgentActivity } from './agent-activity.js';
 import { AgentWork } from './agent-work.js';
+import { AgentSettingsCard } from './agent-settings.js';
 import { AgentAccess } from './agents.js';
 import { WorkProgress } from './work-progress.js';
 
@@ -168,6 +169,7 @@ export function ProjectOverview({ project, snapshot, client, section, onSection,
       {snapshot.resources.length > 0 && <section className="project-section"><div className="section-heading"><h2>Registered results</h2></div>{resultList}</section>}
     </>}
     {section === 'agent' && <>
+      {!linked && <AgentSettingsCard client={client} projectId={project.id} />}
       {!linked && <AgentWork client={client} snapshot={snapshot} exists={path => !!files?.files.some(file => file.path === path)} onContinue={id => onAgent(id)} onPath={path => onPath?.(path)} onNew={() => onNewConversation?.()} />}
       {(orderedRuns.length > 0 || runsProblem) && <section className="project-section agent-runs"><div className="section-heading"><h2>Runs</h2></div>{error(runsProblem, readAgain)}<div className="activity-list">{orderedRuns.map(runRow)}</div></section>}
       <details className="agent-outside" open={outsideOpen} onToggle={event => setOutsideOpen(event.currentTarget.open)}>

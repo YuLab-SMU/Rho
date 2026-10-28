@@ -5,6 +5,7 @@ import { conversationBlocks, currentPlanEntry, type Activity } from '../src/conv
 import { projectName } from './home.js';
 import { AgentMarkdown } from './markdown.js';
 import { SessionProgress } from '@rho-workspace/plugin-agent/ui';
+import { ComposerSettings, OpenSettings, agentLabel, backendOf, modelSetting, useAgentSettings, valueName, type SettingValue } from './agent-settings.js';
 
 // A conversation the person starts here. Rho holds its input, so this panel is where it
 // continues: the person's messages, the Agent's words as they arrive, the actions it takes
@@ -123,7 +124,7 @@ function TurnView({ turn, running, observation, projectRoot, choose, choosing, a
       {permission.state === 'cancelled' ? 'The Agent request was cancelled.' : <>You chose “{permission.options.find(option => option.id === permission.selected)?.name ?? 'an option'}”<span className="turn-choice-what"> · {permission.title}</span></>}
     </p>)}
     <div className="turn-ending-line">
-      <p className={'turn-ending ' + turn.state} role={turn.state === 'running' ? 'status' : undefined}>{ending(turn)}{running && elapsed !== null && <span className="turn-elapsed" aria-hidden="true"> · {liveTime(elapsed)}</span>}</p>
+      <p className={'turn-ending ' + turn.state} role={turn.state === 'running' ? 'status' : undefined}>{ending(turn)}{running && elapsed !== null && <span className="turn-elapsed" aria-hidden="true"> · {liveTime(elapsed)}</span>}{turn.model && <span className="turn-model" title={turn.model}> · {valueName(modelSetting(observation?.config?.options), turn.model)}</span>}</p>
       {turn.state === 'failed' && !running && <button className="text-button" onClick={() => askAgain(turn.text)}>Ask again</button>}
     </div>
   </li>;
@@ -136,12 +137,13 @@ export function AgentConversation({ snapshot, client, selectedId, onSelected, on
   const [draft, setDraft] = useState(() => stored(draftKey) ?? '');
   const [pending, setPending] = useState<Pending | null>(() => { try { return JSON.parse(stored(pendingKey) ?? 'null'); } catch { return null; } });
   const [read, setRead] = useState<Read | null>(null), [busy, setBusy] = useState(false), [problem, setProblem] = useState(''), [unconfirmed, setUnconfirmed] = useState(false);
-  const [backend, setBackend] = useState<'' | 'claude-acp' | 'codex-acp'>('');
+  const settings = useAgentSettings(client, projectId), [configuring, setConfiguring] = useState(false);
   const [choosing, setChoosing] = useState<string | null>(null);
   const [following, setFollowing] = useState(true), [unseen, setUnseen] = useState(false);
   const list = snapshot.conversations ?? [];
   const summary = list.find(c => c.conversationId === openId);
-  const agentName = (summary?.client ?? read?.conversation.client) === 'codex' || (!openId && backend === 'codex-acp') ? 'Codex' : (summary?.client ?? read?.conversation.client) === 'claude-code' || (!openId && backend === 'claude-acp') ? 'Claude Code' : 'Agent';
+  const openClient = summary?.client ?? read?.conversation.client;
+  const agentName = openId ? (openClient ? agentLabel[backendOf(openClient)] : 'Agent') : agentLabel[settings.backend];
   const end = useRef<HTMLDivElement>(null), input = useRef<HTMLTextAreaElement>(null);
   useEffect(() => { setDraft(stored(draftKey) ?? ''); }, [draftKey]);
   // 'new' asks for the composer of a new conversation.
@@ -208,7 +210,17 @@ export function AgentConversation({ snapshot, client, selectedId, onSelected, on
     const text = draft.trim() ? draft : '';
     if (!text) return;
     setFollowing(true); setUnseen(false); onSent?.();
-    void deliver(openId ? { kind: 'send', conversationId: openId, changeId: 'm-' + crypto.randomUUID(), text } : { kind: 'start', changeId: 'm-' + crypto.randomUUID(), text, ...(backend ? { backend } : {}) });
+    void deliver(openId ? { kind: 'send', conversationId: openId, changeId: 'm-' + crypto.randomUUID(), text } : { kind: 'start', changeId: 'm-' + crypto.randomUUID(), text });
+  }
+  // A setting of the open conversation, for its next messages.
+  async function configure(configId: string, value: SettingValue) {
+    if (!openId) return;
+    setConfiguring(true); setProblem('');
+    try {
+      const reply = await client.call('conversation.configure', { projectId, conversationId: openId, configId, value });
+      setRead(current => current && current.conversation.conversationId === reply.conversation.conversationId ? { ...current, conversation: reply.conversation, observation: reply.observation, config: reply.config } : current);
+    } catch (error) { setProblem(error instanceof Error ? error.message : 'The setting could not be changed.'); }
+    finally { setConfiguring(false); }
   }
   async function stop() {
     if (!openId || !last) return;
@@ -221,7 +233,7 @@ export function AgentConversation({ snapshot, client, selectedId, onSelected, on
       <button className="text-button" onClick={() => open(null)}>All conversations</button>
       <strong title={summary?.title ?? read?.conversation.title}>{summary?.title ?? read?.conversation.title ?? 'Conversation'}</strong>
       {clientName(summary?.client ?? read?.conversation.client) && <span className="conversation-client">{clientName(summary?.client ?? read?.conversation.client)}</span>}
-    </header> : <header className="conversation-head"><label>Agent <select aria-label="Conversation Agent" value={backend} disabled={busy || !!pending} onChange={e => setBackend(e.target.value as typeof backend)}><option value="">Configured default</option><option value="claude-acp">Claude Code</option><option value="codex-acp">Codex</option></select></label></header>}
+    </header> : null}
     {openId ? <ol className="conversation-turns" aria-label="Messages">
       {(read?.first ?? 0) > 0 && <li className="turn-note">{read!.first} earlier {read!.first === 1 ? 'message is' : 'messages are'} kept but not shown.</li>}
       {read?.turns.map((turn, i) => <TurnView key={turn.id} turn={turn} running={turn.state === 'running' && i === read.turns.length - 1} observation={read.observation} projectRoot={snapshot.project.root} choosing={choosing} askAgain={askAgain} choose={(turnId, permissionId, optionId) => {
@@ -247,6 +259,10 @@ export function AgentConversation({ snapshot, client, selectedId, onSelected, on
       <label htmlFor="conversation-input" className="visually-hidden">{openId ? 'Message ' + agentName : 'Start a conversation'}</label>
       <textarea id="conversation-input" ref={input} rows={3} value={waiting ? waiting.text : draft} readOnly={!!waiting} placeholder={openId ? 'Reply to ' + agentName + '…' : 'What should the Agent look at or change?'} onChange={e => edit(e.target.value)}
         onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !answering && !busy && !waiting) { e.preventDefault(); send(); } }} />
+      {openId ? (openClient && <OpenSettings options={read?.observation?.config?.options ?? settings.offered(backendOf(openClient))?.options ?? null} values={read?.config ?? {}} agent={agentName}
+        disabled={answering || configuring || !read} checking={settings.checking.has(backendOf(openClient))} checkProblem={settings.checkProblem[backendOf(openClient)]} onCheck={() => void settings.check(backendOf(openClient))}
+        onChoose={(id, value) => void configure(id, value)} />)
+        : !waiting && <ComposerSettings state={settings} />}
       <div className="conversation-actions">
         <span>{answering ? agentName + ' is answering. You can write your next message.' : openId ? 'Resumes this conversation.' : 'Starts a new conversation.'}{!following && unseen && <span className="following-note"> New activity below.</span>}</span>
         {!following && <button className="small-button jump-latest" onClick={() => setFollowing(true)}>{unseen ? 'New activity · ' : ''}Jump to latest</button>}

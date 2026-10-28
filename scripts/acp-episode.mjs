@@ -121,7 +121,11 @@ print(name+' completed once')
   report.browser = browser.version(); context = await browser.newContext({ viewport: { width: 1440, height: 900 } }); page = await context.newPage(); page.setDefaultTimeout(20000);
   page.on('pageerror', e => report.browserErrors.push(e.message));
   await page.goto(service.url); await page.locator('.project-row').filter({ hasText: agentName + ' ACP episode' }).click(); await openPanel();
-  await panel().getByRole('combobox', { name: 'Conversation Agent' }).selectOption(codex ? 'codex-acp' : 'claude-acp');
+  // The Agent for new conversations is a saved choice, made in the message box's settings.
+  await panel().locator('.composer-settings .setting-chip').click();
+  await panel().locator('.model-extra').getByRole('radio', { name: codex ? 'Codex' : 'Claude Code' }).click();
+  await panel().locator('.model-extra').getByRole('radio', { name: codex ? 'Codex' : 'Claude Code', checked: true }).waitFor();
+  await page.keyboard.press('Escape');
   // Deliver the first message but lose its HTTP acknowledgement. Retry must reuse it.
   let lostAck;
   await page.route('**/api/v2/conversation.start', async route => { const response = await route.fetch(); lostAck = await response.json(); await route.abort('failed'); }, { times: 1 });

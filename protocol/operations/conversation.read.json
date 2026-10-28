@@ -109,6 +109,109 @@
               "at": {
                 "type": "string"
               },
+              "config": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "at": {
+                        "type": "string"
+                      },
+                      "omitted": {
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "options": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "category": {
+                              "type": "string"
+                            },
+                            "current": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "boolean"
+                                }
+                              ]
+                            },
+                            "description": {
+                              "type": "string"
+                            },
+                            "id": {
+                              "type": "string"
+                            },
+                            "name": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "enum": [
+                                "select",
+                                "boolean"
+                              ]
+                            },
+                            "values": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "description": {
+                                    "type": "string"
+                                  },
+                                  "group": {
+                                    "type": "string"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "value": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "value",
+                                  "name"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 256,
+                              "type": "array"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "name",
+                            "type",
+                            "current"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 12,
+                        "type": "array"
+                      },
+                      "origin": {
+                        "enum": [
+                          "initial",
+                          "history",
+                          "live"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "at",
+                      "origin",
+                      "options",
+                      "omitted"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
               "connected": {
                 "type": "boolean"
               },
@@ -395,6 +498,25 @@
             "type": "null"
           }
         ]
+      },
+      "config": {
+        "type": "object",
+        "maxProperties": 12,
+        "propertyNames": {
+          "maxLength": 512
+        },
+        "additionalProperties": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            {
+              "type": "boolean"
+            }
+          ]
+        }
       },
       "first": {
         "type": "integer",

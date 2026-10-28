@@ -322,3 +322,129 @@ Rho only (`web/agent-work.tsx`, `web/overview.tsx`, `web/project.tsx`, `web/main
   details. Whether it should only point to the Agent page is open.
 - When the Host is unavailable, the outside-sessions section shows the feed's own
   disconnected state, once opened.
+
+## Choosing the Agent and its model
+
+### Question
+
+The user asked for settings in the Agent UI so that a person chooses the Agent and
+its model themselves.
+
+### Observed before
+
+- The panel's new-conversation header had one select: Configured default, Claude
+  Code or Codex. Model, effort and permission mode came only from each Agent's own
+  configuration, and no screen said which model answered. The failed conversation
+  above ended on a model the gateway said may not exist; nothing in Rho could choose
+  another.
+- ACP v1 sessions report the settings they accept. Opening a session without a
+  message in an empty folder:
+  - Claude Code (`claude-agent-acp` 0.97.0, 3.2 s) offered Mode (5 values), Model
+    (101), Effort (6), Fast mode and Ultracode.
+  - Codex (`codex-acp` 2.3.0, 0.5 s) offered Mode (4), Collaboration mode, Model
+    (103) and Reasoning effort (6).
+
+  Neither groups models through ACP. Names end in " · " and where the model comes
+  from (a routing group, a provider). Descriptions carry account names; this record
+  leaves them out and the screens show them only as tooltips.
+
+### Changed
+
+**Agent 0.4.13** (`Rho-plugins/plugins/agent`):
+
+- The ACP connection keeps the settings a session reports when it opens or changes
+  them (`config_option_update`). The session observation carries them, bounded to 12
+  settings of at most 256 values each, with the rest counted.
+- The person's choices are applied once the session opens and before any message is
+  sent. A setting or value the Agent does not offer fails that message; nothing is
+  sent.
+- `configure()` changes one setting on an open session between messages.
+- `inspect()` opens a session, reads its settings, removes the session where the
+  Agent supports that, and ends the process. It sends no message.
+
+**Rho** (`src/conversations.ts`, `src/protocol.ts`, `web/agent-settings.tsx`,
+`web/conversation.tsx`, `web/overview.tsx`, `web/agent-work.tsx`, `web/theme.css`):
+
+- Four operations for the person at this machine:
+  - `conversation.settings.read` reads one file in the service's state directory
+    and starts nothing. The file holds the Agent for new conversations, each Agent's
+    choices, and what each Agent last offered, from a check or from a conversation's
+    first session opened without choices.
+  - `conversation.settings.update` refuses a stale `expectedVersion` and any value
+    the Agent did not offer.
+  - `conversation.settings.check` runs `inspect()` in the project, one check per
+    Agent at a time, bounded by `connectTimeoutMs`.
+  - `conversation.configure` changes an open conversation's session now. If no
+    session is open, it records the choice for the next one. It is refused while the
+    Agent is answering.
+
+  `conversation.start` without an Agent or settings uses the saved ones and records
+  them on the conversation. A request holds at most 12 settings of 512 characters.
+- **Agent page:** a "New conversations use" card above the conversations, with:
+  - Claude Code or Codex;
+  - a model picker that is searchable, grouped by where each model comes from, and
+    starts with the Agent's default named;
+  - effort, mode and the other settings as compact selects, each with its default;
+  - a line saying which adapter offered them and when, with Check again.
+
+  Before any check, "Ask Claude Code" says that it starts the Agent for a few seconds
+  and sends no message.
+- **Panel:** one chip under the message box names the Agent, model and effort. It
+  opens the same picker, with the Agent switch and effort above the list. In an open
+  conversation, the chip shows that conversation's model and effort and changes them
+  between messages.
+- Each message's ending names the model that answered, in the panel and on the Agent
+  page.
+
+### Runs
+
+Evidence: `work/agent-settings-20261027/` (ignored by Git). `look.mjs` drives a
+disposable service whose Claude Code and Codex are a test Agent offering 39 models
+from five sources. `real.mjs` uses the person's own Claude Code on a disposable
+project.
+
+| Run | What happened | Cause | Change |
+| --- | --- | --- | --- |
+| `look` 1 | Check sent `initialize`, `session/new`, `session/delete` only; the chosen model and effort were set before the prompt; a switch mid-conversation was used by the next message. Effort, Mode and Fast mode chips stood as tall stacked boxes. | The global `label` rule stacks its children. | Chips lay out in a row. |
+| `look` 2 | Switched from one source's DeepSeek V4.1 Flash to another's: the chip and the endings read the same before and after. | Names were shown without their source. | Chips and endings show the whole name. |
+| `look` 3 | In the panel, the open picker cut off the conversation's header and text. | The picker was wider than the panel; focusing and scrolling to the chosen model scrolled the panel sideways. | The picker fits its panel or page; only its list scrolls; focus does not scroll. |
+| `look` 4 | Agent, model and effort took three rows of a 300 px message box. | Three chips. | One chip; the Agent and effort sit above the list. |
+| `look` 5 | With a short conversation, the picker opened above the message box and its search and Agent switch were cut off. | It always opened upward. | It opens on the side with room and fits that height. |
+| `look` 6 | After Ask Claude Code returned, typing did not search. | Focus moved only when the picker opened. | The search takes focus when the list arrives. |
+| `real` | Check 3.9 s: 101 models; "westlake" found four. With Qwen3.8 27B · WestlakeHPC chosen, the first message failed: "API Error: 400 WestlakeHPC: System message must be at the beginning." The ending named the model. The panel switched the conversation to DeepSeek V4.1 Flash · routing group. The next message completed in 6 s with turn model `auto/deepseek-v4.1-flash[1m]`. | That provider refuses the request Claude Code sends; Rho reported it as received. | None in Rho. |
+
+In the real run the answering model said it was Claude. A model's description of
+itself is not evidence. The record keeps the model the adapter accepted for the turn.
+Claude Code reported its own default as the group model that the earlier failed
+conversation named.
+
+### Checks
+
+- `test/agent-settings.test.mjs` covers the operations:
+  - a read starts nothing;
+  - a check sends no prompt and removes its session;
+  - stale and unknown values are refused;
+  - saved choices are set before the first prompt;
+  - an open session changes between messages, leaving the defaults unchanged;
+  - after a restart, a choice is recorded and applied when the session next opens.
+
+  Agent 0.4.13's two new owner tests cover applying, changing and refusing settings
+  and `inspect()` removing its session.
+- Rho unit tests 203/203 serially, Plugins 92/92, and the contract and type checks.
+- `agent-ui` 7/7, `agent-canvas` 9/9, `frontend` 11/11 and `sources` 7/7 passed, as
+  did shell, continuity, pages, person, objects, actions and the plugin UI check.
+  `acp-episode` now chooses its Agent in the message box's settings; it was not run
+  again here.
+
+### Limits
+
+- What an Agent offers is known only from a check or a first session. It can go
+  stale. A saved choice the Agent no longer offers fails the next message with that
+  reason, and Check again refreshes the list.
+- One service keeps one set of choices for every project. A check runs in the current
+  project, and another project's own Agent configuration may offer other models.
+- Whether a model works through an Agent is known only by sending a message, as the
+  WestlakeHPC refusal showed. Rho does not test models.
+- Mode lists the Agent's own permission modes, including those that skip its
+  questions. Rho shows them as offered and adds no approval of its own.
+- No person has used these controls yet; the runs show that the paths work.

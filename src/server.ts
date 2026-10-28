@@ -354,7 +354,7 @@ export class RhoService {
       // Queued behind the project's own writes; it never waits for them, so a write that
       // started a conversation is not held up by its own notification.
       changed: async (project, conversationId) => { void this.serial(project.id, () => this.emit(project, 'conversation.changed', conversationId, localBrowserId)).catch(() => {}); }
-    }, config.claude, config.conversations, { backend: config.agentBackend, claudeAcp: config.claudeAcp, codex: config.codex, codexAcp: config.codexAcp });
+    }, config.claude, config.conversations, { backend: config.agentBackend, claudeAcp: config.claudeAcp, codex: config.codex, codexAcp: config.codexAcp, settingsFile: path.join(this.state.directory, 'agent-settings.json') });
     this.folderPicker = new NativeFolderPicker({ ...nativeFolderLimits, ...config.nativeFolders });
     this.server = http.createServer((req, res) => void this.handle(req, res));
     this.server.requestTimeout = 15000; this.server.headersTimeout = 10000;
@@ -802,9 +802,13 @@ export class RhoService {
       if (method === 'conversation.read') return this.conversations.read(p, b);
       if (method === 'conversation.permission') return this.conversations.permission(p, principal.id, b);
       if (method === 'conversation.stop') return this.conversations.stop(p, principal.id, b);
+      if (method === 'conversation.settings.read') return this.conversations.settings();
       this.plugins.need('agent');
       if (method === 'conversation.start') return this.conversations.start(p, principal.id, b);
       if (method === 'conversation.send') return this.conversations.send(p, principal.id, b);
+      if (method === 'conversation.configure') return this.conversations.configure(p, principal.id, b);
+      if (method === 'conversation.settings.update') return this.conversations.updateSettings(b);
+      if (method === 'conversation.settings.check') return this.conversations.check(p, b);
     }
     const capabilities = new Capabilities(this.plugins, p);
     if (method === 'capability.index' || method === 'capability.resolve' || contractRef) {

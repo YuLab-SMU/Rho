@@ -22,6 +22,25 @@
           "claude-acp",
           "codex-acp"
         ]
+      },
+      "config": {
+        "type": "object",
+        "maxProperties": 12,
+        "propertyNames": {
+          "maxLength": 512
+        },
+        "additionalProperties": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            {
+              "type": "boolean"
+            }
+          ]
+        }
       }
     },
     "required": [
@@ -517,5 +536,5 @@
     ],
     "additionalProperties": true
   },
-  "description": "Person at this machine only: start a conversation with the selected Claude Code or Codex Agent in this project. Rho selects the Agent plugin backend, attaches this project's MCP grant and records the message before sending it. A repeated changeId with the same text returns the original conversation and starts nothing."
+  "description": "Person at this machine only: start a conversation with the selected Claude Code or Codex Agent in this project. Rho selects the Agent plugin backend, attaches this project's MCP grant and records the message before sending it. Without backend or config, the person's saved Agent and settings are used and recorded with the conversation. A repeated changeId with the same text returns the original conversation and starts nothing."
 }
