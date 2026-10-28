@@ -19,9 +19,12 @@ inspect what happened. The application gives those actions direct places:
   in, opens folders and creates a named project from selected source folders. It
   opens as one list with one primary action, and with no projects it shows what can
   be started instead of an empty page.
-- **Overview** opens existing workspaces and recorded results, with recent runs when
-  there are any. Its Work progress shows a conversation while it answers or waits for
-  a choice; finished ones are counted and listed on the Agent page. A project with nothing recorded yet shows its two next steps —
+- **Overview** leads with what the Agent did in small: the Graph's timeline without
+  its controls, one lane per conversation, under a line of questions, commands, files
+  changed and the last time. The results follow as pictures, newest first: a figure
+  as itself, a table as its first rows, eight in all with the rest in Files. Each
+  workspace is a card naming its views. Its Work progress shows a conversation while
+  it answers or waits for a choice; finished ones are listed on the Agent page. A project with nothing recorded yet shows its two next steps —
   work with the Agent or browse its files — rather than empty sections, leading with
   whichever one the project's listing says has something behind it.
 - **Sources** counts the project's Data, Code, Results & figures and Notes from one
@@ -69,8 +72,11 @@ inspect what happened. The application gives those actions direct places:
   the question, what it edited and ran, and what changed on disk while its command
   ran; a later row refers to an earlier output. Lines say whether the Agent reported
   it, a command named it, or a change was seen on disk. Cards preview tables and
-  figures; choosing one shows its path and the file in its own view; the timeline
-  replays the work. While the Agent works the Graph stays and follows it, and its
+  figures; choosing one shows its path and the file in its own view. The timeline
+  below gives each conversation a lane and each step a block coloured by kind (asked,
+  read, edited, ran, changed on disk, answered); the legend counts and filters them,
+  refused or unknown steps are marked, pauses fold to a short gap, and the work
+  replays at 1×, 2× or 4×. While the Agent works the Graph stays and follows it, and its
   files still open in the shared workspace; a step waiting for the person's choice
   turns amber and is answered there. A file opened from it is held in the workspace
   while following goes on ([episode](GRAPH-EPISODE.md)).
@@ -150,11 +156,15 @@ with one conditional `composition.apply`, through `document.open` for text and `
 for a CSV or image. Following is a tab-local choice; the workspace layout is saved.
 `src/work-graph.ts` builds the Graph from `conversation.read` records (a finished
 message keeps the project files that changed on disk while it ran) and the folder walk
-(`project.entries` gives each file's `modifiedAt`), and lays each message out as a row; `web/graph.tsx` draws it, its previews, the inspector and the timeline.
+(`project.entries` gives each file's `modifiedAt`), and lays each message out as a row; `web/graph.tsx` draws it, the inspector, the timeline and the
+Overview's `WorkStrip`. `web/previews.ts` reads the card and Overview previews from a captured
+snapshot, or a registered result at its exact version: at most 16 files, two at a time, figures
+up to 2 MiB and tables to 3 rows by 4 columns.
 `web/work-progress.tsx` reads `project.work.read` for the local person's project
 Overview: Agent-reported plans/usage, retained native source identities and current
 referenced files. It shows a conversation started in Rho only while it answers or
-waits for a choice, and links to the Agent page for the finished ones.
+waits for a choice, and links to the Agent page for the finished ones; what the
+observation left out folds under Observation notes.
 `web/agent-manage.tsx` draws the Agent page's tabs from the conversation summaries in
 the snapshot and `conversation.list` for the trash; an opened row reads its latest
 four messages through `web/agent-work.tsx`, the same step model as the panel.

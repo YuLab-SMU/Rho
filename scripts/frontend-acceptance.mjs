@@ -83,7 +83,7 @@ writeLines(jsonlite::toJSON(list(schemaVersion=1L,complete=TRUE,artifacts=items)
   await page.getByText('No projects match').waitFor();
   await page.getByRole('button', { name: 'Clear search' }).click();
   await page.locator('.project-row').filter({ hasText: project.name }).click();
-  await page.locator('.workspace-link').waitFor();
+  await page.locator('.workspace-card').waitFor();
   await inspect('overview');
   passed('project search, empty search and project overview use actual project records');
   const navigate = async name => {
@@ -102,7 +102,7 @@ writeLines(jsonlite::toJSON(list(schemaVersion=1L,complete=TRUE,artifacts=items)
   await page.getByRole('button', { name: 'analysis.R', exact: true }).last().waitFor();
   passed('files can be searched, nested folders traversed and the parent restored');
   await navigate('Overview');
-  await page.locator('.workspace-link').click();
+  await page.locator('.workspace-card').click();
   await page.getByRole('tab', { name: 'Coefficients', exact: true }).click();
   await page.locator('.ag-row[row-index="0"] [col-id="estimate"]').waitFor();
   await inspect('table');

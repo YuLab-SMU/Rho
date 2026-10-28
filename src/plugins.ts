@@ -28,7 +28,7 @@ const entries = {
   agent: () => import('@rho-workspace/plugin-agent')
 };
 export type PluginId = keyof typeof entries;
-export const selectedPluginVersions: Record<keyof typeof entries, string> = { documents: '0.4.3', files: '0.4.1', r: '0.4.1', requirements: '0.4.0', tables: '0.4.3', media: '0.4.0', charts: '0.4.0', annotations: '0.4.4', agent: '0.4.13' };
+export const selectedPluginVersions: Record<keyof typeof entries, string> = { documents: '0.4.3', files: '0.4.1', r: '0.4.1', requirements: '0.4.0', tables: '0.4.3', media: '0.4.0', charts: '0.4.0', annotations: '0.4.4', agent: '0.4.14' };
 export const pluginIds = Object.keys(entries) as PluginId[];
 type Modules = { [K in PluginId]: Awaited<ReturnType<typeof entries[K]>> };
 export interface PluginConfig {

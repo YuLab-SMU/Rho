@@ -3,12 +3,14 @@ import type { BrowserClient, ViewDescription, WorkspaceSnapshot } from '../src/b
 import type { RhoOutput } from '../src/contract.generated.js';
 import { buildWorkGraph, laneLayout, lineage, type GraphEdge, type GraphEvent, type GraphNode, type GraphTurn, type LaneItem, type LaneLink, type WorkGraph as Graph } from '../src/work-graph.js';
 import { agentName, type AgentNow } from './agent-now.js';
-import { canCapture, openInWorkspace, viewFor } from './canvas.js';
+import { openInWorkspace, viewFor } from './canvas.js';
 import { kindOf, type ProjectFiles } from './sources.js';
 import { Icon, type IconName } from './icons.js';
+import { BrandMark, brandOf } from './brand-marks.js';
 import { size } from './project.js';
 import { AgentMarkdown } from './markdown.js';
 import { OwnerView } from './shell/owner.js';
+import { readPreview, type Preview } from './previews.js';
 import './graph.css';
 
 // The project as a graph of what the Agent did: the questions people asked, the files each
@@ -19,10 +21,6 @@ import './graph.css';
 type Read = RhoOutput<'conversation.read'>;
 type Summary = NonNullable<WorkspaceSnapshot['conversations']>[number];
 const limits = { conversations: 6, turns: 8 };
-// Cards preview a table's first rows and a figure's pixels. The protected resource is the
-// service and the browser: at most this many previews per page, read one or two at a time,
-// each figure within this many bytes; past a limit the card simply has no preview.
-export const previewLimits = { files: 16, concurrent: 2, figureBytes: 2 * 1024 * 1024, rows: 3, columns: 4 };
 
 const clock = (ms: number, seconds = false) => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', ...(seconds ? { second: '2-digit' } : {}), hourCycle: 'h23' });
 const span = (ms: number) => ms < 60000 ? Math.max(1, Math.round(ms / 1000)) + ' s' : ms < 3600000 ? Math.round(ms / 60000) + ' min' : (ms / 3600000).toFixed(1).replace(/\.0$/, '') + ' h';
@@ -64,51 +62,11 @@ function useTurns(client: BrowserClient, snapshot: WorkspaceSnapshot) {
     }, running && Object.keys(reads).length ? 700 : 0);
     return () => { live = false; clearTimeout(timer); };
   }, [client, snapshot.project.id, key]);
-  const turns: GraphTurn[] = useMemo(() => list.flatMap((c: Summary) => (reads[c.conversationId]?.read.turns ?? []).map(turn => ({ conversationId: c.conversationId, conversationTitle: c.title, agent: agentName(c.client), turn, observation: reads[c.conversationId]?.read.observation }))), [list, reads]);
+  const turns: GraphTurn[] = useMemo(() => list.flatMap((c: Summary) => (reads[c.conversationId]?.read.turns ?? []).map(turn => ({ conversationId: c.conversationId, conversationTitle: c.agentTitle || c.title, agent: agentName(c.client), turn, observation: reads[c.conversationId]?.read.observation }))), [list, reads]);
   const omitted = list.reduce((n, c) => n + (reads[c.conversationId]?.read.first ?? 0), 0) + Math.max(0, (snapshot.conversations?.length ?? 0) - list.length);
   return { turns, problem, loading: list.length > 0 && !list.some(c => reads[c.conversationId]), omitted };
 }
 
-// A table's first rows or a figure's pixels for a card, read once per file version.
-type Preview = { kind: 'table'; columns: string[]; rows: Array<Record<string, unknown>>; total: number; width: number } | { kind: 'image'; url: string } | { kind: 'none'; note: string };
-const previews = new Map<string, Promise<Preview>>();
-let started = 0, active = 0;
-const waiting: Array<() => void> = [];
-async function slot<T>(run: () => Promise<T>) {
-  if (active >= previewLimits.concurrent) await new Promise<void>(resolve => waiting.push(resolve));
-  active++;
-  try { return await run(); } finally { active--; waiting.shift()?.(); }
-}
-function readPreview(client: BrowserClient, snapshot: WorkspaceSnapshot, node: GraphNode): Promise<Preview> {
-  const key = snapshot.project.id + ':' + node.path + ':' + node.bytes + ':' + node.modifiedAt;
-  const known = previews.get(key);
-  if (known) return known;
-  if (!canCapture(snapshot)) return Promise.resolve({ kind: 'none', note: 'No preview in this build' });
-  if (started >= previewLimits.files) return Promise.resolve({ kind: 'none', note: 'Select it to see it' });
-  started++;
-  const made = slot(async (): Promise<Preview> => {
-    const projectId = snapshot.project.id;
-    const resource = await client.call('agent.activity.capture', { projectId, path: node.path! });
-    const ref = { id: resource.id, version: resource.version };
-    if (resource.kind === 'table') {
-      const page = await client.call('data.page', { projectId, resource: ref, offset: 0, limit: previewLimits.rows } as never) as { columns: Array<{ name: string }>; rows: Array<Record<string, unknown>>; total: number };
-      return { kind: 'table', columns: page.columns.slice(0, previewLimits.columns).map(c => c.name), rows: page.rows, total: page.total, width: page.columns.length };
-    }
-    if ((node.bytes ?? 0) > previewLimits.figureBytes) return { kind: 'none', note: size(node.bytes ?? 0) + ' · select it to see it' };
-    let offset = 0, data = '';
-    for (;;) {
-      const page = await client.call('resource.read', { projectId, resource: ref, offset }) as { data: string; more: boolean; nextOffset: number };
-      data += atob(page.data);
-      if (!page.more || data.length > previewLimits.figureBytes) break;
-      offset = page.nextOffset;
-    }
-    const bytes = Uint8Array.from(data, c => c.charCodeAt(0));
-    const type = /\.svg$/i.test(node.path!) ? 'image/svg+xml' : /\.png$/i.test(node.path!) ? 'image/png' : 'image/jpeg';
-    return { kind: 'image', url: URL.createObjectURL(new Blob([bytes], { type })) };
-  }).catch((): Preview => ({ kind: 'none', note: 'Preview could not be read' }));
-  previews.set(key, made);
-  return made;
-}
 function CardPreview({ client, snapshot, node, shown }: { client: BrowserClient; snapshot: WorkspaceSnapshot; node: GraphNode; shown: boolean }) {
   // A file that changes again is previewed again; until then the card keeps what it read.
   const version = node.path + ':' + node.bytes + ':' + node.modifiedAt;
@@ -117,7 +75,7 @@ function CardPreview({ client, snapshot, node, shown }: { client: BrowserClient;
   useEffect(() => {
     if (!shown || read?.version === version) return;
     let live = true;
-    readPreview(client, snapshot, node).then(value => { if (live) setRead({ version, preview: value }); });
+    readPreview(client, snapshot, { path: node.path!, bytes: node.bytes, modifiedAt: node.modifiedAt }).then(value => { if (live) setRead({ version, preview: value }); });
     return () => { live = false; };
   }, [shown, version]);
   if (!preview) return <span className="graph-preview loading" aria-hidden="true" />;
@@ -164,16 +122,16 @@ export function WorkGraph({ client, snapshot, files, agentNow, following, princi
   const matches = useMemo(() => { const q = query.trim().toLowerCase(); return q ? new Set(graph.nodes.filter(n => (n.title + ' ' + (n.path ?? '') + ' ' + (n.text ?? '') + ' ' + (n.command ?? '')).toLowerCase().includes(q)).map(n => n.id)) : null; }, [query, graph]);
 
   // Replay: the graph as it stood at a moment of the work. Null is now.
-  const [cursor, setCursor] = useState<number | null>(null), [playing, setPlaying] = useState(false);
+  const [cursor, setCursor] = useState<number | null>(null), [playing, setPlaying] = useState(false), [speed, setSpeed] = useState(1);
   const times = graph.events.map(e => e.at);
   useEffect(() => {
     if (!playing) return;
     const events = graph.events, index = cursor === null ? 0 : events.findIndex(e => e.at > cursor);
     if (index < 0 || index >= events.length) { setPlaying(false); setCursor(null); return; }
-    const pace = Math.min(600, Math.max(140, 9000 / Math.max(1, events.length)));
+    const pace = Math.min(600, Math.max(140, 9000 / Math.max(1, events.length))) / speed;
     const timer = setTimeout(() => setCursor(events[index].at), cursor === null ? 0 : pace);
     return () => clearTimeout(timer);
-  }, [playing, cursor, graph.events]);
+  }, [playing, cursor, graph.events, speed]);
   const current = cursor === null ? null : [...graph.events].reverse().find(e => e.at <= cursor) ?? null;
 
   // Nodes that appear while the person watches arrive with a short mark.
@@ -344,7 +302,7 @@ export function WorkGraph({ client, snapshot, files, agentNow, following, princi
       {selectedNode && <Inspector key={selectedNode.id} node={selectedNode} graph={graph} byId={byId} client={client} snapshot={snapshot} principalId={principalId} workspace={workspace}
         onStudio={onStudio} onAbout={onAbout} onAgent={onAgent} onSelect={id => choose(id, true)} onClose={() => setSelected(null)} />}
     </div>
-    {graph.events.length > 0 && <Timeline graph={graph} cursor={cursor} playing={playing} running={!!agentNow?.running}
+    {graph.events.length > 0 && <Timeline graph={graph} cursor={cursor} playing={playing} running={!!agentNow?.running} speed={speed} onSpeed={setSpeed}
       onCursor={at => { setPlaying(false); setCursor(at); }} onPlay={() => { if (playing) setPlaying(false); else { if (cursor !== null && cursor >= times.at(-1)!) setCursor(null); setPlaying(true); } }} />}
   </section>;
 }
@@ -520,8 +478,24 @@ function Choice({ waiting, client, projectId }: { waiting: NonNullable<GraphNode
 
 // The work over time: each message a band, each action a tick. Dragging or the arrow keys
 // show the graph as it stood then; Play runs through it. Long pauses between messages are cut.
-function Timeline({ graph, cursor, playing, running, onCursor, onPlay }: { graph: Graph; cursor: number | null; playing: boolean; running: boolean; onCursor: (at: number | null) => void; onPlay: () => void }) {
+// The kinds of action the timeline draws, each its own colour; edits and writes are one kind.
+const timelineKinds = [
+  { key: 'ask', label: 'Asked', actions: ['ask'] }, { key: 'read', label: 'Read', actions: ['read'] },
+  { key: 'edit', label: 'Edited', actions: ['edit', 'write'] }, { key: 'run', label: 'Ran', actions: ['run'] },
+  { key: 'changed', label: 'Changed on disk', actions: ['changed'] }, { key: 'answer', label: 'Answered', actions: ['answer'] },
+] as const;
+type TimelineKind = typeof timelineKinds[number]['key'];
+const kindOfAction = (action: string): TimelineKind => timelineKinds.find(k => (k.actions as readonly string[]).includes(action))?.key ?? 'read';
+const failed = (e: GraphEvent) => e.outcome === 'rejected' || e.outcome === 'unknown';
+// Ticks a reader can tell apart: the shortest step that leaves this much room between labels.
+const tickSteps = [10e3, 30e3, 60e3, 120e3, 300e3, 600e3, 900e3, 1800e3, 3600e3, 7200e3, 21600e3];
+
+// What happened when, one lane per conversation: each message a band, each action a block in its
+// kind's colour, refused or unknown ones marked. A pause longer than half a minute is folded to a
+// fixed gap that says how long it was. Pointing at a block names it; pressing moves the playhead.
+function Timeline({ graph, cursor, playing, running, speed, onSpeed, onCursor, onPlay, compact = false }: { graph: Graph; cursor: number | null; playing: boolean; running: boolean; speed: number; onSpeed: (speed: number) => void; onCursor: (at: number | null) => void; onPlay: () => void; compact?: boolean }) {
   const track = useRef<HTMLDivElement>(null), [width, setWidth] = useState(600);
+  const [hover, setHover] = useState<{ event: GraphEvent; x: number; lane: number } | null>(null), [only, setOnly] = useState<TimelineKind | null>(null);
   useLayoutEffect(() => {
     const element = track.current;
     if (!element) return;
@@ -535,29 +509,49 @@ function Timeline({ graph, cursor, playing, running, onCursor, onPlay }: { graph
     for (const t of sorted) { const last = out.at(-1); if (last && t.start <= last.end + 30000) { last.end = Math.max(last.end, t.end); last.turns.push(t); } else out.push({ start: t.start, end: Math.max(t.end, t.start + 1000), turns: [t] }); }
     return out;
   }, [graph.turns]);
-  const gap = 16, usable = Math.max(100, width - gap * Math.max(0, stretches.length - 1));
+  // One lane per conversation, in the order they began.
+  const lanes = useMemo(() => {
+    const out: Array<{ id: string; title: string; agent: string; turns: typeof graph.turns }> = [];
+    for (const t of [...graph.turns].sort((a, b) => a.start - b.start)) {
+      const lane = out.find(l => l.id === t.conversationId);
+      if (lane) lane.turns.push(t); else out.push({ id: t.conversationId, title: t.title, agent: t.agent, turns: [t] });
+    }
+    return out;
+  }, [graph.turns]);
+  const laneOf = useMemo(() => new Map(graph.turns.map(t => [t.id, lanes.findIndex(l => l.id === t.conversationId)])), [graph.turns, lanes]);
+  const gap = 44, usable = Math.max(100, width - gap * Math.max(0, stretches.length - 1));
   const weights = stretches.map(s => Math.sqrt(s.end - s.start)), total = weights.reduce((a, b) => a + b, 0) || 1;
   const offsets: number[] = []; let x = 0;
   stretches.forEach((s, i) => { offsets.push(x); x += usable * weights[i] / total + gap; });
+  const widthOf = (i: number) => usable * weights[i] / total;
   const toX = (at: number) => {
     const found = stretches.findIndex(s => at <= s.end), i = found < 0 ? stretches.length - 1 : found;
-    const s = stretches[i], w = usable * weights[i] / total;
+    const s = stretches[i], w = widthOf(i);
     return offsets[i] + Math.min(w, Math.max(0, (at - s.start) / (s.end - s.start) * w));
   };
   const fromX = (px: number) => {
-    for (let i = stretches.length - 1; i >= 0; i--) if (px >= offsets[i]) { const s = stretches[i], w = usable * weights[i] / total; return s.start + Math.min(1, Math.max(0, (px - offsets[i]) / w)) * (s.end - s.start); }
+    for (let i = stretches.length - 1; i >= 0; i--) if (px >= offsets[i]) { const s = stretches[i], w = widthOf(i); return s.start + Math.min(1, Math.max(0, (px - offsets[i]) / w)) * (s.end - s.start); }
     return stretches[0]?.start ?? 0;
   };
   const events = graph.events, last = events.at(-1)?.at ?? 0;
   const index = cursor === null ? events.length : events.filter(e => e.at <= cursor).length;
+  const laneHeight = 24, lanesTop = 0;
   function scrub(event: ReactPointerEvent<HTMLDivElement>) {
     const element = event.currentTarget, box = element.getBoundingClientRect();
-    element.setPointerCapture(event.pointerId);
+    element.setPointerCapture(event.pointerId); setHover(null);
     const set = (clientX: number) => { const at = fromX(clientX - box.left); const nearest = events.reduce((best, e) => Math.abs(e.at - at) < Math.abs(best.at - at) ? e : best, events[0]); onCursor(Math.abs(toX(nearest.at) - (clientX - box.left)) < 8 ? nearest.at : at); };
     set(event.clientX);
     const move = (e: PointerEvent) => set(e.clientX);
     const stop = () => { element.removeEventListener('pointermove', move); element.removeEventListener('pointerup', stop); element.removeEventListener('pointercancel', stop); };
     element.addEventListener('pointermove', move); element.addEventListener('pointerup', stop); element.addEventListener('pointercancel', stop);
+  }
+  // The block nearest the pointer in the lane under it, within a few pixels.
+  function point(event: ReactPointerEvent<HTMLDivElement>) {
+    if (event.buttons) return;
+    const box = event.currentTarget.getBoundingClientRect(), px = event.clientX - box.left, lane = Math.floor((event.clientY - box.top - lanesTop) / laneHeight);
+    let best: GraphEvent | null = null, distance = 7;
+    for (const e of events) { if (laneOf.get(e.turn) !== lane) continue; const d = Math.abs(toX(e.at) - px); if (d < distance) { best = e; distance = d; } }
+    setHover(best ? { event: best, x: toX(best.at), lane } : null);
   }
   function keys(event: ReactKeyboardEvent<HTMLDivElement>) {
     const at = cursor ?? last;
@@ -567,18 +561,74 @@ function Timeline({ graph, cursor, playing, running, onCursor, onPlay }: { graph
   }
   const head = cursor === null ? width : toX(cursor);
   const duration = graph.turns.reduce((sum, t) => sum + (t.end - t.start), 0);
-  return <footer className="graph-timeline">
-    <button className="graph-play" aria-label={playing ? 'Pause' : 'Play the work from the start'} onClick={onPlay}><Icon name={playing ? 'pause' : 'run'} size={16} /></button>
-    <div className="graph-timeline-text"><strong>{events.filter(e => e.action !== 'ask' && e.action !== 'answer').length} actions</strong><span>{graph.turns.length} {graph.turns.length === 1 ? 'message' : 'messages'} · {span(duration)}</span></div>
-    <div ref={track} className="graph-track" role="slider" tabIndex={0} aria-label="When" aria-valuemin={0} aria-valuemax={events.length} aria-valuenow={index}
-      aria-valuetext={cursor === null ? 'Now · everything' : `${clock(cursor, true)} · ${index} of ${events.length}`} onPointerDown={scrub} onKeyDown={keys}>
-      {stretches.map((s, i) => <span key={i} className="graph-stretch" style={{ left: offsets[i], width: usable * weights[i] / total }}>
-        {s.turns.map(t => <span key={t.id} className={'graph-band' + (t.running ? ' running' : '')} title={t.title} style={{ left: toX(t.start) - offsets[i], width: Math.max(3, toX(t.end) - toX(t.start)) }} />)}
-        <small>{clock(s.start)}</small>
-      </span>)}
-      {events.map(e => <i key={e.key} className={'graph-tick ' + e.action + (cursor !== null && e.at > cursor ? ' later' : '')} style={{ left: toX(e.at) }} />)}
-      <span className="graph-head-line" style={{ left: head }} />
+  const counts = timelineKinds.map(k => ({ ...k, count: events.filter(e => (k.actions as readonly string[]).includes(e.action)).length })).filter(k => k.count > 0);
+  const refused = events.filter(failed).length;
+  // Each stretch's ticks, at the shortest step that leaves 72 px between labels.
+  const ticks = stretches.flatMap((s, i) => {
+    const w = widthOf(i), length = s.end - s.start, step = tickSteps.find(t => w * t / length >= 72) ?? tickSteps.at(-1)!;
+    const out = [{ at: s.start, x: offsets[i], first: true }];
+    for (let t = Math.ceil(s.start / step) * step; t < s.end; t += step) { const tx = toX(t); if (tx - out.at(-1)!.x >= 60 && offsets[i] + w - tx >= 24) out.push({ at: t, x: tx, first: false }); }
+    return out.map(tick => ({ ...tick, label: clock(tick.at, step < 60e3) }));
+  });
+  const pauses = stretches.slice(1).map((s, i) => ({ x: offsets[i + 1] - gap, length: s.start - stretches[i].end }));
+  const Frame = compact ? 'div' : 'footer';
+  return <Frame className={'graph-timeline' + (compact ? ' compact' : '') + (only ? ' only-' + only : '')} aria-label="Timeline">
+    <div className="tl-head">
+      {!compact && <button className="graph-play" aria-label={playing ? 'Pause' : 'Play the work from the start'} onClick={onPlay}><Icon name={playing ? 'pause' : 'run'} size={16} /></button>}
+      <div className="graph-timeline-text"><strong>{events.filter(e => e.action !== 'ask' && e.action !== 'answer').length} actions</strong><span>{graph.turns.length} {graph.turns.length === 1 ? 'message' : 'messages'} · {span(duration)}{lanes.length > 1 ? ` · ${lanes.length} conversations` : ''}</span></div>
+      <div className="tl-legend" role="group" aria-label="Show one kind of action">
+        {counts.map(k => <button key={k.key} className={'tl-kind ' + k.key} aria-pressed={only === k.key} onClick={() => setOnly(only === k.key ? null : k.key)}><i aria-hidden="true" />{k.label}<small>{k.count}</small></button>)}
+        {refused > 0 && <span className="tl-kind failed"><i aria-hidden="true" />Refused or unknown<small>{refused}</small></span>}
+      </div>
+      {!compact && <>
+        <div className="tl-speed" role="group" aria-label="Replay speed">
+          {[1, 2, 4].map(value => <button key={value} aria-pressed={speed === value} onClick={() => onSpeed(value)}>{value}×</button>)}
+        </div>
+        <button className={'graph-now' + (cursor === null ? ' on' : '')} aria-pressed={cursor === null} onClick={() => onCursor(null)}>{running ? <><span className="pulse-dot" aria-hidden="true" />Live</> : 'Now'}</button>
+      </>}
     </div>
-    <button className={'graph-now' + (cursor === null ? ' on' : '')} aria-pressed={cursor === null} onClick={() => onCursor(null)}>{running ? <><span className="pulse-dot" aria-hidden="true" />Live</> : 'Now'}</button>
-  </footer>;
+    <div className="tl-body">
+      <ol className="tl-names" aria-label="Conversations">
+        {lanes.map(l => { const brand = brandOf(l.agent); return <li key={l.id} title={l.title}>{brand ? <BrandMark brand={brand} size={13} /> : <Icon name="chat" size={13} />}<span>{l.title}</span></li>; })}
+      </ol>
+      <div className="tl-plot">
+        <div ref={track} className="graph-track" {...(compact ? { role: 'img', 'aria-label': `${events.length} steps over ${lanes.length} ${lanes.length === 1 ? 'conversation' : 'conversations'}` } : { role: 'slider', tabIndex: 0, 'aria-label': 'When', 'aria-valuemin': 0, 'aria-valuemax': events.length, 'aria-valuenow': index,
+          'aria-valuetext': cursor === null ? 'Now · everything' : `${clock(cursor, true)} · ${index} of ${events.length}`, onPointerDown: scrub, onKeyDown: keys })} onPointerMove={point} onPointerLeave={() => setHover(null)}
+          style={{ height: lanes.length * laneHeight } as CSSProperties}>
+          {lanes.map((l, lane) => <div key={l.id} className="tl-lane" style={{ top: lane * laneHeight, height: laneHeight }}>
+            {l.turns.map(t => <span key={t.id} className={'tl-band' + (t.running ? ' running' : '')} style={{ left: toX(t.start), width: Math.max(4, toX(t.end) - toX(t.start)) }} />)}
+          </div>)}
+          {pauses.map((p, i) => <span key={i} className="tl-fold" style={{ left: p.x, width: gap, height: lanes.length * laneHeight }} aria-hidden="true" />)}
+          {events.map(e => <i key={e.key} className={'graph-tick tl-block ' + kindOfAction(e.action) + (failed(e) ? ' failed' : '') + (cursor !== null && e.at > cursor ? ' later' : '') + (hover?.event.key === e.key ? ' hot' : '')}
+            style={{ left: toX(e.at), top: (laneOf.get(e.turn) ?? 0) * laneHeight + 5 }} />)}
+          <span className="graph-head-line" style={{ left: head, height: lanes.length * laneHeight + 22 }}>{cursor !== null && <time>{clock(cursor, true)}</time>}</span>
+          {hover && <div className="tl-tip" style={{ left: Math.min(Math.max(hover.x, 110), width - 110), top: hover.lane * laneHeight }} role="tooltip">
+            <time>{clock(hover.event.at, true)}</time><span>{caption(hover.event, new Map(graph.nodes.map(n => [n.id, n])))}</span>{failed(hover.event) && <small>{hover.event.outcome === 'rejected' ? 'Refused' : 'Outcome unknown'}</small>}
+          </div>}
+        </div>
+        <div className="tl-axis" aria-hidden="true">
+          {ticks.map(t => <span key={t.at + ':' + t.x} className={t.first ? 'first' : ''} style={{ left: t.x }}>{t.label}</span>)}
+          {pauses.map((p, i) => <small key={i} style={{ left: p.x + gap / 2 }} title={'A pause of ' + span(p.length)}>{span(p.length)}</small>)}
+        </div>
+      </div>
+    </div>
+  </Frame>;
+}
+
+// The Overview's glance at the same record: the timeline without its controls, and the way to
+// the Graph. It reads the conversations as the Graph does, and shows nothing until they are read.
+export function WorkStrip({ client, snapshot, files, onOpen, onConversations }: { client: BrowserClient; snapshot: WorkspaceSnapshot; files: ProjectFiles; onOpen: () => void; onConversations: () => void }) {
+  const { turns, loading } = useTurns(client, snapshot);
+  const graph = useMemo(() => buildWorkGraph({ turns, files: files.files.map(f => ({ path: f.path, bytes: f.bytes, modifiedAt: f.modifiedAt, category: f.category })), project: snapshot.project, kindOf, now: Date.now() }),
+    [turns, files.files, snapshot.project]);
+  if (loading || !graph.events.length) return null;
+  const files_ = graph.nodes.filter(n => n.kind === 'file' && n.events.some(e => e.action === 'edit' || e.action === 'write' || e.action === 'changed')).length;
+  const last = graph.events.at(-1)!.at, days = Math.round((new Date().setHours(0, 0, 0, 0) - new Date(last).setHours(0, 0, 0, 0)) / 864e5);
+  const lastWords = (days === 0 ? 'today' : days === 1 ? 'yesterday' : new Date(last).toLocaleDateString()) + ' at ' + clock(last);
+  const conversations = snapshot.conversations?.length ?? 0;
+  return <section className="project-section work-strip" aria-labelledby="work-strip-title">
+    <div className="section-heading"><h2 id="work-strip-title">What the Agent did</h2><button className="text-button" onClick={onOpen}>Open the Graph <Icon name="chevron" size={12} /></button></div>
+    <p className="work-strip-line">{graph.nodes.filter(n => n.kind === 'question').length} questions in <button className="text-button" onClick={onConversations}>{conversations} {conversations === 1 ? 'conversation' : 'conversations'}</button> · {graph.nodes.filter(n => n.kind === 'run').length} commands · {files_} files changed · last {lastWords}</p>
+    <Timeline graph={graph} cursor={null} playing={false} running={false} speed={1} onSpeed={() => undefined} onCursor={() => undefined} onPlay={() => undefined} compact />
+  </section>;
 }

@@ -438,12 +438,6 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
   .shared-notes, .work-session > header, .work-files > ul > li { flex-direction: column; align-items: stretch; }
   .work-session, .shared-notes { padding: 14px; }
 }
-.workspace-list { display: flex; flex-direction: column; gap: 8px; }
-.workspace-link { justify-content: flex-start; text-align: left; gap: 14px; padding: 15px 16px; border-color: var(--color-hairline); border-radius: 12px; }
-.workspace-link > svg:first-child { color: var(--color-accent); }
-.workspace-link > span { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 4px; }
-.workspace-link small { color: var(--color-meta); white-space: nowrap; text-overflow: ellipsis; overflow: hidden; font-weight: 400; }
-.workspace-link > svg:last-child { color: var(--color-control-border); }
 .result-list, .agent-notes, .health-list { list-style: none; padding: 0; margin: 0; }
 .file-symbol { display: grid; place-content: center; flex: none; width: 38px; height: 38px; background: var(--color-well); border: 1px solid var(--color-hairline); color: var(--color-muted); border-radius: 10px; }
 .result-row { display: flex; align-items: center; width: 100%; gap: 12px; padding: 15px 0; border: 0; border-bottom: 1px solid var(--color-divider); border-radius: 0; text-align: left; font-weight: 400; }

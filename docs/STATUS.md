@@ -54,9 +54,10 @@ Git retains them at `24d9998b`; they are not requirements or reference designs.
   its group wherever the person moved it; the last named file's tab carries the Agent's
   verb. Choosing another view, typing, dragging or leaving stops following.
 - The Graph draws each message as a row from what it read to what changed on disk
-  while its commands ran (recorded per message when it ends), with table and figure
-  previews, a focus path, each file in its own view, replay, the Agent's flag and its
-  pending choices. Each line says whether it was reported, named or seen on disk.
+  while its commands ran (recorded per message when it ends), with previews, a focus
+  path, the Agent's flag and its pending choices; its timeline gives each conversation a
+  lane and each step its kind's colour, and replays at 1–4×. The Overview leads with it
+  in small, then results as pictures ([record](GRAPH-EPISODE.md#the-timeline-the-overview-and-host-activity)).
 - Tabs drag onto other tabs, into a group or to its side, and the Agent panel's edge
   drags; each drop is the conditional `composition.apply` the Agent's grant also holds.
 - The Agent page's Conversations tab lists conversations by day with model, effort,
@@ -66,7 +67,8 @@ Git retains them at `24d9998b`; they are not requirements or reference designs.
   Rho runs the person's own Claude Code or Codex `mcp add` for this project with one
   button (`session.connect`) and shows the access, the entry and the first call.
 - Documents 0.4.3 adopts a changed file into a buffer with no unsaved text. Agent
-  0.4.12 captures one named file; 0.4.13 applies, changes and inspects ACP settings.
+  0.4.12 captures one named file; 0.4.13 applies, changes and inspects ACP settings;
+  0.4.14 draws Host activity as cards (a lost Host, counts, actions, outputs).
 
 Evidence: Rho 218/218 (serial) and Plugins 92/92 ([ledger](VERIFICATION.json));
 `acceptance:agent-page` 7/7, `graph` 8/8 and `agent-canvas` 10/10 (controlled peers),
@@ -131,9 +133,8 @@ existing owner view. Original and later file snapshots remain independent.
   showed diagnostic exit 7, and repeat collection added none. Chrome checked
   pending/Host loss/reconnect, CSV/SVG opening, 1440/390 widths, reload and both
   sessions after the text-file wording/PDF refusal fix.
-- Rho 182/182 and Plugins 76/76 passed then.
-- Evidence: `work/agent-activity/run-6/` records exact hashes, failures and reviews;
-  this demonstrates the flow, not human usability.
+- Rho 182/182 and Plugins 76/76 passed then; `work/agent-activity/run-6/` records exact
+  hashes, failures and reviews. This demonstrates the flow, not human usability.
 - Source selection: Agent 0.4.7, Tables 0.4.3, Core unchanged at
   `4f5bed8631e15acad44cc86b63ea4779ab8af342`. External sessions need an explicit
   collector; the UI does not discover or start every native session. Native
@@ -201,8 +202,7 @@ then Jump to latest. Tool status and the ACP path are labelled as Agent reports.
   seven-turn ACP acceptance; Core remains at `4f5bed8`, unchanged.
 - The earlier [CLI episode](CONVERSATION-EPISODE.md) retains its measurements and
   failures. The 64-method Agent grant ceiling remains open; conversation permission
-  is local-person-only and consumes no grant slot. Raw Markdown display is fixed by
-  this pass.
+  is local-person-only and consumes no grant slot.
 
 ## UI extension authoring
 

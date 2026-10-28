@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { SessionProgress } from '@rho-workspace/plugin-agent/ui';
+import { Icon } from './icons.js';
 import type { BrowserClient, WorkspaceSnapshot } from '../src/browser.js';
 import type { RhoOutput } from '../src/contract.generated.js';
 
@@ -32,10 +33,10 @@ export function WorkProgress({ client, snapshot, openFile, openConversation, ope
   // Work in progress: a conversation started in Rho shows here while it answers or waits for a
   // choice. Finished ones are listed once, on the Agent page.
   const shown = work?.sessions.filter(session => !session.conversationId || session.state === 'running' || (session.pendingPermissions ?? 0) > 0) ?? [];
-  const finished = (work ? work.sessions.length - shown.length + work.omitted.conversations : 0);
   return <section className="project-section project-work" aria-label="Project work">
-    <div className="section-heading"><h2>Work progress</h2><button className="text-button" disabled={reading} onClick={() => request.current?.()}>{reading ? 'Reading…' : 'Refresh'}</button></div>
-    <div className="shared-notes"><div><strong>Shared notes</strong><p>{work?.notes.dirty ? 'Unsaved changes in the shared document. Save before asking Agent to read the file.' : 'Project notes for you and Agent. Save changes, then ask Agent to read project-notes.md.'}</p></div><button onClick={() => openFile(work?.notes.path ?? 'project-notes.md')}>Open shared notes</button></div>
+    {/* A heading only while something is in progress; otherwise the notes are one row. */}
+    {(shown.length > 0 || problem) && <div className="section-heading"><h2>Work progress</h2><button className="text-button" disabled={reading} onClick={() => request.current?.()}>{reading ? 'Reading…' : 'Refresh'}</button></div>}
+    <div className={'shared-notes' + (work?.notes.dirty ? ' dirty' : '')}><span className="shared-notes-mark" aria-hidden="true"><Icon name="document" size={17} /></span><div><strong>Shared notes{work?.notes.dirty && <span className="shared-notes-state">Unsaved</span>}</strong><p>{work?.notes.dirty ? 'Unsaved changes in the shared document. Save before asking Agent to read the file.' : 'Project notes for you and Agent. Save changes, then ask Agent to read project-notes.md.'}</p></div><button onClick={() => openFile(work?.notes.path ?? 'project-notes.md')}>Open shared notes</button></div>
     {problem && <p role="alert">{problem} Retained observations remain below.</p>}
     {!work && !problem && <p role="status">Reading project work…</p>}
     {work && <>
@@ -50,14 +51,18 @@ export function WorkProgress({ client, snapshot, openFile, openConversation, ope
         {session.operationIds.length > 0 && <p className="work-references">Managed run references: {session.operationIds.join(', ')}</p>}
         {session.resourceRefs.length > 0 && <p className="work-references">{session.resourceRefs.length} resource versions referenced. Results keep their own integrity and provenance.</p>}
       </article>)}</div>
-      {finished > 0 && <p className="muted">{finished} finished {finished === 1 ? 'conversation is' : 'conversations are'} on the <button className="text-button" onClick={openActivity}>Agent page</button>.</p>}
       {work.files.length > 0 && <div className="work-files"><h3>Referenced files</h3><p className="muted">Current file observations. A tool reference does not establish who wrote these bytes.</p><ul>{work.files.map(file => <li key={file.path}>
         <div><button className="text-button" disabled={file.state !== 'observed'} onClick={() => openFile(file.path)}>{file.path}</button><small>{file.state === 'observed' ? `${file.bytes} bytes · SHA-256 ${file.sha256?.slice(0, 12)}` : file.state.replaceAll('-', ' ')} · {file.references.length} tool references</small></div>
         <details><summary>Sources</summary><ul>{file.references.map(ref => <li key={ref.session + ref.tool}>{work.sessions.find(s => s.id === ref.session)?.title ?? ref.session} · {ref.tool}</li>)}</ul><p>{file.observedAt}</p>{file.sha256 && <code>{file.sha256}</code>}</details>
       </li>)}</ul></div>}
-      {work.omitted.fileReferences > 0 && <p className="muted">{work.omitted.fileReferences} file references were outside project scope or observation limits.</p>}
-      {work.omitted.external > 0 && <p className="muted">{work.omitted.external} external ACP observations are unavailable or outside retention limits.</p>}
-      <p className="work-native-note">{work.native.message}{work.native.state === 'available' && <button className="text-button" onClick={openActivity}>View native activity</button>}</p>
+      {work.native.state === 'available' && <p className="work-native-note">{work.native.message}<button className="text-button" onClick={openActivity}>View native activity</button></p>}
+      {/* What the observation left out or could not reach: kept, but not in the way. */}
+      {(work.omitted.fileReferences > 0 || work.omitted.external > 0 || work.native.state !== 'available') && <details className="work-observation">
+        <summary>Observation notes</summary>
+        {work.omitted.fileReferences > 0 && <p>{work.omitted.fileReferences} file references were outside project scope or observation limits.</p>}
+        {work.omitted.external > 0 && <p>{work.omitted.external} external ACP observations are unavailable or outside retention limits.</p>}
+        {work.native.state !== 'available' && <p>{work.native.message}</p>}
+      </details>}
     </>}
   </section>;
 }

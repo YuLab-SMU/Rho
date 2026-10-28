@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import type { BrowserClient, ProjectSummary, WorkspaceSnapshot } from '../src/browser.js';
 import { executionWord, integrityWord, results, shortPath, type RunFacts } from '../src/execution-facts.js';
 import { useRuns } from './executions.js';
@@ -12,6 +12,34 @@ import { AgentActivity } from './agent-activity.js';
 import { AgentPage } from './agent-manage.js';
 import { AgentAccess } from './agents.js';
 import { WorkProgress } from './work-progress.js';
+import { readPreview, type Preview } from './previews.js';
+import './overview.css';
+
+// The Graph's record, drawn small on the Overview; loaded with the Graph's own code.
+const WorkStrip = lazy(() => import('./graph.js').then(module => ({ default: module.WorkStrip })));
+const shownFigures = 8;
+const viewIcon = (component: string, title: string): IconName => /table/.test(component) ? 'table' : /media|image/.test(component) ? 'image'
+  : /\.(R|r|py|sh|sql|js|ts)$/.test(title) ? 'code' : /document|editor|note/.test(component) ? 'document' : 'file';
+// A figure or result as a picture of itself: an image's pixels, a table's first rows, or its kind.
+function Thumb({ client, snapshot, item, modifiedAt }: { client: BrowserClient; snapshot: WorkspaceSnapshot; item: SourceItem; modifiedAt?: string }) {
+  const previewable = /\.(png|jpe?g|svg|csv)$/i.test(item.path);
+  const [preview, setPreview] = useState<Preview | null>(null);
+  useEffect(() => {
+    if (!previewable) return;
+    let live = true;
+    readPreview(client, snapshot, { path: item.path, bytes: item.bytes, modifiedAt, resource: item.resource }).then(value => { if (live) setPreview(value); });
+    return () => { live = false; };
+  }, [item.path, item.bytes, modifiedAt, item.resource?.version]);
+  if (previewable && !preview) return <span className="figure-thumb loading" aria-hidden="true" />;
+  if (preview?.kind === 'image') return <span className="figure-thumb image"><img src={preview.url} alt="" /></span>;
+  if (preview?.kind === 'table') return <span className="figure-thumb table" aria-hidden="true">
+    <span style={{ gridTemplateColumns: `repeat(${preview.columns.length}, minmax(0, 1fr))` }}>
+      {preview.columns.map(c => <b key={'h' + c}>{c}</b>)}
+      {preview.rows.map((row, i) => preview.columns.map(c => <i key={i + c}>{row[c] === null || row[c] === undefined ? '' : String(row[c])}</i>))}
+    </span>
+  </span>;
+  return <span className="figure-thumb kind" aria-hidden="true"><Icon name={fileIcon(item)} size={26} stroke={1.4} /></span>;
+}
 
 function shownPath(at: string, project: ProjectSummary) {
   if (!at) return projectName(project);
@@ -53,6 +81,9 @@ export function ProjectOverview({ project, snapshot, client, section, workspace,
   // A file snapshot taken to show a file is a view of that file, not a result of the work.
   const artifacts = results(snapshot.resources.filter(r => (r.provenance as { source?: string } | undefined)?.source !== 'current-filesystem-observation'), runs ?? []);
   const orderedRuns = [...(runs ?? [])].sort((a, b) => b.acceptedAt.localeCompare(a.acceptedAt));
+  // Results and figures, newest first, as the sidebar lists them.
+  const modified = new Map((files?.files ?? []).map(f => [f.path, f.modifiedAt] as const));
+  const figures = [...(sources?.results ?? [])].sort((a, b) => (modified.get(b.path) ?? '').localeCompare(modified.get(a.path) ?? ''));
   const where = place(project);
   // Nothing recorded yet: no workspaces, results, question or Agent notes. Runs are read
   // separately, so an unread run list is not reported as an empty one, and nothing is painted
@@ -144,10 +175,21 @@ export function ProjectOverview({ project, snapshot, client, section, workspace,
       {snapshot.taskMap?.question && <div className="project-question"><Icon name="prompt" size={18} /><h2>{snapshot.taskMap.question}</h2></div>}
       <div className={'project-columns' + (recent ? '' : ' single')}>
         <div className="project-primary">
-          {snapshot.compositions.length > 0 && <section className="project-section"><div className="section-heading"><h2>Continue working</h2></div><div className="workspace-list">{snapshot.compositions.map(c => <button key={c.compositionId} className="workspace-link" onClick={() => onLayout(c.compositionId)}><Icon name="layout" size={20} stroke={1.6} /><span><strong>{compositionName(c.compositionId)}</strong><small>{c.views.map(v => String((v.props as Record<string, unknown>).title ?? v.id)).join(' · ') || 'Empty workspace'}</small></span><Icon name="chevron" size={15} /></button>)}</div></section>}
-          <section className="project-section"><div className="section-heading"><h2>Results</h2><button className="text-button" onClick={() => onSection('files')}>All files <Icon name="chevron" size={12} /></button></div>
-            {artifacts.length ? resultList : <p className="quiet-empty">No results yet.</p>}
+          {files && !!snapshot.conversations?.length && <Suspense fallback={null}><WorkStrip client={client} snapshot={snapshot} files={files} onOpen={() => onSection('graph')} onConversations={() => onSection('agent')} /></Suspense>}
+          <section className="project-section figures-section"><div className="section-heading"><h2>Results &amp; figures{figures.length > 0 && <span className="section-count">{figures.length}</span>}</h2><button className="text-button" onClick={() => onSection('files')}>All files <Icon name="chevron" size={12} /></button></div>
+            {figures.length ? <ul className="figure-grid">{figures.slice(0, shownFigures).map(item => <li key={item.key}>
+              <button className="figure-card" onClick={() => onFile?.('results', item)} title={item.path}>
+                <Thumb client={client} snapshot={snapshot} item={item} modifiedAt={modified.get(item.path)} />
+                <span className="figure-name"><strong>{item.name}</strong><small>{item.resource && item.path.startsWith('.rho/') ? 'Run output' : item.folder}{modified.get(item.path) ? ' · ' + when(modified.get(item.path)!).text : ''}</small></span>
+              </button></li>)}</ul>
+              : artifacts.length ? resultList : <p className="quiet-empty">No results or figures yet.</p>}
+            {figures.length > shownFigures && <button className="text-button figures-more" onClick={() => onSection('files')}>{figures.length - shownFigures} more in Files</button>}
           </section>
+          {snapshot.compositions.length > 0 && <section className="project-section"><div className="section-heading"><h2>Continue working</h2></div><div className="workspace-grid">{snapshot.compositions.map(c => <button key={c.compositionId} className="workspace-card" onClick={() => onLayout(c.compositionId)}>
+            <span className="workspace-card-head"><Icon name="layout" size={18} stroke={1.6} /><strong>{compositionName(c.compositionId)}</strong><small>{c.views.length} {c.views.length === 1 ? 'view' : 'views'}</small><Icon name="chevron" size={14} /></span>
+            {c.views.length ? <span className="workspace-tiles">{c.views.slice(0, 4).map(v => { const title = String((v.props as Record<string, unknown>).title ?? v.id); return <span key={v.id} className="workspace-tile"><Icon name={viewIcon(String(v.component), title)} size={14} /><span>{title}</span></span>; })}
+              {c.views.length > 4 && <span className="workspace-tile more">+{c.views.length - 4}</span>}</span> : <span className="workspace-tiles empty">Empty workspace</span>}
+          </button>)}</div></section>}
           {snapshot.taskMap?.items.length ? <section className="project-section"><div className="section-heading"><h2>From your Agent</h2></div><ul className="agent-notes">{snapshot.taskMap.items.map(item => <li key={item.id} data-fact="agent"><strong>{item.title}</strong>{item.summary && <p>{item.summary}</p>}<small>{snapshot.taskMap!.vocabulary.states[item.state]?.label ?? item.state}</small></li>)}</ul></section> : null}
         </div>
         {recent && <aside className="project-recent"><div className="section-heading"><h2>Recent activity</h2><button className="text-button" onClick={() => onSection('agent')}>View all</button></div>

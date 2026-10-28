@@ -1,6 +1,6 @@
 # One workspace and the Graph
 
-Updated 2026-10-27.
+Updated 2026-10-28.
 
 ## Question
 
@@ -158,3 +158,70 @@ person's own Claude Code.
 - Previews capture a snapshot of the file through Files, as showing it in place
   does.
 - No person other than the builder has used the page.
+
+## The timeline, the Overview and Host activity
+
+Updated 2026-10-28. The user called the Host activity section on Outside Rho "still
+like shit", asked for the Overview too, and for the bar under the Graph to be richer,
+with two references: a panoramic timeline with a legend of kinds, coloured blocks, a
+time axis and a labelled current-time marker; and one swimlane per Agent with
+thinking, tool, waiting and failed blocks, play and 1×/2× speed.
+
+Observed before, on a copy of the person's own project (two real conversations, five
+messages, six figures in `ggplot2-demo/out`), at 1440 and 390 px:
+
+- The Graph's bar was one flat strip of equal dots. It could not say which
+  conversation a step belonged to, what kind of step it was, or how long a pause was.
+- The Overview listed workspaces and results as text and carried the observation's
+  diagnostics as paragraphs. None of the six figures was shown as a picture.
+- Host activity (the Agent plugin's `ActivityFeed`) was paragraphs under a heading:
+  the lost Host, the counts, each action and the output folder all in the same text.
+
+Changed:
+
+- **Timeline.** One lane per conversation, named by its title and Agent mark. Each
+  step is a block in its kind's colour, read from the same `GraphEvent` actions the
+  Graph draws (asked, read, edited, ran, changed on disk, answered); a refused or
+  unknown step is marked as failed. The legend counts each kind and filters to it.
+  Messages less than 30 s apart form one stretch, sized by the square root of its length;
+  between stretches the pause folds to a 44 px gap labelled with its length. The
+  axis picks a tick step that keeps labels 72 px apart. Hovering a block names it
+  and its time; replay labels the head with its time and plays at 1×, 2× or 4×.
+- **Overview.** The same timeline in small (no controls) heads the page under "What
+  the Agent did" and one line: questions, conversations, commands, files changed and
+  the last time. Results follow as cards newest first, a figure as its pixels and a
+  table as its first rows (`web/previews.ts`, shared with the Graph's cards), eight
+  in all. Workspaces are cards naming their views. Shared notes is one row with its
+  unsaved state; what the observation left out folds under Observation notes.
+- **Host activity** (Rho-plugins, Agent 0.4.14). `ActivityFeed` draws itself with a
+  prefixed stylesheet on the embedding's colour tokens: a lost Host is one card with
+  Reconnect, counts are tiles, each action a card with its state, and Outputs a
+  folder field and file rows. Its reads, limits and wording of facts are unchanged.
+
+Runs (`work/timeline-20261028/look.mjs`, evidence in `before/`, `after*/`):
+
+| Run | Observed | Change |
+| --- | --- | --- |
+| 1440, Graph | Both lanes were titled "hi", the first message | Lanes use the Agent's title for the conversation |
+| 1440, Graph | The pause label sat on the next stretch's first tick | The gap became 44 px and the label a small pill |
+| 390, Host | Rho's label style stacked "Project folder" over its field | The plugin's form row sets its own direction and margin |
+| 390, Host | "Refresh outputs" broke onto two lines | Buttons keep one line; the form wraps instead |
+| `acceptance:frontend`, four widths | The Overview card selector had changed. Registered run results showed only their kind under a hashed `.rho/plugins/runs/…` folder; on phones shared notes stood centred in a column | The check opens the workspace card; a result previews its exact version and reads Run output; the notes keep icon and text side by side |
+| 1440 and 390, all three | 23 actions in two lanes with a 2.8 h fold; six figure thumbnails; the lost-Host card; no page errors, no horizontal overflow | — |
+
+Checks: ledger Rho 218/218 and Plugins 92/92 ([ledger](VERIFICATION.json)); `graph` 8/8,
+`frontend` 13/13, `continuity` 7/7, `agent-page` 7/7, `agent-canvas` 10/10, `agent-ui`
+7/7, `sources` 7/7, `objects` 5/5, `actions` 6/6, `plugin-dx` 3/3, shell, pages at four
+widths, person and plugin UI; build, the web type check and `check:contracts` passed.
+
+Limits:
+
+- Block colours say what the record says a step was, not whether its result is
+  right. Changed on disk keeps the Graph's limit: it says when, not who.
+- The Overview shows eight results. A file's preview captures a snapshot through
+  Files and a registered result is read at its version; at most 16 per page, two at
+  once, figures up to 2 MiB and tables to 3 rows by 4 columns. A file that cannot be
+  previewed shows its kind.
+- The activity feed was seen only with a lost Host and an empty outputs folder;
+  `scripts/agent-activity-episode.mjs` with a live collector was not run again.
+- No person other than the builder has used these pages.

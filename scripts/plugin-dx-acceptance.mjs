@@ -85,7 +85,7 @@ try {
   ] }] });
   const pairing = await client.call('session.browser.pair', {});
   await page.goto(service.url + '/#pair=' + pairing.code);
-  await page.locator('.project-row').filter({ hasText: project.name }).click(); await page.locator('.workspace-link').click();
+  await page.locator('.project-row').filter({ hasText: project.name }).click(); await page.locator('.workspace-card').click();
   await page.getByRole('tab', { name: 'Shared summary', exact: true }).click();
   await page.locator('[data-owner-view="summary"]').getByText('作者与 Agent 使用同一份内容。', { exact: false }).waitFor();
   await inspectResponsive(page, { name: 'installed-view', evidence, report });

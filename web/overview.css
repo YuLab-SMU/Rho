@@ -1,0 +1,68 @@
+/* The Overview's pictures of the work: the Agent's record in small, results and figures as
+   themselves, and each workspace by the views it holds. */
+.section-count { margin-left: 8px; padding: 1px 7px; border-radius: 999px; background: var(--color-well); color: var(--color-meta); font-size: 11.5px; font-weight: 500; font-variant-numeric: tabular-nums; vertical-align: 1px; }
+
+.work-strip { padding: 16px 18px 12px; border: 1px solid var(--color-hairline); border-radius: 14px; background: var(--color-surface); }
+.work-strip .section-heading { margin-bottom: 2px; }
+.work-strip { gap: 10px; }
+.work-strip-line { margin-top: -6px; color: var(--color-meta); font-size: 12.5px; }
+.work-strip-line .text-button { min-height: 0; padding: 0; border: 0; color: var(--color-accent-strong); font-size: inherit; text-decoration: underline; text-underline-offset: 2px; }
+.graph-timeline.compact { padding: 0; border: 0; background: transparent; }
+.graph-timeline.compact .graph-timeline-text { display: none; }
+.graph-timeline.compact .tl-names { width: 150px; }
+
+.figure-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; margin: 0; padding: 0; list-style: none; }
+.figure-card { display: flex; flex-direction: column; align-items: stretch; gap: 0; width: 100%; min-height: 0; padding: 0; overflow: hidden; border: 1px solid var(--color-hairline); border-radius: 12px; background: var(--color-surface); text-align: left; font-weight: 400; }
+.figure-card:hover { border-color: var(--color-hairline-strong); box-shadow: 0 6px 18px -12px #1c2a2466; }
+.figure-thumb { display: flex; align-items: center; justify-content: center; height: 176px; overflow: hidden; border-bottom: 1px solid var(--color-divider); background: var(--color-well); }
+.figure-thumb.image { background: white; }
+.figure-thumb.image img { width: 100%; height: 100%; object-fit: contain; padding: 6px; }
+.figure-thumb.kind { color: var(--color-meta); }
+.figure-thumb.loading { background: linear-gradient(90deg, var(--color-well) 0, var(--color-hover) 50%, var(--color-well) 100%); background-size: 200% 100%; animation: figure-wait 1.4s linear infinite; }
+@keyframes figure-wait { to { background-position: -200% 0; } }
+@media (prefers-reduced-motion: reduce) { .figure-thumb.loading { animation: none; } }
+.figure-thumb.table { align-items: flex-start; justify-content: flex-start; padding: 10px; background: var(--color-surface); }
+.figure-thumb.table > span { display: grid; width: 100%; gap: 1px; overflow: hidden; border: 1px solid var(--color-divider); border-radius: 6px; background: var(--color-divider); font-size: 10.5px; line-height: 1.5; }
+.figure-thumb.table b, .figure-thumb.table i { overflow: hidden; padding: 2px 6px; background: var(--color-surface); font-style: normal; text-overflow: ellipsis; white-space: nowrap; }
+.figure-thumb.table b { background: var(--color-well); color: var(--color-muted); font-weight: 600; }
+.figure-name { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: 9px 12px 11px; }
+.figure-name strong { overflow: hidden; color: var(--color-ink); font-size: 13px; font-weight: 550; text-overflow: ellipsis; white-space: nowrap; }
+.figure-name small { overflow: hidden; color: var(--color-meta); font-size: 11.5px; text-overflow: ellipsis; white-space: nowrap; }
+.figures-more { align-self: flex-start; margin-top: 10px; font-size: 12.5px; }
+
+.workspace-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.workspace-card { display: flex; flex-direction: column; align-items: stretch; gap: 12px; padding: 14px 16px; border: 1px solid var(--color-hairline); border-radius: 12px; background: var(--color-surface); text-align: left; font-weight: 400; }
+.workspace-card:hover { border-color: var(--color-hairline-strong); box-shadow: 0 6px 18px -12px #1c2a2466; }
+.workspace-card-head { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.workspace-card-head > svg:first-child { flex: none; color: var(--color-accent); }
+.workspace-card-head strong { overflow: hidden; color: var(--color-ink); font-size: 14px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.workspace-card-head small { color: var(--color-meta); font-size: 12px; white-space: nowrap; }
+.workspace-card-head > svg:last-child { flex: none; margin-left: auto; color: var(--color-control-border); }
+.workspace-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.workspace-tiles.empty { display: block; color: var(--color-meta); font-size: 12.5px; }
+.workspace-tile { display: flex; align-items: center; gap: 7px; min-width: 0; padding: 7px 9px; border-radius: 8px; background: var(--color-well); color: var(--color-muted); font-size: 12px; }
+.workspace-tile > svg { flex: none; color: var(--color-meta); }
+.workspace-tile > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.workspace-tile.more { justify-content: center; color: var(--color-meta); }
+
+@media (max-width: 767px) {
+  .work-strip { padding: 14px 12px 10px; }
+  .figure-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .figure-thumb { height: 104px; }
+  .workspace-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* Work progress: the shared notes as one row, and what the observation left out folded away. */
+.shared-notes { align-items: center; border-radius: 12px; }
+.shared-notes > div { flex: 1; min-width: 0; }
+.shared-notes-mark { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 9px; background: var(--color-accent-soft); color: var(--color-accent-strong); }
+.shared-notes.dirty .shared-notes-mark { background: var(--color-amber-soft); color: var(--color-amber-text); }
+.shared-notes-state { margin-left: 8px; padding: 1px 7px; border-radius: 999px; background: var(--color-amber-soft); color: var(--color-amber-text); font-size: 11px; font-weight: 600; }
+.project-work { gap: 10px; margin-bottom: 0; }
+.work-observation { margin-top: 0; color: var(--color-meta); font-size: 12px; }
+.work-observation summary { width: max-content; cursor: pointer; }
+.work-observation p { margin: 6px 0 0 14px; line-height: 1.5; }
+@media (max-width: 767px) {
+  .shared-notes { display: grid; grid-template-columns: 34px minmax(0, 1fr); align-items: start; gap: 10px 12px; }
+  .shared-notes > button { grid-column: 1 / -1; }
+}
