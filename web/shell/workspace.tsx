@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import type { BrowserClient, CompositionSummary, WorkspaceSnapshot } from '../../src/browser.js';
-import { closeView, groupOf, moveView, placeView, regions, resizeSplit, selectionScope, splitView, tabGroups, viewOrder, type LayoutNode, type LayoutTree, type Region } from '../../src/shell-layout.js';
+import { closeView, dockView, groupNode, groupOf, moveTab, moveView, placeView, regions, resizeSplit, selectionScope, splitView, tabGroups, viewOrder, type LayoutNode, type LayoutTree, type Region } from '../../src/shell-layout.js';
 import type { Command, CommandGroup } from '../commands.js';
 import { Icon } from '../icons.js';
 import { registry } from '../registry.js';
@@ -11,7 +11,7 @@ import { AgentColumn, Bar, Digest, Evidence, Interruption, waiting } from './lay
 import { openRun, runFirstLine, RunView, SourceLine } from './facts.js';
 import { ActionForm } from './action-form.js';
 import { boundResource } from '../executions.js';
-import { Slot, Split, TabGroup, place, unplace, useTabOverflow, type TabRender } from './regions.js';
+import { Slot, Split, TabGroup, place, unplace, useTabOverflow, type DropTarget, type TabDrag, type TabRender } from './regions.js';
 import './shell.css';
 
 type Tabs = Extract<Region, { kind: 'tabs' }>;
@@ -107,6 +107,23 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
     if (tree && allowed('composition.apply')) resizing.current = setTimeout(() => { const now = treeNow(); void writeLayout(now && resizeSplit(now, splitId, values)); }, 600);
   }
   useEffect(() => () => clearTimeout(resizing.current), []);
+  // A tab dragged to another place: the same one conditional write as a layout command, so
+  // the person and the Agent keep arranging one saved layout and either can undo.
+  const [dragging, setDragging] = useState<{ id: string; target: DropTarget | null } | null>(null);
+  function dropTab(target: DropTarget) {
+    const viewId = dragging?.id, view = viewId ? byId.get(viewId) : undefined;
+    setDragging(null);
+    if (!view || (target.zone === 'center' && groupOf(root, view.id)?.id === target.group)) return;
+    const now = treeNow(), ready = now && placeView(now, view, newId), owner = groupNode(target.group);
+    const next = ready && (target.zone === 'tab' ? moveTab(ready, view.id, owner, target.before, newId) : target.zone === 'center' ? moveTab(ready, view.id, owner, null, newId) : dockView(ready, view.id, owner, target.zone, newId));
+    if (!next) return;
+    onPersonMoved?.(); show(view.id); void writeLayout(next);
+  }
+  const drag: TabDrag | undefined = tree && allowed('composition.apply') ? {
+    dragging: dragging?.id ?? null, target: dragging?.target ?? null,
+    start: id => setDragging({ id, target: null }), end: () => setDragging(null),
+    over: target => setDragging(d => d && { ...d, target }), drop: dropTab
+  } : undefined;
   // Eight mounted heavy entries is a rendering budget, never a buffer eviction: render
   // rights go to the first eight available views in layout order, and a view mounts the
   // first time it shows.
@@ -184,7 +201,7 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
   const groupName = (id: string) => groups.length === 1 ? 'Views' : `Views ${groups.findIndex(g => g.id === id) + 1} of ${groups.length}`;
   const firstTitle = (region: Region): string => { const id = region.kind === 'tabs' ? shown(region) : viewOrder(region)[0]; return id ? title(byId.get(id)!) : 'view'; };
   const draw = (region: Region): ReactNode => region.kind === 'tabs'
-    ? <TabGroup key={region.id} group={region} name={groupName(region.id)} selected={shown(region)} onSelect={id => { if (id !== shown(region)) onPersonMoved?.(); show(id); }} onHeader={headerRef(region.id)} render={render} />
+    ? <TabGroup key={region.id} group={region} name={groupName(region.id)} selected={shown(region)} onSelect={id => { if (id !== shown(region)) onPersonMoved?.(); show(id); }} onHeader={headerRef(region.id)} render={render} drag={drag} />
     : <Split key={region.id} region={region} weights={own[region.id] ?? region.weights} onResize={values => resized(region.id, values)}
       label={i => `Resize ${firstTitle(region.children[i - 1])} and ${firstTitle(region.children[i])}`}>{region.children.map(draw)}</Split>;
   // The focused view's layout commands, offered in the command palette.

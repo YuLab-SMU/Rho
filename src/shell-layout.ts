@@ -200,3 +200,57 @@ export function resizeSplit(tree: LayoutTree, splitId: string, weights: number[]
   split.presentation = { ...split.presentation, weights: weights.map(w => Math.round(w * 1000) / 1000) };
   return next;
 }
+
+// Dragging a tab: the tree node a drawn tab group stands for. A pane that is one view is
+// drawn as `tabs:<view>`; every other tab group is its own node.
+export const groupNode = (regionId: string) => regionId.startsWith('tabs:') ? regionId.slice(5) : regionId;
+// Puts a view among a tab group's tabs, before another view or last. The same group
+// reorders; another group takes it in. Returns null when nothing would change.
+export function moveTab(tree: LayoutTree, viewId: string, target: string, before: string | null, newId: (kind: string) => string): LayoutTree | null {
+  const node = tree.nodes.find(n => n.id === target);
+  if (!node || isSplit(node) || target === viewId || !parentOf(tree.nodes, viewId)) return null;
+  if (tabOwner(tree.nodes, viewId) === target) {
+    const tabs = leaves(tree.nodes, target), rest = tabs.filter(id => id !== viewId);
+    const at = before && rest.includes(before) ? rest.indexOf(before) : rest.length;
+    if (tabs.indexOf(viewId) === at) return null;
+  }
+  const next = copy(tree);
+  detach(next, viewId);
+  const into = next.nodes.find(n => n.id === target)!;
+  if (into.kind === 'group') {
+    const children = into.children ?? [];
+    const holder = before ? children.find(child => child === before || leaves(next.nodes, child).includes(before)) : undefined;
+    children.splice(holder ? children.indexOf(holder) : children.length, 0, viewId);
+    into.children = children;
+  } else {
+    const tabs: LayoutNode = { id: newId('group'), kind: 'group', children: before === target ? [viewId, target] : [target, viewId] };
+    next.nodes.push(tabs);
+    const holder = parentOf(next.nodes, target);
+    if (holder) holder.children = holder.children!.map(id => id === target ? tabs.id : id); else next.rootId = tabs.id;
+  }
+  return tidy(next);
+}
+export type Side = 'left' | 'right' | 'top' | 'bottom';
+// Shows a view in a pane of its own on one side of a tab group, sharing that group's space.
+// Beside a neighbour along the same axis it joins that split instead of nesting another.
+export function dockView(tree: LayoutTree, viewId: string, target: string, side: Side, newId: (kind: string) => string): LayoutTree | null {
+  const node = tree.nodes.find(n => n.id === target);
+  if (!node || isSplit(node) || target === viewId || !parentOf(tree.nodes, viewId)) return null;
+  if (tabOwner(tree.nodes, viewId) === target && leaves(tree.nodes, target).length < 2) return null;
+  const next = copy(tree);
+  detach(next, viewId);
+  const axis: Axis = side === 'left' || side === 'right' ? 'horizontal' : 'vertical', after = side === 'right' || side === 'bottom';
+  const pane: LayoutNode = { id: newId('group'), kind: 'group', children: [viewId] };
+  next.nodes.push(pane);
+  const holder = parentOf(next.nodes, target);
+  if (holder && isSplit(holder) && holder.presentation!.axis === axis) {
+    const index = holder.children!.indexOf(target), weights = [...(holder.presentation!.weights ?? holder.children!.map(() => 1))], half = (weights[index] ?? 1) / 2;
+    holder.children!.splice(after ? index + 1 : index, 0, pane.id); weights.splice(index, 1, half, half);
+    holder.presentation = { ...holder.presentation, weights };
+  } else {
+    const split: LayoutNode = { id: newId('split'), kind: 'group', children: after ? [target, pane.id] : [pane.id, target], presentation: { mode: 'split', axis, weights: [1, 1] } };
+    next.nodes.push(split);
+    if (holder) holder.children = holder.children!.map(id => id === target ? split.id : id); else next.rootId = split.id;
+  }
+  return tidy(next);
+}

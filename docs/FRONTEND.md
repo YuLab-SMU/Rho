@@ -51,18 +51,26 @@ inspect what happened. The application gives those actions direct places:
   work opens in: sending a message from the Agent panel shows it and follows the turn.
   Each project file the Agent's steps name opens there once (a read when reported, an
   edit or write once it returned, files a finished command names), as do outputs that
-  appear on disk during the turn. Code sits left, data and figures right. The tab of the
-  file the Agent last named says Reading, Edited, Ran…; the topbar names the Agent's
-  newest action on every project page. Choosing another view, typing or leaving stops
+  appear on disk during the turn. Code sits left, data and figures right, each in its
+  own group wherever it has since been moved. The tab of the file the Agent last named
+  says Reading, Edited, Ran…; the topbar names the Agent's newest action on every
+  project page. Choosing another view, typing, dragging a tab or leaving stops
   following until the person follows again ([episode](AGENT-CANVAS-EPISODE.md)).
 - **Workspaces** hold real owner views in tabs and splits. Arrange views exposes
   split, move, close and undo operations; the command palette offers the same actions.
+  A tab drags onto another group's tabs (a line marks the place), onto the middle of a
+  group to join it, or within a quarter of a group's side to open a pane there; the
+  tinted area shows where it lands. Each drop is one conditional write of the saved
+  layout, the same the commands and the Agent use, and Undo reverses it. Below 768 px
+  nothing drags ([episode](AGENT-CANVAS-EPISODE.md#arranging-views-the-person-drags-the-agent-writes)).
 - **The Agent panel** opens beside any page from the button at the right of the
   sidebar's Agent row, from New conversation or Continue on the Agent page, or from
   the topbar while the sidebar is hidden. In a tab on this machine it holds conversations with
   Claude Code or Codex started in Rho: follow a streaming reply and its actions, reply,
   stop a turn and return to it after a reload
-  ([conversation episode](CONVERSATION-EPISODE.md)). One chip under the message box
+  ([conversation episode](CONVERSATION-EPISODE.md)). Its left edge drags, or moves
+  24 px per arrow key, between 280 px and 760 px (at most 60% of the window); a
+  double-click returns it to 340 px, and each browser keeps its own width. One chip under the message box
   names the Agent, model and effort, the saved choices for a new conversation and the
   open conversation's own, changed between messages; each ending names the model
   that answered ([settings pass](AGENT-CANVAS-EPISODE.md#choosing-the-agent-and-its-model)). The panel renders the retained
@@ -172,7 +180,7 @@ real R output and the installed Chrome executable. It records screenshots of the
 project entry, overview, files, table, figure, activity, settings, plugins and Agent
 panel. Its assertions cover navigation, editing and undo, an unsent conversation message,
 the clipboard handoff in a link tab,
-conditional layout changes, reload, keyboard input, responsive overflow and accessible
+conditional layout changes, dragged tabs, the Agent panel's width, reload, keyboard input, responsive overflow and accessible
 control names. The report and images go to `work/frontend-reset/browser/` by default.
 
 `npm run acceptance:agent-canvas` drives a controlled ACP peer that reads, edits and
@@ -180,7 +188,8 @@ runs project files and writes an output no step names. It checks the sidebar cou
 that Start opens the following Agent canvas, the table, editor and media views it
 opens with the Agent's place on their tabs, the edited text on disk, the saved
 canvas, the Agent page's record of the turn and a file it names shown in place, that
-choosing another view stops following until Follow, and overflow at 1024/390. Evidence goes to `work/agent-canvas-acceptance/` by default.
+choosing another view stops following until Follow, that a pane the person drags out
+stays while the Agent's next data file joins the data group, and overflow at 1024/390. Evidence goes to `work/agent-canvas-acceptance/` by default.
 
 `npm run acceptance:sources` browses a project of data, scripts in two folders and
 figures in two output folders from the sidebar, without a model. It checks the

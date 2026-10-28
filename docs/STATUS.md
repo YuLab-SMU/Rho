@@ -7,16 +7,16 @@ Updated: 2026-10-27.
 On 2026-10-27 the user found the project sidebar nearly empty and the main area
 still while the Agent worked. The sidebar now names its places and counts its Sources,
 the [Agent canvas](#project-sidebar-and-agent-canvas) opens the files the Agent reads
-and changes, each Sources kind unfolds so a file shows in place, and the one Agent
-entry opens a page of what the Agent did, with its panel a button beside it. The user
-then asked to choose the Agent and its model; the Agent page and panel now offer it. Documents
-0.4.3 and Agent 0.4.13 carry the owner changes; [the record](AGENT-CANVAS-EPISODE.md) keeps the runs.
+and changes, a Sources file shows in place, and one Agent entry opens a page of what it
+did. The user then asked to choose the Agent and its model, and for the person to
+arrange the page as the Agent can; both now work. Documents 0.4.3 and Agent 0.4.13
+carry the owner changes; [the record](AGENT-CANVAS-EPISODE.md) keeps the runs.
 
-Agent 0.4.11 adds each tool step's title, ACP category and identifying input to the
-Claude/Codex ACP connections of 0.4.10. Eight real Westlake HPC turns from the installed
-package passed, with cancellation, connection loss and session recovery, as did external
-Codex ACP observation across restart; the unsigned macOS arm64 package installed and
-started ([record](ACP-MULTI-AGENT-EPISODE.md); panel: [Agent UI](AGENT-UI-EPISODE.md)).
+Agent 0.4.11 adds each tool step's title, ACP category and input to the Claude/Codex
+ACP connections of 0.4.10. Eight real Westlake HPC turns from the installed package
+passed with cancellation, connection loss and session recovery, as did external Codex
+observation across restart; the unsigned macOS arm64 package installed and started
+([record](ACP-MULTI-AGENT-EPISODE.md); panel: [Agent UI](AGENT-UI-EPISODE.md)).
 
 The 2026-10-27 home, projects and empty-project pass is in the
 [home and project episode](HOME-PROJECT-EPISODE.md) and
@@ -34,15 +34,14 @@ capability evidence, not the target interface or design acceptance criteria.
 | Comparing two results | Runs | Two views split by hand | Can the differences be read by key? |
 | Claude/Codex and shared workspace | Both installed loops and external Codex relay run | [ACP acceptance](ACP-MULTI-AGENT-EPISODE.md) | Human usability and passive attachment to uninstrumented clients remain unproven |
 | Agent panel presentation | Streams; controlled peer and one real turn observed | [Agent UI episode](AGENT-UI-EPISODE.md) | Can a person scan a long trace and act on it? |
-| Project sidebar and Agent canvas | Runs; four real Claude turns and a controlled peer | [Agent canvas episode](AGENT-CANVAS-EPISODE.md) | Can a person follow a long, fast turn on the canvas and step in? |
+| Project sidebar and Agent canvas | Runs; real Claude turns and a controlled peer | [Agent canvas episode](AGENT-CANVAS-EPISODE.md) | Can a person follow a long, fast turn on the canvas and step in? |
 | Project shell and navigation | Runs | Frontend browser suite below | Does it hold up around the reworked episode? |
 | Plugin UI extensions | Runs | Authoring checks below | Does a view built with it serve a real episode? |
 | Domain episode (DESeq2) | Not started | — | What carries over from base-R? |
 
-The interaction guidance, frontend design guidance and airquality interaction
-specification written earlier on 2026-10-25 were withdrawn the same day at the
-user's request. They fixed grammars, visual values, state sequences and acceptance
-criteria before the application or its plugins had produced results to learn from.
+Interaction and frontend design guidance and the airquality interaction specification,
+written on 2026-10-25, were withdrawn that day at the user's request: they fixed
+grammars, visual values and acceptance criteria before results existed to learn from.
 Git retains them at `24d9998b`; they are not requirements or reference designs.
 
 ## Project sidebar and Agent canvas
@@ -53,10 +52,12 @@ Git retains them at `24d9998b`; they are not requirements or reference designs.
   (48 folders, 5 levels, 4000 files; partial counts say so), then Files. Each kind
   unfolds into its files by folder; one chosen shows in place with no layout written,
   ←/→ and ↑/↓ move through the kind, Open in Studio places it.
-- Sending from the Agent panel opens the Agent canvas and follows the turn: files the
-  steps name, files a finished command names and outputs that appear on disk open
-  once, code left and data/figures right; the tab of the last named file carries the
-  Agent's verb. Choosing another view, typing or leaving stops following.
+- Sending from the Agent panel opens the Agent canvas and follows the turn: named
+  files and outputs that appear on disk open once, code and data/figures each in its
+  group wherever the person moved it; the last named file's tab carries the Agent's
+  verb. Choosing another view, typing, dragging or leaving stops following.
+- Tabs drag onto other tabs, into a group or to its side, and the Agent panel's edge
+  drags; each drop is the conditional `composition.apply` the Agent's grant also holds.
 - The Agent page lists each Rho conversation's latest messages (request, files changed
   and looked at, commands, answer, ending and model), then runs and outside sessions.
   Its card chooses the Agent, model, effort and mode for new conversations among what
@@ -65,12 +66,12 @@ Git retains them at `24d9998b`; they are not requirements or reference designs.
 - Documents 0.4.3 adopts a changed file into a buffer with no unsaved text. Agent
   0.4.12 captures one named file; 0.4.13 applies, changes and inspects ACP settings.
 
-Evidence: Rho 203/203 (serial) and Plugins 92/92 ([ledger](VERIFICATION.json));
-`acceptance:agent-canvas` 9/9 (controlled peer), `acceptance:sources` 7/7, `frontend`
-11/11, `agent-ui` 7/7, pages, shell, person, objects, actions, continuity and plugin
-UI passed. Four real Westlake HPC Claude turns found and fixed five defects; a test
-Agent found six in the settings, and one real Claude run chose and switched models.
-This shows the paths work, not that a person can follow a fast Agent or choose well.
+Evidence: Rho 205/205 (serial) and Plugins 92/92 ([ledger](VERIFICATION.json));
+`acceptance:agent-canvas` 10/10 (controlled peer), `sources` 7/7, `frontend` 13/13,
+`agent-ui` 7/7, pages, shell, person, objects, actions, continuity and plugin UI passed.
+Four real Westlake HPC Claude turns found and fixed five defects; a test Agent found six
+in the settings; real Claude runs switched models and arranged a workspace as asked.
+Paths work; whether a person can follow a fast Agent, choose or arrange well is unobserved.
 
 ## Home, projects and empty project
 
@@ -89,10 +90,9 @@ the setup, the observations before and after, and the limits.
 - The topbar names the way back and keeps only the current place below 768 px;
   Project settings and Plugins sit at the sidebar foot.
 
-The first pass could not list a project's source folders; `project.entries` now
-lists the folder and an `@<sourceId>` entry per source and descends into them.
-Fixing it surfaced that `State.openSelected` demanded an expiry, refusing "Open
-folder…" for this machine's non-expiring access; it now uses the same rule.
+The first pass could not list a project's source folders; `project.entries` now lists
+the folder and an `@<sourceId>` entry per source and descends into them.
+`State.openSelected` no longer demands an expiry, which refused this machine's "Open folder…".
 
 Evidence: Rho 185/185 unit checks, including source-folder listing and this machine's
 tab picking a folder; `acceptance:frontend` 11 checks, pages, shell and person; six

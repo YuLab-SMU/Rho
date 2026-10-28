@@ -506,6 +506,15 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 .health-list .state { padding-top: 3px; }
 .health-list small { color: var(--color-meta); }
 .inspector-pane { display: flex; flex-direction: column; flex: 0 0 340px; min-height: 0; overflow: auto; border-left: 1px solid var(--color-hairline); background: white; }
+/* The panel's body scrolls; its left edge stays put and can be dragged. */
+.side-panel { position: relative; flex-grow: 0; flex-shrink: 0; overflow: visible; }
+.side-panel-body { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: auto; }
+.panel-resizer { position: absolute; top: 0; bottom: 0; left: -5px; z-index: 25; width: 10px; cursor: col-resize; touch-action: none; }
+.panel-resizer::after { content: ''; position: absolute; top: 0; bottom: 0; left: 4px; width: 2px; }
+.panel-resizer:hover::after, .panel-resizer:focus-visible::after, body[data-resizing] .panel-resizer::after { background: var(--color-accent); }
+.panel-resizer:focus-visible { outline: none; }
+.panel-resizer:focus-visible::after { left: 3px; width: 4px; }
+body[data-resizing=col] { cursor: col-resize; user-select: none; }
 .drawer-heading { display: flex; align-items: center; justify-content: space-between; flex: none; padding: 14px 18px; border-bottom: 1px solid var(--color-hairline); }
 .drawer-heading h2 { font-size: 14px; }
 .agent-slot { min-height: 0; }

@@ -1,4 +1,4 @@
-import { lazy, Fragment, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { lazy, Fragment, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserClient, type BrowserConnection, type ProjectSummary, type WorkspaceSnapshot } from '../src/browser.js';
 import { Home, projectHue, projectName as name, trapTab } from './home.js';
@@ -443,7 +443,7 @@ function App() {
                 : <div className="studio-empty"><span className="empty-symbol"><Icon name="file" size={26} stroke={1.5} /></span><h2>This file is no longer in the project</h2><p>{shownFile.key.replace(/^\w+:/, '')} was not found when the folders were last read. It may have been moved or removed.</p><div className="empty-actions"><button onClick={() => showSources(shownFile.row)}>All {sourceLabels[shownFile.row].toLowerCase()}</button></div></div>)
               : <Suspense fallback={<Loading text="Opening project…" />}><ProjectOverview key={project.id} section={section} category={category} files={files} sources={sources} onFile={showFile} linked={!!link} onPath={showPath} onNewConversation={() => talk()} onSection={showSection} onAgent={id => { if (id) setSelectedConversation(id); setAgentOpen(true); }} client={client!} onProjectChanged={next => { setProject(next); setProjects(list => list.map(p => p.id === next.id ? next : p)); }} project={project} snapshot={snapshot} onLayout={layout} onOpened={(id, view) => { layout(id, view); reread(); }} /></Suspense>}
           </main>
-          {projectVisible && agentOpen && !narrow && <aside className="inspector-pane" aria-label="Agent panel">{agentContents}</aside>}
+          {projectVisible && agentOpen && !narrow && <SidePanel label="Agent panel">{agentContents}</SidePanel>}
           {context && !narrow && <aside id="project-context" className="context-drawer inspector-pane" aria-label={feedbackContext ? 'Your question' : 'Context and access'}><div className="drawer-heading"><h2>{feedbackContext ? 'Your question' : 'Connection & access'}</h2><button className="icon-button" aria-label="Close context" onClick={() => { setContext(false); contextTrigger.current?.focus(); }}><Icon name="close" size={18} /></button></div>{contextSections}</aside>}
         </div>
       </div>
@@ -489,6 +489,31 @@ function StudioEmpty({ root, agent, canvas, following, onAgent, onFiles }: { roo
   </div>;
 }
 function Loading({ text }: { text: string }) { return <div className="loading-state" role="status"><span className="loading-dot" /><span>{text}</span></div>; }
+
+// The Agent panel's width, set by dragging its edge or with the arrow keys on it. It is this
+// viewer's own preference, kept in this browser only.
+const panelWidths = { min: 280, max: 760, initial: 340, step: 24 };
+const panelKey = 'rho.agentPanel.width.v1';
+function readWidth() { try { const value = Number(localStorage.getItem(panelKey)); return value >= panelWidths.min ? value : panelWidths.initial; } catch { return panelWidths.initial; } }
+function SidePanel({ label, children }: { label: string; children: ReactNode }) {
+  const [width, setWidth] = useState(readWidth);
+  const widest = () => Math.max(panelWidths.min, Math.min(panelWidths.max, Math.round(innerWidth * 0.6)));
+  const set = (value: number) => { const next = Math.round(Math.min(widest(), Math.max(panelWidths.min, value))); setWidth(next); try { localStorage.setItem(panelKey, String(next)); } catch {} };
+  function drag(event: ReactPointerEvent<HTMLDivElement>) {
+    const handle = event.currentTarget, start = event.clientX, from = width;
+    handle.setPointerCapture(event.pointerId); document.body.dataset.resizing = 'col';
+    const move = (e: PointerEvent) => set(from + start - e.clientX);
+    const stop = () => { handle.removeEventListener('pointermove', move); handle.removeEventListener('pointerup', stop); handle.removeEventListener('pointercancel', stop); delete document.body.dataset.resizing; };
+    handle.addEventListener('pointermove', move); handle.addEventListener('pointerup', stop); handle.addEventListener('pointercancel', stop);
+  }
+  const shown = Math.min(width, widest());
+  return <aside className="inspector-pane side-panel" aria-label={label} style={{ flexBasis: shown, width: shown }}>
+    <div className="panel-resizer" role="separator" aria-orientation="vertical" aria-label={'Resize ' + label} tabIndex={0} aria-valuemin={panelWidths.min} aria-valuemax={widest()} aria-valuenow={shown}
+      onPointerDown={drag} onDoubleClick={() => set(panelWidths.initial)}
+      onKeyDown={event => { const step = event.key === 'ArrowLeft' ? panelWidths.step : event.key === 'ArrowRight' ? -panelWidths.step : 0; if (step) { event.preventDefault(); set(shown + step); } }} />
+    <div className="side-panel-body">{children}</div>
+  </aside>;
+}
 
 // A modal overlay below 768. Focus stays inside; Escape, the backdrop or its own button closes it,
 // and focus returns to the button that opened it.

@@ -139,7 +139,8 @@ try {
   await panel.locator('#conversation-input').fill('A longer reply, please. long');
   await panel.getByRole('button', { name: 'Send', exact: true }).click();
   await page.waitForTimeout(1200);
-  const pane = page.locator('.inspector-pane');
+  // The panel's body is what scrolls; its edge stays beside it.
+  const pane = page.locator('.side-panel-body');
   const scrolled = await pane.evaluate(el => { el.scrollTop = Math.max(0, el.scrollHeight - el.clientHeight - 280); return el.scrollTop; });
   await page.waitForTimeout(1300);
   const held = await pane.evaluate(el => el.scrollTop);

@@ -448,3 +448,99 @@ conversation named.
 - Mode lists the Agent's own permission modes, including those that skip its
   questions. Rho shows them as offered and adds no approval of its own.
 - No person has used these controls yet; the runs show that the paths work.
+
+## Arranging views: the person drags, the Agent writes
+
+### Question
+
+On 2026-10-27 the user asked whether the Agent arranges the page freely, and said
+both the Agent and the person should. The person had no way to arrange views by
+dragging.
+
+### Observed before
+
+- Each workspace is one saved layout: a tree of groups and views, where a split group
+  keeps its axis and weights. Both the person and the Agent change it through
+  `composition.apply` against an expected version, and `composition.undo` reverses
+  the last change.
+- The person could drag the dividers between panes, and Arrange views offered Split
+  right, Split down, Move to the next or previous group, Close view and Undo. Tabs
+  could not be dragged. The Agent panel was fixed at 340 px.
+- A Rho-started Agent's grant already holds `composition.read`, `composition.apply`,
+  `composition.undo` and `composition.put`. Its MCP index was the only description it
+  had of them.
+- When a person's change put a group other than the canvas's own code and data groups
+  under the canvas root, every later file the Agent touched joined the first tab group.
+
+### Changed
+
+Rho only (`src/shell-layout.ts`, `web/shell/regions.tsx`, `web/shell/workspace.tsx`,
+`web/shell/shell.css`, `web/canvas.ts`, `web/main.tsx`, `web/theme.css`):
+
+- **Tabs drag.** A tab can be dropped in three places:
+  - on another group's tabs, where a line marks the place, to move or reorder it;
+  - on the middle of a group, where the group is tinted, to join its tabs;
+  - within a quarter of a group's side, where that half is tinted, to give the view a
+    pane on that side.
+
+  A pane beside one along the same axis joins that split and halves that pane's share.
+  A pane left empty closes. Each drop is one conditional `composition.apply` of the
+  saved layout, the same write the menu's commands and the Agent use. Undo reverses
+  it. A drop where the tab already is writes nothing. Dragging stops following the
+  Agent. Below 768 px the workspace is one tab list and nothing drags.
+- **The Agent panel's edge** drags, or moves 24 px per arrow key, between 280 px and
+  760 px (at most 60% of the window). A double-click returns it to 340 px. Each browser
+  keeps its own width.
+- **The canvas keeps its sides.** The Agent's code files join the canvas's code group
+  and its data and figures join the data group, wherever the person has moved them. A
+  side whose group was emptied comes back at its edge of a left-to-right split.
+
+### Runs
+
+Evidence: `work/layout-drag-20261028/` (ignored by Git). `look.mjs` drags in a
+disposable project of four files. `agent.mjs` asks the person's own Claude Code to
+arrange the same workspace before the person drags in it.
+
+| Run | What happened | Cause | Change |
+| --- | --- | --- | --- |
+| `look` | Dropped `notes.md` near its group's right edge: a pane on the right. Then `air.csv` on that pane's tabs, `model.R` before `analysis.R`, and `air.csv` near the bottom of the right pane: three panes. A drop where the tab already was left the version unchanged, and Undo restored the previous arrangement. The panel widened from 340 to 525 px, narrowed 24 px on a key, and kept 501 px after reload. Keyboard focus on the edge drew a double outline. | The outline and the edge's line both drew. | Focus thickens the line only. |
+| `agent` | Claude Sonnet 5.5 · routing group received "把 Studio 的 workspace 排成：左边是 analysis.R 和 model.R 两个标签，右边上半是 notes.md，右边下半是 air.csv。只改布局，不要改文件。" It took 83 s and 20 tool calls: four `rho_index`, five `rho_resolve` (one refused for an expired cursor), eight `rho_read` and two `rho_call`. One `composition.apply` took the layout from version 4 to 5 exactly as asked, and no file changed. The person then dragged `notes.md` into the left tabs: version 6, following stopped. | — | None. |
+| `frontend` | The new drag check reloaded the page to see the split kept, and the page came back on the Overview. | Before this check, the tab's session store already held a link session from an earlier step, so the reload opened under another browser principal. | The check reads the saved layout. The menu check above it covers reload. |
+
+In its answer the Agent said it could not see how the browser drew the layout and
+asked the user to look.
+
+### Checks
+
+- `test/layout-commands.test.mjs` covers moving a tab:
+  - reordering, and joining another group;
+  - a drop that changes nothing;
+  - a pane emptied and closed;
+  - a bare view turned into a tab group.
+
+  It also covers docking on each side, beside a pane along the same axis, and across
+  it.
+- `acceptance:frontend` adds two checks: a dragged tab joins another group's tabs and
+  closes its emptied pane, then opens a pane below as the saved layout; the panel
+  widens from its edge and keeps the width after reload.
+- `acceptance:agent-canvas` adds one check. The person drags `notes.md` below the
+  code, and following stops. The Agent's next data file joins the data group, and the
+  person's pane stays.
+- With the old placement, the new `acceptance:agent-canvas` check fails: the data file
+  joins `canvas-code`.
+- Rho 205/205 (serial) and Plugins 92/92. `acceptance:frontend` 13/13,
+  `agent-canvas` 10/10 and `agent-ui` 7/7 passed, as did `shell`, `continuity`,
+  `sources`, `pages`, `person`, `objects`, `actions` and the plugin UI check. Build,
+  web type check and contract checks passed.
+
+### Limits
+
+- Tabs cannot be reordered within a group from the keyboard; the commands move a view
+  between groups only.
+- A drop is relative to one group. There is no full-height column at the workspace's
+  edge, no drag between workspaces, and no drag from Sources into Studio.
+- Most of the Agent's 83 s went to finding the operation and reading the layout. A
+  shorter route has not been tried.
+- The Agent cannot see the drawn result.
+- A drop computed on a layout older than the Agent's latest write is refused with a
+  message and not retried.

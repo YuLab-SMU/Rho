@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { closeView, moveView, placeView, regions, resizeSplit, splitView } from '../dist/shell-layout.js';
+import { closeView, dockView, groupNode, moveTab, moveView, placeView, regions, resizeSplit, splitView } from '../dist/shell-layout.js';
 
 // Layout commands change the owner tree only, and the shell draws the result through the
 // same reading as any other composition. Each case states what the person sees afterwards.
@@ -66,4 +66,46 @@ test('a linked result joins a lone last pane without changing its sibling weight
   assert.deepEqual(drawn(closed).children.map(c => c.views), [['a'], ['b']]);
   assert.deepEqual(drawn(closed).weights, [2, 1]);
   assert.deepEqual(closed.nodes.filter(n => n.kind === 'view'), tree.nodes.filter(n => n.kind === 'view'));
+});
+
+test('dragging a tab reorders it, moves it into another group, and leaves nothing behind', () => {
+  assert.deepEqual(drawn(moveTab(tabs('a', 'b', 'c'), 'c', 'root', 'a', id)).views, ['c', 'a', 'b']);
+  assert.deepEqual(drawn(moveTab(tabs('a', 'b', 'c'), 'a', 'root', null, id)).views, ['b', 'c', 'a']);
+  // Dropped where it already is: nothing to write.
+  assert.equal(moveTab(tabs('a', 'b', 'c'), 'b', 'root', 'c', id), null);
+  assert.equal(moveTab(tabs('a', 'b', 'c'), 'c', 'root', null, id), null);
+  const split = splitView(tabs('a', 'b', 'c'), 'c', 'horizontal', id), pane = drawn(split).children[1].id;
+  const joined = moveTab(split, 'a', pane, 'c', id);
+  assert.deepEqual(drawn(joined).children.map(c => c.views), [['b'], ['a', 'c']]);
+  // The last tab of a pane leaves it, and the split collapses into the other pane.
+  assert.deepEqual(drawn(moveTab(splitView(tabs('a', 'b'), 'b', 'horizontal', id), 'b', 'root', 'a', id)), { kind: 'tabs', id: 'root', views: ['b', 'a'] });
+  // A pane that is one bare view becomes a tab group when another tab joins it.
+  const bare = { rootId: 's', nodes: [{ id: 's', kind: 'group', children: ['a', 'b'], presentation: { mode: 'split', axis: 'horizontal', weights: [1, 1] } }, view('a'), view('b'), { id: 'g', kind: 'group', children: [] }] };
+  bare.nodes[0].children = ['g', 'b']; bare.nodes[3].children = ['a', 'x']; bare.nodes.push(view('x'));
+  const into = moveTab(bare, 'x', 'b', 'b', id);
+  assert.deepEqual(drawn(into).children.map(c => c.views), [['a'], ['x', 'b']]);
+  assert.equal(moveTab(tabs('a', 'b'), 'a', 'missing', null, id), null);
+  assert.equal(groupNode('tabs:b'), 'b'); assert.equal(groupNode('group-1'), 'group-1');
+});
+
+test('dropping a tab on a side of a group gives it a pane there', () => {
+  const left = dockView(tabs('a', 'b'), 'b', 'root', 'left', id);
+  assert.deepEqual(drawn(left).children.map(c => c.views), [['b'], ['a']]);
+  assert.equal(drawn(left).axis, 'horizontal');
+  const below = dockView(tabs('a', 'b'), 'a', 'root', 'bottom', id);
+  assert.deepEqual([drawn(below).axis, drawn(below).children.map(c => c.views)], ['vertical', [['b'], ['a']]]);
+  // Beside a pane of a split along the same axis: the split gains a pane, halving that one's share.
+  const three = tabs('a', 'b', 'c'), right = splitView(three, 'c', 'horizontal', id), pane = drawn(right).children[1].id;
+  const middle = dockView(right, 'b', pane, 'left', id);
+  assert.deepEqual(drawn(middle).children.map(c => c.views), [['a'], ['b'], ['c']]);
+  assert.deepEqual(drawn(middle).weights, [1, 0.5, 0.5]);
+  // Across the axis it nests a split in that pane only.
+  const under = dockView(right, 'b', pane, 'bottom', id), drawnUnder = drawn(under);
+  assert.deepEqual(drawnUnder.children[0].views, ['a']);
+  assert.deepEqual([drawnUnder.children[1].axis, drawnUnder.children[1].children.map(c => c.views)], ['vertical', [['c'], ['b']]]);
+  // A view alone in its group has no side of its own to go to.
+  assert.equal(dockView(tabs('a'), 'a', 'root', 'right', id), null);
+  // Moving the last view of one pane beside another closes the emptied pane.
+  const moved = dockView(right, 'c', 'root', 'left', id);
+  assert.deepEqual(drawn(moved).children.map(c => c.views), [['c'], ['a', 'b']]);
 });

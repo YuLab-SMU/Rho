@@ -65,17 +65,21 @@ function placed(current: { rootId?: string; nodes?: unknown[] } | null, view: No
   }
   let root = nodes.find(n => n.id === rootId);
   if (!root) { root = { id: rootId, kind: 'group', children: [] }; nodes.push(root); }
-  let target: Node | undefined;
-  if (canvas && root.children!.every(id => id.startsWith('canvas-'))) {
-    // The canvas keeps code on the left and data and figures on the right; a split needs
-    // both, so with one side the canvas is that side's tabs.
-    target = nodes.find(n => n.id === 'canvas-' + side && n.kind === 'group');
-    if (!target) {
-      target = { id: 'canvas-' + side, kind: 'group', children: [] };
-      nodes.push(target);
-      root.children!.splice(side === 'code' ? 0 : root.children!.length, 0, target.id);
-    }
-    if (root.children!.length > 1) root.presentation = { mode: 'split', axis: 'horizontal', weights: root.presentation?.weights?.length === root.children!.length ? root.presentation.weights : root.children!.map(() => 1) };
+  // The canvas keeps code on the left and data and figures on the right, wherever the person
+  // or the Agent has since moved those two groups; a split needs both, so with one side the
+  // canvas is that side's tabs. A side whose group was emptied returns at its edge of a
+  // left-to-right split.
+  const own = canvas ? nodes.find(n => n.id === 'canvas-' + side && n.kind === 'group') : undefined;
+  let target: Node;
+  if (own) target = own;
+  else if (canvas && (root.children!.every(id => id.startsWith('canvas-')) || (root.presentation?.mode === 'split' && root.presentation.axis === 'horizontal'))) {
+    const weights = root.presentation?.mode === 'split' && root.presentation.weights?.length === root.children!.length ? [...root.presentation.weights] : root.children!.map(() => 1);
+    const at = side === 'code' ? 0 : root.children!.length;
+    target = { id: 'canvas-' + side, kind: 'group', children: [] };
+    nodes.push(target);
+    root.children!.splice(at, 0, target.id);
+    weights.splice(at, 0, weights.length ? weights.reduce((a, b) => a + b, 0) / weights.length : 1);
+    if (root.children!.length > 1) root.presentation = { mode: 'split', axis: 'horizontal', weights };
     else delete root.presentation;
   } else if (root.presentation?.mode === 'split') {
     // A person's own split: the new view joins the first group of tabs.

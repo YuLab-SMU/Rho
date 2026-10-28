@@ -151,6 +151,7 @@ writeLines(jsonlite::toJSON(list(schemaVersion=1L,complete=TRUE,artifacts=items)
   await linkTab.close();
   passed('a link tab keeps its request draft across closing the panel; the clipboard is explicitly a handoff');
   await page.getByRole('tab', { name: 'analysis.R', exact: true }).click();
+  const groupCount = await page.locator('.shell-group').count();
   await page.getByText('Arrange views', { exact: true }).click();
   await page.locator('.view-menu').getByRole('button', { name: 'Split right', exact: true }).click();
   await page.locator('.shell-split[data-axis="horizontal"]').waitFor();
@@ -159,6 +160,40 @@ writeLines(jsonlite::toJSON(list(schemaVersion=1L,complete=TRUE,artifacts=items)
   await page.locator('.shell-split[data-axis="horizontal"]').waitFor();
   assert.match(await editorContent.innerText(), /Ozone/);
   passed('visible Arrange views menu creates a real split and reload restores it');
+  // The same layout by dragging: a tab dropped on another group's tabs joins them and its
+  // emptied pane closes; dropped near a group's edge it opens a pane on that side.
+  const dragTab = async (name, target, x, y) => {
+    const from = await page.getByRole('tab', { name, exact: true }).boundingBox(), box = await target.boundingBox();
+    await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2); await page.mouse.down();
+    await page.mouse.move(from.x + from.width / 2 + 8, from.y + from.height / 2 + 8, { steps: 3 });
+    await page.mouse.move(box.x + box.width * x, box.y + box.height * y, { steps: 10 });
+    await page.mouse.up();
+  };
+  await poll(() => page.locator('.shell-group').count(), n => n === groupCount + 1, 'the split pane is drawn');
+  await dragTab('analysis.R', page.locator('.shell-group').first().locator('.shell-tabs'), 0.98, 0.5);
+  await poll(() => page.locator('.shell-group').count(), n => n === groupCount, 'the dragged tab joins the first group and its pane closes');
+  await dragTab('analysis.R', page.locator('.shell-group').first().locator('.shell-body'), 0.5, 0.93);
+  await page.locator('.shell-split[data-axis="vertical"]').waitFor();
+  assert.equal(await page.locator('.shell-group').count(), groupCount + 1);
+  await page.screenshot({ path: path.join(evidence, 'dragged-1440.png') });
+  // Each drop is the saved layout itself, not a local arrangement.
+  const saved = await call('composition.read', { compositionId: 'Analysis' }), top = saved.nodes.find(n => n.id === saved.rootId);
+  assert.equal(top.presentation?.axis, 'vertical');
+  assert.deepEqual(top.children.map(id => saved.nodes.find(n => n.id === id).children), [['table', 'plot', 'notes'], ['code']]);
+  passed('dragging a tab joins another group or opens a pane at a side, as the saved layout');
+  // The Agent panel's edge widens it; this browser keeps the width.
+  await page.getByRole('button', { name: 'Agent panel', exact: true }).click();
+  const side = page.locator('aside[aria-label="Agent panel"]'), narrowWidth = (await side.boundingBox()).width;
+  const edge = await page.getByRole('separator', { name: 'Resize Agent panel' }).boundingBox();
+  await page.mouse.move(edge.x + edge.width / 2, edge.y + 200); await page.mouse.down();
+  await page.mouse.move(edge.x - 140, edge.y + 200, { steps: 8 }); await page.mouse.up();
+  const wideWidth = (await side.boundingBox()).width;
+  assert.ok(wideWidth > narrowWidth + 100, `the panel widened (${narrowWidth} → ${wideWidth})`);
+  await page.reload();
+  await page.getByRole('button', { name: 'Agent panel', exact: true }).click();
+  assert.equal(Math.round((await side.boundingBox()).width), Math.round(wideWidth));
+  await page.getByRole('button', { name: 'Close Agent' }).click();
+  passed('the Agent panel widens from its edge and keeps that width after reload');
   await navigate('Agent');
   await page.locator('.activity-row').filter({ hasText: 'air-quality-fit' }).click();
   await page.getByRole('dialog', { name: 'air-quality-fit' }).waitFor();

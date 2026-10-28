@@ -36,6 +36,13 @@ createInterface({input:process.stdin}).on('line',async line=>{
  if(r.method==='session/new')return reply({sessionId:'canvas-session'});
  if(r.method==='session/load')return reply({});
  if(r.method!=='session/prompt')return;
+ if(p.prompt[0].text.includes('stations')){
+  await tool('write-stations','Write','edit',{file_path:at('data/stations.csv')},1000,()=>fs.writeFileSync(at('data/stations.csv'),'station,ozone\\nA,41\\nB,36\\n'));
+  await tool('read-stations','Read','read',{file_path:at('data/stations.csv')},1500);
+  update({sessionUpdate:'agent_message_chunk',messageId:'stations',content:{type:'text',text:'Two stations.'}});
+  await sleep(2500);
+  return reply({stopReason:'end_turn'});
+ }
  if(p.prompt[0].text.includes('notes')){
   await sleep(2500);
   await tool('read-notes','Read','read',{file_path:at('notes.md')},2500);
@@ -158,6 +165,26 @@ try {
   now = await until(tabs, t => t.some(tab => tab.name === 'notes.md' && tab.selected), 'following again brings the Agent\'s file forward');
   await shot('06-follow-again');
   passed('choosing another view stops following; Follow brings the Agent\'s newest file forward');
+
+  // The person arranges the canvas by dragging: notes.md gets a pane below the code, and
+  // following stops. The Agent's next data file still joins the data side; the pane stays.
+  const pane = page.locator('.shell-group').filter({ has: page.getByRole('tab', { name: 'notes.md' }) }).locator('.shell-body');
+  const from = await page.getByRole('tab', { name: 'notes.md' }).boundingBox(), below = await pane.boundingBox();
+  await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2); await page.mouse.down();
+  await page.mouse.move(from.x + from.width / 2 + 8, from.y + from.height / 2 + 8, { steps: 3 });
+  await page.mouse.move(below.x + below.width / 2, below.y + below.height * 0.93, { steps: 10 }); await page.mouse.up();
+  await page.locator('.follow-toggle[aria-pressed=false]').waitFor();
+  const read = () => admin.call('composition.read', { projectId: opened.id, compositionId: 'agent-canvas' });
+  const holder = (c, title) => { const id = c.views.find(v => v.props.title === title)?.id; return c.nodes.find(n => n.children?.includes(id)); };
+  await until(read, c => holder(c, 'notes.md')?.children.length === 1, 'notes.md in a pane of its own');
+  await page.getByRole('textbox', { name: /Message|Reply/ }).fill('Now read the stations.');
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  const arranged = await until(read, c => c.views.some(v => v.props.title === 'stations.csv'), 'the Agent\'s new data file on the canvas');
+  assert.equal(holder(arranged, 'stations.csv').id, 'canvas-data');
+  assert.equal(holder(arranged, 'notes.md').children.length, 1, 'the person\'s pane stays');
+  await page.getByRole('tab', { name: 'stations.csv' }).waitFor();
+  await shot('06b-arranged');
+  passed('a pane the person drags out stays; the Agent\'s next data file still joins the data side');
 
   for (const width of [1024, 390]) {
     await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });

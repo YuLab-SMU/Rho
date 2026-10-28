@@ -25,6 +25,23 @@
 .shell-view-header { display: contents; }
 .shell-header-narrow { padding: 7px 10px; border-bottom: 1px solid var(--color-hairline); }
 .shell-panel, .shell-view, .shell-owner { display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; }
+/* A dragged tab: where it would go is drawn before it is dropped. */
+.shell-body { position: relative; display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; }
+.shell-tabs button { position: relative; }
+.shell-tabs button[data-dragging] { opacity: 0.45; }
+.shell-tabs button[data-drop=before]::before, .shell-tabs[data-drop=end]::after { content: ''; position: absolute; top: 7px; bottom: 7px; width: 2px; border-radius: 1px; background: var(--color-accent); pointer-events: none; }
+.shell-tabs button[data-drop=before]::before { left: -1px; }
+.shell-tabs[data-drop=end] { position: relative; }
+.shell-tabs[data-drop=end]::after { position: sticky; right: 0; flex: none; margin-left: 1px; }
+.shell-drop { position: absolute; inset: 0; z-index: 6; }
+.shell-drop-preview { position: absolute; inset: 0; opacity: 0; border: 2px solid var(--color-accent); border-radius: 6px; background: color-mix(in srgb, var(--color-accent) 12%, transparent); pointer-events: none; transition: inset 0.08s ease, opacity 0.08s ease; }
+.shell-drop[data-zone] .shell-drop-preview { opacity: 1; }
+.shell-drop[data-zone=center] .shell-drop-preview { inset: 6px; }
+.shell-drop[data-zone=left] .shell-drop-preview { inset: 6px 50% 6px 6px; }
+.shell-drop[data-zone=right] .shell-drop-preview { inset: 6px 6px 6px 50%; }
+.shell-drop[data-zone=top] .shell-drop-preview { inset: 6px 6px 50% 6px; }
+.shell-drop[data-zone=bottom] .shell-drop-preview { inset: 50% 6px 6px 6px; }
+@media (prefers-reduced-motion: reduce) { .shell-drop-preview { transition: none; } }
 .shell-panel { overflow: hidden; }
 .shell-owner { position: relative; }
 .shell-owner > * { flex: 1; min-height: 0; }
