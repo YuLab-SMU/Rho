@@ -210,9 +210,10 @@ print(name+' completed once')
     await until(() => save.isEnabled(), Boolean, 'shared notes acknowledged'); await save.click();
     await until(() => fs.readFile(path.join(project.root, 'project-notes.md'), 'utf8').catch(() => ''), s => s.includes('teal river 你好'), 'shared notes saved');
     await snap('shared-notes-saved');
-    await page.getByRole('button', { name: 'Overview', exact: true }).click();
-    await page.getByRole('button', { name: 'Continue conversation', exact: true }).click();
-    await panel().locator('#conversation-input').waitFor();
+    // A finished conversation is reached from the panel's recent conversations, not the Overview.
+    await openPanel();
+    if (!await panel().locator('.conversation-turns').count()) { await panel().locator('.conversation-title').click(); await panel().locator('.history-row').first().click(); }
+    await panel().locator('.conversation-turns').waitFor();
     await say(`The human saved project-notes.md. Read that file now. Use native planning tools to report a two-step plan: read the human decision, then create work-result.txt. ${codex ? 'Use apply_patch to write' : 'Write'} work-result.txt containing exactly the human-selected label and value from the notes, then mark both plan entries complete. Do not edit project-notes.md.`);
     assert.equal((await ended(8, 'human-notes-applied')).state, 'completed');
     const result = await fs.readFile(path.join(project.root, 'work-result.txt'), 'utf8');

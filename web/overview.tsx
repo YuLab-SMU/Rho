@@ -129,10 +129,8 @@ export function ProjectOverview({ project, snapshot, client, section, workspace,
   return <section className={'project-page overview' + (isFiles ? ' files-page' : '')} aria-labelledby="overview-title">
     <header className="page-heading">
       <div><h1 id="overview-title">{title}</h1>{section === 'overview' && <p title={where.full}>{where.text}</p>}</div>
-      {section === 'overview' && !emptyProject && <button className="primary" onClick={() => onAgent()}><Icon name="prompt" size={17} /><span>Work with Agent</span></button>}
       {isFiles && <button onClick={() => void listFolder(folder?.path)} disabled={reading}><Icon name="refresh" size={15} />Refresh</button>}
       {section === 'sources' && files && <button onClick={files.refresh} disabled={files.reading}><Icon name="refresh" size={15} />Refresh</button>}
-      {section === 'agent' && (snapshot.conversations?.length || linked) ? <button className="primary" onClick={() => onNewConversation?.()}><Icon name="prompt" size={16} />{linked ? 'Write a request' : 'New conversation'}</button> : null}
     </header>
     {section === 'sources' && files && onFile && <SourceList category={category ?? 'data'} files={files} items={sources?.[category ?? 'data'] ?? null} artifacts={artifacts} onFile={onFile} />}
     {section === 'overview' && snapshot.catalog.operations.some(o => o.method === 'project.work.read' && o.authorized) && <WorkProgress client={client} snapshot={snapshot} openFile={p => void open({ path: p })} openConversation={onAgent} openActivity={() => onSection('agent')} onPresence={setHasWork} />}

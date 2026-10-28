@@ -182,7 +182,7 @@ try {
   await page.keyboard.press('Escape'); await focused('.agent-toggle');
   passed('navigation and Agent dialogs contain keyboard focus and return it on Escape');
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.getByRole('button', { name: 'Context & access', exact: true }).click();
+  await page.getByRole('button', { name: 'Connection & access', exact: true }).click();
   await page.getByRole('button', { name: 'Disconnect this tab', exact: true }).click();
   const confirmation = page.getByRole('dialog', { name: 'Disconnect this tab?' });
   const before = await page.evaluate(() => Object.keys(sessionStorage).sort());

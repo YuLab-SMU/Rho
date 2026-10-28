@@ -141,8 +141,9 @@ try {
   await until(counts, c => c['Results & figures'] === '1', 'the new output counted');
   passed('the person and the Agent share one saved layout: the script in the person\'s group, data and figures beside it, each file once');
 
-  // The Agent page keeps what the turn did; the sidebar's Agent row is the one Agent entry.
-  assert.equal(await page.locator('.topbar').getByRole('button', { name: 'Agent panel' }).count(), 0, 'no second Agent entry beside the sidebar');
+  // The Agent page keeps what the turn did; the top bar holds the one way to the Agent panel.
+  assert.equal(await page.locator('.topbar').getByRole('button', { name: 'Agent panel', exact: true }).count(), 1, 'the Agent panel opens from the top bar');
+  assert.equal(await nav.getByRole('button', { name: 'Agent panel' }).count(), 0, 'and from nowhere else in the sidebar');
   await nav.getByRole('button', { name: 'Agent', exact: true }).click();
   const row = page.locator('.conv-row').filter({ hasText: 'Fit ozone on temperature and draw it.' });
   await row.getByRole('button', { name: /^Show details of / }).click();

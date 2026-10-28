@@ -24,10 +24,10 @@ export interface AgentBadge { running: boolean; waiting: boolean; conversations:
 // The project's places: what it is about, where the work is laid out, the Agent, what ran,
 // and its contents by the kind of file a person looks for. Counts come from one bounded
 // walk of the project folders; a partial walk says so instead of claiming totals.
-export function ProjectNavigation({ project, snapshot, current, sources, partial, agent, agentOpen, onOverview, onStudio, onAgentPanel, onLayout, onSection, onSources, onFile, onAddSource, adding }: {
+export function ProjectNavigation({ project, snapshot, current, sources, partial, agent, onOverview, onStudio, onLayout, onSection, onSources, onFile, onAddSource, adding }: {
   project: ProjectSummary; snapshot: WorkspaceSnapshot | null; current: string;
-  sources: Record<SourceRow, SourceItem[]> | null; partial: boolean; agent: AgentBadge; agentOpen: boolean; adding: boolean;
-  onOverview: () => void; onStudio: () => void; onAgentPanel: () => void; onLayout: (id: string) => void; onSection: (section: Section) => void;
+  sources: Record<SourceRow, SourceItem[]> | null; partial: boolean; agent: AgentBadge; adding: boolean;
+  onOverview: () => void; onStudio: () => void; onLayout: (id: string) => void; onSection: (section: Section) => void;
   onSources: (row: SourceRow) => void; onFile: (row: SourceRow, item: SourceItem) => void; onAddSource: () => void;
 }) {
   // Which kinds are unfolded is remembered per project for this tab; the kind of the file on
@@ -55,11 +55,8 @@ export function ProjectNavigation({ project, snapshot, current, sources, partial
         {layouts.map(c => <button key={c.compositionId} className="nav-row nav-sub-row" aria-current={current === 'studio:' + c.compositionId ? 'page' : undefined} onClick={() => onLayout(c.compositionId)}><span className="nav-row-name">{compositionName(c.compositionId)}</span><span className="nav-row-count" title={views(c)}>{c.views.length}</span></button>)}
       </div>}
       {row('graph', 'Graph', 'graph', () => onSection('graph'))}
-      {/* The Agent's place is what it did here; its panel, beside any page, is where to talk to it. */}
-      <div className="nav-agent">
-        <button className="nav-row" aria-label={'Agent' + (agent.waiting ? ', needs your choice' : agent.running ? ', working' : '')} aria-current={current === 'agent' ? 'page' : undefined} onClick={() => onSection('agent')}><Icon name="spark" size={18} /><span className="nav-row-name">Agent</span>{agentState}</button>
-        <button className="icon-button nav-panel" aria-label="Agent panel" aria-expanded={agentOpen} title={agentOpen ? 'Hide the Agent panel' : 'Talk to the Agent beside this page'} onClick={onAgentPanel}><Icon name="prompt" size={15} /></button>
-      </div>
+      {/* The Agent's place is what it did here; its panel, opened from the top bar beside any page, is where to talk to it. */}
+      <button className="nav-row" aria-label={'Agent' + (agent.waiting ? ', needs your choice' : agent.running ? ', working' : '')} aria-current={current === 'agent' ? 'page' : undefined} onClick={() => onSection('agent')}><Icon name="spark" size={18} /><span className="nav-row-name">Agent</span>{agentState}</button>
     </div>
     <div className="nav-sources">
       <div className="nav-heading"><span className="section-label" id="nav-sources">Sources</span><button className="icon-button nav-add" aria-label="Add source folder" disabled={adding} onClick={onAddSource}><Icon name="plus" size={15} /></button></div>

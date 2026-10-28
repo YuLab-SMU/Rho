@@ -216,7 +216,7 @@ try {
   assert.equal(declared.length, 0); assert.equal((await call('task.map.read')).items.length, 0);
   report.contracts.withoutTaskMap = { taskMapCalls: 0, taskMapItems: 0 }; report.contracts.replies = { annotationId: thread.annotationId, linked: output };
   check('the Agent\'s object, artifact ↔ run ↔ exact version, linked reply and three kinds of statement, without any task map');
-  await page.getByRole('button', { name: 'Context & access', exact: true }).click();
+  await page.getByRole('button', { name: 'Connection & access', exact: true }).click();
   await page.getByRole('button', { name: 'Disconnect this tab', exact: true }).click();
   await page.getByRole('dialog', { name: 'Disconnect this tab?' }).getByRole('button', { name: 'Disconnect', exact: true }).click();
   await page.getByRole('heading', { name: 'This tab is disconnected', exact: true }).waitFor();

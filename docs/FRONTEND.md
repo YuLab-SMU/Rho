@@ -20,7 +20,8 @@ inspect what happened. The application gives those actions direct places:
   opens as one list with one primary action, and with no projects it shows what can
   be started instead of an empty page.
 - **Overview** opens existing workspaces and recorded results, with recent runs when
-  there are any. A project with nothing recorded yet shows its two next steps —
+  there are any. Its Work progress shows a conversation while it answers or waits for
+  a choice; finished ones are counted and listed on the Agent page. A project with nothing recorded yet shows its two next steps —
   work with the Agent or browse its files — rather than empty sections, leading with
   whichever one the project's listing says has something behind it.
 - **Sources** counts the project's Data, Code, Results & figures and Notes from one
@@ -77,9 +78,11 @@ inspect what happened. The application gives those actions direct places:
   tinted area shows where it lands. Each drop is one conditional write of the saved
   layout, the same the commands and the Agent use, and Undo reverses it. Below 768 px
   nothing drags ([episode](AGENT-CANVAS-EPISODE.md#arranging-views-the-person-drags-the-agent-writes)).
-- **The Agent panel** opens beside any page from the button at the right of the
-  sidebar's Agent row, from New conversation or Continue on the Agent page, or from
-  the topbar while the sidebar is hidden. In a tab on this machine it holds conversations with
+- **The Agent panel** opens beside any page from the Agent button at the right end
+  of the topbar, or from Continue on the Agent page. Its one header is the
+  conversation's title, New conversation and Close; the title opens the recent
+  conversations, the last entry leading to the Agent page's full list. A new
+  conversation shows only what the Agent can do here. In a tab on this machine it holds conversations with
   Claude Code or Codex started in Rho: follow a streaming reply and its actions, reply,
   stop a turn and return to it after a reload
   ([conversation episode](CONVERSATION-EPISODE.md)). Its left edge drags, or moves
@@ -113,8 +116,9 @@ inspect what happened. The application gives those actions direct places:
 The topbar names the way back — the projects list, then the project, then the open
 workspace — and keeps only the current place below 768 CSS px. The project sidebar
 starts with All projects and the project (its menu switches to another open project),
-then Overview, Studio, and Agent (Working or Needs you while a turn runs) with its
-panel button, then Sources. Project settings and Plugins sit together at its foot. The sidebar and optional
+then Overview, Studio, and Agent (Working or Needs you while a turn runs), then
+Sources. Project settings, Plugins and Connection & access sit together at its foot;
+the last opens the connection, this tab's access and a document's Changes. The sidebar and optional
 inspector adapt to available space. Narrow screens show one workspace view at a time.
 Closing a panel does not cancel work.
 
@@ -142,7 +146,8 @@ message keeps the project files that changed on disk while it ran) and the folde
 (`project.entries` gives each file's `modifiedAt`), and lays each message out as a row; `web/graph.tsx` draws it, its previews, the inspector and the timeline.
 `web/work-progress.tsx` reads `project.work.read` for the local person's project
 Overview: Agent-reported plans/usage, retained native source identities and current
-referenced files. It links back to the original conversation or the Agent page.
+referenced files. It shows a conversation started in Rho only while it answers or
+waits for a choice, and links to the Agent page for the finished ones.
 `web/agent-manage.tsx` draws the Agent page's tabs from the conversation summaries in
 the snapshot and `conversation.list` for the trash; an opened row reads its latest
 four messages through `web/agent-work.tsx`, the same step model as the panel.

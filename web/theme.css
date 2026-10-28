@@ -134,11 +134,6 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .project-menu button > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nav-sub { display: flex; flex-direction: column; gap: 1px; margin: 0 0 4px 21px; padding-left: 8px; border-left: 1px solid var(--color-hairline); }
 .nav-sub-row { min-height: 30px; padding: 5px 8px; font-size: 13px; }
-.nav-agent { display: flex; align-items: center; gap: 2px; }
-.nav-agent > .nav-row { flex: 1; min-width: 0; }
-.nav-panel { width: 30px; height: 30px; min-height: 30px; border-radius: 7px; color: var(--color-meta); }
-.nav-panel:hover { background: var(--color-hover); color: var(--color-ink); }
-.nav-panel[aria-expanded=true] { background: var(--color-accent-soft); color: var(--color-accent-strong); }
 .nav-badge { display: inline-flex; align-items: center; gap: 5px; padding: 1px 7px; border-radius: 999px; font-size: 11px; font-weight: 600; white-space: nowrap; }
 .nav-badge.working { background: var(--color-accent-soft); color: var(--color-accent-strong); }
 .nav-badge.waiting { background: var(--color-amber-soft); color: var(--color-amber-text); border: 1px solid var(--color-amber-line); }
@@ -333,8 +328,10 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 .status-dot { display: inline-block; flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--color-offline); }
 .live .status-dot, .status-dot.live { background: var(--color-verified); }
 .offline .status-dot { background: var(--color-amber); }
-.agent-toggle { border: 1px solid var(--color-hairline); min-height: 32px; padding: 4px 10px; font-size: 12px; }
-.agent-toggle[aria-expanded=true] { background: var(--color-accent-soft); border-color: var(--color-accent); color: var(--color-accent); }
+/* The way to the Agent panel: the strongest control in the top bar, pressed while the panel is open. */
+.agent-toggle { gap: 6px; min-height: 32px; padding: 4px 12px 4px 10px; border: 1px solid var(--color-accent); border-radius: 8px; background: var(--color-accent); color: #fff; font-size: 12.5px; font-weight: 600; }
+.agent-toggle:hover { border-color: var(--color-accent-hover); background: var(--color-accent-hover); }
+.agent-toggle[aria-expanded=true] { border-color: var(--color-accent); background: var(--color-accent-soft); color: var(--color-accent-strong); }
 .read-only { display: flex; gap: 4px; align-items: center; padding: 2px 6px; background: var(--color-well); border-radius: 4px; font-size: 11px; }
 .content-row { display: flex; flex: 1; min-height: 0; position: relative; }
 .main { flex: 1; min-width: 0; overflow: auto; }
@@ -527,25 +524,34 @@ body[data-resizing=col] { cursor: col-resize; user-select: none; }
 /* The Agent panel. One column: the conversation reads top to bottom, the message box stays at
    the foot, and the Agent's last words are the largest thing in each message. */
 .conversation { display: flex; flex-direction: column; flex: 1 0 auto; min-height: 0; font-size: 14px; container-type: inline-size; }
-.conversation-head { position: sticky; top: 0; z-index: 3; display: flex; align-items: center; gap: 6px; min-width: 0; padding: 7px 10px 7px 8px; border-bottom: 1px solid var(--color-divider); background: var(--color-surface); }
+.conversation-head { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 4px; min-width: 0; padding: 7px 8px; border-bottom: 1px solid var(--color-divider); background: var(--color-surface); }
 .conversation-head .icon-button { width: 30px; height: 30px; min-height: 30px; border-radius: 8px; }
 .conversation-head .icon-button:hover { background: var(--color-hover); color: var(--color-ink); }
-.conversation-mark { display: inline-flex; flex: none; }
-.conversation-head strong { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13.5px; }
+/* The title opens the recent conversations; the Agent page keeps the whole list. */
+.conversation-switch { position: relative; display: flex; flex: 1; min-width: 0; }
+.conversation-title { display: inline-flex; align-items: center; gap: 7px; max-width: 100%; min-height: 32px; padding: 4px 8px; border: 0; border-radius: 8px; background: transparent; color: var(--color-ink); font-weight: 400; text-align: left; }
+.conversation-title:hover:not(:disabled), .conversation-title[aria-expanded=true] { background: var(--color-hover); }
+.conversation-title:disabled { opacity: 1; cursor: default; }
+.conversation-title > svg { flex: none; }
+.conversation-title strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13.5px; font-weight: 600; }
+.conversation-title-chevron { display: inline-flex; flex: none; color: var(--color-meta); transform: rotate(90deg); transition: transform .15s ease; }
+.conversation-title[aria-expanded=true] .conversation-title-chevron { transform: rotate(-90deg); }
+.menu-pop.history-pop { top: calc(100% + 4px); bottom: auto; width: min(340px, calc(100cqw - 16px)); max-height: min(60vh, 440px); }
+.history-list { display: flex; flex-direction: column; gap: 1px; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.history-row { display: flex; align-items: flex-start; gap: 10px; width: 100%; min-height: 0; padding: 8px 10px; border: 0; border-radius: 8px; background: transparent; color: var(--color-ink); font-weight: 400; text-align: left; }
+.history-row:hover, .history-row:focus-visible { background: var(--color-hover); outline: none; }
+.history-row > svg, .history-mark { flex: none; margin-top: 2px; }
+.history-mark { width: 14px; height: 14px; border-radius: 4px; background: var(--color-well); }
+.history-text { display: flex; flex: 1; flex-direction: column; gap: 1px; min-width: 0; }
+.history-text strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 500; }
+.history-row[aria-current=true] .history-text strong { font-weight: 600; }
+.history-text span { color: var(--color-meta); font-size: 11.5px; }
+.history-check { display: inline-flex; flex: none; margin-top: 2px; color: var(--color-accent); }
 .conversation-intro { display: flex; flex-direction: column; gap: 24px; padding: 28px 20px 16px; }
 .intro-lead { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
 .intro-lead > svg { margin-bottom: 6px; }
 .intro-lead p { font-size: 16px; font-weight: 600; line-height: 1.4; letter-spacing: -.1px; overflow-wrap: anywhere; }
 .intro-lead small { color: var(--color-meta); font-size: 13px; }
-.intro-heading { margin-bottom: -16px; color: var(--color-meta); font-size: 12px; font-weight: 500; }
-.conversation-list { list-style: none; margin: 0 -10px; padding: 0; display: flex; flex-direction: column; gap: 1px; }
-.conversation-list button { width: 100%; min-height: 0; display: flex; justify-content: flex-start; align-items: flex-start; gap: 10px; padding: 9px 10px; border: 0; border-radius: 8px; background: transparent; text-align: left; font-weight: 400; }
-.conversation-list button:hover { background: var(--color-hover); }
-.conversation-list button > svg, .conversation-list-mark { margin-top: 3px; }
-.conversation-list-mark { flex: none; width: 15px; height: 15px; border-radius: 4px; background: var(--color-well); }
-.conversation-list-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
-.conversation-list strong { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.conversation-list-text span { color: var(--color-meta); font-size: 12px; }
 .conversation-turns { list-style: none; margin: 0; padding: 18px 20px 16px; display: flex; flex-direction: column; gap: 30px; }
 .turn { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .turn-person { align-self: flex-end; max-width: 85%; }
@@ -784,7 +790,7 @@ dialog::backdrop { background: #13231c45; }
   .app-body > .project-nav { display: none; }
   .topbar { padding: 0 10px; gap: 8px; min-height: 54px; }
   .topbar-actions { gap: 6px; }
-  .connection-label, .command-trigger kbd, .context-toggle { display: none; }
+  .connection-label, .command-trigger kbd { display: none; }
   .crumb, .crumb-sep { display: none; }
   .command-trigger { padding: 5px; }
   .agent-toggle { padding: 5px 8px; }

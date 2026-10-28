@@ -96,7 +96,7 @@ try {
   await shot('01-empty');
   passed('the Graph says what it will draw before anything has been asked');
 
-  await nav.getByRole('button', { name: 'Agent panel' }).click();
+  await page.getByRole('button', { name: 'Agent panel', exact: true }).click();
   await page.getByRole('textbox', { name: 'Start a conversation' }).fill('How does ozone change by month?');
   await page.getByRole('button', { name: 'Start', exact: true }).click();
   const live = await until(cards, c => c.some(card => card.flag === 'Claude Code · Reading' && /airquality\.csv/.test(card.label)), 'the Agent shown reading on its card');
@@ -112,7 +112,7 @@ try {
   await page.getByRole('button', { name: 'Send', exact: true }).click();
   await until(() => page.locator('.graph-now').textContent(), t => t === 'Live', 'the second message running');
   await until(() => page.locator('.graph-now').textContent(), t => t === 'Now', 'the second message ending', 40000);
-  await nav.getByRole('button', { name: 'Agent panel' }).click();
+  await page.getByRole('button', { name: 'Agent panel', exact: true }).click();
   await page.getByRole('button', { name: 'Fit the graph' }).click();
   await page.waitForTimeout(600);
   const drawn = await until(cards, c => c.filter(card => !card.id.startsWith('p')).length === 10 && c.some(card => /ozone_by_month\.png/.test(card.label)), 'both messages drawn');

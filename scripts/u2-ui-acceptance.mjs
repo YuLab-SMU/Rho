@@ -118,7 +118,7 @@ try {
   await poll(text, t => t.startsWith('# Claude'), 'agent observed');
   await input.click(); await page.keyboard.press('Meta+z');
   state = await poll(current, b => !b.content.includes('人类'), 'own undo'); assert.match(state.content, /^# Claude/);
-  await page.getByRole('button', { name: 'Context & access', exact: true }).click();
+  await page.getByRole('button', { name: 'Connection & access', exact: true }).click();
   await page.getByRole('region', { name: 'Changes', exact: true }).waitFor();
   assert.equal(await page.getByText('You', { exact: true }).count() > 0, true);
   const agentChange = page.locator('.rho-doc-changes li.agent').first();
@@ -167,7 +167,7 @@ try {
   await page.getByRole('button', { name: 'Dismiss', exact: true }).click();
   await tab('Pinned'); await poll(text, t => t === 'base <- 1\n', 'exact pinned version');
   assert.equal(await page.locator('.cm-content:visible').getAttribute('contenteditable'), 'false');
-  await page.getByRole('button', { name: 'Context & access', exact: true }).click();
+  await page.getByRole('button', { name: 'Connection & access', exact: true }).click();
   assert.equal(await page.getByRole('region', { name: 'Changes', exact: true }).count(), 0);
   await page.getByRole('button', { name: 'Close context', exact: true }).click();
   report.checks.push('conflict-stops-auto-submit-copy-retained-no-rebase-pinned-content-readonly-no-live-changes');

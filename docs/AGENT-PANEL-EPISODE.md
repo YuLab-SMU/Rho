@@ -75,8 +75,7 @@ Rho only (`web/conversation.tsx`, `web/markdown.tsx`, `web/theme.css`,
   then close it, never the panel. In a new conversation's lists the first entry is
   "Not chosen · Claude Code uses Xhigh", apart from a value the Agent itself calls
   Default.
-- **The start screen** names the Agent with its mark, and lists conversations by
-  their titles.
+- **The start screen** names the Agent with its mark and what it can do here.
 
 ## Runs
 
@@ -96,6 +95,47 @@ Evidence: `work/chat-panel-20261028/`, `work/agent-ui-acceptance/` and
 | The user, after the record | The model chooser, beside two references: a menu of rows with their values, effort as a list, Fast as a switch | Too crude: a native effort select above a large model popover | One chip and a menu of rows |
 | `menu.mjs` | The menu on the copy at 640, 340 and 390 px | The model's value cut at its start ("laude-opus-5-5 · magpie-server"); Fast mode and Ultracode, offered as On/Off lists, drawn as rows; two "Default" entries in a new conversation's Effort list | The value ends in an ellipsis; On/Off lists are switches; Rho's entry is "Not chosen" |
 | `menu.mjs` again | The same, a switch and a value | A switch keeps the menu open and adds "Fast mode" to the chip; a value closes it; Escape from a list returns to its row, then closes the menu with the panel open; no overflow or page errors | — |
+
+## Where the Agent is reached
+
+The user, on the project's Agent page with the panel open: the button that opens the
+chat should be easier to find and see; conversations were listed everywhere; and the
+topbar's panel button, opening Connection & access, is rarely used and can go.
+
+Observed (`work/layout-20261028/`, the same copy, 1440 and 390 px):
+
+- The panel opened from a small `>_` beside the sidebar's Agent row, from New
+  conversation on the Agent page, from Work with Agent on the Overview, and from the
+  topbar only while the sidebar was hidden.
+- The same conversations were listed three times: the Agent page's rows, the panel's
+  start screen, and the Overview's Work progress, where each finished conversation was
+  a large card ("hi", Continue conversation, tokens and cost).
+- The panel had two headers: "Agent ×", then the conversation's back arrow, title and
+  New conversation.
+- The sidebar's Connection & access row also hid the sidebar on a wide window, so
+  focus had nowhere to return when its drawer closed.
+
+Changed (`web/main.tsx`, `web/project.tsx`, `web/overview.tsx`,
+`web/conversation.tsx`, `web/work-progress.tsx`, `web/popover.ts`, `web/icons.tsx`,
+`web/theme.css`):
+
+- **One Agent button**, filled, at the right end of the topbar on every page and
+  width, pressed while the panel is open. The sidebar's `>_`, the Agent page's New
+  conversation and the Overview's Work with Agent went; empty states keep theirs.
+- **One header in the panel**: the conversation's title (or "New conversation"), New
+  conversation and Close. The title opens the recent conversations, newest first,
+  with a search past six and "All conversations" leading to the Agent page. Escape
+  closes the list, then the panel.
+- **One list**: the panel's start screen lists nothing; Work progress shows a
+  conversation while it answers or waits for a choice and counts the finished ones,
+  linking to the Agent page.
+- **Connection & access** opens from the sidebar's foot only, and keeps the sidebar.
+
+| Run | What was looked at | Observed | Change |
+| --- | --- | --- | --- |
+| `look.mjs` | The Agent page, the panel, its recent list, Connection & access at 1440 px | The list focused its first entry, not the open conversation; the sidebar row hid the sidebar and focus fell to the page; the list's dates read "Oct 27" where the Agent page says "Yesterday" | Focus goes to the open one; the row keeps the sidebar; the Agent page's wording |
+| `look.mjs` again, and at 390 px | The same, and the phone sheet | One Agent button; no list on the start screen; Escape closes the list and keeps the panel; All conversations shows the Agent page (and closes the sheet on a phone); no overflow or page errors | — |
+| The Overview at 1440 and 390 px | Work progress | Two finished conversations as cards headed "hi" | Finished ones are counted and linked |
 
 ## Checks
 
@@ -122,6 +162,14 @@ Run serially on 2026-10-28 (`work/chat-panel-20261028/final/`):
   which the menu now shares, passed in `agent-page` after its unused options were
   removed. `acceptance:acp` chooses the Agent through the new menu; it needs a real
   Agent and was not run.
+- After the Agent button moved to the topbar, the same batch passed again, with
+  `agent-canvas` checking that the panel opens from the topbar and from nothing in the
+  sidebar. The older `acceptance:ui` and `acceptance:interaction` stop before the
+  changed step (a "link already used" page and a sidebar entry named "workspace", both
+  gone); `acceptance:ui:u2` opens Changes from the sidebar, then fails on whether the
+  Documents plugin names the person "You". `acceptance:acp` and the conversation
+  episode reach a finished conversation through the recent list; they need a real
+  Agent and were not run.
 
 ## Limits
 
@@ -131,8 +179,15 @@ Run serially on 2026-10-28 (`work/chat-panel-20261028/final/`):
   own names ("Xhigh", "Ultracode").
 - The usage line shows what the Agent reported for its session; an Agent that reports
   none shows no ring. The observation counts the Agent plugin keeps (updates seen, not
-  displayed) are no longer shown in the panel; Work progress still shows them.
+  displayed) are no longer shown in the panel; Work progress shows them while a
+  conversation is in progress.
 - A message whose stream joins two sentences without a break shows them joined: Rho
   shows what the Agent sent.
 - Tables wrap; on a phone a four-column table grows tall rather than scrolling.
+- A document's Changes open in the Connection & access drawer, now reached only from
+  the sidebar's foot; the document has no button of its own for them.
+- The recent list holds conversations started in Rho; sessions started elsewhere are
+  on the Agent page.
+- The recent list's search appears past six conversations; the copy has two, so it
+  was not seen with real records.
 - No person other than the builder has used the window.

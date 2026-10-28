@@ -107,11 +107,11 @@ try {
   const grant = await operator2.call('session.grant', { projectId: project.id, externalSessionId: 'claude-code' });
   const outside = await RhoClient.fromFile(grant.connectionFile);
   await outside.call('project.entries', { projectId: project.id }).then(r => log('outside.entries', { names: r.entries.map(e => e.name) }), e => log('outside.entries', { error: e.message }));
-  await panel().getByRole('button', { name: 'All conversations', exact: true }).click();
+  await panel().locator('.conversation-title').click();
   await page.waitForTimeout(1500); await snap('list-and-outside-session');
   await page.setViewportSize({ width: 390, height: 844 }); await page.reload(); await page.getByRole('button', { name: 'Agent panel', exact: true }).waitFor(); await openPanel();
   await snap('phone-list');
-  await panel().locator('.conversation-list button').first().click(); await page.waitForTimeout(1000); await snap('phone-conversation');
+  await panel().locator('.conversation-title').click(); await panel().locator('.history-row').first().click(); await page.waitForTimeout(1000); await snap('phone-conversation');
   await log('browser.errors', { errors });
 } catch (e) { await log('failed', { message: e.message, stack: e.stack?.split('\n').slice(0, 4) }); await snap('failure').catch(() => {}); process.exitCode = 1; }
 finally {

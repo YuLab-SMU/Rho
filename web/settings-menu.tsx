@@ -1,7 +1,8 @@
-import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { agentLabel, backends, effortSetting, modelSetting, ModelList, NotAsked, split, valueName, type AgentSettingsState, type Backend, type SettingOption, type SettingValue } from './agent-settings.js';
 import { BrandMark, brandOf } from './brand-marks.js';
 import { Icon } from './icons.js';
+import { stepFocus, useOutside } from './popover.js';
 import './settings-menu.css';
 
 // The settings of the next message, under the message box: one chip that names the model,
@@ -11,13 +12,6 @@ type View = { kind: 'root' } | { kind: 'agent' } | { kind: 'option'; id: string 
 const labelOf = (option: SettingOption) => option.category === 'thought_level' ? 'Effort' : option.category === 'model' ? 'Model' : option.name;
 const switchOf = (option: SettingOption) => option.type === 'boolean'
   || (option.values?.length === 2 && option.values.map(v => v.value.toLowerCase()).sort().join() === 'off,on');
-
-function step(menu: HTMLElement, from: Element | null, by: number) {
-  const items = [...menu.querySelectorAll<HTMLElement>('[data-item]:not(:disabled)')];
-  if (!items.length) return;
-  const at = items.indexOf(from as HTMLElement);
-  items[at < 0 ? (by > 0 ? 0 : items.length - 1) : (at + by + items.length) % items.length].focus();
-}
 
 export function SettingsMenu({ agent, options, values, allowDefault, disabled, disabledNote, agents, checking, checkProblem, onCheck, onChoose, describe }: {
   agent: string; options: SettingOption[] | null; values: Record<string, SettingValue>; allowDefault: boolean;
@@ -33,12 +27,7 @@ export function SettingsMenu({ agent, options, values, allowDefault, disabled, d
   const chosen = (option: SettingOption) => option.id in values ? values[option.id] : null;
   const shown = (option: SettingOption) => valueName(option, chosen(option) ?? option.current);
   const brand = agents ? brandOf(agent) : null;
-  useEffect(() => {
-    if (!open) return;
-    const away = (event: MouseEvent) => { if (!root.current?.contains(event.target as Node)) setOpen(false); };
-    document.addEventListener('mousedown', away);
-    return () => document.removeEventListener('mousedown', away);
-  }, [open]);
+  useOutside(open, root, () => setOpen(false));
   // Focus goes where the person is: the first row, the row a list was opened from, or the
   // value already chosen in a list. The model list focuses its own search box.
   useLayoutEffect(() => {
@@ -58,7 +47,7 @@ export function SettingsMenu({ agent, options, values, allowDefault, disabled, d
     if (event.defaultPrevented || !menu.current) return;
     const typing = (event.target as HTMLElement).tagName === 'INPUT';
     if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); if (view.kind === 'root') show(false); else back(); }
-    else if ((event.key === 'ArrowDown' || event.key === 'ArrowUp') && !typing) { event.preventDefault(); step(menu.current, document.activeElement, event.key === 'ArrowDown' ? 1 : -1); }
+    else if ((event.key === 'ArrowDown' || event.key === 'ArrowUp') && !typing) { event.preventDefault(); stepFocus(menu.current, document.activeElement, event.key === 'ArrowDown' ? 1 : -1); }
     else if (event.key === 'ArrowLeft' && !typing && view.kind !== 'root') { event.preventDefault(); back(); }
     else if (event.key === 'ArrowRight' && !typing && (event.target as HTMLElement).dataset.opens) { event.preventDefault(); (event.target as HTMLElement).click(); }
   }

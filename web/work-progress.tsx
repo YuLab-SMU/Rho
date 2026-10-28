@@ -29,13 +29,17 @@ export function WorkProgress({ client, snapshot, openFile, openConversation, ope
     return () => { clearInterval(external); live = false; controller.abort(); if (timer.current) clearTimeout(timer.current); timer.current = null; request.current = null; };
   }, [client, snapshot.project.id]);
   useEffect(() => { request.current?.(); }, [snapshot.cursor]);
+  // Work in progress: a conversation started in Rho shows here while it answers or waits for a
+  // choice. Finished ones are listed once, on the Agent page.
+  const shown = work?.sessions.filter(session => !session.conversationId || session.state === 'running' || (session.pendingPermissions ?? 0) > 0) ?? [];
+  const finished = (work ? work.sessions.length - shown.length + work.omitted.conversations : 0);
   return <section className="project-section project-work" aria-label="Project work">
     <div className="section-heading"><h2>Work progress</h2><button className="text-button" disabled={reading} onClick={() => request.current?.()}>{reading ? 'Reading…' : 'Refresh'}</button></div>
     <div className="shared-notes"><div><strong>Shared notes</strong><p>{work?.notes.dirty ? 'Unsaved changes in the shared document. Save before asking Agent to read the file.' : 'Project notes for you and Agent. Save changes, then ask Agent to read project-notes.md.'}</p></div><button onClick={() => openFile(work?.notes.path ?? 'project-notes.md')}>Open shared notes</button></div>
     {problem && <p role="alert">{problem} Retained observations remain below.</p>}
     {!work && !problem && <p role="status">Reading project work…</p>}
     {work && <>
-      <div className="work-sessions">{work.sessions.map(session => <article className="work-session" key={session.id}>
+      <div className="work-sessions">{shown.map(session => <article className="work-session" key={session.id}>
         <header><div><h3>{session.title}</h3><p>{stateWords[session.state] ?? session.state} · {session.source === 'acp' ? (session.agent === 'codex' ? 'Codex · ACP' : 'Claude Code · ACP') : session.source === 'external-acp' ? 'External ACP' : session.source === 'native-transcript' ? 'Native transcript' : 'Claude CLI'}</p></div>
           {session.conversationId ? <button onClick={() => openConversation(session.conversationId!)}>Continue conversation</button> : session.source === 'external-acp' ? <span className="muted">Input stays in the original client</span> : <button onClick={openActivity}>View activity</button>}</header>
         {session.observation ? <SessionProgress observation={session.observation} /> : session.source === 'native-transcript' ? <p className="muted">Input stays in the original window. Retained through cursor {session.cursor}; {session.droppedEvents ?? 0} events dropped.</p> : <p className="muted">No session projection retained yet.</p>}
@@ -46,7 +50,7 @@ export function WorkProgress({ client, snapshot, openFile, openConversation, ope
         {session.operationIds.length > 0 && <p className="work-references">Managed run references: {session.operationIds.join(', ')}</p>}
         {session.resourceRefs.length > 0 && <p className="work-references">{session.resourceRefs.length} resource versions referenced. Results keep their own integrity and provenance.</p>}
       </article>)}</div>
-      {work.omitted.conversations > 0 && <p className="muted">{work.omitted.conversations} earlier conversations are available in the Agent panel.</p>}
+      {finished > 0 && <p className="muted">{finished} finished {finished === 1 ? 'conversation is' : 'conversations are'} on the <button className="text-button" onClick={openActivity}>Agent page</button>.</p>}
       {work.files.length > 0 && <div className="work-files"><h3>Referenced files</h3><p className="muted">Current file observations. A tool reference does not establish who wrote these bytes.</p><ul>{work.files.map(file => <li key={file.path}>
         <div><button className="text-button" disabled={file.state !== 'observed'} onClick={() => openFile(file.path)}>{file.path}</button><small>{file.state === 'observed' ? `${file.bytes} bytes · SHA-256 ${file.sha256?.slice(0, 12)}` : file.state.replaceAll('-', ' ')} · {file.references.length} tool references</small></div>
         <details><summary>Sources</summary><ul>{file.references.map(ref => <li key={ref.session + ref.tool}>{work.sessions.find(s => s.id === ref.session)?.title ?? ref.session} · {ref.tool}</li>)}</ul><p>{file.observedAt}</p>{file.sha256 && <code>{file.sha256}</code>}</details>

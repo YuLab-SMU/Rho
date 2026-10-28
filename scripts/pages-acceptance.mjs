@@ -90,7 +90,7 @@ try {
 
   // The context panel names the Agent session with access, what it may do and when it last acted.
   await page.locator('.project-nav').getByRole('button', { name: 'Back to project', exact: true }).click();
-  await page.getByRole('button', { name: 'Context & access', exact: true }).click();
+  await page.getByRole('button', { name: 'Connection & access', exact: true }).click();
   const session = page.locator('[data-rho-agent-session="granted"]').filter({ hasText: 'pages-agent' });
   await session.waitFor();
   assert.match(await session.innerText(), /Can read, change and run code[\s\S]*Last active \d\d:\d\d/);
