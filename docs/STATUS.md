@@ -85,11 +85,11 @@ the setup, the observations before and after, and the limits.
   tooltip; no projects opens the two real starting actions.
 - The create-project sheet closes, lists chosen folders as rows and names what is
   still missing; the page behind is dimmed and blurred.
-- A project with nothing recorded opens "Work with Agent" and "Browse files"; the
-  listing decides which leads. The activity column appears only with runs, and the
-  header names the source folder.
+- A project with nothing recorded opens "Work with Agent" and "Browse files", led as
+  its listing decides; activity appears only with runs; the header names the source folder.
 - The topbar names the way back and keeps only the current place below 768 px, and
-  ends with the one Agent button; Connection & access sits at the sidebar foot.
+  ends with the one Agent button. Connection & access, at the sidebar foot, shows the
+  connection and this tab's access as cards ([record](AGENT-PANEL-EPISODE.md#connection--access)).
 
 The first pass could not list a project's source folders; `project.entries` now lists
 the folder and an `@<sourceId>` entry per source and descends into them.

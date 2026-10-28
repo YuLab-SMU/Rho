@@ -1,0 +1,30 @@
+/* Connection & access: the connection and this tab's access, each a card that leads with its
+   state and an action, then what follows from it. */
+.access-card { display: flex; flex-direction: column; gap: 12px; padding: 14px; border: 1px solid var(--color-hairline); border-radius: 12px; background: var(--color-surface); }
+.access-head { display: flex; align-items: center; gap: 11px; min-width: 0; }
+.access-head > button { flex: none; margin-left: auto; }
+.access-mark { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; background: var(--color-well); color: var(--color-muted); }
+.access-card.live .access-mark { background: var(--color-verified-soft); color: var(--color-verified-text); }
+.access-card.offline { border-color: var(--color-amber-line); }
+.access-card.offline .access-mark { background: var(--color-amber-soft); color: var(--color-amber-text); }
+.access-card.connecting .access-mark svg { animation: access-turn 1.4s linear infinite; }
+@keyframes access-turn { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .access-card.connecting .access-mark svg { animation: none; } }
+.access-title { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.access-title strong { color: var(--color-ink); font-size: 14px; font-weight: 600; }
+.access-title small { color: var(--color-meta); font-size: 12px; line-height: 1.4; }
+.context-section .access-foot { padding-top: 10px; border-top: 1px solid var(--color-divider); color: var(--color-meta); font-size: 12px; line-height: 1.5; }
+.context-section .access-problem { padding: 8px 10px; border-radius: 8px; background: var(--color-amber-soft); color: var(--color-amber-text); font-size: 12px; }
+.context-section .access-scope { display: flex; align-items: flex-start; gap: 8px; padding: 8px 10px; border-radius: 8px; background: var(--color-well); color: var(--color-muted); font-size: 12.5px; line-height: 1.45; }
+.access-scope > svg { flex: none; margin-top: 1px; color: var(--color-meta); }
+.access-scope strong { color: var(--color-ink); font-weight: 600; }
+.access-can { display: flex; flex-direction: column; gap: 7px; margin: 0; padding: 0; list-style: none; font-size: 13px; line-height: 1.4; }
+.access-can li { display: flex; align-items: flex-start; gap: 9px; color: var(--color-ink); }
+.access-can li > svg { flex: none; margin-top: 2px; color: var(--color-verified); }
+.access-can li.not { color: var(--color-meta); }
+.access-can li.not > svg { color: var(--color-meta); }
+.access-leave { align-self: flex-start; gap: 7px; min-height: 30px; padding: 5px 11px; border: 1px solid var(--color-hairline); border-radius: 8px; background: var(--color-surface); color: var(--color-failed); font-size: 12.5px; }
+.access-leave:hover { border-color: var(--color-failed); background: var(--color-hover); }
+/* The focused view's own section (a document's Changes) sits above, aligned with the cards and
+   in the application's colours through the custom properties its owner reads. */
+.context-slot { padding: 8px 4px; border-bottom: 1px solid var(--color-hairline); --border: var(--color-hairline); --surface: var(--color-surface); --surface-muted: var(--color-well); --text: var(--color-ink); --text-muted: var(--color-meta); }

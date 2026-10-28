@@ -720,13 +720,10 @@ ol.md-list { list-style-type: decimal; }
 .context-agent-where { font-size: 12px; }
 .context-section { padding: 20px; display: flex; flex-direction: column; gap: 14px; border-bottom: 1px solid var(--color-hairline); font-size: 13px; }
 .context-section p { color: var(--color-meta); overflow-wrap: anywhere; }
-.connection-line { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-.connection-line > button { margin-left: auto; }
 .context-agent-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 20px; }
 .context-agent-list li { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
 .context-agent-list span { color: var(--color-meta); font-size: 12px; }
 .context-slot:empty { display: none; }
-.context-slot { padding: 16px; }
 .away { display: grid; place-content: center; min-height: 100dvh; padding: 24px; background: var(--color-canvas); }
 .standalone { max-width: 480px; display: flex; flex-direction: column; gap: 20px; padding: 40px; background: white; border: 1px solid var(--color-hairline); border-radius: 14px; }
 .standalone .wordmark { color: var(--color-accent); font-size: 22px; }

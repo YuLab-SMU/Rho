@@ -103,7 +103,7 @@ try {
   // This tab was opened on this machine, so it has no link to leave: the panel says where the
   // access comes from instead of offering a disconnect it cannot perform.
   assert.equal(await page.getByRole('button', { name: "Use this machine's access instead", exact: true }).count(), 0);
-  assert.match(await page.locator('#project-context').innerText(), /opened directly on this machine/);
+  assert.match(await page.locator('#project-context').innerText(), /opened directly on this machine/i);
   failing.push(...await measure('direct-access'));
 
   assert.deepEqual(failing, [], 'inspectResponsive outside the workspace');

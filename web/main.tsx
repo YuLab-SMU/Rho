@@ -15,6 +15,7 @@ import { pluginPresentation } from '../src/plugin-presentation.js';
 import { shortcut } from './platform.js';
 import './theme.css';
 import './plugins.css';
+import './access.css';
 
 const Workspace = lazy(() => import('./shell/workspace.js').then(module => ({ default: module.Workspace })));
 const ProjectOverview = lazy(() => import('./overview.js').then(module => ({ default: module.ProjectOverview })));
@@ -36,7 +37,11 @@ function restoreSession(): BrowserConnection | null {
     return saved && saved.url === location.origin && /^[a-f0-9]{64}$/.test(saved.token) && Date.parse(saved.expiresAt) > Date.now() && Array.isArray(saved.methods) ? saved : null;
   } catch { return null; }
 }
-function humanError(error: unknown) { return error instanceof Error ? error.message : 'The request could not be confirmed. Reconnect to inspect the owner state.'; }
+function humanError(error: unknown) {
+  // A request that never reached the service says so, not in the browser's own words.
+  if (error instanceof TypeError && /fetch|network|load failed/i.test(error.message)) return 'Rho did not answer at this address.';
+  return error instanceof Error ? error.message : 'The request could not be confirmed. Reconnect to inspect the owner state.';
+}
 // Only a rejected credential ends this tab's access; scope and network failures keep it.
 function accessEnded(error: unknown) { const e = error as { kind?: string; error?: { kind?: string } } | null; return (e?.error?.kind ?? e?.kind) === 'unauthorized'; }
 function clock(date: Date, seconds = false) { return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', ...(seconds ? { second: '2-digit' } : {}), hourCycle: 'h23' }); }
@@ -308,9 +313,8 @@ function App() {
   const shownPlugin = screen === 'plugins' && pluginId ? snapshot?.catalog.plugins.find(p => p.id === pluginId) : undefined;
   const pluginTitle = shownPlugin ? pluginPresentation(shownPlugin).displayName : '';
   function choosePlugin(id: string) { setPluginId(id); if (!id) setPluginReturn(false); }
-  const connectionNote = phase === 'live' ? `Last read ${clock(readAt ?? new Date(), true)}. Refreshing reads the project again; it never starts work.`
-    : phase === 'offline' ? (readAt ? `Showing what was read at ${clock(readAt, true)}. ` : 'Nothing has been read yet. ') + "Reconnecting only reads again; it doesn't restart Rho or any work." + (error ? ` Last attempt: ${error}` : '')
-    : readAt ? `Reading again. Last read ${clock(readAt, true)}; reading never starts work.` : 'Reading the project. Reading never starts work.';
+  const connectionNote = (readAt ? (phase === 'offline' ? 'Showing what was read at ' : 'Last read ') + clock(readAt, true) + '. ' : 'Nothing has been read yet. ')
+    + (phase === 'offline' ? "Reconnecting only reads again; it doesn't restart Rho or any work." : 'Reading never starts work.');
   // Reconnecting keeps the notice until a read succeeds; the last read stays on screen meanwhile.
   const reconnecting = phase === 'connecting' && offlineAt !== null;
   const seen = readAt ? `You're seeing what was read at ${clock(readAt)}.` : 'Nothing has been read yet.';
@@ -335,21 +339,41 @@ function App() {
   ];
   // Session grants decide the access copy; older read-only sessions keep theirs.
   const edits = link ? !!link.methods?.includes('document.edit') : true, runs = link ? !!link.methods?.includes('action.submit') : true;
-  const access = edits ? `Open and watch projects, edit open documents and pick table rows.${runs ? ' Run an action an Agent proposed and stop a run.' : ''} Save documents using the editor.` : 'Open, create and watch projects. No edits or runs.';
+  // What this tab may do, and what a narrower link leaves out.
+  const can = edits ? ['Open and watch projects', 'Edit open documents and pick table rows', ...(runs ? ['Run an action an Agent proposed, and stop a run'] : []), 'Save documents in the editor'] : ['Open, create and watch projects'];
+  const cannot = edits ? (runs ? [] : ['Run actions or stop runs']) : ['Edit documents', 'Run actions or stop runs'];
+  const linkFolder = link?.root ? (link.rootLabel ?? link.root).split(/[\\/]/).filter(Boolean).at(-1) ?? link.root : '';
   const contextSections = <>
     <div ref={setContextSlot} className="context-slot" />
     {!feedbackContext && <>
-    <section className="context-section">
-      <h3 className="caption">Connection</h3>
-      <div className="connection-line"><span className={'status-dot ' + phase} /><strong>{phase === 'live' ? 'Up to date' : phase === 'offline' ? 'Offline' + (offlineAt ? ' since ' + clock(offlineAt) : '') : 'Connecting'}</strong><button className="small-button" onClick={reread}>{phase === 'offline' ? 'Reconnect' : 'Refresh'}</button></div>
-      <p>{connectionNote}</p>
+    <section className="context-section" aria-labelledby="connection-heading">
+      <h3 className="caption" id="connection-heading">Connection</h3>
+      <div className={'access-card ' + phase}>
+        <div className="access-head">
+          <span className="access-mark" aria-hidden="true"><Icon name={phase === 'offline' ? 'offline' : phase === 'live' ? 'signal' : 'refresh'} size={16} /></span>
+          <div className="access-title"><strong>{phase === 'live' ? 'Up to date' : phase === 'offline' ? "Can't reach Rho" : 'Connecting'}</strong>
+            <small>{phase === 'live' ? 'Changes show as Rho records them' : phase === 'offline' ? (offlineAt ? 'Since ' + clock(offlineAt) : 'Not reached yet') : readAt ? 'Reading the project again' : 'Reading the project'}</small></div>
+          <button className={'small-button' + (phase === 'offline' ? ' primary' : '')} onClick={reread}>{phase === 'offline' ? 'Reconnect' : 'Refresh'}</button>
+        </div>
+        <p className="access-foot">{connectionNote}</p>
+        {phase === 'offline' && error && <p className="access-problem">{error}</p>}
+      </div>
     </section>
-    <section className="context-section">
-      <h3 className="caption">This tab</h3>
-      <dl>{link && <><dt>Link</dt><dd>{link.root ? (link.rootLabel ?? link.root) + ' and below' : 'Set by whoever runs Rho'}</dd></>}<dt>Can</dt><dd>{access}</dd>{link?.expiresAt && <><dt>Expires</dt><dd>{until(link.expiresAt)}</dd></>}</dl>
-      {link
-        ? <button ref={disconnectTrigger} className="danger-link" onClick={() => askDisconnect(disconnectTrigger.current)}>Use this machine's access instead</button>
-        : <p className="context-note">This tab was opened directly on this machine, so nothing has to be sent to it. The folder is set by whoever runs Rho.</p>}
+    <section className="context-section" aria-labelledby="tab-access-heading">
+      <h3 className="caption" id="tab-access-heading">This tab</h3>
+      <div className="access-card">
+        <div className="access-head">
+          <span className="access-mark" aria-hidden="true"><Icon name={link ? 'link' : 'monitor'} size={16} /></span>
+          <div className="access-title"><strong>{link ? 'Opened from a link' : 'This machine'}</strong>
+            <small>{link ? (link.expiresAt ? 'Expires ' + until(link.expiresAt).replace(/^(Today|Tomorrow)/, word => word.toLowerCase()) : 'No expiry') : 'Opened directly on this machine; nothing was sent to it'}</small></div>
+        </div>
+        <p className="access-scope" title={link?.root}><Icon name="folder" size={14} /><span>{link ? (linkFolder ? <><strong>{linkFolder}</strong> and the folders in it</> : 'The folder whoever runs Rho chose') : 'Every project in the folder Rho serves'}</span></p>
+        <ul className="access-can" aria-label="What this tab can do">
+          {can.map(item => <li key={item}><Icon name="check" size={13} stroke={2.2} /><span>{item}</span></li>)}
+          {cannot.map(item => <li key={item} className="not"><Icon name="minus" size={13} stroke={2.2} /><span>{item}<span className="visually-hidden">: not allowed</span></span></li>)}
+        </ul>
+        {link && <button ref={disconnectTrigger} className="access-leave" onClick={() => askDisconnect(disconnectTrigger.current)}><Icon name="unlink" size={14} />Use this machine's access instead</button>}
+      </div>
     </section>
     </>}
   </>;

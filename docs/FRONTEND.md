@@ -121,7 +121,11 @@ workspace — and keeps only the current place below 768 CSS px. The project sid
 starts with All projects and the project (its menu switches to another open project),
 then Overview, Studio, and Agent (Working or Needs you while a turn runs), then
 Sources. Project settings, Plugins and Connection & access sit together at its foot;
-the last opens the connection, this tab's access and a document's Changes. The sidebar and optional
+the last opens a drawer: the focused document's Changes, then the connection (its state,
+when it was last read, Refresh or Reconnect, and why the service did not answer) and this
+tab (this machine or a link, its folder and expiry, what it can and cannot do, and for a
+link the way back to this machine's access), each as a card
+([episode](AGENT-PANEL-EPISODE.md#connection--access)). The sidebar and optional
 inspector adapt to available space. Narrow screens show one workspace view at a time.
 Closing a panel does not cancel work.
 

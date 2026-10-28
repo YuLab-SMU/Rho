@@ -189,6 +189,40 @@ Changed (`src/agent-connect.ts`, `src/server.ts`, `src/protocol.ts`, `src/state.
 | Again, after the copy's service started on a new port | Add again, Codex refused | The kept connection named the previous port, so Add again repaired nothing; the refused Codex was left as "Access only" | Kept only while it reaches this service; a refused new grant is removed |
 | Both widths again, and `work/layout-20261028/look.mjs` | The tab; Connection & access | The steps follow the state; the drawer shows the connection and this tab; no overflow or page errors | — |
 
+## Connection & access
+
+The user asked for Connection & access to be designed as well.
+
+Observed (`work/access-20261028/look.mjs` on the same copy: this machine's tab, a
+document in Studio, a tab from a link, the service stopped; 1440 and 390 px):
+
+- Each part was a heading over sentences. "Can" was one sentence of four abilities in
+  a narrow column beside its label; a link's scope was the full temporary path.
+- Offline, the drawer's dot was grey, not amber like the topbar's, and it showed the
+  browser's "Failed to fetch".
+- A link's "Use this machine's access instead" was red text centred under the list.
+- A document's Changes (the Documents plugin's section) sat 12 px further in than the
+  rest, in its own colours.
+
+Changed (`web/main.tsx`, `web/access.css`, `web/icons.tsx`, `web/theme.css`):
+
+- **Connection** is a card that leads with its state and action: Up to date ("Changes
+  show as Rho records them") and Refresh, Connecting, or Can't reach Rho since a time
+  and Reconnect, in amber. Below, when it was last read and that reading never starts
+  work; offline, the reason, with a request that never reached the service named as
+  "Rho did not answer at this address" here and in the other messages that quote it.
+- **This tab** is a card for this machine or a link: how it was opened or when the link
+  expires, its folder (a link's folder by name, its path on hover), what it can do with
+  a check each and, for a narrower link, what it cannot, then the link's way back as a
+  button.
+- The focused view's section lines up with the cards and takes the application's
+  colours through the custom properties the Documents plugin reads.
+
+| Run | What was looked at | Observed | Change |
+| --- | --- | --- | --- |
+| `look.mjs` at 1440 and 390 px | The four states after the change | A link's folder still showed its full path | The folder's name, with the path on hover |
+| Both widths again | The same | Cards in each state; no overflow or page errors | — |
+
 ## Checks
 
 Run serially on 2026-10-28 (`work/chat-panel-20261028/final/`):
@@ -231,6 +265,9 @@ Run serially on 2026-10-28 (`work/chat-panel-20261028/final/`):
   `objects` 5/5, `actions` 6/6, and shell, person and plugin UI. `pages` looked for the
   Agents list in Connection & access; it now finds the session under Outside Rho and
   passed, with no overflow at four widths.
+- After Connection & access became cards, the whole batch passed again (Rho 218/218,
+  Plugins 92/92, `agent-page` 7/7 and the rest as above), including `pages` on the
+  drawer at four widths and `continuity` going offline and back.
 
 ## Limits
 
@@ -259,4 +296,7 @@ Run serially on 2026-10-28 (`work/chat-panel-20261028/final/`):
 - With no project Host running, Host activity reads "Observation disconnected" (the
   Agent plugin's wording). `acceptance:agent-activity`, which now opens it from Outside
   Rho, drives real Claude Code and dsh and was not rerun.
+- A document's Changes are the Documents plugin's: they do not name the document, give
+  times as "10:29 PM" where Rho uses 24 hours, and set their heading smaller than the
+  cards'.
 - No person other than the builder has used the window.
