@@ -65,7 +65,8 @@ Graph, so the sidebar shows none. The questions this pass answered:
   a file do not.
 - **Sources pages.** Each kind lists its files across the project and its source
   folders, with a filter. A CSV or image opens in its table or media view, text in
-  the editor, a registered result as its exact version.
+  the editor, a registered result as its exact version. (A later pass shows them in
+  place instead; see [Browsing Sources from the sidebar](#browsing-sources-from-the-sidebar).)
 - **Studio.** Workspaces are tabs at the top of Studio with their view counts. The
   Agent canvas is the workspace `agent-canvas`, shown as "Agent canvas".
 - **Following.** Sending a message from the Agent panel opens the Agent canvas and
@@ -158,3 +159,83 @@ me. They do not show that another person can follow a fast Agent on the canvas.
   note on the canvas instead of opening.
 - The canvas shows files. It does not yet explain a change in the Agent's words
   next to it, show command output, or let the person answer on the view itself.
+
+## Browsing Sources from the sidebar
+
+### Question
+
+The user opened Results & figures in their `test` project (six PNGs in
+`ggplot2-demo/out`) and found a page used as the directory awkward: moving from one
+figure to the next meant going back to the list. They asked for the sidebar to
+browse each kind's files directly.
+
+Before this pass, choosing a file on a Sources page placed it as a new tab in the
+`workspace` layout and opened Studio. The next figure needed the list again, and
+every figure seen stayed behind as a tab.
+
+### Changed
+
+Rho only (`web/project.tsx`, `web/preview.tsx`, `web/sources.ts`, `web/canvas.ts`,
+`web/overview.tsx`, `web/main.tsx`, `web/theme.css`):
+
+- **Sidebar.** A Sources row unfolds into its files and folds again. With more than
+  one folder, files sit under folder labels: the project's top level first, then by
+  folder and name. Long names take two lines. The sidebar holds 40 files per kind;
+  "All N files" opens the kind's page, which keeps its filter. Unfolded kinds are
+  remembered per project for the tab, and the kind of the file on screen stays open.
+- **In place.** Choosing a file shows it in the main area in its owner's view,
+  without writing a layout. The view's own controls stay with it (Fit/100% for a
+  figure, Save and Highlight changes for text). Above it: name, folder, size,
+  "3 of 6" (to the kind's page), previous/next and Open in Studio.
+- **Moving.** ← and → switch files unless focus is in a field, a menu or tab list,
+  or inside the view, so a table cell or the editor keeps its keys. ↑ and ↓ in the
+  sidebar list move and show. Until the next file resolves, the last one stays
+  dimmed instead of blanking.
+- Each showing reads the file as it is now. A CSV or image becomes a Files snapshot
+  of its current bytes; snapshots are content-addressed, so unchanged bytes give the
+  same one. Text opens the project's one buffer of that document.
+- The kind's page lists the same files in the same order and shows the chosen one in
+  place. A result with several versions is listed as the one its latest run made.
+
+### Runs
+
+Script and evidence: `work/sidebar-browse-20261027/` (ignored by Git): `browse.mjs`
+on a disposable copy of the user's `ggplot2-demo`, `mixed.mjs` on a project with
+data, scripts in two folders and figures in two output folders. Chrome 1440 × 900,
+1024, 768 and 390 × 844.
+
+| Run | What happened | Cause | Change |
+| --- | --- | --- | --- |
+| `first` | All six listed; the first figure showed in 0.45 s, each next one with → in about 65 ms, one seen before in 38 ms. Open in Studio placed one tab. "02-explore-temperatur…" and "04-model-diagnostics.…" were cut where they differ; at 390 px the header took three rows. | One-line names in a 240 px sidebar; the Studio button's label. | Names wrap to two lines; below 768 px the Studio button shows its icon and keeps its name. |
+| `second` | Full names; a two-row header at 390. The one 404 was `composition.read` of `workspace` before it existed, which opening expects. Files were cached by path and size. | A rewrite of the same size would show the older snapshot; the cache saved about 30 ms. | Each showing captures the current bytes. |
+| `third` | Without the cache each next figure took about 65 ms and one seen before 57 ms. | — | — |
+| `mixed` | The table and editor showed; → in a grid cell and in the editor stayed there. Code listed `scripts/plot.R` before the project's own `analysis.R`. | Folders sorted by display name, the top level under the project's name. | The top level comes first. |
+
+### Checks
+
+- `npm run acceptance:sources` (new) passed 7 checks without a model:
+  - kinds unfold, top level first;
+  - a file shows in place with its folder, size and place, and no layout is written;
+  - ←/→, the buttons and ↑/↓ in the sidebar move, and the shown file is marked;
+  - a CSV shows in its table and a script in the editor, and arrow keys inside them
+    stay there;
+  - Open in Studio places the file;
+  - unfolded kinds survive a reload;
+  - a file chosen from the 390 px drawer shows, with no overflow at 1024/390 and no
+    page errors.
+- `acceptance:agent-canvas` now finds the file in the unfolded Data list instead of
+  on the Data page.
+
+These show that the paths work and that the screens read as intended to me, not
+that another person finds browsing faster.
+
+### Limits
+
+- The lists come from the bounded walk. A new or removed file shows after the next
+  walk, which runs when the project's records change or on Refresh.
+- Each figure or CSV shown is kept as a Files snapshot in the project's state, as
+  opening from the list was before. Neighbours are not fetched ahead; each showing
+  costs one capture, about 65 ms for these figures.
+- There are no swipe gestures; on a touch screen the buttons move.
+- The Tables toolbar touches the view's left edge here and in Studio; that spacing
+  belongs to the Tables owner.

@@ -4,12 +4,12 @@ Updated: 2026-10-27.
 
 ## Current focus
 
-On 2026-10-27 the user found working with the Agent inside a project poor: the
-sidebar held almost nothing and the main area stayed still while the Agent worked.
-They supplied a reference screen. The project sidebar now names its places and counts
-its Sources, and the [Agent canvas](#project-sidebar-and-agent-canvas) opens the files
-the Agent reads and changes as it works. Documents 0.4.3 and Agent 0.4.12 carry the
-two owner repairs this needed; [the record](AGENT-CANVAS-EPISODE.md) keeps the runs.
+On 2026-10-27 the user found the project sidebar nearly empty and the main area
+still while the Agent worked. The sidebar now names its places and counts its Sources,
+the [Agent canvas](#project-sidebar-and-agent-canvas) opens the files the Agent reads
+and changes, and each Sources kind unfolds so a file shows in place and ←/→ move
+through the kind. Documents 0.4.3 and Agent 0.4.12 carry the owner repairs;
+[the record](AGENT-CANVAS-EPISODE.md) keeps the runs.
 
 Agent 0.4.11 adds each tool step's human title, ACP category and identifying input
 to the Claude/Codex ACP connections accepted at 0.4.10. Both Agents passed eight
@@ -22,12 +22,10 @@ distinguishes turn cancellation, native jobs and explicit external relay attachm
 The Agent panel's streamed text, action rows, plan and permission treatment are in
 [Agent panel live activity](AGENT-UI-EPISODE.md).
 
-The user asked for an optimization of the home, projects and empty-project screens
-on 2026-10-27, supplying three reference screens for layout weight and hierarchy.
-That pass is recorded in the [home and project episode](HOME-PROJECT-EPISODE.md) and
-summarized in [Home, projects and empty project](#home-projects-and-empty-project).
-The user's earlier clarification still stands: current implementation is not the
-design target. The [from-scratch product design brief](design/2026-10-26/index.html)
+The 2026-10-27 home, projects and empty-project pass is in the
+[home and project episode](HOME-PROJECT-EPISODE.md) and
+[its summary](#home-projects-and-empty-project). Current implementation is still not
+the design target. The [from-scratch product design brief](design/2026-10-26/index.html)
 still describes the larger product: separate application and project navigation,
 Studio, panoramic Graph, a dynamic Agent experience, a dedicated conversation
 component and a shared plugin design standard. Implementation records below remain
@@ -56,7 +54,9 @@ Git retains them at `24d9998b`; they are not requirements or reference designs.
 - The sidebar shows All projects, the project and a menu to switch, then Overview,
   Studio with its workspaces, Agent (Working or Needs you), Activity with its run
   count, and Sources: Data, Code, Results & figures and Notes from one bounded walk
-  (48 folders, 5 levels, 4000 files; partial counts say so), then Files.
+  (48 folders, 5 levels, 4000 files; partial counts say so), then Files. Each kind
+  unfolds into its files by folder; one chosen shows in place with no layout written,
+  ←/→ and ↑/↓ move through the kind, Open in Studio places it.
 - Sending from the Agent panel opens the Agent canvas and follows the turn: files the
   steps name, files a finished command names and outputs that appear on disk open
   once, code left and data/figures right; the tab of the last named file carries the
@@ -65,10 +65,10 @@ Git retains them at `24d9998b`; they are not requirements or reference designs.
   0.4.12 captures one named file without scanning its folder, digest optional.
 
 Evidence: Rho 202/202 (serial) and Plugins 90/90 ([ledger](VERIFICATION.json));
-the new `acceptance:agent-canvas` 8/8 with a controlled peer; `acceptance:frontend`
+`acceptance:agent-canvas` 8/8 (controlled peer), `acceptance:sources` 7/7, `frontend`
 11/11, `agent-ui` 7/7, pages, shell, person, objects, actions, continuity and plugin
-UI passed. Four real Westlake HPC Claude turns found and fixed five defects. This
-shows the paths work, not that a person can follow a fast Agent there.
+UI passed. Four real Westlake HPC Claude turns found and fixed five defects. This shows
+the paths work, not that a person can follow a fast Agent or browse faster there.
 
 ## Home, projects and empty project
 

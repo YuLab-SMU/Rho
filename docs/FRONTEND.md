@@ -24,9 +24,15 @@ inspect what happened. The application gives those actions direct places:
   work with the Agent or browse its files — rather than empty sections, leading with
   whichever one the project's listing says has something behind it.
 - **Sources** counts the project's Data, Code, Results & figures and Notes from one
-  bounded walk of its folders, by file name, and lists each kind across the project
-  and its source folders. A CSV or image opens in its table or media view, text in
-  the editor, a registered result as its exact version. `+` adds a source folder.
+  bounded walk of its folders, by file name. Each kind unfolds in the sidebar into
+  its files across the project and its source folders: the top level first, then by
+  folder, at most 40 there with the rest on the kind's page. Choosing one shows it
+  in place in its own view, without writing a layout: a CSV or image as a snapshot
+  of its current bytes in the table or media view, text in the editor, a registered
+  result as its exact version. ← and → or the buttons beside "3 of 6" move through
+  the kind, ↑ and ↓ move in the sidebar, and Open in Studio places the file in the
+  workspace ([pass](AGENT-CANVAS-EPISODE.md#browsing-sources-from-the-sidebar)).
+  `+` adds a source folder.
 - **Files** opens documents, browses the project's folder and the source folders it
   works in, and filters the current folder. A source folder is named as the person
   named it and opens one level at a time, the same way any other folder does.
@@ -86,10 +92,11 @@ registered owner views. `web/agents.tsx` handles the explicit external-Agent han
 from `src/conversation-presentation.ts` (text, action lines, folded runs, plan entry),
 and Agent prose is rendered by `src/agent-markdown.ts` with `web/markdown.tsx`.
 `web/project.tsx` draws the project sidebar; `web/sources.ts` walks the project folders
-within its limits and names each file's kind. `web/agent-now.ts` reads the running
+within its limits, names each file's kind and orders each kind's files for the sidebar,
+its page and `web/preview.tsx`, which shows one file in place. `web/agent-now.ts` reads the running
 turn's record (`conversation.read`, last turn) and maps its steps to project paths;
-`web/canvas.ts` places a file's owner view in a workspace with one conditional
-`composition.apply`, through `document.open` for text and `agent.activity.capture`
+`web/canvas.ts` resolves a file's owner view (`viewFor`) and places it in a workspace
+with one conditional `composition.apply`, through `document.open` for text and `agent.activity.capture`
 for a CSV or image. Following is a tab-local choice; the canvas layout is saved.
 `web/work-progress.tsx` reads `project.work.read` for the local person's project
 Overview: Agent-reported plans/usage, retained native source identities and current
@@ -158,6 +165,13 @@ that Start opens the following Agent canvas, the table, editor and media views i
 opens with the Agent's place on their tabs, the edited text on disk, the saved
 canvas, that choosing another view stops following until Follow, and overflow at
 1024/390. Evidence goes to `work/agent-canvas-acceptance/` by default.
+
+`npm run acceptance:sources` browses a project of data, scripts in two folders and
+figures in two output folders from the sidebar, without a model. It checks the
+unfolded lists and their order, a file shown in place with no layout written, ←/→,
+the buttons and ↑/↓, the table and editor keeping their own arrow keys, Open in
+Studio, unfolded kinds after a reload, and the 390 px drawer. Evidence goes to
+`work/sources-acceptance/` by default.
 
 `npm run acceptance:agent-ui` drives a controlled ACP peer through the real service
 and Chrome; it uses no model credentials. It checks that reply text arrives in more

@@ -101,6 +101,7 @@
     "acceptance:base-r": "node scripts/base-r-episode.mjs",
     "acceptance:frontend": "node scripts/frontend-acceptance.mjs",
     "acceptance:agent-canvas": "node scripts/agent-canvas-acceptance.mjs",
+    "acceptance:sources": "node scripts/sources-acceptance.mjs",
     "ui:create": "node scripts/ui-plugin.mjs create",
     "ui:dev": "node scripts/ui-plugin.mjs dev",
     "acceptance:plugin-dx": "node scripts/plugin-dx-acceptance.mjs",

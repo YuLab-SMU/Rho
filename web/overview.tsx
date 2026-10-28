@@ -4,9 +4,9 @@ import { executionWord, integrityWord, results, shortPath, type RunFacts } from 
 import { useRuns } from './executions.js';
 import { projectName, place, SourceFolders, when } from './home.js';
 import { Icon, type IconName } from './icons.js';
-import { availability, resourceIcon, size, type Entry, type Section, type SourceRow } from './project.js';
-import { compositionName, openInWorkspace } from './canvas.js';
-import { walkLimits, type ProjectFile, type ProjectFiles } from './sources.js';
+import { availability, fileIcon, resourceIcon, size, sourceLabels, type Entry, type Section, type SourceRow } from './project.js';
+import { compositionName } from './canvas.js';
+import { walkLimits, type ProjectFiles, type SourceItem } from './sources.js';
 import { RunView } from './shell/facts.js';
 import { AgentActivity } from './agent-activity.js';
 import { WorkProgress } from './work-progress.js';
@@ -21,9 +21,9 @@ interface Props {
   project: ProjectSummary; snapshot: WorkspaceSnapshot; client: BrowserClient; section: Section;
   onSection: (section: Section) => void; onAgent: (conversationId?: string) => void;
   onLayout: (id: string, view?: string) => void; onProjectChanged: (project: ProjectSummary) => void; onOpened: (id: string, view?: string) => void;
-  category?: SourceRow; files?: ProjectFiles;
+  category?: SourceRow; files?: ProjectFiles; sources?: Record<SourceRow, SourceItem[]> | null; onFile?: (row: SourceRow, item: SourceItem) => void;
 }
-export function ProjectOverview({ project, snapshot, client, section, onSection, onAgent, onLayout, onProjectChanged, onOpened, category, files }: Props) {
+export function ProjectOverview({ project, snapshot, client, section, onSection, onAgent, onLayout, onProjectChanged, onOpened, category, files, sources, onFile }: Props) {
   const { runs, problem: runsProblem, readAgain } = useRuns(client, project.id, snapshot.cursor);
   const [inspecting, setInspecting] = useState<string | null>(null);
   const [folder, setFolder] = useState<{ entries: Entry[]; total: number; truncated: boolean; path: string } | null>(null);
@@ -116,19 +116,8 @@ export function ProjectOverview({ project, snapshot, client, section, onSection,
     return <li key={resource.id + resource.version}>{spot ? <button className="result-row" onClick={() => onLayout(spot.compositionId, spot.viewId)}>{content}</button> : <div className="result-row">{content}<small>No open view</small></div>}</li>;
   })}</ul>;
   const visible = folder?.entries.filter(e => !query || e.name.toLocaleLowerCase().includes(query.toLocaleLowerCase())) ?? [];
-  const sourceTitle = { data: 'Data', code: 'Code', results: 'Results & figures', notes: 'Notes' }[category ?? 'data'];
+  const sourceTitle = sourceLabels[category ?? 'data'];
   const title = isFiles ? 'Files' : section === 'activity' ? 'Activity' : section === 'settings' ? 'Project settings' : section === 'sources' ? sourceTitle : projectName(project);
-  // A source file opens in the person's own workspace, in the view its kind has.
-  async function openSource(target: Parameters<typeof openInWorkspace>[3], key: string) {
-    if (opening) return;
-    setOpening(key); setFileError('');
-    try {
-      const placed = await openInWorkspace(client, snapshot, 'workspace', target);
-      if (placed) onOpened(placed.compositionId, placed.viewId);
-      else setFileError('Rho has no viewer for this kind of file yet. It stays in the project folder.');
-    } catch (e) { setFileError(e instanceof Error ? e.message : 'Could not open this file. Try again.'); }
-    finally { setOpening(''); }
-  }
   return <section className={'project-page overview' + (isFiles ? ' files-page' : '')} aria-labelledby="overview-title">
     <header className="page-heading">
       <div><h1 id="overview-title">{title}</h1>{section === 'overview' && <p title={where.full}>{where.text}</p>}</div>
@@ -136,8 +125,7 @@ export function ProjectOverview({ project, snapshot, client, section, onSection,
       {isFiles && <button onClick={() => void listFolder(folder?.path)} disabled={reading}><Icon name="refresh" size={15} />Refresh</button>}
       {section === 'sources' && files && <button onClick={files.refresh} disabled={files.reading}><Icon name="refresh" size={15} />Refresh</button>}
     </header>
-    {section === 'sources' && files && <SourceList category={category ?? 'data'} files={files} project={project} artifacts={artifacts} opening={opening} problem={fileError}
-      onOpen={(target, key) => void openSource(target, key)} onShown={(compositionId, viewId) => onLayout(compositionId, viewId)} places={places} />}
+    {section === 'sources' && files && onFile && <SourceList category={category ?? 'data'} files={files} items={sources?.[category ?? 'data'] ?? null} artifacts={artifacts} onFile={onFile} />}
     {section === 'overview' && snapshot.catalog.operations.some(o => o.method === 'project.work.read' && o.authorized) && <WorkProgress client={client} snapshot={snapshot} openFile={p => void open({ path: p })} openConversation={onAgent} openActivity={() => onSection('activity')} onPresence={setHasWork} />}
     {section === 'overview' && fileError && <p role="alert">{fileError}</p>}
     {emptyProject && <div className="empty-project">
@@ -179,47 +167,30 @@ export function ProjectOverview({ project, snapshot, client, section, onSection,
   </section>;
 }
 
-const sourceIcon: Record<SourceRow, IconName> = { data: 'table', code: 'code', results: 'chart', notes: 'document' };
 const sourceEmpty: Record<SourceRow, string> = { data: 'No data files in this project yet.', code: 'No scripts in this project yet.', results: 'No results or figures yet.', notes: 'No notes in this project yet.' };
-function folderOf(path: string, project: ProjectSummary) {
-  const parts = path.split('/'); parts.pop();
-  if (!parts.length) return projectName(project);
-  const source = parts[0].startsWith('@') ? project.sources?.find(entry => '@' + entry.id === parts[0]) : undefined;
-  return [source ? source.name : parts[0], ...parts.slice(1)].join('/');
-}
-// One kind of project file, wherever it sits. A registered result opens as its exact
-// version; any other file opens as what is in the folder now.
-function SourceList({ category, files, project, artifacts, places, opening, problem, onOpen, onShown }: {
-  category: SourceRow; files: ProjectFiles; project: ProjectSummary; artifacts: ReturnType<typeof results>; places: Map<string, { compositionId: string; viewId: string }>;
-  opening: string; problem: string; onOpen: (target: Parameters<typeof openInWorkspace>[3], key: string) => void; onShown: (compositionId: string, viewId: string) => void;
+// One kind of project file, wherever it sits, in the order the sidebar lists them. Choosing
+// one shows it in place; a registered result is shown as its exact version.
+function SourceList({ category, files, items, artifacts, onFile }: {
+  category: SourceRow; files: ProjectFiles; items: SourceItem[] | null; artifacts: ReturnType<typeof results>; onFile: (row: SourceRow, item: SourceItem) => void;
 }) {
   const [query, setQuery] = useState('');
-  const registered = category === 'results' ? artifacts : [];
-  const known = new Set(registered.map(r => r.resource.path));
-  const listed: ProjectFile[] = files.files.filter(f => (category === 'results' ? f.category === 'figures' || f.category === 'results' : f.category === category) && !known.has(f.path));
-  const match = (text: string) => !query || text.toLocaleLowerCase().includes(query.toLocaleLowerCase());
-  const shownResults = registered.filter(r => match(r.resource.path)), shownFiles = listed.filter(f => match(f.path));
-  const total = registered.length + listed.length;
+  const made = new Map(artifacts.map(row => [row.resource.id + '@' + row.resource.version, row]));
+  const all = items ?? [], total = all.length;
+  const shown = all.filter(item => !query || item.path.toLocaleLowerCase().includes(query.toLocaleLowerCase()));
   return <section className="project-section source-list" aria-label={category}>
     <div className="file-toolbar"><p className="source-summary">{files.readAt === 0 && files.reading ? 'Reading the project folders…' : `${total}${files.truncated ? '+' : ''} ${total === 1 ? 'file' : 'files'}`}{files.truncated && <span title={`Rho reads at most ${walkLimits.maxFolders} folders, ${walkLimits.maxDepth} levels deep.`}> · deeper folders were not read</span>}</p>
       <div className="search-field"><Icon name="search" size={17} stroke={1.7} /><input aria-label="Filter these files" placeholder="Filter…" value={query} onChange={e => setQuery(e.target.value)} /></div></div>
     {files.problem && <div className="inline-error" role="alert"><p>{files.problem}</p><button onClick={files.refresh}>Try again</button></div>}
-    {problem && <p className="inline-error" role="alert">{problem}</p>}
     {total === 0 && files.readAt > 0 ? <div className="empty-state compact"><p>{sourceEmpty[category]}</p></div>
-      : (shownResults.length > 0 || shownFiles.length > 0) ? <ul className="source-rows">
-        {shownResults.map(({ resource, run }) => {
-          const spot = places.get(resource.id + '@' + resource.version), key = resource.id + resource.version;
-          return <li key={key}><button className="source-row" disabled={!!opening} onClick={() => spot ? onShown(spot.compositionId, spot.viewId) : onOpen({ id: resource.id, version: resource.version, kind: resource.kind, path: resource.path }, key)}>
-            <span className="file-symbol"><Icon name={resourceIcon(resource.kind)} size={18} stroke={1.6} /></span>
-            <span className="source-name"><strong>{resource.path.split('/').at(-1)}</strong><small>{folderOf(resource.path, project)}{run ? ' · from ' + run.operationId : ''}</small></span>
-            <span className="source-meta">{opening === key ? 'Opening…' : run ? integrityWord(run.integrity) : 'Result'}</span>
+      : shown.length > 0 ? <ul className="source-rows">
+        {shown.map(item => {
+          const result = item.resource ? made.get(item.resource.id + '@' + item.resource.version) : undefined;
+          return <li key={item.key}><button className="source-row" onClick={() => onFile(category, item)}>
+            <span className="file-symbol"><Icon name={fileIcon(item)} size={18} stroke={1.6} /></span>
+            <span className="source-name"><strong>{item.name}</strong><small>{item.folder}{result?.run ? ' · from ' + result.run.operationId : ''}</small></span>
+            <span className="source-meta">{item.resource ? (result?.run ? integrityWord(result.run.integrity) : 'Result') : item.bytes !== null ? size(item.bytes) : ''}</span>
           </button></li>;
         })}
-        {shownFiles.map(file => <li key={file.path}><button className="source-row" disabled={!!opening} onClick={() => onOpen(file.path, file.path)}>
-          <span className="file-symbol"><Icon name={file.category === 'figures' ? 'image' : file.category === 'results' ? 'table' : sourceIcon[category]} size={18} stroke={1.6} /></span>
-          <span className="source-name"><strong>{file.name}</strong><small>{folderOf(file.path, project)}</small></span>
-          <span className="source-meta">{opening === file.path ? 'Opening…' : size(file.bytes)}</span>
-        </button></li>)}
       </ul> : total > 0 ? <div className="empty-state compact"><p>No files match your filter.</p><button onClick={() => setQuery('')}>Clear filter</button></div> : null}
   </section>;
 }

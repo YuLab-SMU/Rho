@@ -142,6 +142,20 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .nav-heading .section-label { padding-bottom: 0; }
 .nav-add { min-height: 26px; width: 26px; padding: 0; border: 0; background: transparent; color: var(--color-meta); }
 .nav-sources .nav-group { margin-top: 6px; }
+.nav-twisty { display: flex; flex: none; color: var(--color-meta); transition: transform .15s; }
+.nav-row[aria-expanded=true] .nav-twisty { transform: rotate(90deg); }
+/* A kind's files, by folder. The list scrolls on its own so the other kinds stay in reach. */
+.nav-files { list-style: none; margin: 1px 0 6px 18px; padding: 0 0 0 8px; border-left: 1px solid var(--color-hairline); max-height: min(52vh, 440px); overflow-y: auto; scrollbar-width: thin; }
+.nav-folder { display: block; padding: 7px 8px 2px; color: var(--color-meta); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nav-file { display: flex; width: 100%; min-height: 29px; justify-content: flex-start; gap: 7px; padding: 4px 8px; border: 0; border-radius: 6px; background: transparent; color: var(--color-muted); font-size: 12.5px; font-weight: 400; text-align: left; }
+/* Names often differ at their ends (02-explore-temperature, 02-explore-temperature-log), so a long one takes a second line. */
+.nav-file > span { min-width: 0; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; line-height: 1.35; }
+.nav-file > svg { flex: none; align-self: flex-start; margin-top: 2px; color: var(--color-meta); }
+.nav-file:hover:not([aria-current=page]) { background: var(--color-hover); }
+.nav-file[aria-current=page] { background: var(--color-surface); color: var(--color-ink); font-weight: 600; box-shadow: 0 0 0 1px var(--color-hairline); }
+.nav-file[aria-current=page] > svg { color: var(--color-accent); }
+.nav-files-note { margin: 0 0 6px 26px; padding: 3px 8px; color: var(--color-meta); font-size: 12px; }
+.nav-more { min-height: 28px; margin: 2px 0 2px; padding: 3px 8px; border: 0; background: transparent; color: var(--color-accent-strong); font-size: 12px; font-weight: 500; }
 .pulse-dot { display: inline-block; flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--color-verified); box-shadow: 0 0 0 0 #32836166; animation: pulse 1.6s ease-out infinite; }
 .pulse-dot.large { width: 12px; height: 12px; }
 @keyframes pulse { 70% { box-shadow: 0 0 0 6px #32836100; } 100% { box-shadow: 0 0 0 0 #32836100; } }
@@ -179,6 +193,24 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .source-name small { color: var(--color-meta); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .source-meta { flex: none; color: var(--color-meta); font-size: 12px; }
 .source-list .file-toolbar { margin-bottom: 12px; }
+/* One project file shown in place, with the way to the next and previous of its kind. */
+.file-preview { display: flex; flex-direction: column; flex: 1; min-height: 0; background: var(--color-canvas); }
+.preview-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 8px 14px; min-height: 56px; border-bottom: 1px solid var(--color-hairline); background: var(--color-surface); }
+.preview-name { display: flex; flex-direction: column; flex: 1 1 160px; min-width: 0; line-height: 1.3; }
+.preview-name h1 { font-size: 15px; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.preview-name small { color: var(--color-meta); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.preview-owner-header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.preview-owner-header:empty { display: none; }
+.preview-nav { display: flex; align-items: center; gap: 2px; padding: 2px; border: 1px solid var(--color-hairline); border-radius: 9px; }
+.preview-nav .icon-button { width: 30px; height: 30px; min-height: 30px; }
+.preview-nav .icon-button:disabled { opacity: .35; }
+.preview-position { min-height: 30px; padding: 2px 8px; border: 0; background: transparent; color: var(--color-muted); font-size: 12.5px; font-weight: 500; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.preview-studio { min-height: 34px; padding: 4px 12px; font-size: 12.5px; gap: 7px; }
+@media (max-width: 767px) { .preview-bar { padding: 8px 12px; } .preview-studio { width: 34px; padding: 0; } .preview-studio > span { display: none; } }
+.preview-body { display: flex; flex-direction: column; flex: 1; min-height: 0; margin: 12px; overflow: hidden; background: white; border: 1px solid var(--color-hairline); border-radius: 8px; }
+.preview-body > * { transition: opacity .12s; }
+.preview-body.switching > * { opacity: .5; }
+.preview-body > .studio-empty, .preview-body > .loading-state { flex: 1; }
 .project-heading { padding: 12px 10px; display: flex; flex-direction: column; gap: 5px; }
 .project-heading > span { font-size: 12px; color: var(--color-meta); }
 .app-content { display: flex; flex-direction: column; flex: 1; min-width: 0; }

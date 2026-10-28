@@ -4,8 +4,8 @@ import { BrowserClient, type BrowserConnection, type ProjectSummary, type Worksp
 import { Home, projectHue, projectName as name, trapTab } from './home.js';
 import { AgentAccess, AgentRequest } from './agents.js';
 import { AgentConversation } from './conversation.js';
-import { ProjectNavigation, type Section, type SourceRow } from './project.js';
-import { capturable, useProjectFiles } from './sources.js';
+import { ProjectNavigation, sourceLabels, type Section, type SourceRow } from './project.js';
+import { capturable, sourceItems, useProjectFiles, type SourceItem } from './sources.js';
 import { useAgentNow, type AgentNow } from './agent-now.js';
 import { canvasId, compositionName, fileKey, openInWorkspace } from './canvas.js';
 import { Icon } from './icons.js';
@@ -18,6 +18,7 @@ import './plugins.css';
 
 const Workspace = lazy(() => import('./shell/workspace.js').then(module => ({ default: module.Workspace })));
 const ProjectOverview = lazy(() => import('./overview.js').then(module => ({ default: module.ProjectOverview })));
+const FilePreview = lazy(() => import('./preview.js').then(module => ({ default: module.FilePreview })));
 
 const sessionKey = 'rho.browser.session.v1', projectKey = 'rho.browser.project.v1';
 // Opening this page on this machine is the access: the service answers a same-origin request as
@@ -68,6 +69,8 @@ function App() {
   const [context, setContext] = useState(false), [navigation, setNavigation] = useState(true);
   const [feedbackContext, setFeedbackContext] = useState(false);
   const [category, setCategory] = useState<SourceRow>('data'), [addingSource, setAddingSource] = useState(false);
+  // The file shown in place from Sources, by its kind and its key in that kind's list.
+  const [shownFile, setShownFile] = useState<{ row: SourceRow; key: string } | null>(null);
   // Following: the Agent canvas opens what the Agent reads and changes, and brings it forward.
   // It starts when the person sends a message here or asks to follow, and stops when they go
   // somewhere else themselves.
@@ -191,6 +194,7 @@ function App() {
   function showOverview() { setFollowing(false); setSection('overview'); if (project) sessionStorage.removeItem('rho.layout.v1:' + connection?.principalId + ':' + project.id); setOverview(true); setScreen('project'); }
   function showSection(next: Section) { showOverview(); setScreen('project'); setSection(next); }
   function showSources(next: SourceRow) { setCategory(next); showSection('sources'); }
+  function showFile(row: SourceRow, item: SourceItem) { setShownFile({ row, key: item.key }); setCategory(row); showSection('file'); }
   // Studio opens the workspace last open here, the Agent canvas, or the first one.
   function studio() {
     const kept = project ? sessionStorage.getItem('rho.layout.v1:' + connection?.principalId + ':' + project.id) : null;
@@ -322,12 +326,11 @@ function App() {
     </section>
     </>}
   </>;
-  // Counts by kind of file, from the last walk; results also count registered results.
-  const counts = files.readAt ? {
-    data: files.files.filter(f => f.category === 'data').length, code: files.files.filter(f => f.category === 'code').length, notes: files.files.filter(f => f.category === 'notes').length,
-    results: new Set([...files.files.filter(f => f.category === 'figures' || f.category === 'results').map(f => f.path), ...(snapshot?.resources ?? []).filter(r => (r.provenance as { source?: string } | undefined)?.source !== 'current-filesystem-observation').map(r => r.path)]).size,
-  } : null;
-  const here = screen === 'plugins' ? 'plugins' : screen !== 'project' ? '' : studioOpen ? 'studio:' + (composition?.compositionId ?? compositionId) : section === 'sources' ? 'sources:' + category : section === 'documents' ? 'files' : section;
+  // Each kind's files, from the last walk; results also list registered results.
+  const sources = useMemo(() => project && files.readAt ? Object.fromEntries((['data', 'code', 'results', 'notes'] as const).map(row => [row, sourceItems(row, files.files, snapshot?.resources ?? [], project, snapshot?.operations)])) as Record<SourceRow, SourceItem[]> : null,
+    [files.files, files.readAt, snapshot?.resources, snapshot?.operations, project?.id, project?.root, project?.sources]);
+  const fileOnScreen = section === 'file' && shownFile ? sources?.[shownFile.row].find(item => item.key === shownFile.key) : undefined;
+  const here = screen === 'plugins' ? 'plugins' : screen !== 'project' ? '' : studioOpen ? 'studio:' + (composition?.compositionId ?? compositionId) : section === 'sources' ? 'sources:' + category : section === 'file' && shownFile ? 'file:' + shownFile.row + ':' + shownFile.key : section === 'documents' ? 'files' : section;
   const initials = project ? name(project).split(/[\s_.-]+/).filter(Boolean).slice(0, 2).map(w => [...w][0]!.toUpperCase()).join('') || 'P' : '';
   const navigationContents = <>
     {project ? <>
@@ -340,10 +343,10 @@ function App() {
         </div>
       </details>
       {screen === 'plugins' ? <><button className="nav-row" onClick={pick(showOverview)}><Icon name="back" size={14} /><span>Back to project</span></button><PluginNavigation catalog={snapshot?.catalog} pluginId={pluginId} onSelect={id => pick(() => choosePlugin(id))()} /></>
-      : <ProjectNavigation project={project} snapshot={snapshot} current={here} counts={counts} partial={files.truncated} runs={snapshot ? snapshot.operations.length : null}
+      : <ProjectNavigation project={project} snapshot={snapshot} current={here} sources={sources} partial={files.truncated} runs={snapshot ? snapshot.operations.length : null}
           agent={{ running: !!agentNow?.running, waiting: !!agentNow?.waiting, conversations: snapshot?.conversations?.length ?? 0 }} agentOpen={agentOpen} adding={addingSource}
           onOverview={pick(showOverview)} onStudio={pick(studio)} onAgent={pick(() => { setAgentOpen(true); setContext(false); })} onLayout={id => pick(() => layout(id))()}
-          onSection={next => pick(() => showSection(next))()} onSources={next => pick(() => showSources(next))()} onAddSource={() => void addSource()} />}
+          onSection={next => pick(() => showSection(next))()} onSources={next => pick(() => showSources(next))()} onFile={(row, item) => pick(() => showFile(row, item))()} onAddSource={() => void addSource()} />}
     </> : <>
       <button className="brand" onClick={goHome} aria-label="Rho home"><span className="brand-mark">ρ</span><strong>Rho</strong></button>
       <button className="project-switcher" onClick={pick(goHome)}><Icon name="folder" size={18} /><span>Your projects</span><Icon name="chevron" size={13} /></button>
@@ -367,6 +370,7 @@ function App() {
   const crumbs: Array<{ label: string; run?: () => void }> = !project || screen === 'home' ? [{ label: 'Projects' }]
     : screen === 'plugins' ? [{ label: 'Projects', run: goHome }, { label: name(project), run: showOverview }, { label: pluginTitle || 'Plugins' }]
     : studioOpen ? [{ label: 'Projects', run: goHome }, { label: name(project), run: showOverview }, { label: compositionName(composition?.compositionId ?? compositionId) }]
+    : section === 'file' && shownFile ? [{ label: 'Projects', run: goHome }, { label: name(project), run: showOverview }, { label: sourceLabels[shownFile.row], run: () => showSources(shownFile.row) }, { label: fileOnScreen?.name ?? shownFile.key.split('/').at(-1)! }]
     : [{ label: 'Projects', run: goHome }, { label: name(project) }];
   const shownId = composition?.compositionId ?? compositionId;
   const studioList = [...(snapshot?.compositions ?? [])].sort((a, b) => Number(b.compositionId === canvasId) - Number(a.compositionId === canvasId));
@@ -397,7 +401,7 @@ function App() {
           </div>
         </header>
         <div className="content-row">
-          <main id="main" tabIndex={-1} className={studioOpen && snapshot ? 'main project-main workspace-main' : 'main'}>
+          <main id="main" tabIndex={-1} className={(studioOpen || (screen === 'project' && section === 'file')) && snapshot ? 'main project-main workspace-main' : 'main'}>
             {notice && <div className="offline-bar notice-bar" role="status"><Icon name="info" size={17} /><p>{notice}</p><button onClick={() => setNotice('')}>Dismiss</button></div>}
             {screen === 'project' && snapshot?.presentation?.pending && <div className="offline-bar" role="status"><p>New output is ready. Your current views are kept.</p><button onClick={() => showSection('files')}>Show files</button></div>}
             {(phase === 'offline' || reconnecting) && <div className="offline-bar" role="alert"><Icon name="offline" size={17} /><p>{reconnecting ? 'Reconnecting. ' : "Can't reach Rho. "}{seen}</p><button disabled={reconnecting} onClick={reread}>Reconnect</button></div>}
@@ -420,7 +424,11 @@ function App() {
                 {composition ? <Suspense fallback={<Loading text="Opening workspace…" />}><Workspace key={snapshot.project.id + composition.compositionId} composition={composition} snapshot={snapshot} client={client!} onAbout={about} contextTarget={context ? contextSlot : null} principalId={connection.principalId} feedbackContextActive={feedbackContext} onShowContext={() => { setFeedbackContext(true); setContext(true); setAgentOpen(false); }} openView={openView} onCommands={setLayoutCommands} agentTarget={agentOpen ? agentSlot : null} onShowAgent={() => setAgentOpen(true)}
                     presence={presence} onPersonMoved={() => setFollowing(false)} bar={composition.compositionId !== canvasId} following={following && composition.compositionId === canvasId} /></Suspense>
                   : <StudioEmpty root={project.root} agent={agentNow} canvas={shownId === canvasId} following={following} onAgent={() => { setAgentOpen(true); setContext(false); }} onFiles={() => showSources('data')} />}
-              </> : <Suspense fallback={<Loading text="Opening project…" />}><ProjectOverview key={project.id} section={section} category={category} files={files} onSection={showSection} onAgent={id => { if (id) setSelectedConversation(id); setAgentOpen(true); }} client={client!} onProjectChanged={next => { setProject(next); setProjects(list => list.map(p => p.id === next.id ? next : p)); }} project={project} snapshot={snapshot} onLayout={layout} onOpened={(id, view) => { layout(id, view); reread(); }} /></Suspense>}
+              </> : section === 'file' && shownFile ? (fileOnScreen ? <Suspense fallback={<Loading text="Opening file…" />}><FilePreview client={client!} snapshot={snapshot} item={fileOnScreen} items={sources![shownFile.row]} kind={sourceLabels[shownFile.row]} principalId={connection.principalId}
+                  onMove={item => showFile(shownFile.row, item)} onStudio={layout} onList={() => showSources(shownFile.row)} onAbout={about} /></Suspense>
+                : !sources ? <Loading text="Reading the project folders…" />
+                : <div className="studio-empty"><span className="empty-symbol"><Icon name="file" size={26} stroke={1.5} /></span><h2>This file is no longer in the project</h2><p>{shownFile.key.replace(/^\w+:/, '')} was not found when the folders were last read. It may have been moved or removed.</p><div className="empty-actions"><button onClick={() => showSources(shownFile.row)}>All {sourceLabels[shownFile.row].toLowerCase()}</button></div></div>)
+              : <Suspense fallback={<Loading text="Opening project…" />}><ProjectOverview key={project.id} section={section} category={category} files={files} sources={sources} onFile={showFile} onSection={showSection} onAgent={id => { if (id) setSelectedConversation(id); setAgentOpen(true); }} client={client!} onProjectChanged={next => { setProject(next); setProjects(list => list.map(p => p.id === next.id ? next : p)); }} project={project} snapshot={snapshot} onLayout={layout} onOpened={(id, view) => { layout(id, view); reread(); }} /></Suspense>}
           </main>
           {projectVisible && agentOpen && !narrow && <aside className="inspector-pane" aria-label="Agent panel">{agentContents}</aside>}
           {context && !narrow && <aside id="project-context" className="context-drawer inspector-pane" aria-label={feedbackContext ? 'Your question' : 'Context and access'}><div className="drawer-heading"><h2>{feedbackContext ? 'Your question' : 'Connection & access'}</h2><button className="icon-button" aria-label="Close context" onClick={() => { setContext(false); contextTrigger.current?.focus(); }}><Icon name="close" size={18} /></button></div>{contextSections}</aside>}

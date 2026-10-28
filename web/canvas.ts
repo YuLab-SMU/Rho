@@ -23,7 +23,8 @@ const component = (snapshot: WorkspaceSnapshot, id: string) => snapshot.catalog.
 export const canCapture = (snapshot: WorkspaceSnapshot) => allowed(snapshot, 'agent.activity.capture') && !!component(snapshot, 'rho.table') && !!component(snapshot, 'rho.media');
 
 export interface ResourceTarget { id: string; version: string; kind: string; path: string }
-async function viewFor(client: BrowserClient, snapshot: WorkspaceSnapshot, target: string | ResourceTarget): Promise<{ node: Node; side: Side } | null> {
+// The view a file opens in, without placing it anywhere: a preview shows it as it is.
+export async function viewFor(client: BrowserClient, snapshot: WorkspaceSnapshot, target: string | ResourceTarget): Promise<{ node: Node; side: Side } | null> {
   // A registered result opens as exactly that version, keeping its provenance.
   if (typeof target !== 'string') {
     const owner = component(snapshot, target.kind === 'table' ? 'rho.table' : 'rho.media');

@@ -85,3 +85,43 @@ export function useProjectFiles(client: BrowserClient, projectId: string | undef
   }, [client, projectId, due]);
   return { ...state, refresh: () => { last.current = 0; setRequest(r => r + 1); } };
 }
+
+// The kinds the sidebar lists, and the files of one kind in the order every place shows
+// them: the project's own top level, then by folder, then by name. A registered result is listed as its newest retained
+// version; a file snapshot taken only to show a file is not a result.
+export type SourceRow = 'data' | 'code' | 'results' | 'notes';
+export interface ResourceRef { id: string; version: string; kind: string; path: string }
+export interface SourceItem { key: string; path: string; name: string; folder: string; bytes: number | null; category: SourceKind | null; resource?: ResourceRef }
+interface ResourceLike { id: string; version: string; kind: string; path: string; bytes?: number; provenance?: unknown }
+interface ProjectLike { root: string; name?: string; sources?: Array<{ id: string; name: string }> }
+const lastSegment = (value: string) => value.split('/').filter(Boolean).at(-1) ?? value;
+// A folder as the person named it: a source folder by its own name, the project root by the project's.
+export function folderName(path: string, project: ProjectLike) {
+  const parts = path.split('/'); parts.pop();
+  if (!parts.length) return project.name ?? lastSegment(project.root);
+  const source = parts[0].startsWith('@') ? project.sources?.find(entry => '@' + entry.id === parts[0]) : undefined;
+  return [source ? source.name : parts[0], ...parts.slice(1)].join('/');
+}
+export const isResult = (resource: ResourceLike) => (resource.provenance as { source?: string } | undefined)?.source !== 'current-filesystem-observation';
+const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+// Of several versions of one result, the one its latest run made, as the Results list orders them.
+export function sourceItems(row: SourceRow, files: ProjectFile[], resources: ResourceLike[], project: ProjectLike, runs: Array<{ operationId: string; acceptedAt: string }> = []): SourceItem[] {
+  const items = new Map<string, SourceItem>();
+  const accepted = new Map(runs.map(run => [run.operationId, run.acceptedAt]));
+  const at = (resource: ResourceLike) => accepted.get(String((resource.provenance as { operationId?: unknown } | undefined)?.operationId ?? '')) ?? '';
+  const newest = new Map<string, ResourceLike>();
+  if (row === 'results') for (const resource of resources) {
+    const kept = newest.get(resource.path);
+    if (isResult(resource) && (!kept || at(resource).localeCompare(at(kept)) > 0 || (at(resource) === at(kept) && resource.version.localeCompare(kept.version) > 0))) newest.set(resource.path, resource);
+  }
+  for (const resource of newest.values()) items.set(resource.path, {
+    key: 'result:' + resource.path, path: resource.path, name: lastSegment(resource.path), folder: folderName(resource.path, project), bytes: resource.bytes ?? null,
+    category: resource.kind === 'media' ? 'figures' : 'results', resource: { id: resource.id, version: resource.version, kind: resource.kind, path: resource.path } });
+  for (const file of files) {
+    const match = row === 'results' ? file.category === 'figures' || file.category === 'results' : file.category === row;
+    if (match && !items.has(file.path)) items.set(file.path, { key: 'file:' + file.path, path: file.path, name: file.name, folder: folderName(file.path, project), bytes: file.bytes, category: file.category });
+  }
+  // Files at the top of the project come first, then each folder by name.
+  const nested = (item: SourceItem) => Number(item.path.includes('/'));
+  return [...items.values()].sort((a, b) => nested(a) - nested(b) || collator.compare(a.folder, b.folder) || collator.compare(a.name, b.name));
+}

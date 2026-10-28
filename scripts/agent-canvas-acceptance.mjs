@@ -87,7 +87,7 @@ try {
   await until(counts, c => c.Data === '1' && c.Code === '1' && c.Notes === '1' && c['Results & figures'] === '0', 'sidebar counts by kind');
   for (const name of ['Overview', 'Studio', 'Activity', 'Data', 'Code', 'Results & figures', 'Notes', 'Files']) await nav.getByRole('button', { name, exact: true }).waitFor();
   await nav.getByRole('button', { name: 'Data', exact: true }).click();
-  await page.locator('.source-row').filter({ hasText: 'airquality.csv' }).waitFor();
+  await nav.locator('.nav-file').filter({ hasText: 'airquality.csv' }).waitFor();
   await shot('01-sidebar-data');
   passed('the sidebar names the project places and counts its data, code, results and notes');
 
