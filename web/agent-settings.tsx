@@ -86,25 +86,77 @@ export function when(iso: string) {
 }
 
 // Every model the Agent offers, grouped by where it comes from, searchable by name or value.
-// The first entry returns to the Agent's own default when one is allowed.
-// A summary replaces the chip's text, and extra controls (the Agent, effort) sit above the list:
-// the form a narrow message box uses.
-export function ModelPicker({ option, value, agent, allowDefault, disabled, disabledNote, placement = 'down', checking, checkProblem, onChoose, onCheck, className, summary, summaryText, extra }: {
-  option: SettingOption | null; value: string | null; agent: string; allowDefault?: boolean; disabled?: boolean; disabledNote?: string; placement?: 'up' | 'down';
-  checking?: boolean; checkProblem?: string; onChoose: (value: string | null) => void; onCheck?: () => void; className?: string;
-  summary?: ReactNode; summaryText?: string; extra?: ReactNode;
+// The first entry returns to the Agent's own default when one is allowed. The search box holds
+// the focus; arrows move through the list and Enter chooses.
+export function ModelList({ option, value, agent, allowDefault, onChoose, onEscape }: {
+  option: SettingOption; value: string | null; agent: string; allowDefault?: boolean; onChoose: (value: string | null) => void; onEscape?: () => void;
 }) {
-  const [open, setOpen] = useState(false), [query, setQuery] = useState(''), [active, setActive] = useState(0);
-  const root = useRef<HTMLDivElement>(null), button = useRef<HTMLButtonElement>(null), search = useRef<HTMLInputElement>(null), list = useRef<HTMLDivElement>(null), id = useId();
-  const [place, setPlace] = useState<{ left: number; width: number; up: boolean; height: number } | null>(null);
+  const [query, setQuery] = useState('');
+  const search = useRef<HTMLInputElement>(null), list = useRef<HTMLDivElement>(null), id = useId();
   const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
-  const entries = (option?.values ?? []).map(v => ({ ...v, ...split(v.name), group: v.group ?? split(v.name).group }))
+  const entries = (option.values ?? []).map(v => ({ ...v, ...split(v.name), group: v.group ?? split(v.name).group }))
     .filter(v => words.every(word => (v.name + ' ' + v.value + ' ' + v.group).toLowerCase().includes(word)));
   const groups = [...new Set(entries.map(v => v.group))].sort((a, b) => Number(!!a) - Number(!!b));
   const ordered = groups.flatMap(group => entries.filter(v => v.group === group));
   const showDefault = allowDefault && !words.length;
   const items: Array<string | null> = [...(showDefault ? [null] : []), ...ordered.map(v => v.value)];
-  const current = Math.min(active, items.length - 1), defaultName = valueName(option, option?.current as string);
+  const [active, setActive] = useState(() => Math.max(0, items.indexOf(value)));
+  const current = Math.min(active, items.length - 1), defaultName = valueName(option, option.current as string);
+  useEffect(() => { search.current?.focus({ preventScroll: true }); }, []);
+  useEffect(() => {
+    const item = document.getElementById(id + '-' + current), box = list.current;
+    if (!item || !box) return;
+    if (item.offsetTop < box.scrollTop) box.scrollTop = item.offsetTop - 4;
+    else if (item.offsetTop + item.offsetHeight > box.scrollTop + box.clientHeight) box.scrollTop = item.offsetTop + item.offsetHeight - box.clientHeight + 4;
+  }, [current]);
+  function key(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); onEscape?.(); }
+    else if ((event.key === 'ArrowDown' || event.key === 'ArrowUp') && items.length) { event.preventDefault(); setActive((current + (event.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length); }
+    else if (event.key === 'Enter' && items.length) { event.preventDefault(); onChoose(items[current]); }
+  }
+  return <>
+    <div className="model-search"><Icon name="search" size={14} />
+      <input ref={search} role="combobox" aria-expanded="true" aria-controls={id + '-list'} aria-autocomplete="list" aria-activedescendant={items.length ? id + '-' + current : undefined}
+        aria-label="Search models" placeholder={'Search ' + option.values!.length + ' models'} value={query} spellCheck={false} autoComplete="off"
+        onChange={event => { setQuery(event.target.value); setActive(0); }} onKeyDown={key} /></div>
+    <div ref={list} id={id + '-list'} className="model-list" role="listbox" aria-label="Models">
+      {showDefault && <div id={id + '-0'} role="option" aria-selected={value === null} className={'model-option' + (current === 0 ? ' active' : '')} onMouseMove={() => setActive(0)} onClick={() => onChoose(null)}>
+        <span className="model-name">{agent}'s default</span>{defaultName && <span className="model-meta">{defaultName}</span>}{value === null && <Icon name="check" size={14} />}</div>}
+      {groups.map(group => <div key={group || '-'} role="group" aria-label={group || agent}>
+        {(group || groups.length > 1) && <span className="model-group" aria-hidden="true"><ProviderMark name={group || agent} size={13} />{group || agent}</span>}
+        {ordered.filter(v => v.group === group).map(v => {
+          const index = items.indexOf(v.value);
+          return <div key={v.value} id={id + '-' + index} role="option" aria-selected={value === v.value} className={'model-option' + (current === index ? ' active' : '')}
+            title={v.value + (v.description ? '\n' + v.description : '')} onMouseMove={() => setActive(index)} onClick={() => onChoose(v.value)}>
+            <span className="model-name">{v.name}</span>{v.value === option.current && allowDefault && <span className="model-meta">default</span>}{value === v.value && <Icon name="check" size={14} />}</div>;
+        })}
+      </div>)}
+      {!items.length && <p className="model-none">No model matches “{query.trim()}”.</p>}
+    </div>
+  </>;
+}
+
+// What a menu says while the Agent has not told Rho what it offers.
+export function NotAsked({ agent, checking, checkProblem, onCheck }: { agent: string; checking?: boolean; checkProblem?: string; onCheck?: () => void }) {
+  return <div className="model-unknown">
+    <p>{checking ? 'Asking ' + agent + ' which models it offers…' : 'Rho has not asked ' + agent + ' which models it offers yet.'}</p>
+    {checkProblem && <p className="inline-error" role="alert">{checkProblem}</p>}
+    {onCheck && <button className="small-button" disabled={checking} onClick={onCheck}>{checking ? 'Asking…' : 'Ask ' + agent}</button>}
+    <small>Starts {agent} in this project for a few seconds. No message is sent.</small>
+  </div>;
+}
+
+// The model chip with its list in a popover, as the Agents tab shows it for each Agent.
+// A summary replaces the chip's text.
+export function ModelPicker({ option, value, agent, allowDefault, disabled, disabledNote, checking, checkProblem, onChoose, onCheck, className, summary, summaryText }: {
+  option: SettingOption | null; value: string | null; agent: string; allowDefault?: boolean; disabled?: boolean; disabledNote?: string;
+  checking?: boolean; checkProblem?: string; onChoose: (value: string | null) => void; onCheck?: () => void; className?: string;
+  summary?: ReactNode; summaryText?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const root = useRef<HTMLDivElement>(null), button = useRef<HTMLButtonElement>(null);
+  const [place, setPlace] = useState<{ left: number; width: number; up: boolean; height: number } | null>(null);
+  const defaultName = valueName(option, option?.current as string);
   useEffect(() => {
     if (!open) return;
     const away = (event: MouseEvent) => { if (!root.current?.contains(event.target as Node)) setOpen(false); };
@@ -124,59 +176,19 @@ export function ModelPicker({ option, value, agent, allowDefault, disabled, disa
     }
     // Opens on the side it was placed on unless the other has clearly more room.
     const width = Math.min(360, right - left - 16), above = anchor.top - top - 8, below = bottom - anchor.bottom - 8;
-    const up = placement === 'up' ? above >= 360 || above >= below : below < 360 && above > below;
+    const up = below < 360 && above > below;
     setPlace({ left: Math.min(Math.max(anchor.left, left + 8), right - 8 - width) - anchor.left, width, up, height: Math.max(160, Math.min(480, up ? above : below)) });
   }, [open]);
-  useEffect(() => { if (open && place) search.current?.focus({ preventScroll: true }); }, [open, !!place, !!option?.values?.length]);
-  useEffect(() => {
-    const item = document.getElementById(id + '-' + current), box = list.current;
-    if (!open || !item || !box) return;
-    if (item.offsetTop < box.scrollTop) box.scrollTop = item.offsetTop - 4;
-    else if (item.offsetTop + item.offsetHeight > box.scrollTop + box.clientHeight) box.scrollTop = item.offsetTop + item.offsetHeight - box.clientHeight + 4;
-  }, [open, current, place]);
-  function show(next: boolean) {
-    setOpen(next); setQuery('');
-    setActive(Math.max(0, items.indexOf(value)));
-    if (!next) button.current?.focus({ preventScroll: true });
-  }
+  function show(next: boolean) { setOpen(next); if (!next) button.current?.focus({ preventScroll: true }); }
   function choose(next: string | null) { show(false); if (next !== value) onChoose(next); }
-  function key(event: KeyboardEvent<HTMLInputElement>) {
-    if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); show(false); }
-    else if ((event.key === 'ArrowDown' || event.key === 'ArrowUp') && items.length) { event.preventDefault(); setActive((current + (event.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length); }
-    else if (event.key === 'Enter' && items.length) { event.preventDefault(); choose(items[current]); }
-  }
   const shown = value === null ? (allowDefault ? 'Default' + (defaultName ? ' · ' + defaultName : '') : 'Model') : valueName(option, value);
   const known = !!option?.values?.length;
   return <div ref={root} className={'model-picker' + (className ? ' ' + className : '')}>
     <button ref={button} className="setting-chip" aria-haspopup="dialog" aria-expanded={open} disabled={disabled} aria-label={summaryText} title={disabled ? disabledNote : summaryText ?? 'Model: ' + shown}
       onClick={() => show(!open)}>{summary ?? <><span className="setting-chip-label">Model</span><span className="setting-chip-value">{shown}</span></>}<Icon name="updown" size={12} /></button>
     {open && <div className={'model-popover ' + (place?.up ? 'up' : 'down')} style={place ? { left: place.left, width: place.width, maxHeight: place.height } : { visibility: 'hidden' }} role="dialog" aria-label={'Choose the model ' + agent + ' uses'} onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); show(false); } }}>
-      {extra && <div className="model-extra">{extra}</div>}
-      {known ? <>
-        <div className="model-search"><Icon name="search" size={14} />
-          <input ref={search} role="combobox" aria-expanded="true" aria-controls={id + '-list'} aria-autocomplete="list" aria-activedescendant={items.length ? id + '-' + current : undefined}
-            aria-label="Search models" placeholder={'Search ' + option!.values!.length + ' models'} value={query} spellCheck={false} autoComplete="off"
-            onChange={event => { setQuery(event.target.value); setActive(0); }} onKeyDown={key} /></div>
-        <div ref={list} id={id + '-list'} className="model-list" role="listbox" aria-label="Models">
-          {showDefault && <div id={id + '-0'} role="option" aria-selected={value === null} className={'model-option' + (current === 0 ? ' active' : '')} onMouseMove={() => setActive(0)} onClick={() => choose(null)}>
-            <span className="model-name">{agent}'s default</span>{defaultName && <span className="model-meta">{defaultName}</span>}{value === null && <Icon name="check" size={14} />}</div>}
-          {groups.map(group => <div key={group || '-'} role="group" aria-label={group || agent}>
-            {(group || groups.length > 1) && <span className="model-group" aria-hidden="true"><ProviderMark name={group || agent} size={13} />{group || agent}</span>}
-            {ordered.filter(v => v.group === group).map(v => {
-              const index = items.indexOf(v.value);
-              return <div key={v.value} id={id + '-' + index} role="option" aria-selected={value === v.value} className={'model-option' + (current === index ? ' active' : '')}
-                title={v.value + (v.description ? '\n' + v.description : '')} onMouseMove={() => setActive(index)} onClick={() => choose(v.value)}>
-                <span className="model-name">{v.name}</span>{v.value === option!.current && allowDefault && <span className="model-meta">default</span>}{value === v.value && <Icon name="check" size={14} />}</div>;
-            })}
-          </div>)}
-          {!items.length && <p className="model-none">No model matches “{query.trim()}”.</p>}
-        </div>
-      </> : <div className="model-unknown">
-        <p>{checking ? 'Asking ' + agent + ' which models it offers…' : 'Rho has not asked ' + agent + ' which models it offers yet.'}</p>
-        {checkProblem && <p className="inline-error" role="alert">{checkProblem}</p>}
-        {onCheck && <button className="small-button" disabled={checking} onClick={onCheck}>{checking ? 'Asking…' : 'Ask ' + agent}</button>}
-        <small>Starts {agent} in this project for a few seconds. No message is sent.</small>
-      </div>}
+      {known ? <ModelList option={option!} value={value} agent={agent} allowDefault={allowDefault} onChoose={choose} onEscape={() => show(false)} />
+        : <NotAsked agent={agent} checking={checking} checkProblem={checkProblem} onCheck={onCheck} />}
     </div>}
   </div>;
 }
@@ -207,43 +219,3 @@ export function ordered(options: SettingOption[]) {
 // Read again each time the Agent page opens: a conversation or another tab may have changed them.
 export function refreshAgentSettings(client: BrowserClient, projectId: string) { if (store.value && !store.reading) void load(client, projectId); }
 
-// The compact form under the message box: one chip that names the Agent, model and effort, and
-// opens them together. For a new conversation these are the saved choices; for an open one,
-// that conversation's own settings, changed between messages.
-function Summary({ agent, model, effort }: { agent?: string; model: string; effort?: string }) {
-  const brand = agent ? brandOf(agent) : null;
-  // The provider a model is offered through reads second, so the model's own name leads.
-  const { name, group } = split(model);
-  return <span className="setting-summary">{agent && <span className="summary-agent">{brand && <BrandMark brand={brand} size={13} />}<span className="summary-agent-name">{agent}</span></span>}<span className="summary-model">{name}</span>{group && <span className="summary-group">{group}</span>}{effort && <span className="summary-effort">{effort}</span>}</span>;
-}
-export function ComposerSettings({ state }: { state: AgentSettingsState }) {
-  const { backend } = state, offered = state.offered(backend), choices = state.choices(backend), agent = agentLabel[backend];
-  const model = modelSetting(offered?.options), effort = effortSetting(offered?.options);
-  if (!state.settings) return null;
-  const chosen = model && model.id in choices ? choices[model.id] as string : null;
-  const modelName = model ? valueName(model, chosen ?? model.current) : 'Default model';
-  const effortName = effort ? valueName(effort, effort.id in choices ? choices[effort.id] : effort.current) + ' effort' : undefined;
-  return <div className="composer-settings">
-    <ModelPicker option={model} value={chosen} agent={agent} allowDefault placement="up" checking={state.checking.has(backend)} checkProblem={state.checkProblem[backend]}
-      onChoose={next => model && void state.choose(backend, model.id, next)} onCheck={() => void state.check(backend)}
-      summary={<Summary agent={agent} model={modelName} effort={effortName} />} summaryText={['Agent and model for a new conversation:', agent, modelName, effortName].filter(Boolean).join(' ')}
-      extra={<>
-        <div className="agent-choice" role="radiogroup" aria-label="Agent">{backends.map(which => <button key={which} role="radio" aria-checked={which === backend} className={which === backend ? 'selected' : ''} onClick={() => which !== backend && void state.chooseAgent(which)}><BrandMark brand={which === 'codex-acp' ? 'codex' : 'claude-code'} size={13} />{agentLabel[which]}</button>)}</div>
-        {effort && <SettingSelect option={effort} value={effort.id in choices ? choices[effort.id] : null} allowDefault onChoose={next => void state.choose(backend, effort.id, next)} />}
-      </>} />
-  </div>;
-}
-export function OpenSettings({ options, values, agent, disabled, onChoose, checking, checkProblem, onCheck }: {
-  options: SettingOption[] | null; values: Record<string, SettingValue>; agent: string; disabled: boolean;
-  onChoose: (id: string, value: SettingValue) => void; checking?: boolean; checkProblem?: string; onCheck?: () => void;
-}) {
-  const model = modelSetting(options), effort = effortSetting(options), note = 'Change after this message';
-  const value = (option: SettingOption) => option.id in values ? values[option.id] : option.current;
-  const modelName = model ? valueName(model, value(model)) : 'Model', effortName = effort ? valueName(effort, value(effort)) + ' effort' : undefined;
-  return <div className="composer-settings">
-    <ModelPicker option={model} value={model ? value(model) as string : null} agent={agent} placement="up" disabled={disabled} disabledNote={note} checking={checking} checkProblem={checkProblem}
-      onChoose={next => model && next !== null && onChoose(model.id, next)} onCheck={onCheck}
-      summary={<Summary model={modelName} effort={effortName} />} summaryText={['Model for the next message:', modelName, effortName].filter(Boolean).join(' ')}
-      extra={effort && <SettingSelect option={effort} value={value(effort)} disabled={disabled} disabledNote={note} onChoose={next => next !== null && onChoose(effort.id, next)} />} />
-  </div>;
-}

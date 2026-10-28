@@ -123,8 +123,9 @@ print(name+' completed once')
   await page.goto(service.url); await page.locator('.project-row').filter({ hasText: agentName + ' ACP episode' }).click(); await openPanel();
   // The Agent for new conversations is a saved choice, made in the message box's settings.
   await panel().locator('.composer-settings .setting-chip').click();
-  await panel().locator('.model-extra').getByRole('radio', { name: codex ? 'Codex' : 'Claude Code' }).click();
-  await panel().locator('.model-extra').getByRole('radio', { name: codex ? 'Codex' : 'Claude Code', checked: true }).waitFor();
+  await panel().locator('.menu-pop .menu-row').filter({ hasText: /^Agent/ }).click();
+  await panel().locator('.menu-pop').getByRole('radio', { name: codex ? 'Codex' : 'Claude Code' }).click();
+  await panel().locator('.menu-pop .menu-row').filter({ hasText: codex ? /^Agent\s*Codex/ : /^Agent\s*Claude Code/ }).waitFor();
   await page.keyboard.press('Escape');
   // Deliver the first message but lose its HTTP acknowledgement. Retry must reuse it.
   let lostAck;

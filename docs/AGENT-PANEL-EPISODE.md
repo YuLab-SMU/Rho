@@ -38,7 +38,8 @@ Looked at with the real records of the local service's test project, on a copy
 ## Changed
 
 Rho only (`web/conversation.tsx`, `web/markdown.tsx`, `web/theme.css`,
-`web/agent-settings.tsx`, `web/icons.tsx`, `src/conversation-presentation.ts`):
+`web/agent-settings.tsx`, `web/settings-menu.tsx`, `web/settings-menu.css`,
+`web/icons.tsx`, `src/conversation-presentation.ts`):
 
 - **Each message folds its work.** The Agent's last words stay in the open. What it did
   before them, with what it said along the way and the choices made for it, is one
@@ -57,21 +58,30 @@ Rho only (`web/conversation.tsx`, `web/markdown.tsx`, `web/theme.css`,
 - **The header** has a back arrow, the Agent's mark, the session's title and New
   conversation, and stays at the top while the messages scroll.
 - **The message box** is one rounded surface: the text grows to about ten lines; under
-  it the model chip (the model's name, then the provider it comes through, then effort;
-  the provider yields first when the panel is narrow) and a round Send, which becomes
-  Stop while the Agent answers. ⌘/Ctrl Enter still sends. "Jump to latest" is a round
+  it the settings chip and a round Send, which becomes Stop while the Agent answers. ⌘/Ctrl Enter still sends. "Jump to latest" is a round
   button above the box, with a dot when something new arrived.
 - **Under the box**, the plan entry in progress and the context ring, tokens and cost
   the Agent reported. It opens a small card above the box: context used as a bar with
   its tokens, the cost, the plan as a list of entries, and one line saying the Agent
   reported these and Rho does not measure them. Escape closes it and leaves the panel
   open.
+- **The settings are one chip and a short menu.** The chip names the model, the
+  provider it comes through, the effort and what is switched on; the provider yields
+  first when the panel is narrow. It opens a menu with a row per setting the Agent
+  offers, each with its value: the Agent (new conversation only), the model, effort,
+  mode. A setting whose only values are On and Off is a switch that changes at once
+  and keeps the menu open. A row opens its list in place under a back arrow; the model
+  list keeps its search and providers. A value closes the menu; Escape and ← step back,
+  then close it, never the panel. In a new conversation's lists the first entry is
+  "Not chosen · Claude Code uses Xhigh", apart from a value the Agent itself calls
+  Default.
 - **The start screen** names the Agent with its mark, and lists conversations by
   their titles.
 
 ## Runs
 
-Evidence: `work/chat-panel-20261028/` and `work/agent-ui-acceptance/` (ignored by Git).
+Evidence: `work/chat-panel-20261028/`, `work/agent-ui-acceptance/` and
+`work/agent-page-acceptance/` (ignored by Git).
 
 | Run | What was looked at | Observed | Change |
 | --- | --- | --- | --- |
@@ -83,6 +93,9 @@ Evidence: `work/chat-panel-20261028/` and `work/agent-ui-acceptance/` (ignored b
 | `acceptance:agent-ui` | A controlled peer: streaming, permission, plan | "Mod" cut in the chip: its −8 px margin made it 8 px narrower than its holder; list markers were hollow circles inside the list of messages | The margin moved to the holder; first-level markers |
 | `chipdebug.mjs` | The chip's widths | The deficit was always 8 px, the margin | — |
 | The user, after the first pass | The record above the box | "Still a lump": the plugin's session view as prose, a title, a context sentence and four paragraphs of observation notes; the trigger a grey band when open | Rho draws the card from the same report; the notes went; no band |
+| The user, after the record | The model chooser, beside two references: a menu of rows with their values, effort as a list, Fast as a switch | Too crude: a native effort select above a large model popover | One chip and a menu of rows |
+| `menu.mjs` | The menu on the copy at 640, 340 and 390 px | The model's value cut at its start ("laude-opus-5-5 · magpie-server"); Fast mode and Ultracode, offered as On/Off lists, drawn as rows; two "Default" entries in a new conversation's Effort list | The value ends in an ellipsis; On/Off lists are switches; Rho's entry is "Not chosen" |
+| `menu.mjs` again | The same, a switch and a value | A switch keeps the menu open and adds "Fast mode" to the chip; a value closes it; Escape from a list returns to its row, then closes the menu with the panel open; no overflow or page errors | — |
 
 ## Checks
 
@@ -101,11 +114,21 @@ Run serially on 2026-10-28 (`work/chat-panel-20261028/final/`):
   7/7, `sources` 7/7, `objects` 5/5, `actions` 6/6, and shell, pages, person and plugin
   UI passed. After the record changed, `agent-ui` 7/7, `frontend` 13/13, `agent-canvas`
   10/10, `agent-page` 5/5 and the stylesheet token test passed again.
+- After the settings menu, the same serial batch passed again: Rho 215/215, Plugins
+  92/92, `agent-page` 6/6 with "the message box names the saved model and effort in one
+  chip, and its menu changes them in place", `graph` 8/8, `frontend` 13/13,
+  `agent-canvas` 10/10, `agent-ui` 7/7, `continuity` 7/7, `sources` 7/7, `objects` 5/5,
+  `actions` 6/6, and shell, pages, person and plugin UI. The Agents tab's model list,
+  which the menu now shares, passed in `agent-page` after its unused options were
+  removed. `acceptance:acp` chooses the Agent through the new menu; it needs a real
+  Agent and was not run.
 
 ## Limits
 
 - The fold hides what the Agent said along the way once a message ends; it is one
   click away, and the last words never fold.
+- The menu offers what the Agent reported when it was last asked, under the Agent's
+  own names ("Xhigh", "Ultracode").
 - The usage line shows what the Agent reported for its session; an Agent that reports
   none shows no ring. The observation counts the Agent plugin keeps (updates seen, not
   displayed) are no longer shown in the panel; Work progress still shows them.

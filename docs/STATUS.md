@@ -68,7 +68,7 @@ Git retains them at `24d9998b`; they are not requirements or reference designs.
   0.4.12 captures one named file; 0.4.13 applies, changes and inspects ACP settings.
 
 Evidence: Rho 215/215 (serial) and Plugins 92/92 ([ledger](VERIFICATION.json));
-`acceptance:agent-page` 5/5, `graph` 8/8 and `agent-canvas` 10/10 (controlled peers),
+`acceptance:agent-page` 6/6, `graph` 8/8 and `agent-canvas` 10/10 (controlled peers),
 `sources`, `frontend`, `agent-ui`, pages, shell, person, objects, actions, continuity and
 plugin UI passed. Real Claude and Codex runs found defects in following, settings, the
 Graph and the Agent page; each was fixed and run again. No other person has used them.
@@ -180,12 +180,12 @@ protocol/session behavior. Existing CLI conversations retain their original driv
 Rho MCP calls keep their project grant; native tools keep their Agent's permissions.
 Only this machine's browser can answer a native permission request.
 
-The panel renders the retained record as it arrives: Markdown, a caret and elapsed
-time on the live message, one line per action with its kind and target, and an amber
-permission card. When a message ends, its work and choices fold into one line above
-the answer ([panel pass](AGENT-PANEL-EPISODE.md)); plan, context and cost sit under the
-box. It follows new activity only at the end and offers Jump to latest after the
-person scrolls up. Tool status and the ACP path are labelled as Agent reports.
+The panel renders the retained record as it arrives: Markdown, a caret and time on the
+live message, one line per action with its kind and target, and an amber permission
+card. A message's work and choices then fold into one line above the answer
+([panel pass](AGENT-PANEL-EPISODE.md)); settings are one chip and a menu of rows in the
+box, plan, context and cost a line under it. New activity is followed only at the end,
+then Jump to latest. Tool status and the ACP path are labelled as Agent reports.
 
 - [Agent UI episode](AGENT-UI-EPISODE.md): `acceptance:agent-ui` 7/7,
   `acceptance:frontend` 11/11, Rho 202/202 (one earlier full run cancelled the known

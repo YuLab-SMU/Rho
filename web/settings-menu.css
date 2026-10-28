@@ -1,0 +1,34 @@
+/* The settings of the next message: one chip under the message box, a short menu above it,
+   and a list in place for each setting. */
+.settings-menu { position: relative; display: inline-flex; min-width: 0; max-width: 100%; }
+.settings-menu > .setting-chip > svg { transform: rotate(90deg); opacity: .7; transition: transform .15s ease; }
+.settings-menu > .setting-chip[aria-expanded=true] { background: var(--color-hover); color: var(--color-ink); }
+.settings-menu > .setting-chip[aria-expanded=true] > svg { transform: rotate(-90deg); }
+.menu-pop { position: absolute; left: 0; bottom: calc(100% + 8px); z-index: 40; display: flex; flex-direction: column; width: min(300px, calc(100cqw - 32px)); max-height: min(62vh, 460px); padding: 6px; border: 1px solid var(--color-hairline); border-radius: 12px; background: var(--color-surface); box-shadow: 0 12px 32px rgba(20, 30, 25, 0.16); font-size: 13px; }
+.menu-pop.wide { width: min(360px, calc(100cqw - 32px)); height: min(62vh, 460px); }
+.menu-row, .menu-choice { display: flex; justify-content: flex-start; align-items: center; gap: 10px; width: 100%; min-height: 36px; padding: 6px 10px; border: 0; border-radius: 8px; background: transparent; color: var(--color-ink); font-weight: 400; text-align: left; }
+.menu-row:hover, .menu-row:focus-visible, .menu-choice:hover, .menu-choice:focus-visible { background: var(--color-hover); outline: none; }
+.menu-row:active, .menu-choice:active { background: var(--color-pressed); }
+.menu-label { flex: none; }
+.menu-value { flex: 1; display: inline-flex; justify-content: flex-end; align-items: center; gap: 6px; min-width: 0; color: var(--color-meta); white-space: nowrap; }
+.menu-value > svg { flex: none; }
+.menu-value > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.menu-row > svg:last-child { flex: none; color: var(--color-meta); }
+/* A switch for a setting that is on or off; it changes at once and the menu stays open. */
+.menu-switch { position: relative; flex: none; width: 30px; height: 18px; margin-left: auto; border-radius: 9px; background: var(--color-control-border); transition: background .15s ease; }
+.menu-switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--color-surface); box-shadow: 0 1px 2px rgba(20, 30, 25, 0.25); transition: transform .15s ease; }
+.menu-switch.on { background: var(--color-accent); }
+.menu-switch.on::after { transform: translateX(12px); }
+.menu-divider { flex: none; height: 1px; margin: 5px 6px; background: var(--color-divider); }
+.menu-head { flex: none; display: flex; align-items: center; gap: 4px; margin: -2px -2px 4px; padding: 0 0 6px; border-bottom: 1px solid var(--color-divider); font-weight: 600; }
+.menu-back { flex: none; width: 28px; height: 28px; min-height: 28px; padding: 0; border: 0; border-radius: 7px; background: transparent; color: var(--color-muted); }
+.menu-back:hover, .menu-back:focus-visible { background: var(--color-hover); color: var(--color-ink); outline: none; }
+.menu-choices { display: flex; flex-direction: column; gap: 1px; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.menu-choice > svg:last-child { flex: none; margin-left: auto; color: var(--color-accent); }
+.menu-choice[aria-checked=true] { font-weight: 500; }
+.menu-choice-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.menu-choice-text small { color: var(--color-meta); font-size: 11.5px; font-weight: 400; line-height: 1.4; }
+/* The model list fills the menu; only the list scrolls. */
+.menu-pop .model-search { flex: none; margin: -2px -2px 4px; padding: 4px 8px 8px; border-bottom: 1px solid var(--color-divider); }
+.menu-pop .model-list { flex: 1 1 auto; min-height: 0; max-height: none; padding: 0; }
+.menu-pop .model-unknown { padding: 10px; }

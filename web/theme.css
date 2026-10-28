@@ -284,12 +284,11 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .model-unknown { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 14px; font-size: 12.5px; }
 .model-unknown small { color: var(--color-meta); font-size: 11px; }
 .turn-model { color: var(--color-meta); }
-.composer-settings .model-picker, .composer-settings .setting-chip { width: auto; max-width: 100%; }
+.composer-settings .setting-chip { width: auto; max-width: 100%; }
 .setting-summary { display: flex; align-items: baseline; gap: 7px; min-width: 0; overflow: hidden; white-space: nowrap; }
 .summary-agent, .summary-effort { flex: none; color: var(--color-meta); }
 .summary-agent { display: inline-flex; align-items: center; gap: 5px; }
 .summary-model { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.model-extra { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--color-divider); }
 .agent-outside { border-top: 1px solid var(--color-hairline); padding-top: 14px; }
 .agent-outside > summary { color: var(--color-muted); font-size: 13px; font-weight: 500; cursor: pointer; }
 .agent-outside[open] > summary { margin-bottom: 14px; }
@@ -666,10 +665,9 @@ ol.md-list { list-style-type: decimal; }
 .composer-box textarea:focus-visible { outline: none; }
 .composer-bar { display: flex; align-items: center; gap: 8px; min-width: 0; cursor: default; }
 .composer-bar .composer-settings { flex: 1; min-width: 0; }
-.composer-bar .model-picker { margin-left: -8px; }
+.composer-bar .settings-menu { margin-left: -8px; }
 .composer-bar .setting-chip { min-height: 28px; padding: 3px 8px; border-color: transparent; background: transparent; color: var(--color-muted); }
 .composer-bar .setting-chip:hover:not(:disabled) { background: var(--color-hover); color: var(--color-ink); }
-.composer-bar .summary-agent-name { display: none; }
 /* The model's own name leads; the provider it comes through yields first when the panel is narrow. */
 .composer-bar .summary-model { flex: none; max-width: clamp(72px, calc(100cqw - 216px), 240px); }
 .composer-bar .summary-group { flex: none; max-width: 140px; overflow: hidden; text-overflow: ellipsis; color: var(--color-meta); }

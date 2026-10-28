@@ -112,6 +112,37 @@ try {
   await until(() => call('conversation.settings.read'), s => s.backend === 'claude-acp', 'Claude Code the default again');
   passed('the Agents tab asks an Agent only when asked, shows its own names, providers and models, and saves the model, effort and default Agent');
 
+  // The message box's settings: one chip naming the model and effort, and a short menu with a
+  // row per setting; a value closes it, Escape steps back and then closes it, not the panel.
+  await page.getByRole('button', { name: 'Agent panel', exact: true }).click();
+  const box = page.locator('aside[aria-label="Agent panel"]'), chip = box.locator('.composer-bar .setting-chip'), menu = box.locator('.menu-pop');
+  // The default panel is narrow, so the provider is in the chip's name but not drawn.
+  await until(() => chip.innerText(), t => /^DeepSeek V4\.1\s+High$/.test(t.trim()), 'the chip naming the saved model and effort');
+  assert.equal(await chip.getAttribute('aria-label'), 'Settings for a new conversation, DeepSeek V4.1, DeepSeek, High effort');
+  await chip.click();
+  assert.deepEqual(await menu.locator('.menu-row .menu-label').allTextContents(), ['Agent', 'Model', 'Effort', 'Mode']);
+  await menu.locator('.menu-row').filter({ hasText: /^Effort/ }).click();
+  assert.equal(await menu.getByRole('radio', { name: 'High', exact: true }).getAttribute('aria-checked'), 'true');
+  await menu.getByRole('radio', { name: /^Not chosen/ }).waitFor();
+  await shot('01b-settings-menu');
+  await menu.getByRole('radio', { name: 'Xhigh', exact: true }).click();
+  await until(() => call('conversation.settings.read'), s => s.choices['claude-acp']?.effort === 'xhigh', 'the effort chosen in the menu saved');
+  assert.equal(await menu.count(), 0, 'a value closes the menu');
+  await chip.click();
+  await menu.locator('.menu-row').filter({ hasText: /^Model/ }).click();
+  await menu.getByRole('combobox', { name: 'Search models' }).waitFor();
+  await page.keyboard.press('Escape');
+  await menu.locator('.menu-row').filter({ hasText: /^Effort\s*Xhigh/ }).click();
+  await menu.getByRole('radio', { name: 'High', exact: true }).click();
+  await until(() => call('conversation.settings.read'), s => s.choices['claude-acp']?.effort === 'high', 'the effort back to High');
+  await chip.click();
+  await page.keyboard.press('Escape');
+  assert.equal(await menu.count(), 0, 'Escape closes the menu');
+  assert.ok(await box.isVisible(), 'and leaves the panel open');
+  await page.keyboard.press('Escape');
+  await box.waitFor({ state: 'hidden' });
+  passed('the message box names the saved model and effort in one chip, and its menu changes them in place');
+
   // Conversations as rows: the Agent's title, model, effort, context and cost.
   const first = (await call('conversation.start', { changeId: 'page-1', text: 'Summarize ozone by month.' })).conversation.conversationId;
   await ended(first);

@@ -85,9 +85,12 @@ inspect what happened. The application gives those actions direct places:
   ([conversation episode](CONVERSATION-EPISODE.md)). Its left edge drags, or moves
   24 px per arrow key, between 280 px and 760 px (at most 60% of the window); a
   double-click returns it to 340 px, and each browser keeps its own width. One chip under the message box
-  names the Agent, model and effort, the saved choices for a new conversation and the
-  open conversation's own, changed between messages; each ending names the model
-  that answered ([settings pass](AGENT-CANVAS-EPISODE.md#choosing-the-agent-and-its-model)). The panel renders the retained
+  names the model, its provider, the effort and what is switched on: the saved choices
+  for a new conversation and the open conversation's own, changed between messages. It
+  opens a short menu with a row per setting the Agent offers (the Agent for a new
+  conversation, the model with its search, effort, mode); a row opens its list in place,
+  an On/Off setting is a switch, and Escape steps back, then closes the menu, not the
+  panel. Each ending names the model that answered ([settings pass](AGENT-CANVAS-EPISODE.md#choosing-the-agent-and-its-model)). The panel renders the retained
   record rather than protocol events ([panel pass](AGENT-PANEL-EPISODE.md)): the
   Agent's last words stay open as Markdown prose, lists, code with Copy and tables
   that wrap; what it did before them folds into one line ("Worked · Ran 8 commands ·
@@ -96,7 +99,7 @@ inspect what happened. The application gives those actions direct places:
   `Called data.page`) with an icon for its kind and the Agent's title and reported path
   behind a disclosure; files are counted once; answered choices stay in the fold. Each
   message ends with its outcome, model, time and Copy. A native permission request is
-  an amber choice card. The message box is one rounded surface with the model chip and
+  an amber choice card. The message box is one rounded surface with the settings chip and
   a round Send or Stop; under it, the plan entry in progress and the context and cost
   the Agent reported open a card with context as a bar, the cost and the whole plan. New activity is followed only while
   the person is at the end; scrolling up keeps the position and offers "Jump to latest". The Agent's tool status and
@@ -144,7 +147,7 @@ referenced files. It links back to the original conversation or the Agent page.
 the snapshot and `conversation.list` for the trash; an opened row reads its latest
 four messages through `web/agent-work.tsx`, the same step model as the panel.
 `web/agent-settings.tsx` keeps one copy of `conversation.settings.read` per tab for
-the Agents tab and the panel's chip;
+the Agents tab and the panel's settings menu (`web/settings-menu.tsx`);
 asking an Agent what it offers (`conversation.settings.check`) is always the
 person's click.
 Shared notes opens `project-notes.md` in the existing Documents owner; saving is
@@ -218,7 +221,9 @@ data file joins the data group, and overflow at 1024/390. Evidence goes to
 `npm run acceptance:agent-page` drives controlled peers for Claude Code and Codex
 that offer models, settings and Claude Code's own names and report a title, context
 and cost. It checks asking an Agent, its names, providers and models, saving the model,
-effort and default; the rows with their model, effort, context and cost, search and
+effort and default; the message box's chip naming them and its menu changing the
+effort in place, with Escape stepping back and closing the menu but not the panel; the
+rows with their model, effort, context and cost, search and
 the Agent filter; an opened row's facts and rendered table and the Markdown export;
 the trash with Undo, restore and delete, never while the Agent answers; and overflow
 at 1024/390. Evidence goes to `work/agent-page-acceptance/` by default.
