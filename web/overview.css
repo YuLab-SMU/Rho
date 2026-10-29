@@ -1,68 +1,133 @@
-/* The Overview's pictures of the work: the Agent's record in small, results and figures as
-   themselves, and each workspace by the views it holds. */
+/* The Overview's pictures of the work: the Agent's record with its counts, results and figures
+   as themselves, each workspace drawn as its arrangement, and the files the Agent used. */
 .section-count { margin-left: 8px; padding: 1px 7px; border-radius: 999px; background: var(--color-well); color: var(--color-meta); font-size: 11.5px; font-weight: 500; font-variant-numeric: tabular-nums; vertical-align: 1px; }
 
-.work-strip { padding: 16px 18px 12px; border: 1px solid var(--color-hairline); border-radius: 14px; background: var(--color-surface); }
-.work-strip .section-heading { margin-bottom: 2px; }
-.work-strip { gap: 10px; }
-.work-strip-line { margin-top: -6px; color: var(--color-meta); font-size: 12.5px; }
+/* What the Agent did: the counts of each kind of step are the timeline's legend and its filter. */
+.work-strip { container-type: inline-size; gap: 16px; padding: 18px 20px 14px; border: 1px solid var(--color-hairline); border-radius: 12px; background: var(--color-surface); }
+.work-strip > .section-heading { align-items: flex-start; }
+.work-strip > .section-heading > div { flex: 1; min-width: 0; }
+.work-strip > .section-heading > .text-button { flex: none; white-space: nowrap; }
+.work-strip-line { margin-top: 2px; color: var(--color-meta); font-size: 12.5px; }
 .work-strip-line .text-button { min-height: 0; padding: 0; border: 0; color: var(--color-accent-strong); font-size: inherit; text-decoration: underline; text-underline-offset: 2px; }
-.graph-timeline.compact { padding: 0; border: 0; background: transparent; }
+.graph-timeline.compact { gap: 14px; padding: 0; border: 0; background: transparent; }
+.graph-timeline.compact .tl-head { display: block; }
 .graph-timeline.compact .graph-timeline-text { display: none; }
 .graph-timeline.compact .tl-names { width: 150px; }
+/* A bare strip split by dividers; each cell draws the line on its left, and the strip clips the
+   line of every cell that starts a row. */
+.graph-timeline.compact .tl-legend { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 12px 0; margin-left: -16px; overflow: hidden; }
+/* Narrower cards set the kinds in rows of three, then two, so every label stays whole. */
+@container (max-width: 820px) { .graph-timeline.compact .tl-legend { grid-auto-flow: row; grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@container (max-width: 460px) { .graph-timeline.compact .tl-legend { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.graph-timeline.compact .tl-kind { display: grid; grid-template-columns: 9px minmax(0, 1fr); grid-template-areas: "n n" "i l"; align-items: center; justify-items: start; gap: 0 7px; min-width: 0; min-height: 0; padding: 0 16px; border: 0; border-radius: 0; background: transparent; box-shadow: -1px 0 0 var(--color-divider); text-align: left; }
+.graph-timeline.compact .tl-kind small { grid-area: n; color: var(--color-ink); font-size: 22px; font-weight: 550; line-height: 1.3; letter-spacing: -.3px; }
+.graph-timeline.compact .tl-kind > span { grid-area: l; overflow: hidden; color: var(--color-meta); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.graph-timeline.compact .tl-kind i { grid-area: i; justify-self: center; }
+.graph-timeline.compact button.tl-kind:hover > span { color: var(--color-ink); }
+.graph-timeline.compact .tl-kind[aria-pressed=true] { box-shadow: -1px 0 0 var(--color-divider), inset 0 -2px 0 var(--tl-color); }
+.graph-timeline.compact .tl-kind[aria-pressed=true] > span { color: var(--color-ink); }
+.graph-timeline.compact .tl-kind[aria-pressed=false] small { color: var(--color-meta); }
+.graph-timeline.compact:not([class*=only-]) .tl-kind small { color: var(--color-ink); }
+.graph-timeline.compact .tl-kind:focus-visible { outline-offset: -2px; }
 
-.figure-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; margin: 0; padding: 0; list-style: none; }
+/* Results first and widest; the side column holds the places to pick up and the files used. */
+.overview .project-columns { grid-template-columns: minmax(0, 1fr) 296px; gap: 36px; align-items: start; }
+.overview .project-columns.single { grid-template-columns: minmax(0, 1fr); }
+.project-side { display: flex; flex-direction: column; gap: 32px; min-width: 0; }
+.project-side .project-section { gap: 12px; }
+.project-side .project-recent { padding: 0; border: 0; }
+
+.figure-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; margin: 0; padding: 0; list-style: none; }
 .figure-card { display: flex; flex-direction: column; align-items: stretch; gap: 0; width: 100%; min-height: 0; padding: 0; overflow: hidden; border: 1px solid var(--color-hairline); border-radius: 12px; background: var(--color-surface); text-align: left; font-weight: 400; }
-.figure-card:hover { border-color: var(--color-hairline-strong); box-shadow: 0 6px 18px -12px #1c2a2466; }
+.figure-card:hover { border-color: var(--color-hairline-strong); background: var(--color-surface); }
+.figure-card:hover .figure-name strong { color: var(--color-accent-strong); }
 .figure-thumb { display: flex; align-items: center; justify-content: center; height: 176px; overflow: hidden; border-bottom: 1px solid var(--color-divider); background: var(--color-well); }
 .figure-thumb.image { background: white; }
 .figure-thumb.image img { width: 100%; height: 100%; object-fit: contain; padding: 6px; }
 .figure-thumb.kind { color: var(--color-meta); }
-.figure-thumb.loading { background: linear-gradient(90deg, var(--color-well) 0, var(--color-hover) 50%, var(--color-well) 100%); background-size: 200% 100%; animation: figure-wait 1.4s linear infinite; }
-@keyframes figure-wait { to { background-position: -200% 0; } }
-@media (prefers-reduced-motion: reduce) { .figure-thumb.loading { animation: none; } }
+.figure-thumb.loading { background: var(--color-well); }
 .figure-thumb.table { align-items: flex-start; justify-content: flex-start; padding: 10px; background: var(--color-surface); }
-.figure-thumb.table > span { display: grid; width: 100%; gap: 1px; overflow: hidden; border: 1px solid var(--color-divider); border-radius: 6px; background: var(--color-divider); font-size: 10.5px; line-height: 1.5; }
+.figure-thumb.table > span { display: grid; width: 100%; gap: 1px; overflow: hidden; border: 1px solid var(--color-divider); border-radius: 6px; background: var(--color-divider); font-size: 11px; line-height: 1.5; }
 .figure-thumb.table b, .figure-thumb.table i { overflow: hidden; padding: 2px 6px; background: var(--color-surface); font-style: normal; text-overflow: ellipsis; white-space: nowrap; }
 .figure-thumb.table b { background: var(--color-well); color: var(--color-muted); font-weight: 600; }
 .figure-name { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: 9px 12px 11px; }
 .figure-name strong { overflow: hidden; color: var(--color-ink); font-size: 13px; font-weight: 550; text-overflow: ellipsis; white-space: nowrap; }
 .figure-name small { overflow: hidden; color: var(--color-meta); font-size: 11.5px; text-overflow: ellipsis; white-space: nowrap; }
-.figures-more { align-self: flex-start; margin-top: 10px; font-size: 12.5px; }
+/* The newest figure at twice the size: two columns and two rows of a three-column grid, with
+   the next two beside it and, when there are six, three more in the row below. */
+.figure-grid.featured { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.figure-grid.featured .figure-thumb { height: 128px; }
+.figure-grid.featured > li:first-child { grid-column: span 2; grid-row: span 2; }
+.figure-grid.featured > li:first-child .figure-card { height: 100%; }
+.figure-grid.featured > li:first-child .figure-thumb { position: relative; flex: 1; height: auto; min-height: 200px; }
+/* The picture fills the space its cell is given and never sizes the rows itself. */
+.figure-grid.featured > li:first-child .figure-thumb.image img { position: absolute; inset: 0; padding: 12px; }
+.figure-grid.featured > li:first-child .figure-name strong { font-size: 14px; }
+.figures-more { align-self: flex-start; font-size: 12.5px; }
 
-.workspace-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
-.workspace-card { display: flex; flex-direction: column; align-items: stretch; gap: 12px; padding: 14px 16px; border: 1px solid var(--color-hairline); border-radius: 12px; background: var(--color-surface); text-align: left; font-weight: 400; }
-.workspace-card:hover { border-color: var(--color-hairline-strong); box-shadow: 0 6px 18px -12px #1c2a2466; }
-.workspace-card-head { display: flex; align-items: center; gap: 9px; min-width: 0; }
-.workspace-card-head > svg:first-child { flex: none; color: var(--color-accent); }
-.workspace-card-head strong { overflow: hidden; color: var(--color-ink); font-size: 14px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+/* Continue working: each workspace as a small drawing of its panes. */
+.project-side .workspace-grid { display: flex; flex-direction: column; gap: 10px; }
+.workspace-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+.workspace-card { display: flex; flex-direction: column; align-items: stretch; gap: 10px; padding: 12px; border: 1px solid var(--color-hairline); border-radius: 12px; background: var(--color-surface); text-align: left; font-weight: 400; }
+.workspace-card:hover, .notes-card:hover { border-color: var(--color-hairline-strong); background: var(--color-surface); }
+.workspace-card:hover .mini-pane, .workspace-card:hover .mini-layout { box-shadow: inset 0 0 0 1px var(--color-hairline-strong); }
+.workspace-card-head { display: flex; align-items: baseline; gap: 8px; min-width: 0; padding: 0 2px; }
+.workspace-card-head strong { overflow: hidden; color: var(--color-ink); font-size: 13.5px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .workspace-card-head small { color: var(--color-meta); font-size: 12px; white-space: nowrap; }
-.workspace-card-head > svg:last-child { flex: none; margin-left: auto; color: var(--color-control-border); }
-.workspace-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
-.workspace-tiles.empty { display: block; color: var(--color-meta); font-size: 12.5px; }
-.workspace-tile { display: flex; align-items: center; gap: 7px; min-width: 0; padding: 7px 9px; border-radius: 8px; background: var(--color-well); color: var(--color-muted); font-size: 12px; }
-.workspace-tile > svg { flex: none; color: var(--color-meta); }
-.workspace-tile > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.workspace-tile.more { justify-content: center; color: var(--color-meta); }
+.workspace-card-head > svg { flex: none; align-self: center; margin-left: auto; color: var(--color-control-border); }
+.mini-layout { display: flex; height: 80px; padding: 4px; border-radius: 8px; background: var(--color-well); }
+.mini-layout.empty { align-items: center; justify-content: center; color: var(--color-meta); font-size: 12px; }
+.mini-split { display: flex; flex: 1; gap: 4px; min-width: 0; min-height: 0; }
+.mini-split.vertical { flex-direction: column; }
+.mini-split > span { display: flex; flex-basis: 0; min-width: 0; min-height: 0; }
+.mini-pane { position: relative; display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; border-radius: 5px; background: var(--color-surface); box-shadow: inset 0 0 0 1px var(--color-hairline); }
+.mini-tabs { display: flex; gap: 3px; padding: 6px 7px 0; }
+.mini-tabs i { width: 14px; height: 4px; border-radius: 2px; background: var(--color-divider); }
+.mini-tabs i.on { background: var(--color-hairline-strong); }
+.mini-face { display: flex; flex: 1; align-items: center; justify-content: center; gap: 5px; min-width: 0; min-height: 0; padding: 0 8px 4px; color: var(--color-muted); font-size: 11.5px; }
+.mini-face > svg { flex: none; color: var(--color-meta); }
+.mini-face > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mini-pane > small { position: absolute; top: 2px; right: 6px; color: var(--color-meta); font-size: 11px; font-variant-numeric: tabular-nums; }
 
-@media (max-width: 767px) {
-  .work-strip { padding: 14px 12px 10px; }
-  .figure-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-  .figure-thumb { height: 104px; }
-  .workspace-grid { grid-template-columns: minmax(0, 1fr); }
+/* The shared notes as a page of their own. */
+.notes-card { display: flex; align-items: center; justify-content: flex-start; gap: 12px; width: 100%; min-height: 0; padding: 10px 12px; border: 1px solid var(--color-hairline); border-radius: 12px; background: var(--color-surface); text-align: left; font-weight: 400; }
+.notes-sheet { display: flex; flex: none; flex-direction: column; justify-content: center; gap: 4px; width: 28px; height: 34px; padding: 0 6px; border-radius: 4px; background: var(--color-well); box-shadow: inset 0 0 0 1px var(--color-hairline); }
+.notes-sheet i { height: 2px; border-radius: 1px; background: var(--color-hairline-strong); }
+.notes-sheet i:last-child { width: 60%; }
+.notes-name { display: flex; flex-direction: column; min-width: 0; }
+.notes-name strong { color: var(--color-ink); font-size: 13.5px; font-weight: 600; }
+.notes-name small { overflow: hidden; color: var(--color-meta); text-overflow: ellipsis; white-space: nowrap; }
+.notes-card > svg { flex: none; margin-left: auto; color: var(--color-control-border); }
+
+/* Files the Agent used: most used first, each bar as long as its share of the most used. */
+.touched-unit { color: var(--color-meta); font-size: 12px; }
+.touched-list { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
+.touched-row { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; align-items: start; gap: 10px; width: calc(100% + 16px); min-height: 0; margin: 0 -8px; padding: 6px 8px 7px; border: 0; border-radius: 8px; background: transparent; text-align: left; font-weight: 400; }
+.touched-row:hover { background: var(--color-hover); }
+.touched-row:disabled { opacity: .6; }
+.touched-row > svg { margin-top: 2px; color: var(--color-meta); }
+.touched-name { display: flex; flex-direction: column; min-width: 0; }
+.touched-name strong { overflow: hidden; color: var(--color-ink); font-size: 13px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.touched-name small { overflow: hidden; color: var(--color-meta); font-size: 11.5px; text-overflow: ellipsis; white-space: nowrap; }
+.touched-name i { display: block; height: 2px; margin-top: 4px; border-radius: 1px; background: var(--color-hairline-strong); }
+.touched-row.top .touched-name i { background: var(--color-accent); }
+.touched-count { padding-top: 1px; color: var(--color-ink); font-size: 13px; font-variant-numeric: tabular-nums; text-align: right; }
+.touched-more { color: var(--color-meta); font-size: 12px; }
+.touched-native { align-self: flex-start; font-size: 12px; }
+
+@media (max-width: 1150px) {
+  .overview .project-columns { grid-template-columns: minmax(0, 1fr); gap: 36px; }
+  .project-side { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); align-items: start; gap: 32px; }
 }
-
-/* Work progress: the shared notes as one row, and what the observation left out folded away. */
-.shared-notes { align-items: center; border-radius: 12px; }
-.shared-notes > div { flex: 1; min-width: 0; }
-.shared-notes-mark { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 9px; background: var(--color-accent-soft); color: var(--color-accent-strong); }
-.shared-notes.dirty .shared-notes-mark { background: var(--color-amber-soft); color: var(--color-amber-text); }
-.shared-notes-state { margin-left: 8px; padding: 1px 7px; border-radius: 999px; background: var(--color-amber-soft); color: var(--color-amber-text); font-size: 11px; font-weight: 600; }
-.project-work { gap: 10px; margin-bottom: 0; }
-.work-observation { margin-top: 0; color: var(--color-meta); font-size: 12px; }
-.work-observation summary { width: max-content; cursor: pointer; }
-.work-observation p { margin: 6px 0 0 14px; line-height: 1.5; }
 @media (max-width: 767px) {
-  .shared-notes { display: grid; grid-template-columns: 34px minmax(0, 1fr); align-items: start; gap: 10px 12px; }
-  .shared-notes > button { grid-column: 1 / -1; }
+  .work-strip { padding: 14px 14px 10px; }
+  .graph-timeline.compact .tl-names { width: 96px; }
+  .figure-grid, .figure-grid.featured { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .figure-thumb, .figure-grid.featured .figure-thumb { height: 108px; }
+  /* Six fill three even rows; three lead with the newest across the width. */
+  .figure-grid.featured > li:first-child { grid-row: auto; }
+  .figure-grid.count-6 > li:first-child { grid-column: auto; }
+  .figure-grid.count-6 > li:first-child .figure-thumb { flex: none; height: 108px; min-height: 0; }
+  .figure-grid.count-3 > li:first-child .figure-thumb { min-height: 168px; }
+  .workspace-grid { grid-template-columns: minmax(0, 1fr); }
 }

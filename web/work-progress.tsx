@@ -1,18 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
 import { SessionProgress } from '@rho-workspace/plugin-agent/ui';
-import { Icon } from './icons.js';
+import { Icon, type IconName } from './icons.js';
 import type { BrowserClient, WorkspaceSnapshot } from '../src/browser.js';
 import type { RhoOutput } from '../src/contract.generated.js';
 
-type Work = RhoOutput<'project.work.read'>;
+export type Work = RhoOutput<'project.work.read'>;
+export interface ProjectWork { work: Work | null; problem: string; reading: boolean; refresh: () => void }
 const stateWords: Record<string, string> = { running: 'Answering', completed: 'Last message answered', failed: 'Last message failed', stopped: 'Stopped', unknown: 'Outcome unknown', retained: 'Retained native activity', idle: 'No messages' };
-export function WorkProgress({ client, snapshot, openFile, openConversation, openActivity, onPresence }: {
-  client: BrowserClient; snapshot: WorkspaceSnapshot; openFile: (path: string) => void;
-  openConversation: (id: string) => void; openActivity: () => void; onPresence: (present: boolean) => void;
-}) {
+// The project's work as one bounded read, repeated while it is shown: linked Agent sessions,
+// the files their tools named and the shared notes. Reading starts no Agent or Host.
+export function useProjectWork(client: BrowserClient, snapshot: WorkspaceSnapshot, enabled: boolean, onPresence: (present: boolean) => void): ProjectWork {
   const [work, setWork] = useState<Work | null>(null), [problem, setProblem] = useState(''), [reading, setReading] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null), request = useRef<(() => void) | null>(null);
   useEffect(() => {
+    if (!enabled) return;
     let live = true, busy = false, again = false;
     const controller = new AbortController();
     const read = async () => {
@@ -28,41 +29,63 @@ export function WorkProgress({ client, snapshot, openFile, openConversation, ope
     // External ACP connections are owned outside this service and have their own cursor.
     const external = setInterval(() => { if (!document.hidden) schedule(); }, 1500);
     return () => { clearInterval(external); live = false; controller.abort(); if (timer.current) clearTimeout(timer.current); timer.current = null; request.current = null; };
-  }, [client, snapshot.project.id]);
+  }, [client, snapshot.project.id, enabled]);
   useEffect(() => { request.current?.(); }, [snapshot.cursor]);
-  // Work in progress: a conversation started in Rho shows here while it answers or waits for a
-  // choice. Finished ones are listed once, on the Agent page.
+  return { work, problem, reading, refresh: () => request.current?.() };
+}
+
+// Work in progress: a conversation started in Rho shows here while it answers or waits for a
+// choice. Finished ones are listed once, on the Agent page.
+export function WorkSessions({ state, openConversation, openActivity }: { state: ProjectWork; openConversation: (id: string) => void; openActivity: () => void }) {
+  const { work, problem, reading, refresh } = state;
   const shown = work?.sessions.filter(session => !session.conversationId || session.state === 'running' || (session.pendingPermissions ?? 0) > 0) ?? [];
+  if (!shown.length && !problem) return null;
   return <section className="project-section project-work" aria-label="Project work">
-    {/* A heading only while something is in progress; otherwise the notes are one row. */}
-    {(shown.length > 0 || problem) && <div className="section-heading"><h2>Work progress</h2><button className="text-button" disabled={reading} onClick={() => request.current?.()}>{reading ? 'Reading…' : 'Refresh'}</button></div>}
-    <div className={'shared-notes' + (work?.notes.dirty ? ' dirty' : '')}><span className="shared-notes-mark" aria-hidden="true"><Icon name="document" size={17} /></span><div><strong>Shared notes{work?.notes.dirty && <span className="shared-notes-state">Unsaved</span>}</strong><p>{work?.notes.dirty ? 'Unsaved changes in the shared document. Save before asking Agent to read the file.' : 'Project notes for you and Agent. Save changes, then ask Agent to read project-notes.md.'}</p></div><button onClick={() => openFile(work?.notes.path ?? 'project-notes.md')}>Open shared notes</button></div>
+    <div className="section-heading"><h2>Work progress</h2><button className="text-button" disabled={reading} onClick={refresh}>{reading ? 'Reading…' : 'Refresh'}</button></div>
     {problem && <p role="alert">{problem} Retained observations remain below.</p>}
-    {!work && !problem && <p role="status">Reading project work…</p>}
-    {work && <>
-      <div className="work-sessions">{shown.map(session => <article className="work-session" key={session.id}>
-        <header><div><h3>{session.title}</h3><p>{stateWords[session.state] ?? session.state} · {session.source === 'acp' ? (session.agent === 'codex' ? 'Codex · ACP' : 'Claude Code · ACP') : session.source === 'external-acp' ? 'External ACP' : session.source === 'native-transcript' ? 'Native transcript' : 'Claude CLI'}</p></div>
-          {session.conversationId ? <button onClick={() => openConversation(session.conversationId!)}>Continue conversation</button> : session.source === 'external-acp' ? <span className="muted">Input stays in the original client</span> : <button onClick={openActivity}>View activity</button>}</header>
-        {session.observation ? <SessionProgress observation={session.observation} /> : session.source === 'native-transcript' ? <p className="muted">Input stays in the original window. Retained through cursor {session.cursor}; {session.droppedEvents ?? 0} events dropped.</p> : <p className="muted">No session projection retained yet.</p>}
-        {session.source === 'external-acp' && <>
-          {(session.pendingPermissions ?? 0) > 0 && <p role="status">Waiting for a permission choice in the original client.</p>}
-          {session.lastMessage && <details><summary>Latest reply · read only</summary><p className="external-reply">{session.lastMessage}</p>{(session.omittedMessageChars ?? 0) > 0 && <small>Later reply text was not retained.</small>}</details>}
-        </>}
-        {session.operationIds.length > 0 && <p className="work-references">Managed run references: {session.operationIds.join(', ')}</p>}
-        {session.resourceRefs.length > 0 && <p className="work-references">{session.resourceRefs.length} resource versions referenced. Results keep their own integrity and provenance.</p>}
-      </article>)}</div>
-      {work.files.length > 0 && <div className="work-files"><h3>Referenced files</h3><p className="muted">Current file observations. A tool reference does not establish who wrote these bytes.</p><ul>{work.files.map(file => <li key={file.path}>
-        <div><button className="text-button" disabled={file.state !== 'observed'} onClick={() => openFile(file.path)}>{file.path}</button><small>{file.state === 'observed' ? `${file.bytes} bytes · SHA-256 ${file.sha256?.slice(0, 12)}` : file.state.replaceAll('-', ' ')} · {file.references.length} tool references</small></div>
-        <details><summary>Sources</summary><ul>{file.references.map(ref => <li key={ref.session + ref.tool}>{work.sessions.find(s => s.id === ref.session)?.title ?? ref.session} · {ref.tool}</li>)}</ul><p>{file.observedAt}</p>{file.sha256 && <code>{file.sha256}</code>}</details>
-      </li>)}</ul></div>}
-      {work.native.state === 'available' && <p className="work-native-note">{work.native.message}<button className="text-button" onClick={openActivity}>View native activity</button></p>}
-      {/* What the observation left out or could not reach: kept, but not in the way. */}
-      {(work.omitted.fileReferences > 0 || work.omitted.external > 0 || work.native.state !== 'available') && <details className="work-observation">
-        <summary>Observation notes</summary>
-        {work.omitted.fileReferences > 0 && <p>{work.omitted.fileReferences} file references were outside project scope or observation limits.</p>}
-        {work.omitted.external > 0 && <p>{work.omitted.external} external ACP observations are unavailable or outside retention limits.</p>}
-        {work.native.state !== 'available' && <p>{work.native.message}</p>}
-      </details>}
-    </>}
+    {shown.length > 0 && <div className="work-sessions">{shown.map(session => <article className="work-session" key={session.id}>
+      <header><div><h3>{session.title}</h3><p>{stateWords[session.state] ?? session.state} · {session.source === 'acp' ? (session.agent === 'codex' ? 'Codex · ACP' : 'Claude Code · ACP') : session.source === 'external-acp' ? 'External ACP' : session.source === 'native-transcript' ? 'Native transcript' : 'Claude CLI'}</p></div>
+        {session.conversationId ? <button onClick={() => openConversation(session.conversationId!)}>Continue conversation</button> : session.source === 'external-acp' ? <span className="muted">Input stays in the original client</span> : <button onClick={openActivity}>View activity</button>}</header>
+      {session.observation ? <SessionProgress observation={session.observation} /> : session.source === 'native-transcript' ? <p className="muted">Input stays in the original window. Retained through cursor {session.cursor}; {session.droppedEvents ?? 0} events dropped.</p> : <p className="muted">No session projection retained yet.</p>}
+      {session.source === 'external-acp' && <>
+        {(session.pendingPermissions ?? 0) > 0 && <p role="status">Waiting for a permission choice in the original client.</p>}
+        {session.lastMessage && <details><summary>Latest reply · read only</summary><p className="external-reply">{session.lastMessage}</p>{(session.omittedMessageChars ?? 0) > 0 && <small>Later reply text was not retained.</small>}</details>}
+      </>}
+    </article>)}</div>}
   </section>;
+}
+
+const iconFor = (path: string): IconName => /\.(png|jpe?g|svg|gif|pdf|tiff?|webp)$/i.test(path) ? 'image' : /\.(csv|tsv|xlsx?|parquet|rds|rda|feather)$/i.test(path) ? 'table'
+  : /\.(R|r|py|sh|sql|js|ts|jl|Rmd|qmd)$/.test(path) ? 'code' : /\.(md|txt)$/i.test(path) ? 'document' : 'file';
+// The files the Agent's tools named, most used first, each with a bar for how often. A tool
+// naming a file does not say who wrote it; the file's own bytes and history stay in Files.
+export function TouchedFiles({ work, openFile, openActivity }: { work: Work | null; openFile: (path: string) => void; openActivity: () => void }) {
+  if (!work || (!work.files.length && !work.omitted.fileReferences)) return null;
+  const files = [...work.files].sort((a, b) => b.references.length - a.references.length);
+  const most = Math.max(1, ...files.map(file => file.references.length)), omitted = work.omitted.fileReferences;
+  return <section className="project-section touched-files" aria-labelledby="touched-title">
+    <div className="section-heading"><h2 id="touched-title">Files the Agent used</h2><span className="touched-unit">Tool calls</span></div>
+    <ul className="touched-list">{files.map((file, i) => {
+      const parts = file.path.split('/'), name = parts.pop()!, folder = parts.join('/'), observed = file.state === 'observed';
+      const sessions = [...new Set(file.references.map(ref => work.sessions.find(s => s.id === ref.session)?.title ?? ref.session))];
+      return <li key={file.path}><button className={'touched-row' + (i === 0 ? ' top' : '')} aria-label={file.path} title={`${file.path}\nNamed in ${sessions.join(', ')}`} disabled={!observed} onClick={() => openFile(file.path)}>
+        <Icon name={iconFor(name)} size={16} stroke={1.6} />
+        <span className="touched-name"><strong>{name}</strong><small>{observed ? folder || 'Project folder' : file.state.replaceAll('-', ' ')}</small>
+          <i aria-hidden="true" style={{ width: `${Math.max(4, file.references.length / most * 100)}%` }} /></span>
+        <span className="touched-count">{file.references.length}</span>
+      </button></li>;
+    })}</ul>
+    {omitted > 0 && <p className="touched-more">{omitted} more outside the project or past the limit</p>}
+    {work.native.state === 'available' && <button className="text-button touched-native" onClick={openActivity}>View native activity <Icon name="chevron" size={12} /></button>}
+  </section>;
+}
+
+// The notes the person and the Agent keep together; the editor owns its buffer and history.
+export function SharedNotes({ work, openFile }: { work: Work | null; openFile: (path: string) => void }) {
+  const path = work?.notes.path ?? 'project-notes.md';
+  return <button className="notes-card" aria-label="Open shared notes" onClick={() => openFile(path)}>
+    <span className="notes-sheet" aria-hidden="true"><i /><i /><i /></span>
+    <span className="notes-name"><strong>Shared notes</strong><small>{path}</small></span>
+    <Icon name="chevron" size={14} />
+  </button>;
 }

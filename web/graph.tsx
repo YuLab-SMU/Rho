@@ -577,8 +577,8 @@ function Timeline({ graph, cursor, playing, running, speed, onSpeed, onCursor, o
       {!compact && <button className="graph-play" aria-label={playing ? 'Pause' : 'Play the work from the start'} onClick={onPlay}><Icon name={playing ? 'pause' : 'run'} size={16} /></button>}
       <div className="graph-timeline-text"><strong>{events.filter(e => e.action !== 'ask' && e.action !== 'answer').length} actions</strong><span>{graph.turns.length} {graph.turns.length === 1 ? 'message' : 'messages'} · {span(duration)}{lanes.length > 1 ? ` · ${lanes.length} conversations` : ''}</span></div>
       <div className="tl-legend" role="group" aria-label="Show one kind of action">
-        {counts.map(k => <button key={k.key} className={'tl-kind ' + k.key} aria-pressed={only === k.key} onClick={() => setOnly(only === k.key ? null : k.key)}><i aria-hidden="true" />{k.label}<small>{k.count}</small></button>)}
-        {refused > 0 && <span className="tl-kind failed"><i aria-hidden="true" />Refused or unknown<small>{refused}</small></span>}
+        {counts.map(k => <button key={k.key} className={'tl-kind ' + k.key} aria-pressed={only === k.key} onClick={() => setOnly(only === k.key ? null : k.key)}><i aria-hidden="true" /><span>{k.label}</span><small>{k.count}</small></button>)}
+        {refused > 0 && <span className="tl-kind failed"><i aria-hidden="true" /><span>Refused or unknown</span><small>{refused}</small></span>}
       </div>
       {!compact && <>
         <div className="tl-speed" role="group" aria-label="Replay speed">
@@ -627,8 +627,10 @@ export function WorkStrip({ client, snapshot, files, onOpen, onConversations }: 
   const lastWords = (days === 0 ? 'today' : days === 1 ? 'yesterday' : new Date(last).toLocaleDateString()) + ' at ' + clock(last);
   const conversations = snapshot.conversations?.length ?? 0;
   return <section className="project-section work-strip" aria-labelledby="work-strip-title">
-    <div className="section-heading"><h2 id="work-strip-title">What the Agent did</h2><button className="text-button" onClick={onOpen}>Open the Graph <Icon name="chevron" size={12} /></button></div>
-    <p className="work-strip-line">{graph.nodes.filter(n => n.kind === 'question').length} questions in <button className="text-button" onClick={onConversations}>{conversations} {conversations === 1 ? 'conversation' : 'conversations'}</button> · {graph.nodes.filter(n => n.kind === 'run').length} commands · {files_} files changed · last {lastWords}</p>
+    {/* Questions and commands are counted by the kinds under the heading; the line keeps the rest. */}
+    <div className="section-heading"><div><h2 id="work-strip-title">What the Agent did</h2>
+      <p className="work-strip-line"><button className="text-button" onClick={onConversations}>{conversations} {conversations === 1 ? 'conversation' : 'conversations'}</button> · {files_} {files_ === 1 ? 'file' : 'files'} changed · last {lastWords}</p></div>
+      <button className="text-button" onClick={onOpen}>Open the Graph <Icon name="chevron" size={12} /></button></div>
     <Timeline graph={graph} cursor={null} playing={false} running={false} speed={1} onSpeed={() => undefined} onCursor={() => undefined} onPlay={() => undefined} compact />
   </section>;
 }

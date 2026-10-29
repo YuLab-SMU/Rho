@@ -12,6 +12,7 @@ import { Icon } from './icons.js';
 import { CommandPalette, type Command, type CommandGroup } from './commands.js';
 import { PluginCatalog, PluginNavigation } from './plugins.js';
 import { pluginPresentation } from '../src/plugin-presentation.js';
+import { ProjectRail, railProjects, useProjectStates } from './project-rail.js';
 import { shortcut } from './platform.js';
 import './theme.css';
 import './plugins.css';
@@ -50,6 +51,8 @@ function until(iso: string) {
   return (at.toDateString() === today ? 'Today' : at.toDateString() === next.toDateString() ? 'Tomorrow' : at.toLocaleDateString()) + ' at ' + clock(at);
 }
 type Phase = 'connecting' | 'live' | 'offline';
+// Where the person was in a project: switching back from the rail returns there.
+interface Place { screen: 'project' | 'plugins'; overview: boolean; section: Section; category: SourceRow; shownFile: { row: SourceRow; key: string } | null; compositionId: string; pluginId: string }
 function App() {
   // The narrowed link this tab uses, if any. Without one the tab is simply the local person.
   const [link, setLink] = useState<BrowserConnection | null>(() => linkCode === null ? restoreSession() : null);
@@ -77,6 +80,7 @@ function App() {
   const [category, setCategory] = useState<SourceRow>('data'), [addingSource, setAddingSource] = useState(false);
   // The file shown in place from Sources, by its kind and its key in that kind's list.
   const [shownFile, setShownFile] = useState<{ row: SourceRow; key: string } | null>(null);
+  const places = useRef(new Map<string, Place>());
   // Following: what the Agent reads and changes opens in the workspace the person shares with
   // it and is brought forward there. It starts when the person sends a message here or asks to
   // follow, and stops when they go somewhere else themselves. The Graph follows the same turn.
@@ -237,7 +241,19 @@ function App() {
   }
   function plugins() { setFollowing(false); setPluginId(''); setPluginReturn(false); setScreen('plugins'); }
   function about(id: string) { setPluginId(id); setPluginReturn(true); setScreen('plugins'); }
-  function goHome() { setFollowing(false); setScreen('home'); setHomeFocus(true); }
+  function goHome() { remember(); setFollowing(false); setScreen('home'); setHomeFocus(true); }
+  function remember() { if (project && screen !== 'home') places.current.set(project.id, { screen, overview, section, category, shownFile, compositionId, pluginId }); }
+  // Switching between projects keeps each one where the person left it in this tab; choosing a
+  // project from the list still opens it on its Overview.
+  function switchProject(next: ProjectSummary) {
+    if (next.id === project?.id && screen !== 'home') return;
+    remember();
+    const kept = places.current.get(next.id);
+    chooseProject(next);
+    if (!kept) return;
+    setScreen(kept.screen); setOverview(kept.overview); setSection(kept.section); setCategory(kept.category); setShownFile(kept.shownFile); setPluginId(kept.pluginId);
+    if (!kept.overview) setCompositionId(kept.compositionId);
+  }
   async function addSource() {
     if (!project) return;
     setAddingSource(true);
@@ -383,13 +399,15 @@ function App() {
   const fileOnScreen = section === 'file' && shownFile ? sources?.[shownFile.row].find(item => item.key === shownFile.key) : undefined;
   const here = screen === 'plugins' ? 'plugins' : screen !== 'project' ? '' : studioOpen ? 'studio:' + (composition?.compositionId ?? compositionId) : section === 'sources' ? 'sources:' + category : section === 'file' && shownFile ? 'file:' + shownFile.row + ':' + shownFile.key : section === 'documents' ? 'files' : section;
   const initials = project ? name(project).split(/[\s_.-]+/).filter(Boolean).slice(0, 2).map(w => [...w][0]!.toUpperCase()).join('') || 'P' : '';
+  // The projects list has the application's own sidebar even while a project stays chosen.
+  const inProject = !!project && screen !== 'home';
   const navigationContents = <>
-    {project ? <>
+    {project && inProject ? <>
       <button className="nav-back" onClick={pick(goHome)}><Icon name="back" size={15} /><span>All projects</span></button>
       <details className="project-card">
         <summary aria-label={'Project ' + name(project) + '. Switch project'}><span className={'project-avatar ' + projectHue(project.id + name(project))} aria-hidden="true">{initials}</span><span className="project-card-name"><small>Project</small><strong>{name(project)}</strong></span><Icon name="updown" size={16} /></summary>
         <div className="project-menu" role="group" aria-label="Switch project">
-          {projects.filter(p => p.id !== project.id).slice(0, 8).map(p => <button key={p.id} onClick={e => { e.currentTarget.closest('details')?.removeAttribute('open'); pick(() => chooseProject(p))(); }}><span className={'project-avatar small ' + projectHue(p.id + name(p))} aria-hidden="true">{name(p).slice(0, 1).toUpperCase()}</span><span>{name(p)}</span></button>)}
+          {projects.filter(p => p.id !== project.id).slice(0, 8).map(p => <button key={p.id} onClick={e => { e.currentTarget.closest('details')?.removeAttribute('open'); pick(() => switchProject(p))(); }}><span className={'project-avatar small ' + projectHue(p.id + name(p))} aria-hidden="true">{name(p).slice(0, 1).toUpperCase()}</span><span>{name(p)}</span></button>)}
           <button onClick={e => { e.currentTarget.closest('details')?.removeAttribute('open'); pick(goHome)(); }}><Icon name="folder" size={16} /><span>All projects…</span></button>
         </div>
       </details>
@@ -403,11 +421,15 @@ function App() {
       <button className="project-switcher" onClick={pick(goHome)}><Icon name="folder" size={18} /><span>Your projects</span><Icon name="chevron" size={13} /></button>
     </>}
     <div className="navigation-footer">
-      {project && <button className="nav-row" aria-current={screen === 'project' && overview && section === 'settings' ? 'page' : undefined} onClick={pick(() => showSection('settings'))}><Icon name="context" size={17} /><span>Project settings</span></button>}
-      {project && <button className="nav-row" aria-current={screen === 'plugins' ? 'page' : undefined} onClick={pick(plugins)}><Icon name="plugins" size={17} /><span>Plugins</span></button>}
-      <button ref={contextTrigger} className="nav-row" aria-expanded={context && !feedbackContext} onClick={pick(() => { setFeedbackContext(false); setContext(v => feedbackContext || !v); setAgentOpen(false); })}><Icon name="context" size={17} /><span>Connection & access</span></button>
+      {inProject && <button className="nav-row" aria-current={screen === 'project' && overview && section === 'settings' ? 'page' : undefined} onClick={pick(() => showSection('settings'))}><Icon name="context" size={17} /><span>Project settings</span></button>}
+      {inProject && <button className="nav-row" aria-current={screen === 'plugins' ? 'page' : undefined} onClick={pick(plugins)}><Icon name="plugins" size={17} /><span>Plugins</span></button>}
     </div>
   </>;
+  // Each recent project's Agent state; the open project's comes from its own live record.
+  const railList = railProjects(projects), railStates = { ...useProjectStates(client, railList, !link) };
+  if (project && agentNow) { if (agentNow.running) railStates[project.id] = agentNow.waiting ? 'waiting' : 'working'; else delete railStates[project.id]; }
+  const rail = <ProjectRail projects={railList} current={project?.id ?? null} home={!inProject} states={railStates} onHome={pick(goHome)} onProject={next => pick(() => switchProject(next))()}
+    accessOpen={context && !feedbackContext} accessTrigger={contextTrigger} onAccess={pick(() => { setFeedbackContext(false); setContext(v => feedbackContext || !v); setAgentOpen(false); })} />;
   const closeAgent = () => { setAgentOpen(false); agentReturn(); };
   // A conversation's own header holds its title, the recent conversations and Close.
   const agentContents = <>
@@ -431,10 +453,11 @@ function App() {
   return <div className="application">
     <a className="skip-link" href="#main">Skip to workspace</a>
     <div className="app-body">
-      {!narrow && navigation && <aside className="project-nav" aria-label={sidebarName}>{navigationContents}</aside>}
+      {!narrow && rail}
+      {!narrow && navigation && inProject && <aside className="project-nav" aria-label={sidebarName}>{navigationContents}</aside>}
       <div className="app-content">
         <header className="topbar">
-          <button ref={navigationTrigger} className="icon-button" aria-label={navigation ? 'Hide navigation' : 'Open navigation'} aria-expanded={navigation} onClick={() => setNavigation(v => !v)}><Icon name="sidebar" size={19} /></button>
+          {(inProject || narrow) && <button ref={navigationTrigger} className="icon-button" aria-label={navigation ? 'Hide navigation' : 'Open navigation'} aria-expanded={navigation} onClick={() => setNavigation(v => !v)}><Icon name="sidebar" size={19} /></button>}
           <nav className="location" aria-label="Location">
             {crumbs.map((crumb, index) => <Fragment key={crumb.label + index}>
               {index > 0 && <span className="crumb-sep" aria-hidden="true">/</span>}
@@ -489,7 +512,7 @@ function App() {
         </div>
       </div>
     </div>
-    {narrow && navigation && <Overlay className="drawer" label="Navigation" returnFocus={navigationTrigger} onClose={() => setNavigation(false)}><button className="icon-button drawer-close" aria-label="Close navigation" onClick={() => setNavigation(false)}><Icon name="close" size={18} /></button>{navigationContents}</Overlay>}
+    {narrow && navigation && <Overlay className="drawer" label="Navigation" returnFocus={navigationTrigger} onClose={() => setNavigation(false)}><button className="icon-button drawer-close" aria-label="Close navigation" onClick={() => setNavigation(false)}><Icon name="close" size={18} /></button><div className="drawer-split">{rail}<div className="drawer-nav">{navigationContents}</div></div></Overlay>}
     {narrow && agentOpen && <Overlay className="context-sheet" label="Agent panel" returnFocus={agentTrigger} onClose={() => setAgentOpen(false)}>{agentContents}</Overlay>}
     {narrow && context && <Overlay className="context-sheet" label={feedbackContext ? 'Your question' : 'Context and access'} returnFocus={contextTrigger} onClose={() => setContext(false)}><div className="drawer-heading"><h2>{feedbackContext ? 'Your question' : 'Connection & access'}</h2><button className="done-button" onClick={() => setContext(false)}>Done</button></div>{contextSections}</Overlay>}
     <dialog ref={dialog} className="commands" aria-label="Commands" onCancel={() => setCommands(false)} onClose={e => { if (e.currentTarget.open) return; setCommands(false); const next = afterCommands.current; afterCommands.current = null; if (next) next(); else commandReturn()?.focus(); }} onClick={e => { if (e.target === e.currentTarget) setCommands(false); }}>{commands && <CommandPalette groups={groups} onRun={runCommand} />}</dialog>

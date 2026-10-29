@@ -1,5 +1,6 @@
-import { lazy, Suspense, useEffect, useRef, useState } from 'react';
-import type { BrowserClient, ProjectSummary, WorkspaceSnapshot } from '../src/browser.js';
+import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from 'react';
+import type { BrowserClient, CompositionSummary, ProjectSummary, WorkspaceSnapshot } from '../src/browser.js';
+import { regions, type Region } from '../src/shell-layout.js';
 import { executionWord, integrityWord, results, shortPath, type RunFacts } from '../src/execution-facts.js';
 import { useRuns } from './executions.js';
 import { projectName, place, SourceFolders, when } from './home.js';
@@ -11,13 +12,14 @@ import { RunView } from './shell/facts.js';
 import { AgentActivity } from './agent-activity.js';
 import { AgentPage } from './agent-manage.js';
 import { AgentAccess } from './agents.js';
-import { WorkProgress } from './work-progress.js';
+import { SharedNotes, TouchedFiles, useProjectWork, WorkSessions } from './work-progress.js';
 import { readPreview, type Preview } from './previews.js';
 import './overview.css';
 
 // The Graph's record, drawn small on the Overview; loaded with the Graph's own code.
 const WorkStrip = lazy(() => import('./graph.js').then(module => ({ default: module.WorkStrip })));
-const shownFigures = 8;
+// The newest result leads at twice the size; the rest fill whole rows beside and below it.
+const figureCount = (total: number) => total >= 6 ? 6 : total >= 3 ? 3 : total;
 const viewIcon = (component: string, title: string): IconName => /table/.test(component) ? 'table' : /media|image/.test(component) ? 'image'
   : /\.(R|r|py|sh|sql|js|ts)$/.test(title) ? 'code' : /document|editor|note/.test(component) ? 'document' : 'file';
 // A figure or result as a picture of itself: an image's pixels, a table's first rows, or its kind.
@@ -39,6 +41,24 @@ function Thumb({ client, snapshot, item, modifiedAt }: { client: BrowserClient; 
     </span>
   </span>;
   return <span className="figure-thumb kind" aria-hidden="true"><Icon name={fileIcon(item)} size={26} stroke={1.4} /></span>;
+}
+
+// A workspace drawn as its own arrangement: each split at its weights, each tab group as a
+// pane naming its first view and how many more it holds.
+function MiniLayout({ composition }: { composition: CompositionSummary }) {
+  const root = regions(composition), views = new Map(composition.views.map(v => [v.id, v]));
+  if (!root) return <span className="mini-layout empty">Empty workspace</span>;
+  const draw = (region: Region): ReactNode => {
+    if (region.kind === 'split') return <span className={'mini-split ' + region.axis}>{region.children.map((child, i) => <span key={child.id} style={{ flexGrow: region.weights[i] ?? 1 }}>{draw(child)}</span>)}</span>;
+    const shown = region.views.flatMap(id => views.get(id) ?? []), first = shown[0];
+    const title = first ? String(first.props.title ?? first.id) : '';
+    return <span className="mini-pane">
+      <span className="mini-tabs">{shown.slice(0, 5).map((v, i) => <i key={v.id} className={i === 0 ? 'on' : undefined} />)}</span>
+      {first && <span className="mini-face"><Icon name={viewIcon(String(first.component), title)} size={13} /><span>{title}</span></span>}
+      {shown.length > 1 && <small>+{shown.length - 1}</small>}
+    </span>;
+  };
+  return <span className="mini-layout" aria-hidden="true">{draw(root)}</span>;
 }
 
 function shownPath(at: string, project: ProjectSummary) {
@@ -70,6 +90,8 @@ export function ProjectOverview({ project, snapshot, client, section, workspace,
   // project has nothing recorded, so an empty project can lead with the step that has content.
   const [rootEntries, setRootEntries] = useState<number | null>(null);
   const [hasWork, setHasWork] = useState(false);
+  const workAllowed = snapshot.catalog.operations.some(o => o.method === 'project.work.read' && o.authorized);
+  const work = useProjectWork(client, snapshot, section === 'overview' && workAllowed, setHasWork);
   const readSequence = useRef(0), runDialog = useRef<HTMLDialogElement>(null);
   const isFiles = section === 'files' || section === 'documents';
   const places = new Map<string, { compositionId: string; viewId: string }>();
@@ -91,8 +113,11 @@ export function ProjectOverview({ project, snapshot, client, section, workspace,
   const clean = !snapshot.compositions.length && !artifacts.length && !snapshot.taskMap?.question && !snapshot.taskMap?.items.length && !snapshot.conversations?.length && !hasWork;
   const settled = !clean || ((runs !== null || !!runsProblem) && rootEntries !== null);
   const emptyProject = section === 'overview' && clean && runs !== null && runs.length === 0 && rootEntries !== null;
-  // The activity column earns its place only when it has something to report.
+  // The side column earns its place only when it has something to report.
   const recent = !!runsProblem || (runs?.length ?? 0) > 0;
+  const touched = !!work.work && (work.work.files.length > 0 || work.work.omitted.fileReferences > 0);
+  const side = recent || touched || workAllowed || snapshot.compositions.length > 0;
+  const shownFigures = figureCount(figures.length);
   // An empty project leads with the step that has something behind it, and never with a claim
   // that could not be read: a failed listing keeps the Agent first.
   const browseLeads = (rootEntries ?? 0) > 0;
@@ -164,7 +189,7 @@ export function ProjectOverview({ project, snapshot, client, section, workspace,
       {section === 'sources' && files && <button onClick={files.refresh} disabled={files.reading}><Icon name="refresh" size={15} />Refresh</button>}
     </header>
     {section === 'sources' && files && onFile && <SourceList category={category ?? 'data'} files={files} items={sources?.[category ?? 'data'] ?? null} artifacts={artifacts} onFile={onFile} />}
-    {section === 'overview' && snapshot.catalog.operations.some(o => o.method === 'project.work.read' && o.authorized) && <WorkProgress client={client} snapshot={snapshot} openFile={p => void open({ path: p })} openConversation={onAgent} openActivity={() => onSection('agent')} onPresence={setHasWork} />}
+    {section === 'overview' && workAllowed && <WorkSessions state={work} openConversation={onAgent} openActivity={() => onSection('agent')} />}
     {section === 'overview' && fileError && <p role="alert">{fileError}</p>}
     {emptyProject && <div className="empty-project">
       <span className="empty-symbol"><Icon name="grid" size={26} stroke={1.5} /></span>
@@ -173,27 +198,32 @@ export function ProjectOverview({ project, snapshot, client, section, workspace,
     </div>}
     {section === 'overview' && !emptyProject && settled && <>
       {snapshot.taskMap?.question && <div className="project-question"><Icon name="prompt" size={18} /><h2>{snapshot.taskMap.question}</h2></div>}
-      <div className={'project-columns' + (recent ? '' : ' single')}>
+      {files && !!snapshot.conversations?.length && <Suspense fallback={null}><WorkStrip client={client} snapshot={snapshot} files={files} onOpen={() => onSection('graph')} onConversations={() => onSection('agent')} /></Suspense>}
+      <div className={'project-columns' + (side ? '' : ' single')}>
         <div className="project-primary">
-          {files && !!snapshot.conversations?.length && <Suspense fallback={null}><WorkStrip client={client} snapshot={snapshot} files={files} onOpen={() => onSection('graph')} onConversations={() => onSection('agent')} /></Suspense>}
           <section className="project-section figures-section"><div className="section-heading"><h2>Results &amp; figures{figures.length > 0 && <span className="section-count">{figures.length}</span>}</h2><button className="text-button" onClick={() => onSection('files')}>All files <Icon name="chevron" size={12} /></button></div>
-            {figures.length ? <ul className="figure-grid">{figures.slice(0, shownFigures).map(item => <li key={item.key}>
+            {figures.length ? <ul className={'figure-grid count-' + shownFigures + (shownFigures >= 3 ? ' featured' : '')}>{figures.slice(0, shownFigures).map(item => <li key={item.key}>
               <button className="figure-card" onClick={() => onFile?.('results', item)} title={item.path}>
                 <Thumb client={client} snapshot={snapshot} item={item} modifiedAt={modified.get(item.path)} />
                 <span className="figure-name"><strong>{item.name}</strong><small>{item.resource && item.path.startsWith('.rho/') ? 'Run output' : item.folder}{modified.get(item.path) ? ' · ' + when(modified.get(item.path)!).text : ''}</small></span>
               </button></li>)}</ul>
               : artifacts.length ? resultList : <p className="quiet-empty">No results or figures yet.</p>}
-            {figures.length > shownFigures && <button className="text-button figures-more" onClick={() => onSection('files')}>{figures.length - shownFigures} more in Files</button>}
+            {figures.length > shownFigures && <button className="text-button figures-more" onClick={() => onSection('files')}>{figures.length - shownFigures} more in Files <Icon name="chevron" size={12} /></button>}
           </section>
-          {snapshot.compositions.length > 0 && <section className="project-section"><div className="section-heading"><h2>Continue working</h2></div><div className="workspace-grid">{snapshot.compositions.map(c => <button key={c.compositionId} className="workspace-card" onClick={() => onLayout(c.compositionId)}>
-            <span className="workspace-card-head"><Icon name="layout" size={18} stroke={1.6} /><strong>{compositionName(c.compositionId)}</strong><small>{c.views.length} {c.views.length === 1 ? 'view' : 'views'}</small><Icon name="chevron" size={14} /></span>
-            {c.views.length ? <span className="workspace-tiles">{c.views.slice(0, 4).map(v => { const title = String((v.props as Record<string, unknown>).title ?? v.id); return <span key={v.id} className="workspace-tile"><Icon name={viewIcon(String(v.component), title)} size={14} /><span>{title}</span></span>; })}
-              {c.views.length > 4 && <span className="workspace-tile more">+{c.views.length - 4}</span>}</span> : <span className="workspace-tiles empty">Empty workspace</span>}
-          </button>)}</div></section>}
           {snapshot.taskMap?.items.length ? <section className="project-section"><div className="section-heading"><h2>From your Agent</h2></div><ul className="agent-notes">{snapshot.taskMap.items.map(item => <li key={item.id} data-fact="agent"><strong>{item.title}</strong>{item.summary && <p>{item.summary}</p>}<small>{snapshot.taskMap!.vocabulary.states[item.state]?.label ?? item.state}</small></li>)}</ul></section> : null}
         </div>
-        {recent && <aside className="project-recent"><div className="section-heading"><h2>Recent activity</h2><button className="text-button" onClick={() => onSection('agent')}>View all</button></div>
-          {error(runsProblem, readAgain)}{orderedRuns.length ? <div className="activity-list">{orderedRuns.slice(0, 5).map(runRow)}</div> : <p className="quiet-empty">No runs yet.</p>}
+        {side && <aside className="project-side">
+          {(snapshot.compositions.length > 0 || workAllowed) && <section className="project-section"><div className="section-heading"><h2>Continue working</h2></div>
+            <div className="workspace-grid">{snapshot.compositions.map(c => <button key={c.compositionId} className="workspace-card" onClick={() => onLayout(c.compositionId)}>
+              <span className="workspace-card-head"><strong>{compositionName(c.compositionId)}</strong><small>{c.views.length} {c.views.length === 1 ? 'view' : 'views'}</small><Icon name="chevron" size={14} /></span>
+              <MiniLayout composition={c} />
+            </button>)}
+            {workAllowed && <SharedNotes work={work.work} openFile={p => void open({ path: p })} />}</div>
+          </section>}
+          <TouchedFiles work={work.work} openFile={p => void open({ path: p })} openActivity={() => onSection('agent')} />
+          {recent && <section className="project-section project-recent"><div className="section-heading"><h2>Recent activity</h2><button className="text-button" onClick={() => onSection('agent')}>View all</button></div>
+            {error(runsProblem, readAgain)}{orderedRuns.length ? <div className="activity-list">{orderedRuns.slice(0, 5).map(runRow)}</div> : <p className="quiet-empty">No runs yet.</p>}
+          </section>}
         </aside>}
       </div>
     </>}

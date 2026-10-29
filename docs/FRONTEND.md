@@ -19,11 +19,13 @@ inspect what happened. The application gives those actions direct places:
   in, opens folders and creates a named project from selected source folders. It
   opens as one list with one primary action, and with no projects it shows what can
   be started instead of an empty page.
-- **Overview** leads with what the Agent did in small: the Graph's timeline without
-  its controls, one lane per conversation, under a line of questions, commands, files
-  changed and the last time. The results follow as pictures, newest first: a figure
-  as itself, a table as its first rows, eight in all with the rest in Files. Each
-  workspace is a card naming its views. Its Work progress shows a conversation while
+- **Overview** leads with what the Agent did in small: a count for each kind of step
+  (asked, read, edited, ran, changed on disk, answered), which is also the legend and
+  filter of the Graph's timeline below it, one lane per conversation. The results follow
+  as pictures, newest first: the newest at twice the size, then two or five more, with
+  the rest in Files. A side column draws each workspace as its panes, opens the shared
+  notes, and lists the files the Agent's tools named, most used first, each with a bar
+  for its tool calls. Its Work progress shows a conversation while
   it answers or waits for a choice; finished ones are listed on the Agent page. A project with nothing recorded yet shows its two next steps —
   work with the Agent or browse its files — rather than empty sections, leading with
   whichever one the project's listing says has something behind it.
@@ -123,16 +125,23 @@ inspect what happened. The application gives those actions direct places:
   episode](AGENT-UI-EPISODE.md) records the observations, checks and limits.
 
 The topbar names the way back — the projects list, then the project, then the open
-workspace — and keeps only the current place below 768 CSS px. The project sidebar
-starts with All projects and the project (its menu switches to another open project),
-then Overview, Studio, and Agent (Working or Needs you while a turn runs), then
-Sources. Project settings, Plugins and Connection & access sit together at its foot;
-the last opens a drawer: the focused document's Changes, then the connection (its state,
+workspace — and keeps only the current place below 768 CSS px. A rail at the far left
+belongs to the application: Rho opens the projects list, then the eight most recently
+opened projects as avatars in the service's order, a dot on each one whose Agent is
+answering (from one bounded `conversation.list` per project every five seconds while
+the page is visible; the open project's own record also says when it needs a choice),
+and Open or create a project. Choosing a project there returns to where it was left in
+this tab; choosing one from the projects list opens its Overview. The projects list has
+no project sidebar. The project sidebar starts with All projects and the project (its
+menu switches to another open project), then Overview, Studio, and Agent (Working or
+Needs you while a turn runs), then Sources, with Project settings and Plugins at its
+foot. Connection & access, at the foot of the rail, opens a drawer: the focused document's Changes, then the connection (its state,
 when it was last read, Refresh or Reconnect, and why the service did not answer) and this
 tab (this machine or a link, its folder and expiry, what it can and cannot do, and for a
 link the way back to this machine's access), each as a card
 ([episode](AGENT-PANEL-EPISODE.md#connection--access)). The sidebar and optional
-inspector adapt to available space. Narrow screens show one workspace view at a time.
+inspector adapt to available space; below 768 CSS px the navigation drawer holds the
+rail beside the project sidebar. Narrow screens show one workspace view at a time.
 Closing a panel does not cancel work.
 
 The [home and project episode](HOME-PROJECT-EPISODE.md) records the 2026-10-27 pass
@@ -163,8 +172,8 @@ up to 2 MiB and tables to 3 rows by 4 columns.
 `web/work-progress.tsx` reads `project.work.read` for the local person's project
 Overview: Agent-reported plans/usage, retained native source identities and current
 referenced files. It shows a conversation started in Rho only while it answers or
-waits for a choice, and links to the Agent page for the finished ones; what the
-observation left out folds under Observation notes.
+waits for a choice, and links to the Agent page for the finished ones; references the
+observation left out are counted under the file list.
 `web/agent-manage.tsx` draws the Agent page's tabs from the conversation summaries in
 the snapshot and `conversation.list` for the trash; an opened row reads its latest
 four messages through `web/agent-work.tsx`, the same step model as the panel.
@@ -172,8 +181,7 @@ four messages through `web/agent-work.tsx`, the same step model as the panel.
 the Agents tab and the panel's settings menu (`web/settings-menu.tsx`);
 asking an Agent what it offers (`conversation.settings.check`) is always the
 person's click.
-Shared notes opens `project-notes.md` in the existing Documents owner; saving is
-explicit before asking Agent to read it. A failed work read keeps the previous
+Shared notes opens `project-notes.md` in the existing Documents owner. A failed work read keeps the previous
 view and offers Refresh. The cursor invalidates the read model; individual sources
 and resources retain their own versions. See the [observed loop](ACP-EPISODE.md#shared-workspace-loop).
 External ACP sessions use the same work surface with their own source identity,

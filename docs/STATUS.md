@@ -1,6 +1,6 @@
 # Rho status
 
-Updated: 2026-10-28.
+Updated: 2026-10-29.
 
 ## Current focus
 
@@ -60,12 +60,12 @@ Git retains them at `24d9998b`; they are not requirements or reference designs.
   in small, then results as pictures ([record](GRAPH-EPISODE.md#the-timeline-the-overview-and-host-activity)).
 - Tabs drag onto other tabs, into a group or to its side, and the Agent panel's edge
   drags; each drop is the conditional `composition.apply` the Agent's grant also holds.
-- The Agent page's Conversations tab lists conversations by day with model, effort,
-  context, cost, search, Markdown export and a trash (restore; delete only from there);
-  a row opens to its facts and work. Agents shows each Agent's version, models by
-  provider, own names, settings and the default, asked on the person's click. Outside
-  Rho runs the person's own Claude Code or Codex `mcp add` for this project with one
-  button (`session.connect`) and shows the access, the entry and the first call.
+- The Agent page lists conversations by day (model, effort, context, cost, search,
+  Markdown export, a trash); Agents shows versions, models by provider, settings and the
+  default. Outside Rho runs the person's own Claude Code or Codex `mcp add` for this
+  project with one button (`session.connect`) and shows the access and first call.
+- A left rail keeps open projects one click away with their Agent state; All projects
+  drops the project sidebar. The Overview leads with counts and figures.
 - Documents 0.4.3 adopts a changed file into a buffer with no unsaved text. Agent
   0.4.12 captures one named file; 0.4.13 applies, changes and inspects ACP settings;
   0.4.14 draws Host activity as cards and 0.4.15 shows project paths relative.

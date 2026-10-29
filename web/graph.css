@@ -166,7 +166,12 @@
 .tl-kind { display: inline-flex; align-items: center; gap: 6px; min-height: 26px; padding: 2px 8px; border: 1px solid transparent; border-radius: 999px; background: transparent; color: var(--color-muted); font-size: 12px; font-weight: 450; }
 .tl-kind:hover { background: var(--color-hover); color: var(--color-ink); }
 .tl-kind[aria-pressed=true] { border-color: var(--color-hairline-strong); background: var(--color-surface); color: var(--color-ink); box-shadow: 0 1px 2px #1c2a2414; }
-.tl-kind i { width: 9px; height: 9px; border-radius: 3px; background: var(--tl-color); }
+/* Each swatch is its mark scaled down: a bar for a step, a hollow bar for a change on disk, a
+   diamond for a question and a ring for an answer. */
+.tl-kind i { flex: none; width: 5px; height: 11px; border-radius: 1.5px; background: var(--tl-color); }
+.tl-kind.changed i { background: transparent; box-shadow: inset 0 0 0 1.5px var(--tl-color); }
+.tl-kind.ask i { width: 7px; height: 7px; border-radius: 1px; transform: rotate(45deg); }
+.tl-kind.answer i { width: 8px; height: 8px; border-radius: 50%; background: transparent; box-shadow: inset 0 0 0 2px var(--tl-color); }
 .tl-kind small { color: var(--color-meta); font-size: 11px; font-variant-numeric: tabular-nums; }
 .tl-speed { display: inline-flex; flex: none; padding: 2px; border: 1px solid var(--color-hairline); border-radius: 999px; background: var(--color-well); }
 .tl-speed button { min-height: 24px; padding: 1px 9px; border: 0; border-radius: 999px; background: transparent; color: var(--color-muted); font-size: 12px; font-variant-numeric: tabular-nums; }

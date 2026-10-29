@@ -194,7 +194,8 @@ print(name+' completed once')
   report.checks.push('service restart read existing messages without execution, then loaded the original session for a deliberate next message');
   if (values.work) {
     await panel().getByRole('button', { name: 'Close Agent', exact: true }).click();
-    await page.getByRole('region', { name: 'Project work', exact: true }).waitFor();
+    // A finished conversation leaves its files on the Overview; Work progress shows only running ones.
+    await page.getByRole('region', { name: 'Files the Agent used', exact: true }).waitFor();
     let work = await call('project.work.read');
     const session = work.sessions.find(s => s.conversationId === conversationId);
     assert.ok(session.observation.plan?.entries.length, 'real native plan is represented');
@@ -225,13 +226,13 @@ print(name+' completed once')
     assert.equal((await call('observation.snapshot')).documents.filter(d => d.path === 'project-notes.md').length, 1);
     report.work = work;
     await panel().getByRole('button', { name: 'Close Agent', exact: true }).click();
-    await until(() => page.locator('.work-files').innerText().catch(() => ''), s => s.includes('work-result.txt'), 'result reference visible');
+    await until(() => page.locator('.touched-files').innerText().catch(() => ''), s => s.includes('work-result.txt'), 'result reference visible');
     for (const width of [1440, 768, 390]) {
       await page.setViewportSize({ width, height: 900 }); await snap('project-work-' + width);
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
     }
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.locator('.work-files').getByRole('button', { name: 'work-result.txt', exact: true }).click();
+    await page.locator('.touched-files').getByRole('button', { name: 'work-result.txt', exact: true }).click();
     await page.getByRole('tab', { name: 'work-result.txt', exact: true, selected: true }).waitFor();
     await until(() => page.locator('.cm-content:visible').innerText(), text => text.trim() === result.trim(), 'referenced result contents'); await snap('referenced-result-opened');
     report.checks.push('real ACP plan, usage and replay projection; human saved shared notes in Documents; the same Agent session read the decision and wrote verified file bytes; project view rendered at three widths and navigation selected the result');

@@ -1,0 +1,36 @@
+/* The application's column: Rho, each recent project as its avatar, and this tab's connection.
+   The current project carries an ink pill on the rail's edge; a dot says its Agent is working. */
+.project-rail { --rail-ground: #eef1f0; position: relative; z-index: 6; display: flex; flex: 0 0 60px; flex-direction: column; align-items: stretch; gap: 4px; padding: 12px 0; border-right: 1px solid var(--color-hairline); background: var(--rail-ground); }
+.project-rail button { position: relative; width: 60px; min-height: 44px; padding: 0; border: 0; border-radius: 0; background: transparent; color: var(--color-muted); }
+.project-rail button:hover, .project-rail button:active { background: transparent; }
+.project-rail button:focus-visible { outline: none; }
+.project-rail button:focus-visible > :first-child { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.rail-home { margin-bottom: 6px; }
+.rail-home .brand-mark { width: 34px; height: 34px; font-size: 27px; border-radius: 10px; }
+.rail-projects { display: flex; flex-direction: column; gap: 4px; margin: 0; padding: 8px 0 0; border-top: 1px solid var(--color-hairline); list-style: none; }
+.rail-project .project-avatar { width: 36px; height: 36px; margin: 0 auto; border-radius: 10px; font-size: 13px; transition: border-radius .15s; }
+.rail-project:hover .project-avatar, .rail-project[aria-current=page] .project-avatar { border-radius: 12px; }
+/* The pill: a stub on hover, full height for the project on screen. */
+.rail-project::before, .rail-home::before { content: ''; position: absolute; left: 0; top: 50%; width: 4px; height: 0; border-radius: 0 3px 3px 0; background: var(--color-ink); transform: translateY(-50%); transition: height .15s; }
+.rail-project:hover::before, .rail-home:hover::before { height: 10px; }
+.rail-project[aria-current=page]::before, .rail-home[aria-current=page]::before { height: 26px; }
+.rail-state { position: absolute; right: 9px; bottom: 1px; width: 11px; height: 11px; border-radius: 50%; background: var(--color-accent); box-shadow: 0 0 0 2.5px var(--rail-ground); }
+.rail-project.waiting .rail-state { background: var(--color-amber); }
+.rail-project.working .rail-state::after { content: ''; position: absolute; inset: 0; border-radius: 50%; background: var(--color-accent); animation: rail-pulse 1.8s ease-out infinite; }
+@keyframes rail-pulse { from { opacity: .55; transform: scale(1); } to { opacity: 0; transform: scale(2.4); } }
+@media (prefers-reduced-motion: reduce) { .rail-project.working .rail-state::after { animation: none; } .rail-project .project-avatar, .rail-project::before, .rail-home::before { transition: none; } }
+.rail-add > svg { box-sizing: content-box; padding: 9px; border: 1px dashed var(--color-control-border); border-radius: 10px; color: var(--color-meta); }
+.rail-add:hover > svg { border-style: solid; border-color: var(--color-hairline-strong); color: var(--color-ink); }
+.rail-access { margin-top: auto; }
+.rail-access > svg { box-sizing: content-box; padding: 8px; border-radius: 9px; }
+.rail-access:hover > svg, .rail-access[aria-expanded=true] > svg { background: var(--color-hover); color: var(--color-ink); }
+/* The name beside each mark, on hover and on keyboard focus. */
+.project-rail [data-tip]:hover::after, .project-rail [data-tip]:focus-visible::after { content: attr(data-tip); position: absolute; left: calc(100% + 2px); top: 50%; z-index: 30; padding: 5px 9px; border-radius: 6px; background: var(--color-ink); color: white; font-size: 12px; font-weight: 500; line-height: 1.4; white-space: nowrap; transform: translateY(-50%); pointer-events: none; box-shadow: 0 6px 16px #1c2a2433; }
+
+/* In the narrow drawer the rail stands beside the project's navigation. */
+.drawer:has(.drawer-split) { width: min(340px, 92vw); padding-left: 0; }
+.drawer-split { display: flex; min-height: 100%; }
+.drawer-split > .project-rail { flex-basis: 60px; margin: -22px 0 -14px; padding-top: 22px; }
+.drawer-nav { display: flex; flex: 1; flex-direction: column; min-width: 0; padding-left: 12px; }
+.drawer-split [data-tip]:hover::after, .drawer-split [data-tip]:focus-visible::after { display: none; }
+@media (max-width: 767px) { .app-body > .project-rail { display: none; } }
