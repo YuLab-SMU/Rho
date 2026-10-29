@@ -134,6 +134,8 @@ export interface ConversationPorts {
   grant(project: Project, conversation: { id: string; title: string; client: string }): Promise<{ file: string; principal: string }>;
   directory(project: Project): Promise<string>;
   changed(project: Project, conversationId: string): Promise<void>;
+  // Local Claude Code plugin directories a Claude session loads: skills and hooks of the selected plugins.
+  claudePlugins?(project: Project): Promise<string[]>;
 }
 const identity = /^c-[a-f0-9]{16}$/;
 function cut(text: string, maxBytes: number) {
@@ -569,7 +571,7 @@ export class Conversations {
       const driver = c.backend === 'codex-acp'
         ? new CodexAcpConversation({ ...this.config.codexAcp, ...common, codex: this.config.codex })
         : c.backend === 'claude-acp'
-          ? new ClaudeAcpConversation({ ...this.config.claudeAcp, ...common, claude: this.binary })
+          ? new ClaudeAcpConversation({ ...this.config.claudeAcp, ...common, claude: this.binary, plugins: [...this.config.claudeAcp?.plugins ?? [], ...await this.ports.claudePlugins?.(project) ?? []] })
           : new ClaudeCliConversation({ cwd: project.root, binary: this.binary, sessionId: c.nativeSessionId!, confirmed: c.confirmed, projectName: project.name ?? path.basename(project.root), mcpServers, limits: this.limits });
       this.drivers.set(key, { driver, project, conversation: c }); return driver;
     });

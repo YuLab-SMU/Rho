@@ -5,7 +5,7 @@ import path from 'node:path';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { Ajv } from 'ajv';
 import { atomicJson, canonical, confined, digest, Fault, now, publicResource, readJson, requireThat, stateDirectory } from '@rho-workspace/plugin-contracts';
-import { Plugins, type PluginConfig } from './plugins.js';
+import { Plugins, selectedPluginVersions, type PluginConfig } from './plugins.js';
 import { protocol, operations } from './protocol.js';
 import { describeProtocol } from './protocol-discovery.js';
 import { CoreBridge } from './bridge.js';
@@ -354,6 +354,12 @@ export class RhoService {
       directory: project => this.dataDir(project),
       // Queued behind the project's own writes; it never waits for them, so a write that
       // started a conversation is not held up by its own notification.
+      claudePlugins: async () => {
+        const declared = this.plugins.claudeCode();
+        if (!declared.skills.length && !declared.hooks.length) return [];
+        const { writeClaudePlugin } = await import('@rho-workspace/plugin-agent/conversation');
+        return [await writeClaudePlugin(path.join(this.state.directory, 'claude-plugins'), { name: 'rho', version: selectedPluginVersions.agent, description: 'Skills and hooks of the plugins selected in Rho.', ...declared })];
+      },
       changed: async (project, conversationId) => { void this.serial(project.id, () => this.emit(project, 'conversation.changed', conversationId, localBrowserId)).catch(() => {}); }
     }, config.claude, config.conversations, { backend: config.agentBackend, claudeAcp: config.claudeAcp, codex: config.codex, codexAcp: config.codexAcp, settingsFile: path.join(this.state.directory, 'agent-settings.json') });
     this.folderPicker = new NativeFolderPicker({ ...nativeFolderLimits, ...config.nativeFolders });

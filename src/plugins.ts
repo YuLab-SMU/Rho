@@ -28,7 +28,7 @@ const entries = {
   agent: () => import('@rho-workspace/plugin-agent')
 };
 export type PluginId = keyof typeof entries;
-export const selectedPluginVersions: Record<keyof typeof entries, string> = { documents: '0.4.3', files: '0.4.1', r: '0.4.1', requirements: '0.4.0', tables: '0.4.3', media: '0.4.0', charts: '0.4.0', annotations: '0.4.4', agent: '0.4.15' };
+export const selectedPluginVersions: Record<keyof typeof entries, string> = { documents: '0.4.5', files: '0.4.1', r: '0.4.1', requirements: '0.4.0', tables: '0.4.3', media: '0.4.0', charts: '0.4.0', annotations: '0.4.6', agent: '0.4.16' };
 export const pluginIds = Object.keys(entries) as PluginId[];
 type Modules = { [K in PluginId]: Awaited<ReturnType<typeof entries[K]>> };
 export interface PluginConfig {
@@ -109,6 +109,25 @@ export class Plugins {
     return this;
   }
   optional<K extends PluginId>(id: K): Modules[K] | undefined { return this.modules[id] as Modules[K] | undefined; }
+  // What selected plugins offer the Claude Code sessions this application starts: native
+  // skills made from skills they already declare, and hook commands inside their own packages.
+  claudeCode() {
+    const skills: Array<{ name: string; description: string; content: string }> = [];
+    const hooks: Array<{ event: 'PreToolUse' | 'PostToolUse'; matcher: string; command: { file: string; args: string[] }; timeoutSeconds?: number }> = [];
+    for (const module of Object.values(this.modules)) {
+      const plugin = module.plugin as PluginDescriptor & { claudeCode?: { skills?: Array<{ skill: string; name: string; description: string }>; hooks?: Array<{ event: 'PreToolUse' | 'PostToolUse'; matcher: string; entry: string; timeoutSeconds?: number }> } };
+      for (const s of plugin.claudeCode?.skills ?? []) {
+        const skill = plugin.skills.find(x => x.id === s.skill);
+        requireThat(skill, 'invalid', 'A Claude Code skill must name a skill its plugin declares.', { plugin: plugin.id, skill: s.skill });
+        skills.push({ name: s.name, description: s.description, content: skill.content });
+      }
+      for (const h of plugin.claudeCode?.hooks ?? []) {
+        requireThat(/^\.\/[a-z0-9-]+$/.test(h.entry), 'invalid', 'A Claude Code hook entry is a named export of its own package.', { plugin: plugin.id });
+        hooks.push({ event: h.event, matcher: h.matcher, timeoutSeconds: h.timeoutSeconds, command: { file: process.execPath, args: [fileURLToPath(import.meta.resolve(plugin.package + h.entry.slice(1)))] } });
+      }
+    }
+    return { skills, hooks };
+  }
   ids() { return [...pluginIds]; }
   isKnown(id: string): id is PluginId { return pluginIds.includes(id as PluginId); }
   availabilityFor(id: PluginId) { return this.availability.find(entry => entry.id === id); }

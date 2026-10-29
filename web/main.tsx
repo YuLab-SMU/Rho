@@ -317,6 +317,21 @@ function App() {
     }
     seen.sizes = sizes;
   }, [files.readAt, agentNow?.running, agentNow?.conversationId]);
+  // When the file of an open document changes on disk (an Agent's own editor, another
+  // program), opening it again lets its owner take the change into the buffer, merging it with
+  // unsaved text where the two changed different lines. Only files seen before are followed.
+  const documentFiles = useRef<{ projectId: string; modified: Map<string, string | undefined> } | null>(null);
+  useEffect(() => {
+    if (!snapshot || !files.readAt) return;
+    const projectId = snapshot.project.id, modified = new Map(files.files.map(f => [f.path, f.modifiedAt] as const));
+    const before = documentFiles.current?.projectId === projectId ? documentFiles.current.modified : null;
+    documentFiles.current = { projectId, modified };
+    if (!before) return;
+    for (const d of snapshot.documents) {
+      if (before.has(d.path) && modified.has(d.path) && before.get(d.path) !== modified.get(d.path))
+        client.call('document.open', { projectId, path: d.path }).catch(() => undefined);
+    }
+  }, [files.readAt]);
   // A followed view comes forward in the workspace; on the Graph the person stays where they are.
   const onGraph = useRef(false); onGraph.current = screen === 'project' && overview && section === 'graph';
   function bringForward(id: string, view: string) { if (followingNow.current && !onGraph.current) place(id, view, true); }

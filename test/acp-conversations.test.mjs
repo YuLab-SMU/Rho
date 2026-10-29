@@ -18,7 +18,7 @@ createInterface({input:process.stdin}).on('line',line=>{
  const r=JSON.parse(line),p=r.params,reply=result=>out({id:r.id,result});
  const update=update=>out({method:'session/update',params:{sessionId:'kept-session',update}});
  if(!r.method){log({kind:'choice',value:r.result});if(permission){out({id:permission,result:{stopReason:'end_turn'}});permission=null;}return;}
- log({kind:r.method,sessionId:p?.sessionId,text:p?.prompt?.[0]?.text,mcp:p?.mcpServers?.[0]?.env?.find(x=>x.name==='RHO_AGENT_CONNECTION')?.value});
+ log({kind:r.method,sessionId:p?.sessionId,text:p?.prompt?.[0]?.text,mcp:p?.mcpServers?.[0]?.env?.find(x=>x.name==='RHO_AGENT_CONNECTION')?.value,plugins:p?._meta?.claudeCode?.options?.plugins});
  if(r.method==='initialize')return reply({protocolVersion:1,agentCapabilities:{loadSession:true}});
  if(r.method==='session/new')return reply({sessionId:'kept-session'});
  if(r.method==='session/load'){update({sessionUpdate:'agent_message_chunk',content:{type:'text',text:'HISTORY'}});return reply({});}
@@ -61,6 +61,14 @@ test('Rho keeps ACP message identities, one grant per connection and the origina
     const session = (await f.record(id)).acpSessionId;
     assert.equal(session, 'kept-session'); assert.equal((await f.record(id)).nativeSessionId, null);
     const file = (await f.calls()).find(x => x.kind === 'session/new').mcp, grant = await fs.readFile(file, 'utf8');
+    // The session loads one plugin directory with the selected plugins' native skills and hooks; it holds no credential.
+    const [plugin] = (await f.calls()).find(x => x.kind === 'session/new').plugins;
+    assert.equal(plugin.type, 'local'); assert.equal(plugin.skipMcpDiscovery, true); assert.ok(plugin.path.startsWith(path.join(await fs.realpath(root), '.service', 'claude-plugins') + path.sep));
+    const hooks = JSON.parse(await fs.readFile(path.join(plugin.path, 'hooks/hooks.json'), 'utf8')).hooks.PreToolUse;
+    assert.equal(hooks[0].matcher, 'Edit|Write|MultiEdit'); assert.match(hooks[0].hooks[0].command, /plugin-documents\/dist\/claude-hook\.js'$|documents\/dist\/claude-hook\.js'$/);
+    assert.match(await fs.readFile(path.join(plugin.path, 'skills/documents/SKILL.md'), 'utf8'), /^---\nname: documents\ndescription: "Change a project file/);
+    const written = await fs.readdir(plugin.path, { recursive: true });
+    for (const name of written.filter(n => n.endsWith('.json') || n.endsWith('.md'))) assert.ok(!(await fs.readFile(path.join(plugin.path, name), 'utf8')).includes(JSON.parse(grant).token));
     await f.call('conversation.send', { conversationId: id, changeId: 'second', text: 'second' }); await f.wait(id, ended);
     assert.equal(await fs.readFile(file, 'utf8'), grant, 'a persistent MCP process keeps its original credential');
     assert.equal((await f.calls()).filter(x => x.kind === 'process').length, 1);

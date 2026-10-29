@@ -66,11 +66,12 @@ Git retains them at `24d9998b`; they are not requirements or reference designs.
   project with one button (`session.connect`) and shows the access and first call.
 - A left rail keeps open projects one click away with their Agent state; All projects
   drops the project sidebar. The Overview leads with counts and figures.
-- Documents 0.4.3 adopts a changed file into a buffer with no unsaved text. Agent
-  0.4.12 captures one named file; 0.4.13 applies, changes and inspects ACP settings;
-  0.4.14 draws Host activity as cards and 0.4.15 shows project paths relative.
+- Documents 0.4.4 merges a disk change into unsaved text and Studio reopens a document
+  whose file changed; 0.4.5's Claude Code hook, loaded by Agent 0.4.16, sends a native edit
+  of a file with unsaved text to the shared buffer ([record](DOCUMENTS-EPISODE.md)).
+  Agent 0.4.12–0.4.15: one named file, ACP settings, activity cards, relative paths.
 
-Evidence: Rho 218/218 (serial) and Plugins 92/92 ([ledger](VERIFICATION.json));
+Evidence: Rho 218/218 (serial) and Plugins 97/97 ([ledger](VERIFICATION.json));
 `acceptance:agent-page` 7/7, `graph` 8/8 and `agent-canvas` 10/10 (controlled peers),
 `sources`, `frontend`, `agent-ui`, pages, shell, person, objects, actions, continuity and
 plugin UI passed. Real Claude and Codex runs found defects in following, settings, the

@@ -17,6 +17,7 @@ were withdrawn on 2026-10-25; Git keeps their history.
 | [Agents and conversations](AGENT-PAGE-EPISODE.md) | The Agents tab (version, models by provider, Claude Code's own names, settings, default) and the conversations list with usage, export and a trash; runs, checks and limits |
 | [The Agent panel](AGENT-PANEL-EPISODE.md) | The 2026-10-28 pass over the conversation window: work folded under each answer, the answer's type, the message box and usage line; runs, checks and limits |
 | [Agent panel live activity](AGENT-UI-EPISODE.md) | Streaming replies, per-action rows, permission and plan treatment, Markdown and reading position; observations, checks and limits |
+| [An Agent's edit beside unsaved text](DOCUMENTS-EPISODE.md) | Claude Code's native edit while a person has unsaved text in Studio: the fork observed, the owner merge and Studio's follow, the Documents hook that sends the Agent to the shared buffer, real runs, checks and limits |
 | [Agent activity](AGENT-ACTIVITY.md) | Live Claude Code/dsh observations, errors, captured outputs, recovery and real-run evidence |
 | [Conversation episode](CONVERSATION-EPISODE.md) | Conversations with Claude Code started in Rho, who holds a session's input, limits, real runs and their reviews |
 | [Claude ACP episode](ACP-EPISODE.md) | Agent-owned ACP, real Westlake HPC multi-turn conversation, cancellation and recovery; legacy compatibility and limits |
