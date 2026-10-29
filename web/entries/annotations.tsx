@@ -8,4 +8,4 @@ function Feedback(props: UiViewProps) {
 }
 const Question: NonNullable<UiContribution['TableQuestion']> = ({ snapshot, requestFeedback, shell, ...props }) => <TableQuestion {...props} documents={snapshot.documents} threads={snapshot.annotations} contexts={snapshot.contexts} onRoutedQuestion={requestFeedback} onReview={id => shell?.openReview?.(id)}
   enabled={['document.open', 'document.read', 'document.edit', 'document.undoOwn', 'document.revert', 'document.history', 'document.change.read', 'annotation.create', 'annotation.read', 'context.create', 'interaction.selection.read'].every(method => snapshot.catalog.operations.some(o => o.method === method && o.authorized && o.state === 'available'))} />;
-export const entry: UiContribution = { ...feedbackEntry, entryVersion: '0.1-draft', packageVersion: '0.5.0', commands: [], View: Feedback, TableQuestion: Question };
+export const entry: UiContribution = { ...feedbackEntry, entryVersion: '0.1-draft', packageVersion: '0.5.1', commands: [], View: Feedback, TableQuestion: Question };

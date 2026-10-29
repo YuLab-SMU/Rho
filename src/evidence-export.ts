@@ -178,6 +178,7 @@ export class EvidenceExporter {
       );
     const selection = {
       format: 'rho.evidence-selection/1',
+      analysisEvidenceCompleteness: 'not-established',
       annotationId,
       thread,
       files,
@@ -453,7 +454,7 @@ function render(
     })
     .join('');
   return (
-    '<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'; img-src \'self\' data:; base-uri \'none\'"><title>Rho evidence</title><style>*{box-sizing:border-box}body{overflow-wrap:anywhere;min-width:0;font:16px/1.6 system-ui;margin:0 auto;padding:32px;max-width:1100px;color:#18342b;background:#fff}h1{font-size:28px}h2{font-size:20px}section{border-top:1px solid #dce4df;margin:28px 0;padding-top:16px}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;background:#f4f7f5;padding:16px}img{max-width:100%;height:auto}.scroll{overflow:auto}table{border-collapse:collapse;white-space:nowrap}th,td{border-bottom:1px solid #dce4df;padding:8px 12px;text-align:right}p,li{overflow-wrap:anywhere}a{color:#176448}@media(max-width:600px){body{padding:16px}}</style><h1>Selected research evidence</h1><p>This package contains selected recorded versions. An accepted human decision is not a scientific validity check.</p><h2>Question and replies</h2>' +
+    '<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'; img-src \'self\' data:; base-uri \'none\'"><title>Rho evidence</title><style>*{box-sizing:border-box}body{overflow-wrap:anywhere;min-width:0;font:16px/1.6 system-ui;margin:0 auto;padding:32px;max-width:1100px;color:#18342b;background:#fff}h1{font-size:28px}h2{font-size:20px}section{border-top:1px solid #dce4df;margin:28px 0;padding-top:16px}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;background:#f4f7f5;padding:16px}img{max-width:100%;height:auto}.scroll{overflow:auto}table{border-collapse:collapse;white-space:nowrap}th,td{border-bottom:1px solid #dce4df;padding:8px 12px;text-align:right}p,li{overflow-wrap:anywhere}a{color:#176448}@media(max-width:600px){body{padding:16px}}</style><h1>Selected research evidence</h1><p>Package generation is complete. Analysis evidence completeness is not established. This package contains selected recorded versions. An accepted human decision is not a scientific validity check.</p><h2>Question and replies</h2>' +
     selection.thread.messages
       .map(
         (m: any, i: number) =>

@@ -19434,7 +19434,7 @@ export const ownerContracts: OwnerContractSnapshot = {
     },
     "annotations": {
       "package": "@rho-workspace/plugin-annotations",
-      "packageVersion": "0.5.0",
+      "packageVersion": "0.5.1",
       "entry": "./contract",
       "entryPath": "@rho-workspace/plugin-annotations/dist/contract.js",
       "entrySha256": "f40420c9d928fb09fc07450c7ea77c80565f5fb22de59d09ccad1522a38fe3cc",

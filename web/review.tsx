@@ -144,7 +144,7 @@ function EvidenceExport({
       <h2>Export read-only evidence</h2>
       <p>
         Only this question, its replies, decisions and explicitly linked
-        captured files are included.
+        captured files are included. Completeness of the analysis evidence is not established.
       </p>
       {error && <p role="alert">{error}</p>}
       <button disabled={busy} onClick={() => void inspect()}>

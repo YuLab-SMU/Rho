@@ -14,7 +14,7 @@ test('a selected evidence package survives source deletion, retries exactly and 
  const exporter=new EvidenceExporter(root,{thread:async()=>thread,resources:()=>files.list(),bytes:r=>files.bytes(r),observations:async()=>({turns:[],omitted:0})});
  const preview=await exporter.preview('q');await fs.rm(path.join(root,'analysis.py'));
  const input={annotationId:'q',exportId:'one',expectedDigest:preview.digest};const result=await exporter.export(input);
- assert.equal(result.state,'complete');assert.deepEqual(await exporter.export(input),result);
+ assert.equal(result.state,'complete');assert.equal(preview.analysisEvidenceCompleteness,'not-established');assert.deepEqual(await exporter.export(input),result);
  const target=path.join(root,result.destination);assert.equal((await verifyEvidence(target)).verified,true);
  const html=await fs.readFile(path.join(target,'index.html'),'utf8');assert.ok(html.includes('&lt;script&gt;'));assert.ok(!html.includes('<script>'));
  await assert.rejects(exporter.export({...input,expectedDigest:'0'.repeat(64)}),e=>e.kind==='conflict');
