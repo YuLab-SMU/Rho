@@ -8,6 +8,10 @@ state or catalog. Rho retains its selected schema snapshot and checks provider
 parity without importing absent implementations. The reusable backend exposes `/api/v2` to calling clients and the project-scoped
 stdio MCP adapter. Its sole registered execution action is `r.execute`: an
 explicit project script, requirements, arguments and output declarations.
+Agents normally use their native tools under existing permissions. Select managed
+execution only for a concrete need for continuity or a retained application run.
+`r.execute` accepts user-written R; the R action catalog does not restrict methods.
+Activity observation remains independent of managed execution.
 Analysis recipes and scientific checkers are external consumers, excluded from
 the application and Plugins npm packages. The browser consumes the same public capabilities.
 See [extraction](https://github.com/YuLab-SMU/Rho/blob/main/docs/PLUGIN-EXTRACTION.md)
@@ -37,7 +41,7 @@ The selected baseline is macOS arm64, Node 22.22.3 (engine range
 The unsigned local tarball contains Plugins and the selected digest-checked Core
 binary. R and any project-selected packages are external prerequisites.
 The service, documents, declared files and saved resource readers work without R.
-An unavailable Rscript returns an unknown dependency probe and prevents execution.
+An unavailable Rscript returns an unknown dependency probe and prevents managed R execution.
 Other platforms and npm registry publication are unverified.
 
 ```sh
@@ -59,9 +63,13 @@ credential is the machine's own. Host and Origin are checked on every request, a
 a browser request marked as coming from another site is refused. `--port`, `--rscript`, `--core`, `--plugins` and `--limits` are explicit
 operator selections; `RHO_RSCRIPT`, `RHO_CORE_BINARY` and `RHO_PYTHON` select
 equivalent runtimes. A Core override is outside bundled digest verification.
-A source checkout has no `vendor/rho-core`: packaging supplies it, so source
-checks and the browser acceptance need the same `--core`/`RHO_CORE_BINARY`
-selection, and say so when it is missing.
+A source checkout has no `vendor/rho-core`: packaging supplies it. Without a Core
+binary on PATH, the workspace and native Agent tools still start. Explicit managed
+operations and Host activity require `--core`/`RHO_CORE_BINARY` or a bundled Core.
+An explicitly selected missing binary or invalid bundled artifact still fails
+startup; no alternate executable silently replaces it. Execution acceptance needs
+an explicit Core selection. General project diagnosis does not treat absent R as
+a broken workspace; diagnosis for the managed `run-r` intent does.
 Core uses the canonical project path plus `/.rho/host.sock`; macOS permits at
 most 103 UTF-8 bytes. A longer path fails before Host startup.
 
@@ -75,7 +83,7 @@ packages and missing required services report `unavailable`; nothing is installe
 implicitly. `capability.list` returns selected package availability and only the
 available owners' actions/entries. `unavailableActions` names missing action
 providers. Selecting only Files/R retains `r-objects` and object reads without
-Requirements, Documents or an R installation; execution stays unavailable. Wire API 2.0 and action/view 0.2.0 remain stable.
+Requirements, Documents or an R installation; managed R execution stays unavailable. Wire API 2.0 and action/view 0.2.0 remain stable.
 
 Owner removal preserves retained request identities, bytes, drafts/undo and layout
 references. Existing accepted intent delivery returns its original record;
@@ -119,7 +127,11 @@ tools follow the selected Agent's own permission policy. A native permission req
 only its offered choices to this machine's browser. It adds no Rho approval to an
 already authorized operation. `--agent-backend claude-cli` / `RHO_AGENT_BACKEND`
 selects the old per-message driver for new conversations; existing records keep
-their original backend and session identity. Configuration changes do not migrate
+their original backend and session identity. That driver now keeps native tools
+and configured MCP servers, with native permission settings; it no longer disables
+built-in tools or forces `dontAsk`. Rho MCP calls keep their existing grant. The
+noninteractive CLI cannot answer a new native permission prompt; use ACP when
+interactive permission choices are needed. Configuration changes do not migrate
 sessions. See the [ACP episode](ACP-EPISODE.md) for limits and recovery semantics.
 
 `--agent-backend codex-acp` selects Codex as the service default; `--codex PATH` /

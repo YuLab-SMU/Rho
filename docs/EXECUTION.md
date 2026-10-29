@@ -1,5 +1,11 @@
 # Rho execution bridge
 
+This bridge covers explicitly selected managed operations and Host activity.
+Agents normally use their native tools under existing permissions. Their native
+work does not need a Core Host or a managed operation record. Activity observation
+can retain selected external evidence without taking over execution. Existing
+managed records keep the identity, continuity and honest facts described below.
+
 Rho reaches [Rho-core](https://github.com/YuLab-SMU/Rho-core) only through its
 documented public CLI. Core owns the managed execution contract and the resident
 Host. The first-release local Rho service invokes that CLI; the browser WebUI uses

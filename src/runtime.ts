@@ -31,12 +31,14 @@ export async function runtime(core?: string, rscript?: string) {
     // selected action probe reports unknown; it must not start a Host.
     selectedRscript = selection ? path.resolve(selection) : 'Rscript';
   }
-  // A source checkout has no vendor/rho-core because packaging supplies it; name the
-  // actual selections rather than only asking for an absolute path.
+  // Core is optional for native Agent work. An explicitly selected or bundled
+  // artifact must still be valid; absence from PATH does not block the workspace.
   const chosen = core ?? process.env.RHO_CORE_BINARY ?? bundled;
-  let coreBinary: string;
+  let coreBinary: string | undefined;
   try { coreBinary = await executable('rho-core', chosen); }
-  catch {
+  catch (e) {
+    if (!(e instanceof Fault && e.kind === 'unavailable')) throw e;
+    if (!chosen) return { coreBinary: undefined, rscript: selectedRscript };
     requireThat(false, 'unavailable', 'The Core binary is unavailable. Select it with --core ABSOLUTE_PATH or RHO_CORE_BINARY; a packed install supplies vendor/rho-core, and a source checkout does not.', { executable: 'rho-core', remedy: '--core, RHO_CORE_BINARY or the packaged vendor/rho-core' });
   }
   return { coreBinary, rscript: selectedRscript };

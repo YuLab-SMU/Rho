@@ -12,11 +12,10 @@ shared workspace and a Graph of what the Agent did ([record](GRAPH-EPISODE.md)),
 settings with conversation management ([record](AGENT-PAGE-EPISODE.md)), the conversation
 window and Agents outside Rho ([record](AGENT-PANEL-EPISODE.md)); all run ([section](#project-sidebar-workspace-and-graph)).
 
-Agent 0.4.11 adds each tool step's title, ACP category and input to the Claude/Codex
-ACP connections of 0.4.10. Eight real Westlake HPC turns from the installed package
-passed with cancellation, connection loss and session recovery, as did external Codex
-observation across restart; the unsigned macOS arm64 package installed and started
-([record](ACP-MULTI-AGENT-EPISODE.md); panel: [Agent UI](AGENT-UI-EPISODE.md)).
+Agent 0.4.11 adds each tool step's title, ACP category and input to the Claude/Codex ACP connections of 0.4.10. Eight real Westlake HPC turns from the installed package passed with cancellation, connection loss and session recovery, as did external Codex observation across restart; the unsigned macOS arm64 package installed and started ([record](ACP-MULTI-AGENT-EPISODE.md); panel: [Agent UI](AGENT-UI-EPISODE.md)).
+
+The [Iris comparison](CORE-VALUE-EPISODE.md) is corrected. Native tools are normal; Core is optional.
+The CLI restriction and startup dependency are removed; activity and honest facts remain ([checks](NATIVE-TOOLS-EPISODE.md)).
 
 The home, projects and empty-project pass of 2026-10-27 is in
 [its episode](HOME-PROJECT-EPISODE.md) and [summary](#home-projects-and-empty-project).
@@ -28,6 +27,7 @@ evidence, not the target interface or design acceptance criteria.
 | Part | Stage | Evidence | Next question |
 | --- | --- | --- | --- |
 | Execution identity, recovery and Documents buffers | Hardened | Owner and acceptance suites below | None in the current focus |
+| Execution choice | Native tools by default; Core on demand | [Checks and limits](NATIVE-TOOLS-EPISODE.md) | Longer scientific workloads remain outside the comparison |
 | Question → Agent → linked result | Runs; not yet usable from the screens | [Base-R episode](BASE-R-EPISODE.md) | Can the answer be read from one screen? |
 | Comparing two results | Runs | Two views split by hand | Can the differences be read by key? |
 | Claude/Codex and shared workspace | Both installed loops and external Codex relay run | [ACP acceptance](ACP-MULTI-AGENT-EPISODE.md) | Human usability and passive attachment to uninstrumented clients remain unproven |

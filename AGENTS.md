@@ -1,5 +1,12 @@
 # Working on Rho
 
+Agents normally use their native tools with their existing permissions. Core
+managed execution is optional, selected for a concrete need such as execution
+continuity or a retained operation record. Rho activity observation remains
+available without routing the observed work through Core. Preserve existing
+managed identities and honest partial/unknown facts; native actions do not acquire
+managed guarantees by being observed.
+
 Read [Status](docs/STATUS.md), [Architecture](docs/ARCHITECTURE.md),
 [Roadmap](docs/ROADMAP.md), the [execution bridge](docs/EXECUTION.md) and the
 [documentation index](docs/README.md) first.

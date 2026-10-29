@@ -213,6 +213,10 @@ Core owns its declared execution contract.
 
 Inspect Git status and preserve unrelated work. Start with a concrete user action,
 try the available public capability and identify the smallest gap in its owner.
+Native Agent tools are the normal execution path. Core is selected for a concrete
+operation need; an acceptance case that explicitly exercises managed execution
+does not set a general Agent policy. Keep activity observation and honest outcome
+facts independent of the choice of execution path.
 Reuse mature tools and valid evidence. Additional state, transport or compatibility
 mechanisms need a consumer requirement and explicit acceptance conditions.
 

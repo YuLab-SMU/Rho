@@ -24,13 +24,15 @@ test('doctor reports a writable project with no Host as ready to work', async ()
     const byId = Object.fromEntries(report.checks.map(check => [check.id, check]));
     assert.equal(byId['project-write'].state, 'ok');
     assert.equal(byId['state-write'].state, 'ok');
-    // No Host yet is normal: the first execution starts one.
+    // No Host yet is normal; only a selected managed operation starts one.
     assert.equal(byId.core.state, 'ok');
-    assert.match(byId.core.detail, /first execution starts one/);
+    assert.match(byId.core.detail, /explicitly selected managed operation/);
     // The selected Rscript does not exist here, and that is named with its remedy.
-    assert.equal(byId.rscript.state, 'fail');
+    assert.equal(byId.rscript.state, 'warn');
     assert.match(byId.rscript.remedy, /--rscript|RHO_RSCRIPT/);
-    assert.equal(report.ok, false, 'a missing interpreter is not a healthy project');
+    assert.equal(report.ok, true, 'an optional managed interpreter does not block native work');
+    const managed = await f.operator.call('project.doctor', { projectId: f.p.id, intent: 'run-r' });
+    assert.equal(managed.ok, false, 'the explicitly selected managed R entry still needs its interpreter');
   } finally { await f.cleanup(); }
 });
 
@@ -102,10 +104,10 @@ test('a socket left by a dead Host is reported as stale, not as a working execut
     assert.equal(core.state, 'warn');
     assert.match(core.detail, /no Host answers/);
     assert.match(core.remedy, /stale socket|Stop the service/);
-    // And the whole report does not claim the project is ready to execute.
+    // Native work can continue; the warning does not claim a working Host.
     const missingR = report.checks.find(check => check.id === 'rscript');
-    assert.equal(missingR.state, 'fail');
-    assert.equal(report.ok, false);
+    assert.equal(missingR.state, 'warn');
+    assert.equal(report.ok, true);
   } finally { await f.cleanup(); }
 });
 

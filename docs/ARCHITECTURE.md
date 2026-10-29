@@ -2,7 +2,9 @@
 
 Rho is the application container for an intelligent workspace. Functional
 components provide what users and Agents do; Rho connects their interfaces and
-resources to a shared workspace. Rho-core provides the execution foundation.
+resources to a shared workspace. Agents use their native tools normally, with
+existing permissions. Core supplies optional managed execution and retained
+activity observations; it is not a prerequisite for an Agent computation.
 
 This document defines the design boundary. [Status](STATUS.md) records
 implementation; [Technology stack](TECHSTACK.md) records the selected libraries.
@@ -41,14 +43,15 @@ map are generated from the served contract, so both clients and the service requ
 boundary are checked against one definition.
 
 A headless caller uses the component's supported entry. Rho assembles its views
-and actions; selected native execution uses Core's public capability. An Agent
+and actions; selected managed execution uses Core's public capability. An Agent
 component owns its model loop and context. Core remains independent of UI bundles
 and model interaction. Each repository delivers and verifies its own boundary.
 
 The application is an npm-distributed local service and browser
 WebUI. The browser reaches scoped application operations through that service;
 it does not invoke Core or native tools directly. The service uses Core's public
-CLI. A later desktop client reuses these component and execution boundaries and
+CLI for explicitly selected managed operations and Host activity. A missing Core
+binary does not block workspace startup or native Agent tools. A later desktop client reuses these component and execution boundaries and
 adds native window and system integration.
 
 ## Interaction model

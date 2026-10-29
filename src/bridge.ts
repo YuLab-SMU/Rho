@@ -24,8 +24,9 @@ export async function command(binary: string, args: string[], stdin?: string, ti
 }
 export class CoreBridge {
   private owned = new Map<string, { child: ChildProcess; lines: string[] }>();
-  constructor(public binary: string, public rscript: string) {}
+  constructor(public binary: string | undefined, public rscript: string) {}
   async call(root: string, method: string, caller?: string, requestId?: string, args: string[] = [], code?: string) {
+    if (!this.binary) return { exitCode: 3, reply: { ok: false, error: { kind: 'core_unavailable', message: 'Core is not installed or selected. Native Agent tools remain available; select Core for managed runs or Host activity.' } } };
     await confined(root, '.rho', true);
     const flags = [method, '--socket', path.join(root, '.rho/host.sock')];
     if (caller) flags.push('--caller', caller);
@@ -40,6 +41,7 @@ export class CoreBridge {
     return result;
   }
   async ensureOwnedHost(root: string) {
+    requireThat(this.binary, 'unavailable', 'This managed operation needs Core. Select it with --core or RHO_CORE_BINARY. Native Agent work does not need a Host.');
     const before = await this.capability(root);
     if (before.exitCode === 0) {
       const r = before.reply.value.executors.find((x: any) => x.name === 'r');

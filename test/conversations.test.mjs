@@ -16,7 +16,7 @@ const args = process.argv.slice(2), at = name => args[args.indexOf(name) + 1];
 const session = args.includes('--resume') ? at('--resume') : at('--session-id');
 let text = ''; process.stdin.on('data', d => text += d);
 process.stdin.on('end', () => {
-  fs.appendFileSync(${JSON.stringify(log)}, JSON.stringify({ resume: args.includes('--resume'), session, text, tools: at('--allowedTools'), mcp: JSON.parse(at('--mcp-config')) }) + '\\n');
+  fs.appendFileSync(${JSON.stringify(log)}, JSON.stringify({ resume: args.includes('--resume'), session, text, args, tools: at('--allowedTools'), mcp: JSON.parse(at('--mcp-config')) }) + '\\n');
   const out = record => process.stdout.write(JSON.stringify({ session_id: session, ...record }) + '\\n');
   out({ type: 'system', subtype: 'init', model: 'fake-model' });
   if (text === 'slow') { out({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 'tool-1', name: 'mcp__rho__rho_call', input: { operation: 'document.read' } }] } }); setInterval(() => {}, 1000); return; }
@@ -31,7 +31,7 @@ async function fixture(root) {
   const state = path.join(root, '.service'), log = path.join(root, 'claude.jsonl'), claude = path.join(root, 'claude-stub.mjs');
   await fs.mkdir(path.join(root, 'work'), { recursive: true });
   await fs.writeFile(claude, fakeClaude(log), { mode: 0o755 });
-  const service = await new RhoService({ root, stateDir: state, coreBinary: path.join(root, 'no-core'), rscript: 'Rscript', claude, agentBackend: 'claude-cli' }).start();
+  const service = await new RhoService({ root, stateDir: state, rscript: 'Rscript', claude, agentBackend: 'claude-cli' }).start();
   const operator = new RhoClient({ url: service.url, token: service.adminToken });
   const p = await operator.call('project.open', { path: 'work' });
   const person = new BrowserClient({ url: service.url });
@@ -73,12 +73,16 @@ test('a conversation started in Rho keeps one identity per message and resumes i
     assert.equal(starts.length, 1);
     assert.equal(starts[0].resume, false); assert.equal(starts[0].text, 'hello 你好');
     assert.equal(starts[0].tools, 'mcp__rho__rho_index');
+    for (const flag of ['--tools', '--strict-mcp-config', '--permission-mode', '--dangerously-skip-permissions']) {
+      assert.ok(!starts[0].args.includes(flag), `Rho must not override native tools or permissions with ${flag}`);
+    }
+    assert.match(starts[0].args[starts[0].args.indexOf('--append-system-prompt') + 1], /Use your native tools normally/);
     // The Agent gets the project grant `rho --grant` gives, under its own principal; never conversation methods.
     const grant = JSON.parse(await fs.readFile(starts[0].mcp.mcpServers.rho.env.RHO_AGENT_CONNECTION, 'utf8'));
     assert.equal(grant.projectId, p.id);
     assert.ok(!grant.methods.some(m => m.startsWith('conversation.') || m.startsWith('session.')));
     const agent = new RhoClient(grant);
-    // It has no file tools of its own, so the grant lists the project folder; other project methods stay operator work.
+    // The shared folder listing supplements native file tools; other project methods stay operator work.
     assert.deepEqual((await agent.call('project.entries', { projectId: p.id })).entries.map(e => e.name), []);
     assert.ok(!grant.methods.some(m => m.startsWith('project.') && m !== 'project.entries'));
     await assert.rejects(agent.call('project.open', { path: 'work' }), e => e.error.kind === 'unauthorized');

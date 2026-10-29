@@ -14,13 +14,14 @@ same resources.
 
 | Repository | Responsibility |
 | --- | --- |
-| [Rho-core](https://github.com/YuLab-SMU/Rho-core) | Intelligent-system foundation: managed execution, request identity, retained execution facts and resident Host |
+| [Rho-core](https://github.com/YuLab-SMU/Rho-core) | Optional managed execution, retained execution facts, activity observation and resident Host |
 | [Rho-plugins](https://github.com/YuLab-SMU/Rho-plugins) | Reusable document/code, file/artifact, runtime/object, requirement, table, media/chart and Agent capabilities; optional reusable domain adapters |
 | Rho | Component selection and assembly, local service, workspace layout, shared interaction and presentation; native windows in a later client |
 
 Components may expose CLI, Skills, MCP and UI entries as their consumers require.
 They retain their implementation, conditions and results across headless and
-application use. Rho connects those components to the Core's public capabilities.
+application use. Agents use native tools normally; Rho connects shared workspace capabilities and
+uses Core only for selected managed operations or activity observation.
 
 A specific analysis workflow is project code or an acceptance example, not a
 plugin. The [plugin extraction plan](docs/PLUGIN-EXTRACTION.md) applies the
