@@ -1,0 +1,54 @@
+{
+  "method": "evidence.preview",
+  "inputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "projectId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "annotationId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      }
+    },
+    "required": [
+      "projectId",
+      "annotationId"
+    ]
+  },
+  "outputSchema": {
+    "type": "object",
+    "additionalProperties": true,
+    "required": [
+      "digest",
+      "files",
+      "gaps",
+      "bytes"
+    ],
+    "properties": {
+      "digest": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{64}$"
+      },
+      "files": {
+        "type": "array",
+        "items": {
+          "type": "object"
+        }
+      },
+      "gaps": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "bytes": {
+        "type": "integer",
+        "minimum": 0
+      }
+    }
+  },
+  "description": null
+}

@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { BrowserApiError, type BrowserClient, type WorkspaceSnapshot } from '../src/browser.js';
 import type { RhoOutput } from '../src/contract.generated.js';
-import { activitySummary, conversationBlocks, currentPlanEntry, type Activity, type AgentAction, type Block } from '../src/conversation-presentation.js';
+import { activitySummary, conversationBlocks, currentPlanEntry, durationText, stepDuration, type Activity, type AgentAction, type Block } from '../src/conversation-presentation.js';
 import { projectName } from './home.js';
 import { AgentMarkdown, CopyButton } from './markdown.js';
 import { agentLabel, backendOf, modelSetting, split, useAgentSettings, valueName, type SettingValue } from './agent-settings.js';
@@ -66,14 +66,19 @@ function scrollParent(node: HTMLElement | null) {
   }
   return document.scrollingElement as HTMLElement | null;
 }
+// What a command printed opens at its end, where a terminal leaves it: the last line is the result or the error.
+const atEnd = (element: HTMLElement | null) => { if (element) element.scrollTop = element.scrollHeight; };
 function ActivityRow({ activity }: { activity: Activity }) {
-  const outcome = activity.outcome;
+  const outcome = activity.outcome, step = activity.step, duration = stepDuration(step), printed = step.output;
+  // A command that ran and exited with a failing code failed; it was not refused.
+  const failed = outcome === 'failed' ? (step.exitCode ? 'exit ' + step.exitCode : 'failed') : outcome === 'rejected' ? 'refused' : null;
   const summary = <>
     <span className={'activity-icon ' + outcome} aria-hidden="true"><Icon name={actionIcon[activity.action]} size={13} /></span>
     <span className="activity-verb">{activity.verb}</span>
     {activity.target && <span className={'activity-target ' + (activity.targetKind ?? 'text')} title={activity.target}>{activity.target}</span>}
-    {outcome === 'rejected' && <span className="activity-flag">refused</span>}
+    {failed && <span className="activity-flag">{failed}</span>}
     {outcome === 'unknown' && <span className="activity-flag unknown">unknown</span>}
+    {activity.action === 'execute' && duration !== null && <span className="activity-duration">{durationText(duration)}</span>}
   </>;
   const details = activity.title || activity.location || activity.step.operation || activity.step.tool || activity.step.detail;
   if (!details) return <li className="activity-row" data-action={activity.action} data-outcome={outcome}><p>{summary}</p></li>;
@@ -87,7 +92,11 @@ function ActivityRow({ activity }: { activity: Activity }) {
         {activity.step.detail && <><dt>Input</dt><dd><code>{activity.step.detail}</code></dd></>}
         {activity.step.operation && <><dt>Operation</dt><dd><code>{activity.step.operation}</code></dd></>}
         {activity.location && <><dt>Reported path</dt><dd><code>{activity.location}</code></dd></>}
-        <dt>Tool status</dt><dd>{{ requested: 'still running', returned: 'completed', rejected: 'refused', unknown: 'unknown' }[outcome]}</dd>
+        {step.exitCode !== undefined && <><dt>Exit code</dt><dd>{step.exitCode}</dd></>}
+        {duration !== null && <><dt>Took</dt><dd title="From the Agent's call to its result, including any permission check">{durationText(duration)}</dd></>}
+        {printed && <><dt className="activity-printed">Printed</dt><dd className="activity-printed">{printed.text ? <pre className="activity-output" ref={atEnd}>{printed.text}</pre> : 'Nothing'}
+          {printed.cut && <span className="activity-cut">The last {printed.text.split('\n').length} of {printed.lines} lines.</span>}</dd></>}
+        <dt>Tool status</dt><dd>{{ requested: 'still running', returned: 'completed', failed: 'failed', rejected: 'refused', unknown: 'unknown' }[outcome]}</dd>
       </dl>
     </details>
   </li>;

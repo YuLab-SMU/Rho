@@ -6,6 +6,7 @@ import { RhoService } from '../dist/server.js';
 import { CheckedClient } from './checked-client.mjs';
 import { ExternalAcpObserver, readExternalAcp } from '@rho-workspace/plugin-agent/external-acp';
 import { BrowserClient } from '../dist/browser.js';
+import { validateResponse, responseProblems } from '../dist/contract-runtime.js';
 
 // Independent protocol peer for application identity/storage/authorization checks.
 const peer = `import fs from 'node:fs';
@@ -31,6 +32,12 @@ createInterface({input:process.stdin}).on('line',line=>{
     setTimeout(()=>update({sessionUpdate:'plan',entries:[{content:'Idle replacement 你好',status:'completed',priority:'medium'}]}),100);
   }
   if(text==='write'){fs.mkdirSync('results',{recursive:true});fs.writeFileSync('results/out.csv','a\\n1\\n');fs.rmSync('old.txt',{force:true});}
+  if(text==='command'||text==='command-large'){
+    update({sessionUpdate:'tool_call',toolCallId:'cmd',title:'Terminal',kind:'execute',status:'pending'});
+    setTimeout(()=>update({sessionUpdate:'tool_call_update',toolCallId:'cmd',title:'rtk Rscript model.R',rawInput:{command:'rtk Rscript model.R'}}),60);
+    return setTimeout(()=>{update({sessionUpdate:'tool_call_update',toolCallId:'cmd',_meta:{terminal_output:{terminal_id:'cmd',data:text==='command'?'fitted 你好\\n':Array.from({length:20},(_,i)=>'line '+i+' '+'x'.repeat(90)).join('\\n')}}});
+      update({sessionUpdate:'tool_call_update',toolCallId:'cmd',status:'completed',_meta:{terminal_exit:{terminal_id:'cmd',exit_code:0,signal:null}}});active=null;reply({stopReason:'end_turn'});},140);
+  }
   if(text==='drop')return process.exit(7);
   if(text==='wait')return;
   if(text==='permission'){permission=r.id;out({id:'permission',method:'session/request_permission',params:{sessionId:'kept-session',toolCall:{toolCallId:'write',title:'Write notes',rawInput:{file_path:'notes.txt'}},options:[{optionId:'yes',kind:'allow_once',name:'Allow once'},{optionId:'no',kind:'reject_once',name:'Reject'}]}});return;}
@@ -136,6 +143,25 @@ test('a message records the project files that changed on disk while it ran, and
   } finally { await f.service.close(); }
 });
 
+test('a command step keeps when it started, its exit code and what it printed; a full message gives up the output first', async () => {
+  const root = await fs.mkdtemp('/tmp/rho-acp-command-'); let f = await setup(root);
+  try {
+    const id = (await f.call('conversation.start', { changeId: 'command', text: 'command' })).conversation.conversationId;
+    await f.wait(id, ended);
+    const read = await f.call('conversation.read', { conversationId: id });
+    assert.ok(validateResponse('conversation.read', read), JSON.stringify(responseProblems('conversation.read')));
+    const step = read.turns.at(-1).steps.find(s => s.id === 'cmd');
+    assert.equal(step.detail, 'rtk Rscript model.R'); assert.equal(step.outcome, 'returned'); assert.equal(step.exitCode, 0);
+    assert.deepEqual(step.output, { text: 'fitted 你好', lines: 1, bytes: 13, cut: false });
+    const ran = Date.parse(step.at) - Date.parse(step.startedAt), reported = Date.parse(step.at) - Date.parse(read.turns.at(-1).startedAt);
+    assert.ok(ran >= 50 && ran <= reported - 40, 'the step ran from when its command was named, not from when the Agent began writing it: ' + ran + ' of ' + reported);
+    await f.service.close();
+    f = await setup(root, { maxTurnBytes: 2048 });
+    const full = (await f.call('conversation.start', { changeId: 'large', text: 'command-large' })).conversation.conversationId;
+    const kept = (await f.wait(full, ended)).turns.at(-1).steps.find(s => s.id === 'cmd');
+    assert.equal(kept.outcome, 'returned'); assert.equal(kept.exitCode, 0); assert.equal(kept.output, undefined);
+  } finally { await f.service.close(); }
+});
 test('a conversation in the trash is kept whole, frees its place, cannot be continued, and is deleted only from there', async () => {
   const root = await fs.mkdtemp('/tmp/rho-acp-trash-'); let f = await setup(root, { maxConversations: 2 });
   try {

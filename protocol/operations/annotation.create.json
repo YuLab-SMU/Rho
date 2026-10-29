@@ -82,6 +82,37 @@
               "entities"
             ],
             "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "resource"
+              },
+              "resource": {
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "version": {
+                    "pattern": "^[a-f0-9]{64}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "version"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind",
+              "resource"
+            ],
+            "type": "object"
           }
         ]
       },
@@ -203,12 +234,122 @@
               "entities"
             ],
             "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "resource"
+              },
+              "resource": {
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "version": {
+                    "pattern": "^[a-f0-9]{64}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "version"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind",
+              "resource"
+            ],
+            "type": "object"
           }
         ]
       },
       "annotationId": {
         "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
         "type": "string"
+      },
+      "decisions": {
+        "items": {
+          "additionalProperties": false,
+          "properties": {
+            "at": {
+              "type": "string"
+            },
+            "author": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "draft": {
+              "type": "object"
+            },
+            "id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            },
+            "resources": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "version": {
+                    "pattern": "^[a-f0-9]{64}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "version"
+                ],
+                "type": "object"
+              },
+              "maxItems": 16,
+              "type": "array",
+              "uniqueItems": true
+            },
+            "status": {
+              "enum": [
+                "accepted",
+                "needs-changes",
+                "withdrawn"
+              ]
+            },
+            "supersedes": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "targetMessageId": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "version": {
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "id",
+            "author",
+            "at",
+            "version",
+            "targetMessageId",
+            "resources",
+            "status",
+            "reason"
+          ],
+          "type": "object"
+        },
+        "maxItems": 256,
+        "type": "array"
       },
       "messages": {
         "items": {
@@ -517,6 +658,41 @@
               "from",
               "to",
               "text"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "resource"
+              },
+              "metadata": {
+                "type": "object"
+              },
+              "resource": {
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "version": {
+                    "pattern": "^[a-f0-9]{64}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "version"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind",
+              "resource",
+              "metadata"
             ],
             "type": "object"
           }

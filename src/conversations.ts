@@ -1,3 +1,6 @@
+import { projectPath, commandFiles, buildWorkGraph } from './work-graph.js';
+import { toolActivity } from './conversation-presentation.js';
+import {privateEvidencePath, type CapturePort, type TurnEvidence} from './evidence-capture.js';
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
 import type { AgentConversation, AgentPermission, ConversationStep, ConversationEvent, ClaudeAcpOptions, CodexAcpOptions, SessionObservation, ConfigOption, ClaudeAcpConversation } from '@rho-workspace/plugin-agent/conversation';
@@ -48,10 +51,11 @@ export const conversationLimits = {
   // Files compared on disk before and after a message, to record which changed during it; past
   // this many the comparison stops and the record says it is partial. Changes kept per message;
   // more are counted.
-  maxComparedFiles: 20000, maxChangedFiles: 200
+  maxComparedFiles: 20000, maxChangedFiles: 200, maxCaptureFiles: 64, maxCaptureBytes: 33554432, maxSnapshotBytes: 8388608, maxCaptureConcurrent: 2
 };
 type StopReason = 'person' | 'closing' | 'wall-limit' | 'output-limit' | 'line-limit' | 'identity';
-type Step = ConversationStep;
+// A tool step also keeps when it started (see observe); its `at` is its latest report.
+type Step = ConversationStep & { startedAt?: string };
 interface Permission extends AgentPermission { state: 'pending' | 'selected' | 'cancelled'; selected?: string }
 export interface ConversationConfig { settingsFile?: string; backend?: 'claude-acp' | 'codex-acp' | 'claude-cli'; codex?: string; codexAcp?: Omit<CodexAcpOptions, 'cwd' | 'mcpServers' | 'limits' | 'sessionId' | 'codex' | 'observation' | 'observe'>; claudeAcp?: Omit<ClaudeAcpOptions, 'cwd' | 'mcpServers' | 'limits' | 'sessionId' | 'claude' | 'observation' | 'observe'> }
 interface Turn {
@@ -64,6 +68,8 @@ interface Turn {
   // Project files that changed on disk between the message's start and end, compared by time and
   // size. It says what changed meanwhile, not what made the change.
   files?: { changed: FileChange[]; omitted: number; partial: boolean };
+  evidence?: TurnEvidence;
+  contexts?: string[];
 }
 interface FileChange { path: string; change: 'added' | 'modified' | 'removed'; modifiedAt: string | null; bytes: number | null }
 interface Disk { files: Map<string, { modified: number; bytes: number }>; partial: boolean }
@@ -128,7 +134,7 @@ interface Summary {
   usage?: { used: number; size: number; cost: { amount: number; currency: string } | null } | null; costUsd?: number | null; sessionId?: string | null; trashedAt?: string | null;
 }
 interface Index { format: 1; conversations: Summary[]; deleted?: Array<{ conversationId: string; changeId: string; requestDigest: string; deletedAt: string; deletedBy: string }> }
-interface Live { project: Project; conversation: Conversation; turn: Turn; controller: AbortController; stop(reason: StopReason, by: string): void; done: Promise<void>; before?: Disk | null }
+interface Live { project: Project; conversation: Conversation; turn: Turn; controller: AbortController; stop(reason: StopReason, by: string): void; done: Promise<void>; before?: Disk | null; captures?: Promise<void>[] }
 export interface ConversationPorts {
   // The project's Agent grant for this conversation, written to a private connection file.
   grant(project: Project, conversation: { id: string; title: string; client: string }): Promise<{ file: string; principal: string }>;
@@ -136,6 +142,8 @@ export interface ConversationPorts {
   changed(project: Project, conversationId: string): Promise<void>;
   // Local Claude Code plugin directories a Claude session loads: skills and hooks of the selected plugins.
   claudePlugins?(project: Project): Promise<string[]>;
+  capture?: CapturePort;
+  context?(project: Project, contextId: string): Promise<unknown>;
 }
 const identity = /^c-[a-f0-9]{16}$/;
 function cut(text: string, maxBytes: number) {
@@ -156,6 +164,7 @@ export class Conversations {
   private checks = new Map<Backend, Promise<void>>();
   constructor(private ports: ConversationPorts, public binary = 'claude', limits: Partial<typeof conversationLimits> = {}, private config: ConversationConfig = {}) {
     this.limits = { ...conversationLimits, ...limits };
+    for (const key of ['maxCaptureFiles','maxCaptureBytes','maxSnapshotBytes','maxCaptureConcurrent'] as const) requireThat(Number.isSafeInteger(this.limits[key]) && this.limits[key]>0 && this.limits[key]<=conversationLimits[key], 'invalid', 'Capture budgets must be positive integers no greater than the supported defaults.', {limit:key,maximum:conversationLimits[key]});
     requireThat(!config.backend || ['claude-acp', 'codex-acp', 'claude-cli'].includes(config.backend), 'invalid', 'Choose claude-acp, codex-acp or claude-cli.');
   }
 
@@ -210,8 +219,8 @@ export class Conversations {
   // Rho last stopped. What Claude Code did after the last kept step is not known, and nothing
   // is sent again on its behalf.
   private view(project: Project, c: Conversation, turn: Turn) {
-    if (turn.state !== 'running' || this.liveTurn(project, c, turn)) return turn;
-    return { ...turn, permissions: turn.permissions?.map(p => p.state === 'pending' ? { ...p, state: 'cancelled' as const } : p), state: 'unknown' as const, problem: turn.problem ?? 'Rho stopped before this message was answered. Steps after the last one shown are not known, and the message was not sent again.' };
+    if (turn.state !== 'running' || this.liveTurn(project, c, turn)) return !this.liveTurn(project,c,turn) && turn.evidence?.records.some(r => r.state === 'pending') ? { ...turn, evidence: { ...turn.evidence, records: turn.evidence.records.map(r => r.state === 'pending' ? { ...r, state: 'interrupted' as const, reason: 'Rho stopped before the capture was confirmed.' } : r) } } : turn;
+    return { ...turn, permissions: turn.permissions?.map(p => p.state === 'pending' ? { ...p, state: 'cancelled' as const } : p), evidence: turn.evidence ? { ...turn.evidence, records: turn.evidence.records.map(r => r.state === 'pending' ? { ...r, state: 'interrupted' as const, reason: 'Rho stopped before this capture was confirmed.' } : r) } : undefined, state: 'unknown' as const, problem: turn.problem ?? 'Rho stopped before this message was answered. Steps after the last one shown are not known, and the message was not sent again.' };
   }
   private reply(project: Project, c: Conversation, turn: Turn) { return { conversation: this.listed(project, this.summary(c)), turn: this.view(project, c, turn) }; }
   private listed(project: Project, s: Summary) {
@@ -247,6 +256,19 @@ export class Conversations {
     const next = { ...index, conversations };
     await atomicJson(path.join(await this.folder(project), 'index.json'), next);
     return next;
+  }
+  async reviewEvidence(project: Project, annotationId: string) {
+    const list = await this.list(project), turns: any[] = [], selected: any[] = []; let omitted = Math.max(0,list.length - 6);
+    for (const summary of list.slice(0,6)) {
+      const c = await this.load(project,summary.conversationId); omitted += Math.max(0,c.turns.length - 8);
+      for (const turn of c.turns.slice(-8)) for (const contextId of turn.contexts ?? []) {
+        const context = await this.ports.context?.(project,contextId) as any;
+        if (context?.annotations?.some((a:any)=>a.annotationId === annotationId)) { turns.push({ conversationId:c.id,turnId:turn.id,contexts:turn.contexts,evidence:this.view(project,c,turn).evidence ?? null }); selected.push({conversationId:c.id,conversationTitle:c.title,agent:c.backend,turn:this.view(project,c,turn)}); break; }
+      }
+    }
+    const graph=buildWorkGraph({turns:selected,files:[],project,kindOf:()=>null,now:Date.now()});
+    const model={nodes:graph.nodes.map(n=>({id:n.id,kind:n.kind,...(n.path?{path:n.path}:{}),...(n.resource?{resource:n.resource,capturedAt:n.capturedAt}:{}),...(n.gap?{gap:n.gap}:{})})),edges:graph.edges.map(e=>({from:e.from,to:e.to,label:e.label,basis:e.basis,at:e.at})),omittedTurns:graph.omittedTurns,omittedNodes:graph.omittedNodes??0};
+    return {turns,omitted,model};
   }
   // Moving a conversation to the trash keeps it whole and frees its place among the project's
   // conversations; it cannot be continued until restored. An idle connection to its Agent ends.
@@ -312,10 +334,10 @@ export class Conversations {
   // conversation or message and starts nothing; changed words under that identity are refused.
   // Without an Agent or settings named in the request, the person's saved ones are used and
   // recorded with the conversation.
-  async start(project: Project, by: string, input: { changeId: string; text: string; backend?: Backend; config?: Choices }) {
+  async start(project: Project, by: string, input: { changeId: string; text: string; contexts?: string[]; backend?: Backend; config?: Choices }) {
     requireThat(!input.backend || backends.includes(input.backend), 'invalid', 'Choose Claude Code or Codex.');
     if (input.config) this.choices(input.config);
-    const text = this.message(input.text), requestDigest = digest(canonical({ text, ...(input.backend ? { backend: input.backend } : {}), ...(input.config ? { config: input.config } : {}) }));
+    const text = this.message(input.text), requestDigest = digest(canonical({ text, ...(input.contexts?.length ? { contexts: input.contexts } : {}), ...(input.backend ? { backend: input.backend } : {}), ...(input.config ? { config: input.config } : {}) }));
     return this.serial(project.id, async () => {
       const index = await this.index(project), existing = index.conversations.find(x => x.changeId === input.changeId);
       requireThat(!index.deleted?.some(x => x.changeId === input.changeId), 'conflict', 'That request started a conversation that was later deleted. It is not started again.');
@@ -329,7 +351,9 @@ export class Conversations {
       const backend = input.backend ?? saved.backend ?? this.config.backend ?? 'claude-acp';
       const config = backend === 'claude-cli' ? undefined : input.config ?? saved.choices[backend];
       const at = now(), c: Conversation = { format: 2, backend, id: 'c-' + randomBytes(8).toString('hex'), changeId: input.changeId, requestDigest, createdAt: at, createdBy: by, updatedAt: at, version: 0, client: backend === 'codex-acp' ? 'codex' : 'claude-code', nativeSessionId: backend === 'claude-cli' ? randomUUID() : null, confirmed: false, principal: null, title: titleOf(text), turns: [], ...(config && Object.keys(config).length ? { config } : {}) };
+      for (const id of input.contexts ?? []) await this.ports.context?.(project, id);
       const turn = this.turn(input.changeId, requestDigest, by, text, 1);
+      if (input.contexts?.length) turn.contexts = [...input.contexts];
       c.turns.push(turn);
       // Recorded before the process starts, so a crash in between leaves an unknown message, never a resend.
       await this.write(project, c);
@@ -337,8 +361,8 @@ export class Conversations {
       return this.reply(project, c, turn);
     });
   }
-  async send(project: Project, by: string, input: { conversationId: string; changeId: string; text: string }) {
-    const text = this.message(input.text), requestDigest = digest(canonical({ text }));
+  async send(project: Project, by: string, input: { conversationId: string; changeId: string; text: string; contexts?: string[] }) {
+    const text = this.message(input.text), requestDigest = digest(canonical({ text, ...(input.contexts?.length ? { contexts: input.contexts } : {}) }));
     return this.serial(project.id, async () => {
       const c = await this.load(project, input.conversationId), existing = c.turns.find(t => t.changeId === input.changeId);
       if (existing) {
@@ -356,7 +380,9 @@ export class Conversations {
       requireThat(Buffer.byteLength(JSON.stringify({ ...c, observation: undefined })) + this.limits.maxObservationBytes + this.limits.maxTurnBytes + this.limits.maxMessageBytes <= this.limits.maxRecordBytes, 'limit', 'This conversation has reached the size Rho keeps. Start a new conversation.', { limit: 'maxRecordBytes', maximum: this.limits.maxRecordBytes });
       this.capacity();
       for (const old of c.turns) if (old.state === 'running') Object.assign(old, this.view(project, c, old));
+      for (const id of input.contexts ?? []) await this.ports.context?.(project, id);
       const turn = this.turn(input.changeId, requestDigest, by, text, c.turns.length + 1);
+      if (input.contexts?.length) turn.contexts = [...input.contexts];
       c.turns.push(turn);
       await this.write(project, c);
       this.launch(project, c, turn);
@@ -524,6 +550,7 @@ export class Conversations {
       turn.stop = { requestedAt: now(), by, reason };
       controller.abort(); this.cancelPermissions(project, c);
     } };
+    if (this.ports.capture) turn.evidence = { records: [], omitted: 0, bytes: 0, snapshots: 0 };
     this.live.set(key, live);
     live.done = this.run(live).catch(() => { turn.problem ??= 'Rho lost track of this message. Received steps were kept; it was not sent again.'; })
       .finally(async () => {
@@ -531,8 +558,12 @@ export class Conversations {
         turn.endedAt ??= now();
         if (live.before) {
           const after = await disk(project.root, this.limits.maxComparedFiles).catch(() => null);
-          if (after) turn.files = compare(live.before, after, this.limits.maxChangedFiles);
+          if (after) {
+            turn.files = compare(live.before, after, this.limits.maxChangedFiles);
+            for (const file of turn.files.changed) if (file.change !== 'removed') this.capture(live, file.path, 'turn-end');
+          }
         }
+        await Promise.all(live.captures ?? []);
         for (const step of turn.steps) if (step.kind === 'tool' && step.outcome === 'requested') step.outcome = 'unknown';
         this.cancelPermissions(project, c);
         const pending = this.flushes.get(project.id + '/' + c.id); if (pending) { clearTimeout(pending); this.flushes.delete(project.id + '/' + c.id); }
@@ -564,6 +595,9 @@ export class Conversations {
         requireThat(Buffer.byteLength(JSON.stringify(observation)) <= this.limits.maxObservationBytes, 'limit', 'The session projection exceeded maxObservationBytes; prior observations were kept.');
         const config = observation.config, learned = config && config.at !== c.observation?.config?.at && config.origin === 'initial' && !c.config && (c.backend === 'claude-acp' || c.backend === 'codex-acp');
         c.observation = observation; this.schedule(project, c);
+        for (const live of this.live.values()) if (live.project.id === project.id && live.conversation.id === c.id) {
+          for (const tool of observation.tools ?? []) if (tool.origin !== 'history' && Date.parse(tool.at) >= Date.parse(live.turn.sentAt)) for (const location of tool.locations ?? []) this.capture(live, location.path, 'tool:' + tool.id + ':' + tool.outcome);
+        }
         // A first session opened without the person's choices shows what the Agent offers by default.
         if (learned) void this.offer(c.backend as Backend, { at: config.at, source: 'conversation', adapter: c.adapter ?? null, options: config.options, omitted: config.omitted }).catch(() => {});
       } };
@@ -576,6 +610,29 @@ export class Conversations {
       this.drivers.set(key, { driver, project, conversation: c }); return driver;
     });
   }
+  private capture(live: Live, reported: string, phase: string) {
+    const file = projectPath(reported, live.project), evidence = live.turn.evidence;
+    if (!file || !evidence || !this.ports.capture || !/\.(?:R|r|Rmd|qmd|py|md|txt|json|csv|tsv|png|jpe?g|svg|pdf|sql|sh|js|mjs|cjs|ts|tsx|jsx|css|html|yaml|yml|toml)$/.test(file)) return;
+    const key = phase + ':' + file;
+    if (evidence.records.some(r => r.key === key)) return;
+    if (evidence.records.length >= Math.min(this.limits.maxCaptureFiles, 64)) { evidence.omitted++; return; }
+    const record: TurnEvidence['records'][number] = { key, path: file, phase, requestedAt: now(), state: 'pending', snapshots: [] };
+    evidence.records.push(record);
+    if(privateEvidencePath(file)){record.state='unavailable';record.reason='Known connection or credential location excluded from automatic evidence.';this.schedule(live.project,live.conversation);return;}
+    // Persist the pending observation before acquiring bytes. Read/reconnect never runs this.
+    const lanes = live.captures ??= [], lane = 0;
+    lanes[lane] = (lanes[lane] ?? Promise.resolve()).then(async () => {
+      await this.serial(live.project.id, () => this.write(live.project, live.conversation));
+      if (evidence.bytes >= this.limits.maxCaptureBytes || evidence.snapshots >= this.limits.maxCaptureFiles) { record.state = 'unavailable'; record.reason = 'The turn snapshot budget was reached.'; return; }
+      try {
+        const captured = await this.ports.capture!(live.project, file, Math.min(this.limits.maxSnapshotBytes, this.limits.maxCaptureBytes - evidence.bytes), this.limits.maxCaptureFiles - evidence.snapshots);
+        record.snapshots = captured.snapshots; record.reason = captured.reason;
+        record.state = captured.snapshots.length ? 'captured' : 'unavailable';
+        evidence.bytes += captured.snapshots.reduce((n, r) => n + r.bytes, 0); evidence.snapshots += captured.snapshots.length;
+      } catch (error) { record.state = 'unavailable'; record.reason = error instanceof Fault ? error.message : 'The file could not be captured; earlier snapshots are kept.'; }
+      this.schedule(live.project, live.conversation);
+    }).catch(() => { record.state = 'interrupted'; record.reason = 'The capture could not be confirmed.'; });
+  }
   private observe(live: Live, event: ConversationEvent) {
     const { project, conversation: c, turn } = live;
     if (event.type === 'started') { turn.pid = event.pid; turn.startedAt ??= now(); }
@@ -586,11 +643,24 @@ export class Conversations {
       const incoming = event.step;
       const existing = incoming.kind === 'tool' && incoming.id ? turn.steps.find(s => s.kind === 'tool' && s.id === incoming.id)
         : event.append && turn.steps.at(-1)?.kind === 'text' && turn.steps.at(-1)?.id === incoming.id ? turn.steps.at(-1) : undefined;
-      const next = { ...existing, ...incoming };
+      // A tool step starts with the Agent's last description of it before any result: an Agent
+      // reports a call while the model is still writing its input, so that time is not part of
+      // how long it ran. Progress reports describe nothing and do not move it.
+      const describing = (incoming.detail !== undefined || incoming.title !== undefined) && !incoming.output && !existing?.output && (incoming.outcome ?? 'requested') === 'requested' && (existing?.outcome ?? 'requested') === 'requested';
+      const startedAt = describing ? incoming.at : existing?.startedAt ?? existing?.at ?? incoming.at;
+      const next: Step = { ...existing, ...incoming, ...(incoming.kind === 'tool' ? { startedAt } : {}) };
       if (incoming.text !== undefined) Object.assign(next, cut((event.append && existing ? existing.text ?? '' : '') + incoming.text, this.limits.maxTextBytes));
       const size = Buffer.byteLength(JSON.stringify({ steps: turn.steps, permissions: turn.permissions })) - (existing ? Buffer.byteLength(JSON.stringify(existing)) : 0);
-      if (size + Buffer.byteLength(JSON.stringify(next)) > this.limits.maxTurnBytes) turn.omitted++;
-      else if (existing) Object.assign(existing, next); else turn.steps.push(next);
+      const fits = (step: Step) => size + Buffer.byteLength(JSON.stringify(step)) <= this.limits.maxTurnBytes;
+      // A command's printed output is the first thing given up when the message is full.
+      const kept = fits(next) ? next : next.output && fits({ ...next, output: undefined }) ? { ...next, output: undefined } : null;
+      if (incoming.kind === 'tool') {
+        const action = toolActivity(incoming as any, null, project.root);
+        if (action.targetKind === 'path' && (action.location || incoming.detail)) this.capture(live, action.location ?? incoming.detail!, 'step:' + incoming.id + ':' + incoming.outcome);
+        if (action.targetKind === 'command' && action.target) for (const file of commandFiles(action.target, project)) this.capture(live, file, 'command:' + incoming.id + ':' + incoming.outcome);
+      }
+      if (!kept) turn.omitted++;
+      else if (existing) Object.assign(existing, kept); else turn.steps.push(kept);
     }
     this.schedule(project, c);
   }
@@ -603,7 +673,7 @@ export class Conversations {
     catch (e) { turn.state = 'failed'; turn.problem = e instanceof Fault ? e.message : 'Rho could not connect this conversation to the project.'; return; }
     const wall = setTimeout(() => live.stop('wall-limit', 'rho'), this.limits.turnWallMs); wall.unref();
     try {
-      const completion = await driver.run({ text: turn.text, signal: controller.signal,
+      const completion = await driver.run({ text: turn.text + (turn.contexts?.length ? '\n\nRead these exact frozen review contexts with context.read before responding: ' + turn.contexts.join(', ') + '. Reply with annotation.reply and explicit result resource versions.' : ''), signal: controller.signal,
         session: identity => this.serial(project.id, async () => {
           requireThat(!identity.acpSessionId || !c.acpSessionId || identity.acpSessionId === c.acpSessionId, 'conflict', 'The original ACP session identity changed.');
           requireThat(!identity.nativeSessionId || !c.nativeSessionId || identity.nativeSessionId === c.nativeSessionId, 'conflict', 'The original native session identity changed.');

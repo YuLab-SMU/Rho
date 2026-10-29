@@ -1,0 +1,719 @@
+{
+  "method": "annotation.decide",
+  "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "projectId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "annotationId": {
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+        "type": "string"
+      },
+      "changeId": {
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+        "type": "string"
+      },
+      "draft": {
+        "additionalProperties": false,
+        "properties": {
+          "documentId": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "version": {
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "documentId",
+          "version"
+        ],
+        "type": "object"
+      },
+      "expectedVersion": {
+        "minimum": 1,
+        "type": "integer"
+      },
+      "resources": {
+        "items": {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "version": {
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "version"
+          ],
+          "type": "object"
+        },
+        "maxItems": 16,
+        "minItems": 1,
+        "type": "array",
+        "uniqueItems": true
+      },
+      "status": {
+        "enum": [
+          "accepted",
+          "needs-changes",
+          "withdrawn"
+        ]
+      },
+      "supersedes": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "targetMessageId": {
+        "minLength": 1,
+        "type": "string"
+      }
+    },
+    "required": [
+      "projectId",
+      "annotationId",
+      "expectedVersion",
+      "changeId",
+      "targetMessageId",
+      "resources",
+      "status"
+    ],
+    "type": "object"
+  },
+  "outputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "anchor": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "documentId": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "from": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "kind": {
+                "const": "document"
+              },
+              "to": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "version": {
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "kind",
+              "documentId",
+              "version",
+              "from",
+              "to"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "entities": {
+                "items": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "maxItems": 1024,
+                "minItems": 1,
+                "type": "array",
+                "uniqueItems": true
+              },
+              "kind": {
+                "const": "table"
+              },
+              "resource": {
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "version": {
+                    "pattern": "^[a-f0-9]{64}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "version"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind",
+              "resource",
+              "entities"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "resource"
+              },
+              "resource": {
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "version": {
+                    "pattern": "^[a-f0-9]{64}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "version"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind",
+              "resource"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "annotationId": {
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+        "type": "string"
+      },
+      "decisions": {
+        "items": {
+          "additionalProperties": false,
+          "properties": {
+            "at": {
+              "type": "string"
+            },
+            "author": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "draft": {
+              "type": "object"
+            },
+            "id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            },
+            "resources": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "version": {
+                    "pattern": "^[a-f0-9]{64}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "version"
+                ],
+                "type": "object"
+              },
+              "maxItems": 16,
+              "type": "array",
+              "uniqueItems": true
+            },
+            "status": {
+              "enum": [
+                "accepted",
+                "needs-changes",
+                "withdrawn"
+              ]
+            },
+            "supersedes": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "targetMessageId": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "version": {
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "id",
+            "author",
+            "at",
+            "version",
+            "targetMessageId",
+            "resources",
+            "status",
+            "reason"
+          ],
+          "type": "object"
+        },
+        "maxItems": 256,
+        "type": "array"
+      },
+      "messages": {
+        "items": {
+          "additionalProperties": false,
+          "properties": {
+            "at": {
+              "format": "date-time",
+              "type": "string"
+            },
+            "author": {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            "draft": {
+              "additionalProperties": false,
+              "properties": {
+                "sha256": {
+                  "pattern": "^[a-f0-9]{64}$",
+                  "type": "string"
+                },
+                "source": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "dirty": {
+                      "type": "boolean"
+                    },
+                    "documentId": {
+                      "pattern": "^[a-f0-9]{64}$",
+                      "type": "string"
+                    },
+                    "kind": {
+                      "const": "buffer"
+                    },
+                    "path": {
+                      "maxLength": 4096,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "version": {
+                      "minimum": 1,
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "documentId",
+                    "version",
+                    "path",
+                    "dirty"
+                  ],
+                  "type": "object"
+                },
+                "text": {
+                  "maxLength": 1048576,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "source",
+                "sha256",
+                "text"
+              ],
+              "type": "object"
+            },
+            "id": {
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
+            },
+            "replyTo": {
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
+            },
+            "resources": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "version": {
+                    "pattern": "^[a-f0-9]{64}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "version"
+                ],
+                "type": "object"
+              },
+              "maxItems": 16,
+              "type": "array",
+              "uniqueItems": true
+            }
+          },
+          "required": [
+            "id",
+            "author",
+            "at",
+            "draft"
+          ],
+          "type": "object"
+        },
+        "maxItems": 256,
+        "minItems": 1,
+        "type": "array"
+      },
+      "receipt": {
+        "additionalProperties": false,
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "author": {
+            "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+            "type": "string"
+          },
+          "changeId": {
+            "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+            "type": "string"
+          },
+          "requestDigest": {
+            "pattern": "^[a-f0-9]{64}$",
+            "type": "string"
+          },
+          "version": {
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "changeId",
+          "requestDigest",
+          "author",
+          "version",
+          "at"
+        ],
+        "type": "object"
+      },
+      "receipts": {
+        "items": {
+          "additionalProperties": false,
+          "properties": {
+            "at": {
+              "format": "date-time",
+              "type": "string"
+            },
+            "author": {
+              "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+              "type": "string"
+            },
+            "changeId": {
+              "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+              "type": "string"
+            },
+            "requestDigest": {
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
+            },
+            "version": {
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "changeId",
+            "requestDigest",
+            "author",
+            "version",
+            "at"
+          ],
+          "type": "object"
+        },
+        "maxItems": 256,
+        "minItems": 1,
+        "type": "array"
+      },
+      "retainedFromVersion": {
+        "minimum": 1,
+        "type": "integer"
+      },
+      "source": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "entityKey": {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              "kind": {
+                "const": "table"
+              },
+              "namespace": {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              "resource": {
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "version": {
+                    "pattern": "^[a-f0-9]{64}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "version"
+                ],
+                "type": "object"
+              },
+              "rows": {
+                "items": {
+                  "additionalProperties": {
+                    "type": [
+                      "string",
+                      "number",
+                      "boolean",
+                      "null"
+                    ]
+                  },
+                  "type": "object"
+                },
+                "maxItems": 1024,
+                "minItems": 1,
+                "type": "array"
+              }
+            },
+            "required": [
+              "kind",
+              "resource",
+              "namespace",
+              "entityKey",
+              "rows"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "from": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "kind": {
+                "const": "document"
+              },
+              "sha256": {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              "source": {
+                "additionalProperties": false,
+                "properties": {
+                  "dirty": {
+                    "type": "boolean"
+                  },
+                  "documentId": {
+                    "pattern": "^[a-f0-9]{64}$",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "const": "buffer"
+                  },
+                  "path": {
+                    "maxLength": 4096,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "version": {
+                    "minimum": 1,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "documentId",
+                  "version",
+                  "path",
+                  "dirty"
+                ],
+                "type": "object"
+              },
+              "text": {
+                "maxLength": 1048576,
+                "type": "string"
+              },
+              "to": {
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "kind",
+              "source",
+              "sha256",
+              "from",
+              "to",
+              "text"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "resource"
+              },
+              "metadata": {
+                "type": "object"
+              },
+              "resource": {
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "version": {
+                    "pattern": "^[a-f0-9]{64}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "version"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind",
+              "resource",
+              "metadata"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "sourceStatus": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "anchoredVersion": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "currentVersion": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "state": {
+                "enum": [
+                  "same-version",
+                  "version-differs"
+                ]
+              }
+            },
+            "required": [
+              "state",
+              "currentVersion",
+              "anchoredVersion"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "state": {
+                "const": "same-version"
+              }
+            },
+            "required": [
+              "state"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "state": {
+                "const": "snapshot-retained"
+              }
+            },
+            "required": [
+              "state"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "snapshot": {
+                "const": "retained"
+              },
+              "state": {
+                "const": "source-unavailable"
+              }
+            },
+            "required": [
+              "state",
+              "snapshot"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "version": {
+        "minimum": 1,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "annotationId",
+      "version",
+      "anchor",
+      "source",
+      "messages",
+      "receipts",
+      "retainedFromVersion"
+    ],
+    "type": "object"
+  },
+  "description": null
+}

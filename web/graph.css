@@ -142,6 +142,7 @@
 .graph-answer { max-height: 260px; overflow: auto; padding: 10px 12px; border-left: 3px solid var(--color-accent-soft); background: #fbfcfb; font-size: 13.5px; }
 .graph-said > button { align-self: flex-start; }
 .graph-command { margin: 0; padding: 10px 12px; border-radius: 8px; background: var(--color-well); font: 12.5px/1.55 var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+.graph-output { margin: 0; max-height: 260px; overflow: auto; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--color-hairline); font: 11.5px/1.45 var(--font-mono); white-space: pre; }
 .graph-relations, .graph-history { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; }
 .graph-relations li { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .graph-link { justify-content: flex-start; gap: 7px; min-width: 0; min-height: 28px; padding: 3px 7px; border: 0; background: transparent; color: var(--color-ink); font-size: 13px; text-align: left; }

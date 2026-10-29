@@ -49,7 +49,9 @@ export function extensionPackages(selectionFile = process.env.RHO_UI_EXTENSIONS)
 export function selectedUiEntries() {
   const entries = JSON.parse(fs.readFileSync(path.join(root, 'ui-entries.json'), 'utf8'));
   const selected = process.env.RHO_UI_PLUGINS?.split(','), omitted = process.env.RHO_UI_OMIT?.split(',') ?? [];
-  const extensions = extensionPackages();
+  // Rho's own selection of first-party views over existing capabilities, then any chosen for this build.
+  const extensions = [...extensionPackages(path.join(root, 'ui-extensions.json')), ...extensionPackages()];
+  if (new Set(extensions.map(e => e.component)).size !== extensions.length) throw new Error('Duplicate UI extension component.');
   const known = new Set(['documents', 'files', 'r', 'requirements', 'tables', 'media', 'charts', 'annotations', 'agent']);
   for (const e of extensions) if (!known.has(e.plugin)) throw new Error('Choose an existing capability owner for ' + e.component + ': ' + e.plugin);
   return [...entries, ...extensions].filter(e => e.package ? selected === undefined || selected.includes(e.plugin) : !omitted.includes(e.plugin));

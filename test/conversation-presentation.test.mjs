@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { activitySummary, conversationBlocks, currentPlanEntry, shortPath, toolActivity } from '../dist/conversation-presentation.js';
+import { activitySummary, commandEnd, conversationBlocks, currentPlanEntry, displayCommand, durationText, shortPath, stepDuration, toolActivity } from '../dist/conversation-presentation.js';
 
 const step = (value) => ({ kind: 'tool', at: '2026-10-27T10:00:00.000Z', outcome: 'returned', ...value });
 const turn = (steps, extra = {}) => ({ id: 't1', by: 'person', text: 'Analyse the table', sentAt: '2026-10-27T10:00:00.000Z', state: 'completed', steps, omitted: 0, problem: null, ...extra });
@@ -73,4 +73,26 @@ test('a file the Agent touched several times is counted once; commands count eac
   const runs = [1, 2].map(i => toolActivity(step({ id: 'r' + i, tool: 'Bash', detail: 'Rscript analysis.R' }), null, '/tmp/p'));
   const read = toolActivity(step({ id: 'x', tool: 'Read', detail: '/tmp/p/out/a.png' }), null, '/tmp/p');
   assert.equal(activitySummary([...edits, ...runs, read, toolActivity(step({ id: 'y', tool: 'Read', detail: '/tmp/p/out/b.png' }), null, '/tmp/p')]), 'Edited 1 file · Ran 2 commands · Read 2 files');
+});
+
+test('a command is named without the output wrapper a setup adds, and says how it ended and how long it ran', () => {
+  assert.equal(displayCommand('rtk python3 analysis.py'), 'python3 analysis.py');
+  assert.equal(displayCommand('cd ozone-report && rtk ls . && rtk proxy git status; rtk  Rscript model.R'), 'cd ozone-report && ls . && git status; Rscript model.R');
+  assert.equal(displayCommand('python3 rtk.py'), 'python3 rtk.py');
+  assert.equal(displayCommand('rtk'), 'rtk');
+  const step = { kind: 'tool', id: 's', tool: 'Bash', toolKind: 'execute', detail: 'rtk Rscript model.R', startedAt: '2026-10-29T08:00:00.000Z', at: '2026-10-29T08:00:02.400Z', outcome: 'rejected', exitCode: 1, output: { text: 'Execution halted', lines: 1, bytes: 16, cut: false } };
+  const activity = toolActivity(step, null, '/p');
+  assert.equal(activity.target, 'Rscript model.R'); assert.equal(activity.step.detail, 'rtk Rscript model.R', 'the details keep what actually ran');
+  assert.equal(activity.outcome, 'failed', 'a command that ran and exited 1 failed; it was not refused');
+  const refused = toolActivity({ ...step, exitCode: undefined, output: undefined }, null, '/p');
+  assert.equal(refused.outcome, 'rejected');
+  assert.equal(toolActivity({ ...step, outcome: 'returned', exitCode: 2 }, null, '/p').outcome, 'failed');
+  assert.equal(activitySummary([activity, refused]), 'Ran 2 commands · 1 failed · 1 refused');
+  assert.equal(stepDuration(step), 2400); assert.equal(durationText(2400), '2.4 s'); assert.equal(durationText(95_000), '1 min 35 s'); assert.equal(durationText(40), '0.1 s');
+  assert.equal(commandEnd(step), 'Exit 1');
+  assert.equal(commandEnd({ ...step, outcome: 'returned', exitCode: 0 }), 'Exit 0');
+  assert.equal(commandEnd({ ...step, exitCode: undefined, output: undefined }), 'Refused');
+  assert.equal(commandEnd({ ...step, exitCode: undefined }), 'Failed');
+  assert.equal(stepDuration({ ...step, outcome: 'requested' }), null, 'a running step has no duration yet');
+  assert.equal(stepDuration({ ...step, startedAt: undefined }), null);
 });

@@ -1,6 +1,6 @@
 {
   "name": "@rho-workspace/local",
-  "version": "0.4.0",
+  "version": "0.5.1",
   "type": "module",
   "description": "Rho local workspace service, scoped browser shell and headless client",
   "license": "AGPL-3.0-only",
@@ -109,7 +109,9 @@
     "acceptance:plugin-dx": "node scripts/plugin-dx-acceptance.mjs",
     "acceptance:agent-activity": "node scripts/agent-activity-episode.mjs",
     "acceptance:acp": "node scripts/acp-episode.mjs",
-    "acceptance:agent-ui": "node scripts/agent-ui-acceptance.mjs"
+    "acceptance:agent-ui": "node scripts/agent-ui-acceptance.mjs",
+    "acceptance:review": "node scripts/review-evidence-acceptance.mjs",
+    "acceptance:review:agent": "node scripts/review-agent-episode.mjs"
   },
   "dependencies": {
     "@rho-workspace/plugin-agent": "file:../Rho-plugins/plugins/agent",
@@ -125,9 +127,18 @@
     "ajv": "8.20.0"
   },
   "devDependencies": {
+    "@codemirror/autocomplete": "6.20.3",
+    "@codemirror/lang-markdown": "6.5.2",
+    "@codemirror/lang-python": "6.2.1",
+    "@codemirror/language": "6.13.1",
+    "@codemirror/legacy-modes": "6.5.5",
     "@codemirror/state": "6.7.6",
     "@codemirror/view": "6.43.13",
+    "@lezer/common": "1.5.3",
+    "@lezer/highlight": "1.2.5",
+    "@lezer/markdown": "1.8.0",
     "@playwright/test": "1.64.1",
+    "@rho-workspace/plugin-markdown": "file:../Rho-plugins/plugins/markdown",
     "@types/node": "22.20.0",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",

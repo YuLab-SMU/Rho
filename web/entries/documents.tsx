@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { DocumentCardBody, DocumentEditorView, documentForms, editorEntry } from '@rho-workspace/plugin-documents/ui';
 import type { FrameBodyProps, UiContribution, UiViewProps } from '../../src/ui-contract.js';
+import { languageExtensions } from '../languages.js';
 // A session without edit grants still reads the document.
 const editable = (props: UiViewProps) => ['document.edit', 'document.undoOwn', 'document.revert', 'document.change.read'].every(m => props.snapshot.catalog.operations.some(o => o.method === m && o.state === 'available' && o.authorized));
 const bufferBytes = (props: UiViewProps) => Math.max(1, Math.min(1024 * 1024, (props.snapshot.limits.documents as { maxBufferBytes?: number } | undefined)?.maxBufferBytes ?? 1024 * 1024));
@@ -9,8 +10,9 @@ function Editor(props: UiViewProps) {
   const doc = props.snapshot.documents.find(d => d.id === binding?.documentId);
   const canType = editable(props);
   const saveable = props.snapshot.catalog.operations.some(o => o.method === 'document.save' && o.state === 'available' && o.authorized);
-  return <DocumentEditorView view={props.view} projectId={props.projectId} client={props.client} active={props.active}
+  return <DocumentEditorView view={props.view} extensionsFor={languageExtensions} projectId={props.projectId} client={props.client} active={props.active}
       documentVersion={doc?.version} documentRevision={doc?.revision} principalId={props.principalId} contextTarget={props.contextTarget} headerTarget={props.headerTarget} maxUnconfirmedBytes={bufferBytes(props)} editable={canType} saveable={saveable}
+      reviewSelection={props.shell?.openReview ? anchor => props.shell!.openReview!(undefined, anchor) : undefined}
       askable={props.snapshot.catalog.operations.some(o => o.method === 'context.create' && o.state === 'available' && o.authorized)} />;
 }
 // The item's passage, change, outline or summary inside Rho's frame. Cards read
@@ -24,4 +26,4 @@ function Body({ form, params, view, present, reportHidden, Card }: FrameBodyProp
   return <DocumentCardBody form={form} params={params} projectId={view.projectId} client={view.client} documentId={binding?.documentId} documentVersion={doc?.version} principalId={view.principalId}
     editable={editable(view)} maxUnconfirmedBytes={bufferBytes(view)} onParams={present} reportHidden={reportHidden} Reference={Reference} />;
 }
-export const entry: UiContribution = { ...editorEntry, entryVersion: '0.1-draft', packageVersion: '0.4.1', propsSchema: { type: 'object', properties: { title: { type: 'string' } } }, commands: [], requiredOperations: ['document.read'], View: Editor, forms: documentForms, Body };
+export const entry: UiContribution = { ...editorEntry, entryVersion: '0.1-draft', packageVersion: '0.4.7', propsSchema: { type: 'object', properties: { title: { type: 'string' } } }, commands: [], requiredOperations: ['document.read'], View: Editor, forms: documentForms, Body };

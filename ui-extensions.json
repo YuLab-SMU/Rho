@@ -1,0 +1,9 @@
+{
+  "format": "rho.ui-selection/1",
+  "packages": [
+    {
+      "package": "@rho-workspace/plugin-markdown",
+      "version": "0.1.0"
+    }
+  ]
+}

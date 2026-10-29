@@ -123,3 +123,34 @@ test('each message is a row; a file from an earlier row is referred to in the la
   const bottom = Math.max(...lanes.items.filter(i => i.lane === 0).map(i => lanes.placed.get(i.id).y + lanes.placed.get(i.id).height));
   assert.ok(lanes.items.filter(i => i.lane === 1).every(i => lanes.placed.get(i.id).y > bottom), 'the second row is below the first');
 });
+
+test('a command that ran and failed stays on the graph with how it ended, how long it ran and what it printed', () => {
+  const graph = buildWorkGraph(input([turn('t1', 'Fit the model', 0, 20, [
+    { ...tool('m', 'Bash', 9, 'rtk Rscript model.R', 'rejected'), startedAt: at(6), exitCode: 1, output: { text: 'Error in lm()\nExecution halted', lines: 2, bytes: 29, cut: false } },
+    { ...tool('n', 'Bash', 12, 'rm -rf results', 'rejected') }])], [{ path: 'model.R', bytes: 30, modifiedAt: at(-60), category: 'code' }]));
+  const runs = graph.nodes.filter(n => n.kind === 'run');
+  assert.equal(runs.length, 1, 'the refused command did nothing and is left out');
+  assert.deepEqual({ title: runs[0].title, command: runs[0].command, ran: runs[0].ran, end: runs[0].end, durationMs: runs[0].durationMs, output: runs[0].output },
+    { title: 'Rscript model.R', command: 'Rscript model.R', ran: 'rtk Rscript model.R', end: 'Exit 1', durationMs: 3000, output: { text: 'Error in lm()\nExecution halted', lines: 2, cut: false } });
+  assert.ok(graph.edges.some(e => e.from === 'f:model.R' && e.to === runs[0].id && e.label === 'runs'));
+  assert.equal(runs[0].outcome, 'failed'); assert.equal(graph.events.find(e => e.node === runs[0].id).outcome, 'failed');
+});
+
+test('same path keeps distinct captured versions and old events do not acquire a later snapshot time',()=>{
+ const captured=(id,s)=>({resource:{id,version:id.repeat(64)},kind:'file',bytes:9,observedAt:at(s),source:{kind:'disk',path:'analysis.R'}});
+ const a=turn('t1','First',0,10,[tool('read','Read',2,root+'/analysis.R')]);
+ const b=turn('t2','Second',20,30,[tool('edit','Edit',22,root+'/analysis.R')]);
+ a.evidence={records:[{key:'a',path:'analysis.R',phase:'tool',state:'captured',snapshots:[captured('a',3)]}],omitted:0,bytes:9,snapshots:1};
+ b.evidence={records:[{key:'b',path:'analysis.R',phase:'tool',state:'captured',snapshots:[captured('b',23)]}],omitted:0,bytes:9,snapshots:1};
+ const graph=buildWorkGraph(input([a,b],[])),versions=graph.nodes.filter(n=>n.path==='analysis.R'&&n.resource);
+ assert.deepEqual(versions.map(n=>n.resource.id),['a','b']);assert.ok(versions.every(n=>n.exists===false),'retained bytes do not assert the current file still exists');assert.ok(graph.nodes.some(n=>n.path==='analysis.R'&&!n.resource&&n.gap),'a later snapshot cannot bind an earlier path observation');
+ assert.equal(versions[0].capturedAt,Date.parse(at(3)));assert.equal(versions[1].capturedAt,Date.parse(at(23)));
+ assert.ok(graph.edges.filter(e=>e.label==='captured observation').every(e=>e.basis==='observed'));
+ assert.ok(!graph.edges.some(e=>/produced/.test(e.label)));
+});
+
+test('one oversized turn respects the drawing cap and all drawn links reference retained nodes',()=>{
+ const t=turn('t','Many outputs',0,20,Array.from({length:220},(_,i)=>tool('w'+i,'Write',3,root+'/results/'+i+'.csv')));
+ const graph=buildWorkGraph(input([t],[]));assert.equal(graph.nodes.length,160);assert.ok(graph.omittedNodes>0);
+ const ids=new Set(graph.nodes.map(n=>n.id));assert.ok(graph.edges.every(e=>ids.has(e.from)&&ids.has(e.to)));assert.ok(ids.has('q:c1/t'));
+});

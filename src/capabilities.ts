@@ -224,7 +224,7 @@ export class Capabilities {
       const provider = owner && this.plugins.isKnown(owner)
         ? this.pluginStatus(owner as PluginId, state)
         : { projectEnabled: true, dependenciesSatisfied: true, packagePresent: true };
-      const dependenciesSatisfied = provider.dependenciesSatisfied && [...(operation?.requires ?? []), ...(['workspace.observe', 'workspace.enhance'].includes(method) ? ['agent', 'tables', 'files'] : [])].every(id => {
+      const dependenciesSatisfied = provider.dependenciesSatisfied && [...(operation?.requires ?? []), ...(['workspace.observe', 'workspace.enhance'].includes(method) ? ['agent', 'tables', 'files'] : []), ...(['evidence.preview','evidence.export'].includes(method) ? ['agent','files','annotations'] : [])].every(id => {
         if (!this.plugins.isKnown(id)) return false;
         const dep = this.pluginStatus(id, state);
         return dep.projectEnabled && dep.dependenciesSatisfied && dep.packagePresent;

@@ -27,7 +27,62 @@
       },
       "options": {
         "additionalProperties": false,
+        "oneOf": [
+          {
+            "not": {
+              "required": [
+                "fields"
+              ]
+            },
+            "required": [
+              "leftField",
+              "rightField"
+            ]
+          },
+          {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "leftField"
+                  ]
+                },
+                {
+                  "required": [
+                    "rightField"
+                  ]
+                }
+              ]
+            },
+            "required": [
+              "fields"
+            ]
+          }
+        ],
         "properties": {
+          "fields": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "leftField": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "rightField": {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "leftField",
+                "rightField"
+              ],
+              "type": "object"
+            },
+            "maxItems": 16,
+            "minItems": 1,
+            "type": "array"
+          },
           "join": {
             "enum": [
               "left",
@@ -69,8 +124,6 @@
           "leftNamespace",
           "rightNamespace",
           "mapping",
-          "leftField",
-          "rightField",
           "join"
         ],
         "type": "object"

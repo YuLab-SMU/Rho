@@ -16,7 +16,7 @@ export const browserMethods = ['protocol.describe', 'protocol.validate', 'projec
   // A person may prepare a context naming one exact object and version: that is how
   // they point the Agent at the thing they are asking about. It writes only that
   // reference, starts nothing, and the Agent's fetch stays a separate fact.
-  'context.create', 'document.open', 'annotation.create',
+  'context.create', 'document.open', 'annotation.create', 'annotation.decide', 'resource.capture', 'data.compare',
   // People see and steer the task map; only the Agent declares its items.
   'task.map.read', 'task.map.present', 'task.map.respond',
   // A person runs an action from the form an Agent proposed, reads a run's bounded output,
@@ -38,7 +38,7 @@ export const browserMethods = ['protocol.describe', 'protocol.validate', 'projec
 // Only the person at this machine talks to a conversation Rho starts: it runs their own Claude
 // Code with their model credentials. Only they add Rho to their own Agent's configuration. A
 // narrower, expiring link never receives these.
-export const conversationMethods = ['session.connect', 'conversation.start', 'conversation.send', 'conversation.stop', 'conversation.read', 'conversation.list', 'conversation.trash', 'conversation.restore', 'conversation.delete', 'conversation.permission', 'conversation.configure', 'conversation.settings.read', 'conversation.settings.update', 'conversation.settings.check', 'project.work.read'];
+export const conversationMethods = ['session.connect', 'conversation.start', 'conversation.send', 'conversation.stop', 'conversation.read', 'conversation.list', 'conversation.trash', 'conversation.restore', 'conversation.delete', 'conversation.permission', 'conversation.configure', 'conversation.settings.read', 'conversation.settings.update', 'conversation.settings.check', 'project.work.read', 'evidence.preview', 'evidence.export'];
 // The person at this machine. A tab this service served is authorized by the request itself:
 // same origin, loopback only, no link, no code and no expiry. `--pair` stays an explicit,
 // narrower grant for a shared or subfolder-scoped tab.

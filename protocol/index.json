@@ -77,26 +77,32 @@
     "annotation.create": {
       "summary": "annotation.create",
       "path": "operations/annotation.create.json",
-      "bytes": 15606,
-      "sha256": "fd90fb4a0570e65f07bfd719855beaec589d43bc3a829823615fd270a4e24691"
+      "bytes": 20206,
+      "sha256": "e494e2da57acc42caf02f7c536745c57cb869a542bd3eb5c95597e4902abb364"
+    },
+    "annotation.decide": {
+      "summary": "annotation.decide",
+      "path": "operations/annotation.decide.json",
+      "bytes": 18259,
+      "sha256": "b9efa123476e9972c02c52d87ae671ec6f6c6e1c6843c284ef8b0218f94f4f14"
     },
     "annotation.list": {
       "summary": "annotation.list",
       "path": "operations/annotation.list.json",
-      "bytes": 13847,
-      "sha256": "75f902cfcae8be1c9a9c4964135dc0bb17cbad25f5dfbcafb02a6a29d4eb9fc7"
+      "bytes": 17899,
+      "sha256": "f8923f4afc4b4d57f707f03a2fbf7bcd9ae151e83fb766a888e7c1b721904fa9"
     },
     "annotation.read": {
       "summary": "annotation.read",
       "path": "operations/annotation.read.json",
-      "bytes": 12973,
-      "sha256": "f8bd049d144782f0f08e2fc6be99437432b47ccbce9bca81b9061a7f53cf0bf2"
+      "bytes": 16735,
+      "sha256": "d9d0efa73428cc630ff1c14b06f1d4c8300dff37dc692787a541c86921f9d1ac"
     },
     "annotation.reply": {
       "summary": "annotation.reply",
       "path": "operations/annotation.reply.json",
-      "bytes": 14231,
-      "sha256": "a6ee560eb3cc6a1d4545bfd77678c99e59a7b4e4ed8386b639e1a4dd597dc132"
+      "bytes": 17993,
+      "sha256": "74ff9e087a31e41e29dd81357c3a6b50c4228355b910253bff893f0bf6c1e766"
     },
     "artifact.check": {
       "summary": "Verify the selected completion inventory and file bytes only; domain check reports remain project resources.",
@@ -215,14 +221,14 @@
     "conversation.permission": {
       "summary": "Person at this machine only: record an offered choice for a pending Agent permission request. The original request identity is retained; repeated identical choices do not respond twice.",
       "path": "operations/conversation.permission.json",
-      "bytes": 19129,
-      "sha256": "133ef3f495c777b56698eca2fc25c616d687dec6068c23eb6dd07c045ba66211"
+      "bytes": 24054,
+      "sha256": "3376fb5ad2d674fa559e9ad7b331e68d33af0633ab5dc0e6b5a7e2efff2bb1f3"
     },
     "conversation.read": {
       "summary": "Read a conversation started in Rho: the person's messages, the Agent's visible text and tool steps, and how each message ended. Reading starts and resumes nothing.",
       "path": "operations/conversation.read.json",
-      "bytes": 33305,
-      "sha256": "e392aa58f29b60b9b7f42d4f922273a0e3f8eed855c99974ef1bcaefb7bdd25d"
+      "bytes": 38538,
+      "sha256": "57305f14e14b0471320902c0d3396599f213432dc7e8909f00d81b6d45100026"
     },
     "conversation.restore": {
       "summary": "Person at this machine only: return a conversation from the trash to the project's conversations, within the project's conversation limit.",
@@ -233,8 +239,8 @@
     "conversation.send": {
       "summary": "Person at this machine only: send the next message to a conversation started in Rho, which resumes the same Agent session. Refused while the previous message is being answered. A repeated changeId with the same text returns the original message.",
       "path": "operations/conversation.send.json",
-      "bytes": 19053,
-      "sha256": "34215b8c5ed90a9eb64169af4a4e3257fbb128ea712c64496b175fda65d23535"
+      "bytes": 24150,
+      "sha256": "5d1f5aec541eb71efe6e4cfdcc1ee419f925ddcccf62e978adaa2f208b09498c"
     },
     "conversation.settings.check": {
       "summary": "Person at this machine only: start the chosen Agent in this project to read the settings it offers, then remove that session and end the process. No message is sent; one check per Agent runs at a time.",
@@ -257,14 +263,14 @@
     "conversation.start": {
       "summary": "Person at this machine only: start a conversation with the selected Claude Code or Codex Agent in this project. Rho selects the Agent plugin backend, attaches this project's MCP grant and records the message before sending it. Without backend or config, the person's saved Agent and settings are used and recorded with the conversation. A repeated changeId with the same text returns the original conversation and starts nothing.",
       "path": "operations/conversation.start.json",
-      "bytes": 19614,
-      "sha256": "ce46148e9a0cc16837da18760f252e5328883d6b7201b8c43406459c8c9e665e"
+      "bytes": 24711,
+      "sha256": "87301c43b393fb1758253603b765464ff616c454eceb693d86abdb07d0919c8c"
     },
     "conversation.stop": {
       "summary": "Person at this machine only: ask the original Agent to stop answering one message. ACP cancellation is confirmed by the original prompt response; a lost connection keeps the outcome unknown. Legacy CLI conversations confirm process exit. Steps already taken stay done.",
       "path": "operations/conversation.stop.json",
-      "bytes": 18956,
-      "sha256": "eff30649172607ac645d4791cbdd3111f8b7f4ff034d62ce685df9455f9ece32"
+      "bytes": 23881,
+      "sha256": "16b3d7df4ef1ed96b386f44717431f31adae38f0a3de3e772086ba25b2def5cb"
     },
     "conversation.trash": {
       "summary": "Person at this machine only: move a conversation that is not being answered to the trash. It is kept whole and not continued until restored; an idle connection to its Agent ends.",
@@ -275,8 +281,8 @@
     "data.compare": {
       "summary": "Join two explicit table versions using declared keys, namespaces, fields and join policy. Scientific comparability remains the project responsibility.",
       "path": "operations/data.compare.json",
-      "bytes": 5027,
-      "sha256": "8dbcf547e663f81c5c89d43b5f0670f7beb4e36747439843de06adac88623720"
+      "bytes": 6260,
+      "sha256": "5fcd75404322f9bbd7fedaf66ba45ca6ae0fd9a8ea65310b8cc23de460b191de"
     },
     "data.page": {
       "summary": "data.page",
@@ -349,6 +355,18 @@
       "path": "operations/document.undoOwn.json",
       "bytes": 9456,
       "sha256": "eca65167dd6fd62ba3650f47e4b9727f4ac86d53a3b65c20994714bfe7e7f48c"
+    },
+    "evidence.export": {
+      "summary": "evidence.export",
+      "path": "operations/evidence.export.json",
+      "bytes": 1309,
+      "sha256": "34c8fb1ef1f516fce3d683181b4ae450ea162b34eba7815eecb16dbe16be5f2b"
+    },
+    "evidence.preview": {
+      "summary": "evidence.preview",
+      "path": "operations/evidence.preview.json",
+      "bytes": 1004,
+      "sha256": "4fbf03970c525ad073153aad9846ce960da2369b8cb45b4b6aaeef95cd8f19fd"
     },
     "feedback.read": {
       "summary": "Original business binding only: fetch one complete frozen feedback object using its original delivery/context and a stable fetchId. relatedDocumentId is a pointer: read its CURRENT version before conditional edit/save and preserve human changes. This owner-served receipt does not prove client return or understanding.",
@@ -494,6 +512,12 @@
       "bytes": 40360,
       "sha256": "10886c899156957e072c4439ab78b9582e43ca4dbf7e8d9fd5b5f3ee71c51de4"
     },
+    "resource.capture": {
+      "summary": "resource.capture",
+      "path": "operations/resource.capture.json",
+      "bytes": 8867,
+      "sha256": "5aa9e13c1c40d0907dfc4445dc3458abaab75f2ce77ad1d7b5f57282726b581d"
+    },
     "resource.list": {
       "summary": "resource.list",
       "path": "operations/resource.list.json",
@@ -539,8 +563,8 @@
     "session.grant": {
       "summary": "session.grant",
       "path": "operations/session.grant.json",
-      "bytes": 3962,
-      "sha256": "10117e763b13cffe36ddb6817965a6fee39a49e3e23f00ad5664ce383aabbeb3"
+      "bytes": 4090,
+      "sha256": "4b4ed60de3d9e4d6db64430965bbd64aa3114ea7f25f9dc883a85c2cd71bc5a8"
     },
     "skill.list": {
       "summary": "List the application and enabled provider Skills shipped in the selected package. Skills guide discovery but do not grant authorization.",

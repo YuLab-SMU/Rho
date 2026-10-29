@@ -2,19 +2,19 @@
   "schemaVersion": 1,
   "checks": {
     "rho-tests": {
-      "command": "node --test test/*.test.mjs",
-      "checkedAt": "2026-10-29T06:16:40.099Z",
+      "command": "RHO_CORE_BINARY=<selected unchanged binary> node --test --test-concurrency=1 test/*.test.mjs",
+      "checkedAt": "2026-10-29T10:17:04.429502+00:00",
       "exitCode": 0,
-      "tests": 218,
-      "passing": 218,
+      "tests": 229,
+      "passing": 229,
       "passed": true
     },
     "plugin-tests": {
-      "command": "node --test test/*.test.mjs",
-      "checkedAt": "2026-10-29T06:16:43.103Z",
+      "command": "node --test --test-concurrency=1 test/*.test.mjs",
+      "checkedAt": "2026-10-29T10:10:59.714737+00:00",
       "exitCode": 0,
-      "tests": 97,
-      "passing": 97,
+      "tests": 110,
+      "passing": 110,
       "passed": true
     }
   }

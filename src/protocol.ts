@@ -1,3 +1,4 @@
+import { evidenceSchema } from './evidence-capture.js';
 import { ownerContracts } from './contracts/owners.generated.js';
 import { enhancementSchemas } from './enhancement-contracts.js';
 import { discoverySchemas } from './discovery-contracts.js';
@@ -83,8 +84,8 @@ export const operations: Record<string, any> = { ...base.operations,
   'data.compare': obj({ ...project, left: ref, right: ref, options: obj({ leftKey: text, rightKey: text, leftNamespace: text, rightNamespace: text, mapping: { const: 'equal-string' }, leftField: text, rightField: text, join: { enum: ['left', 'inner', 'full'] } }) }),
   'media.describe': obj({ ...project, resource: ref }),
   // A conversation the person starts in Rho: their words, under a request identity they hold.
-  'conversation.start': obj({ ...project, changeId, text: { type: 'string', minLength: 1, maxLength: 16384 }, backend: agentBackend, config: choices }, ['projectId', 'changeId', 'text']),
-  'conversation.send': obj({ ...project, conversationId: changeId, changeId, text: { type: 'string', minLength: 1, maxLength: 16384 } }),
+  'conversation.start': obj({ ...project, changeId, text: { type: 'string', minLength: 1, maxLength: 16384 }, backend: agentBackend, config: choices, contexts: { ...array(digest), maxItems: 8 } }, ['projectId', 'changeId', 'text']),
+  'conversation.send': obj({ ...project, conversationId: changeId, changeId, text: { type: 'string', minLength: 1, maxLength: 16384 }, contexts: { ...array(digest), maxItems: 8 } }, ['projectId','conversationId','changeId','text']),
   'conversation.permission': obj({ ...project, conversationId: changeId, turnId: changeId, permissionId: changeId, optionId: { type: 'string', minLength: 1, maxLength: 256 } }),
   'conversation.stop': obj({ ...project, conversationId: changeId, turnId: changeId }),
   'conversation.read': obj({ ...project, conversationId: changeId, before: integer, limit: { type: 'integer', minimum: 1, maximum: 200 } }, ['projectId', 'conversationId']),
@@ -146,6 +147,8 @@ const taskItem = obj({ id: changeId, kind: word, state: word, title: phrase(160)
   // and never guesses which artifact an item meant.
   artifact: obj({ id: text, version: digest }, ['id', 'version']),
   from: { ...array(changeId), maxItems: 16, uniqueItems: true } }, ['id', 'kind', 'state', 'title']);
+operations['evidence.preview'] = obj({ ...project, annotationId: changeId });
+operations['evidence.export'] = obj({ ...project, annotationId: changeId, exportId: changeId, expectedDigest: digest });
 operations['task.map.read'] = obj(project);
 operations['task.map.declare'] = obj({ ...project, expectedVersion: integer, changeId, question: { anyOf: [phrase(240), { type: 'null' }] }, compositionId: { anyOf: [changeId, { type: 'null' }] }, vocabulary: obj({ kinds: terms, states: terms }, []), items: { ...array(taskItem), maxItems: 256 }, remove: { ...array(changeId), maxItems: 256, uniqueItems: true }, next: { ...array(changeId), maxItems: 16, uniqueItems: true } }, ['projectId', 'expectedVersion', 'changeId']);
 operations['task.map.present'] = obj({ ...project, expectedVersion: integer, changeId, target: mapTarget, form: hint, params: formParams, focus: { anyOf: [changeId, { type: 'null' }] }, reason: phrase(160) }, ['projectId', 'expectedVersion', 'changeId', 'target']);
@@ -217,14 +220,16 @@ const offered = response({ at: text, source: { enum: ['check', 'conversation'] }
 const agentSettings = response({ version: integer, updatedAt: { anyOf: [text, { type: 'null' }] }, backend: { anyOf: [agentBackend, { type: 'null' }] }, serviceBackend: { enum: ['claude-acp', 'codex-acp', 'claude-cli'] },
   choices: response({ 'claude-acp': choices, 'codex-acp': choices }, []), offered: response({ 'claude-acp': offered, 'codex-acp': offered }, []), checking: array(agentBackend) });
 // A tool step keeps its original identity, the Agent's bounded human title, its ACP
-// category and one identifying input (command, path, pattern or query). Raw tool
-// output and reasoning are never part of this record.
-const conversationStep = response({ kind: { enum: ['text', 'tool', 'error'] }, at: text, text: { type: 'string' }, cut: { type: 'boolean' }, id: text, tool: text, operation: text,
+// category and one identifying input (command, path, pattern or query), when it was
+// first and last reported, and for a command its exit code and the last lines it printed
+// (Agent's commandOutputLimits). Other tool output and reasoning are never part of it.
+const conversationStep = response({ kind: { enum: ['text', 'tool', 'error'] }, at: text, startedAt: text, text: { type: 'string' }, cut: { type: 'boolean' }, id: text, tool: text, operation: text,
   title: text, toolKind: { enum: ['read', 'edit', 'delete', 'move', 'search', 'execute', 'think', 'fetch', 'switch_mode', 'other'] }, detail: text,
-  outcome: { enum: ['requested', 'returned', 'rejected', 'unknown'] } }, ['kind', 'at']);
+  outcome: { enum: ['requested', 'returned', 'rejected', 'unknown'] }, exitCode: integer,
+  output: response({ text: { type: 'string' }, lines: integer, bytes: integer, cut: { type: 'boolean' } }, ['text', 'lines', 'bytes', 'cut']) }, ['kind', 'at']);
 const conversationTurn = response({ id: text, by: text, text: { type: 'string' }, sentAt: text, state: { enum: ['running', 'completed', 'failed', 'stopped', 'unknown'] }, startedAt: { anyOf: [text, { type: 'null' }] }, endedAt: { anyOf: [text, { type: 'null' }] }, model: { anyOf: [text, { type: 'null' }] },
   stop: { anyOf: [response({ requestedAt: text, by: text, reason: { enum: ['person', 'closing', 'wall-limit', 'output-limit', 'line-limit', 'identity'] } }), { type: 'null' }] },
-  steps: array(conversationStep), omitted: integer,
+  steps: array(conversationStep), omitted: integer, evidence: evidenceSchema, contexts: array(digest),
   permissions: array(response({ id: text, title: { type: 'string' }, toolCallId: text, details: { type: 'string' }, options: array(response({ id: text, name: text, kind: text })), state: { enum: ['pending', 'selected', 'cancelled'] }, selected: text }, ['id', 'title', 'toolCallId', 'options', 'state'])),
   retry: { anyOf: [response({ attempt: { anyOf: [integer, { type: 'null' }] }, of: { anyOf: [integer, { type: 'null' }] }, status: { anyOf: [integer, { type: 'null' }] }, at: text }), { type: 'null' }] },
   result: { anyOf: [response({ isError: { type: 'boolean' }, kind: { anyOf: [text, { type: 'null' }] }, reason: { anyOf: [text, { type: 'null' }] }, steps: { anyOf: [integer, { type: 'null' }] }, durationMs: { anyOf: [{ type: 'number' }, { type: 'null' }] }, costUsd: { anyOf: [{ type: 'number' }, { type: 'null' }] }, message: { anyOf: [{ type: 'string' }, { type: 'null' }] } }), { type: 'null' }] },
@@ -350,6 +355,8 @@ export const responses: Record<string, any> = { ...base.responses, ...ownerRespo
   'project.openFile': response({ document: ownerResponses['document.open'], viewId: text, composition: structuredComposition }),
   'interaction.selection.read': contract.selectionChannelSchema,
   'interaction.selection.set': contract.selectionChannelSchema,
+  'evidence.preview': { type: 'object', additionalProperties: true, required: ['digest','files','gaps','bytes'], properties: { digest, files: array({ type: 'object' }), gaps: array({ type: 'string' }), bytes: integer } },
+  'evidence.export': response({ destination: text, state: { const: 'complete' }, files: integer, manifestDigest: digest, gaps: array({ type: 'string' }) }),
   'task.map.read': taskMap, 'task.map.declare': taskMap, 'task.map.present': taskMap, 'task.map.respond': taskMap,
   'requirements.prepare': runSchema, 'action.submit': runSchema, 'action.lookup': runSchema, 'action.observe': runSchema, 'action.retry': runSchema, 'action.cancel': runSchema,
   'action.list': array(runSchema),

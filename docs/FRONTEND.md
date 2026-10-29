@@ -1,6 +1,6 @@
 # Browser application
 
-Updated 2026-10-27. The frontend was reset at the user's request. Previous frontend
+Updated 2026-10-29. The frontend was reset at the user's request. Previous frontend
 plans, visual specifications, Paper references and appearance rulers have been
 removed from the working repository. Git retains their history; they do not govern
 this implementation. This document describes the current application, not another
@@ -34,8 +34,9 @@ inspect what happened. The application gives those actions direct places:
   its files across the project and its source folders: the top level first, then by
   folder, at most 40 there with the rest on the kind's page. Choosing one shows it
   in place in its own view, without writing a layout: a CSV or image as a snapshot
-  of its current bytes in the table or media view, text in the editor, a registered
-  result as its exact version. ← and → or the buttons beside "3 of 6" move through
+  of its current bytes in the table or media view, a Markdown file in the Markdown
+  reader (Source shows the editor), other text in the editor, highlighted when Rho
+  has its language, a registered result as its exact version. ← and → or the buttons beside "3 of 6" move through
   the kind, ↑ and ↓ move in the sidebar, and Open in Studio places the file in the
   workspace ([pass](AGENT-CANVAS-EPISODE.md#browsing-sources-from-the-sidebar)).
   `+` adds a source folder.
@@ -70,11 +71,20 @@ inspect what happened. The application gives those actions direct places:
   action on every project page. Choosing another view, typing, dragging a tab or
   leaving stops following until the person follows again
   ([canvas episode](AGENT-CANVAS-EPISODE.md), [one workspace](GRAPH-EPISODE.md)).
+- **Review** brings a frozen question, explicit Agent replies, exact result versions, keyed
+  table differences, captured code changes and append-only human decisions together. Table
+  row and document selection controls open the same record; whole-resource questions cover
+  figures. Sending a frozen context is a separate action from deciding. A result can focus
+  Graph; Graph links back. Reload restores Review and its selected record. Evidence export
+  previews that record and its retained references before writing a static offline reader
+  ([episode](REVIEW-EVIDENCE-EPISODE.md)).
 - **Graph** draws what the Agent did: each message a row from the files it read to
   the question, what it edited and ran, and what changed on disk while its command
   ran; a later row refers to an earlier output. Lines say whether the Agent reported
   it, a command named it, or a change was seen on disk. Cards preview tables and
-  figures; choosing one shows its path and the file in its own view. The timeline
+  figures from captured versions; choosing one shows those retained bytes and related
+  reviews. Older records explicitly lack a historical snapshot. Opening the current
+  file is a separate action, and replay hides captures later than its cursor. The timeline
   below gives each conversation a lane and each step a block coloured by kind (asked,
   read, edited, ran, changed on disk, answered); the legend counts and filters them,
   refused or unknown steps are marked, pauses fold to a short gap, and the work
@@ -163,6 +173,18 @@ turn's record (`conversation.read`, last turn) and maps its steps to project pat
 `web/canvas.ts` resolves a file's owner view (`viewFor`) and places it in a workspace
 with one conditional `composition.apply`, through `document.open` for text and `agent.activity.capture`
 for a CSV or image. Following is a tab-local choice; the workspace layout is saved.
+Every owner view receives the shell's services (`ShellServices` in `src/ui-contract.ts`,
+made in `web/shell-services.ts`): a linked project file opens in place, or in the
+workspace on screen in Studio; an image is read as its current bytes (`readImage` in
+`web/previews.ts`, at most 64 per page of 8 MiB each, past which the view shows its
+description); `web/languages.ts` gives Python, R and Markdown to the editor and to code
+in rendered text, one set of token classes coloured in `theme.css`.
+A command the Agent ran shows how it ended (its exit code when the Agent reported one; a
+command that ran and failed is "failed", not "refused"), how long the call took from its
+last description to its result, and the last lines it printed, opened at their end, in
+the panel row and the Graph's run card and details (`commandEnd`, `stepDuration` in
+`src/conversation-presentation.ts`). A leading `rtk` output wrapper is left out of the
+command's name; the row's details keep what ran.
 `src/work-graph.ts` builds the Graph from `conversation.read` records (a finished
 message keeps the project files that changed on disk while it ran) and the folder walk
 (`project.entries` gives each file's `modifiedAt`), and lays each message out as a row; `web/graph.tsx` draws it, the inspector, the timeline and the
@@ -269,8 +291,10 @@ path. Evidence goes to `work/graph-acceptance/` by default.
 `npm run acceptance:sources` browses a project of data, scripts in two folders and
 figures in two output folders from the sidebar, without a model. It checks the
 unfolded lists and their order, a file shown in place with no layout written, ←/→,
-the buttons and ↑/↓, the table and editor keeping their own arrow keys, Open in
-Studio, unfolded kinds after a reload, and the 390 px drawer. Evidence goes to
+the buttons and ↑/↓, the table and editor keeping their own arrow keys, an R script's
+colours, Open in Studio, unfolded kinds after a reload, a Markdown note read with its
+image, math, table and highlighted code, following another writer's edit, Source and a
+link to a script, and the 390 px drawer. Evidence goes to
 `work/sources-acceptance/` by default.
 
 `npm run acceptance:agent-ui` drives a controlled ACP peer through the real service

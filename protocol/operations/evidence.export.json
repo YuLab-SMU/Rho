@@ -1,0 +1,66 @@
+{
+  "method": "evidence.export",
+  "inputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "projectId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "annotationId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "exportId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "expectedDigest": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{64}$"
+      }
+    },
+    "required": [
+      "projectId",
+      "annotationId",
+      "exportId",
+      "expectedDigest"
+    ]
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "destination": {
+        "type": "string",
+        "minLength": 1
+      },
+      "state": {
+        "const": "complete"
+      },
+      "files": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "manifestDigest": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{64}$"
+      },
+      "gaps": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      }
+    },
+    "required": [
+      "destination",
+      "state",
+      "files",
+      "manifestDigest",
+      "gaps"
+    ],
+    "additionalProperties": true
+  },
+  "description": null
+}

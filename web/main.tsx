@@ -1,3 +1,4 @@
+const Reviews = lazy(() => import('./review.js'));
 import { lazy, Fragment, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserClient, type BrowserConnection, type ProjectSummary, type WorkspaceSnapshot } from '../src/browser.js';
@@ -14,6 +15,7 @@ import { PluginCatalog, PluginNavigation } from './plugins.js';
 import { pluginPresentation } from '../src/plugin-presentation.js';
 import { ProjectRail, railProjects, useProjectStates } from './project-rail.js';
 import { shortcut } from './platform.js';
+import { ShellContext, shellServices } from './shell-services.js';
 import './theme.css';
 import './plugins.css';
 import './access.css';
@@ -75,6 +77,8 @@ function App() {
   const [compositionId, setCompositionId] = useState(''), [openView, setOpenView] = useState(''), [openFollowed, setOpenFollowed] = useState(false), [overview, setOverview] = useState(false), [section, setSection] = useState<Section>('overview');
   // About from a view opens that plugin and offers the way back to the project.
   const [pluginId, setPluginId] = useState(''), [pluginReturn, setPluginReturn] = useState(false);
+  const [graphResource,setGraphResource]=useState<{id:string;version:string}|null>(null);
+  const [reviewId, setReviewId] = useState(''), [reviewAnchor,setReviewAnchor] = useState<any>(null);
   const [context, setContext] = useState(false), [navigation, setNavigation] = useState(true);
   const [feedbackContext, setFeedbackContext] = useState(false);
   const [category, setCategory] = useState<SourceRow>('data'), [addingSource, setAddingSource] = useState(false);
@@ -114,7 +118,8 @@ function App() {
     // a person arriving should see what the work is and where it stands.
     if (!restoreLayout) sessionStorage.removeItem('rho.layout.v1:' + connection?.principalId + ':' + next.id);
     const retainedLayout = restoreLayout ? sessionStorage.getItem('rho.layout.v1:' + connection?.principalId + ':' + next.id) : null;
-    setSection('overview'); setOverview(!retainedLayout); if (retainedLayout) setCompositionId(retainedLayout); setPluginReturn(false);
+    const retainedReview = restoreLayout && sessionStorage.getItem('rho.review.open:' + connection?.principalId + ':' + next.id) === 'true';
+    setReviewId(''); setReviewAnchor(null); setSection(retainedReview ? 'review' : 'overview'); setOverview(retainedReview || !retainedLayout); if (retainedLayout) setCompositionId(retainedLayout); setPluginReturn(false);
     sessionStorage.setItem(projectKey, next.id); setProject(next); setScreen('project');
     if (matchMedia('(max-width: 767px)').matches) setNavigation(false);
   }
@@ -202,7 +207,7 @@ function App() {
   // Opening a layout may name the view to bring forward: from the project page a
   // person picks an artifact, not a tab.
   // A view brought while following only changes what is shown; one the person opens is held.
-  function place(id: string, view?: string, followed = false) { if (project) { sessionStorage.setItem('rho.layout.v1:' + connection?.principalId + ':' + project.id, id); sessionStorage.setItem(workspaceKey(project.id), id); } setCompositionId(id); setOpenView(view ?? ''); setOpenFollowed(followed); setOverview(false); setScreen('project'); }
+  function place(id: string, view?: string, followed = false) { if (project) { sessionStorage.removeItem('rho.review.open:' + connection?.principalId + ':' + project.id); sessionStorage.setItem('rho.layout.v1:' + connection?.principalId + ':' + project.id, id); sessionStorage.setItem(workspaceKey(project.id), id); } setCompositionId(id); setOpenView(view ?? ''); setOpenFollowed(followed); setOverview(false); setScreen('project'); }
   // A workspace the person opens is their choice; following goes on only in the one it follows into.
   function layout(id: string, view?: string) { if (id !== followTarget.current) setFollowing(false); place(id, view); }
   // The workspace the person and the Agent share in this tab: the one on screen, the one last
@@ -213,10 +218,10 @@ function App() {
     const list = snapshot?.compositions ?? [], kept = project ? sessionStorage.getItem(workspaceKey(project.id)) : null;
     return list.find(c => c.compositionId === kept)?.compositionId ?? list[0]?.compositionId ?? defaultWorkspace;
   }
-  function showOverview() { setFollowing(false); setSection('overview'); if (project) sessionStorage.removeItem('rho.layout.v1:' + connection?.principalId + ':' + project.id); setOverview(true); setScreen('project'); }
-  function showSection(next: Section) { showOverview(); setScreen('project'); setSection(next); }
+  function showOverview() { if (project) sessionStorage.removeItem('rho.review.open:' + connection?.principalId + ':' + project.id); setFollowing(false); setSection('overview'); if (project) sessionStorage.removeItem('rho.layout.v1:' + connection?.principalId + ':' + project.id); setOverview(true); setScreen('project'); }
+  function showSection(next: Section) { if(next==='review'){setReviewId('');setReviewAnchor(null);} showOverview(); if (project && next === 'review') sessionStorage.setItem('rho.review.open:' + connection?.principalId + ':' + project.id, 'true'); setScreen('project'); setSection(next); }
   // The Graph keeps following the Agent's turn; the workspace keeps receiving its files.
-  function showGraph() { const was = following; showSection('graph'); if (was) setFollowing(true); }
+  function showGraph() { setGraphResource(null); const was = following; showSection('graph'); if (was) setFollowing(true); }
   function showSources(next: SourceRow) { setCategory(next); showSection('sources'); }
   function showFile(row: SourceRow, item: SourceItem) { setShownFile({ row, key: item.key }); setCategory(row); showSection('file'); }
   // A file the Agent named: shown in place among its kind, or in the workspace when it has no kind.
@@ -225,9 +230,18 @@ function App() {
       const item = sources?.[row].find(entry => entry.path === path);
       if (item) { showFile(row, item); return; }
     }
+    openIn(sharedWorkspace(), path);
+  }
+  // Opens a file in a workspace and shows it there, or says why it could not.
+  function openIn(workspace: string, path: string) {
     if (!snapshot) return;
-    openInWorkspace(client, snapshot, sharedWorkspace(), path).then(placed => placed ? layout(placed.compositionId, placed.viewId) : setNotice(path + ' · Rho has no viewer for this kind of file yet.'),
+    openInWorkspace(client, snapshot, workspace, path).then(placed => placed ? layout(placed.compositionId, placed.viewId) : setNotice(path + ' · Rho has no viewer for this kind of file yet.'),
       error => setNotice(path + ' · ' + (error instanceof Error ? error.message : 'It could not be opened.')));
+  }
+  // A project file a view links to: in Studio it opens in the workspace on screen, elsewhere in place.
+  function openLinked(path: string) {
+    const here = studioOpen ? composition?.compositionId ?? compositionId : '';
+    if (here) openIn(here, path); else showPath(path);
   }
   // The Agent panel, ready for a new conversation or showing the one chosen.
   function talk(conversationId = 'new') { setSelectedConversation(conversationId); setAgentOpen(true); setContext(false); }
@@ -411,6 +425,11 @@ function App() {
   // Each kind's files, from the last walk; results also list registered results.
   const sources = useMemo(() => project && files.readAt ? Object.fromEntries((['data', 'code', 'results', 'notes'] as const).map(row => [row, sourceItems(row, files.files, snapshot?.resources ?? [], project, snapshot?.operations)])) as Record<SourceRow, SourceItem[]> : null,
     [files.files, files.readAt, snapshot?.resources, snapshot?.operations, project?.id, project?.root, project?.sources]);
+  const linked = useRef(openLinked); linked.current = openLinked;
+  const shellNow = useRef({ snapshot, files: files.files }); shellNow.current = { snapshot, files: files.files };
+  const reviewNavigation=useRef<(id?:string,anchor?:any)=>void>(()=>{});
+  reviewNavigation.current=(id,anchor)=>{showSection('review');setReviewId(id??'');setReviewAnchor(anchor??null);};
+  const shell = useMemo(() => shellServices(client, () => shellNow.current, path => linked.current(path), (id, anchor) => reviewNavigation.current(id,anchor)), [client]);
   const fileOnScreen = section === 'file' && shownFile ? sources?.[shownFile.row].find(item => item.key === shownFile.key) : undefined;
   const here = screen === 'plugins' ? 'plugins' : screen !== 'project' ? '' : studioOpen ? 'studio:' + (composition?.compositionId ?? compositionId) : section === 'sources' ? 'sources:' + category : section === 'file' && shownFile ? 'file:' + shownFile.row + ':' + shownFile.key : section === 'documents' ? 'files' : section;
   const initials = project ? name(project).split(/[\s_.-]+/).filter(Boolean).slice(0, 2).map(w => [...w][0]!.toUpperCase()).join('') || 'P' : '';
@@ -465,7 +484,7 @@ function App() {
   const studioList = [...(snapshot?.compositions ?? [])];
   if (studioOpen && shownId && !studioList.some(c => c.compositionId === shownId)) studioList.unshift({ compositionId: shownId, views: [] } as unknown as typeof studioList[number]);
   const followingHere = following && shownId === followTarget.current;
-  return <div className="application">
+  return <ShellContext.Provider value={shell}><div className="application">
     <a className="skip-link" href="#main">Skip to workspace</a>
     <div className="app-body">
       {!narrow && rail}
@@ -518,7 +537,8 @@ function App() {
                   onMove={item => showFile(shownFile.row, item)} onStudio={layout} onList={() => showSources(shownFile.row)} onAbout={about} /></Suspense>
                 : !sources ? <Loading text="Reading the project folders…" />
                 : <div className="studio-empty"><span className="empty-symbol"><Icon name="file" size={26} stroke={1.5} /></span><h2>This file is no longer in the project</h2><p>{shownFile.key.replace(/^\w+:/, '')} was not found when the folders were last read. It may have been moved or removed.</p><div className="empty-actions"><button onClick={() => showSources(shownFile.row)}>All {sourceLabels[shownFile.row].toLowerCase()}</button></div></div>)
-              : section === 'graph' ? <Suspense fallback={<Loading text="Opening the graph…" />}><WorkGraph client={client!} snapshot={snapshot} files={files} agentNow={agentNow} following={following} principalId={connection.principalId}
+              : section === 'review' ? <Suspense fallback={<Loading text="Opening review…" />}><Reviews key={snapshot.project.id+':'+connection.principalId} client={client!} snapshot={snapshot} principalId={connection.principalId} annotationId={reviewId} initialAnchor={reviewAnchor} onGraph={ref=>{showSection('graph');setGraphResource(ref);}} onSent={id => { setSelectedConversation(id); setAgentOpen(true); }} /></Suspense>
+              : section === 'graph' ? <Suspense fallback={<Loading text="Opening the graph…" />}><WorkGraph initialResource={graphResource} client={client!} snapshot={snapshot} files={files} agentNow={agentNow} following={following} principalId={connection.principalId}
                   onFollow={follow} onStopFollowing={() => setFollowing(false)} onStudio={layout} workspace={sharedWorkspace} onAbout={about} onAgent={id => { if (id) setSelectedConversation(id); setAgentOpen(true); setContext(false); }} /></Suspense>
               : <Suspense fallback={<Loading text="Opening project…" />}><ProjectOverview key={project.id} section={section} workspace={sharedWorkspace} category={category} files={files} sources={sources} onFile={showFile} linked={!!link} onPath={showPath} onNewConversation={() => talk()} onSection={showSection} onAgent={id => { if (id) setSelectedConversation(id); setAgentOpen(true); }} client={client!} onProjectChanged={next => { setProject(next); setProjects(list => list.map(p => p.id === next.id ? next : p)); }} project={project} snapshot={snapshot} onLayout={layout} onOpened={(id, view) => { layout(id, view); reread(); }} /></Suspense>}
           </main>
@@ -534,7 +554,7 @@ function App() {
     <dialog ref={confirmDialog} className="confirm" aria-labelledby="disconnect-title" aria-describedby="disconnect-body" onCancel={() => setConfirming(false)} onClose={() => { setConfirming(false); confirmReturn.current?.focus(); }}>
       <h2 id="disconnect-title">Use this machine's access?</h2><p id="disconnect-body">This tab stops using its link and keeps working as this machine. Open projects, unsaved edits and running work are unchanged.</p><div className="dialog-actions"><button onClick={() => setConfirming(false)}>Cancel</button><button className="danger" onClick={() => useLocalAccess('This tab now uses this machine.')}>Use this machine</button></div>
     </dialog>
-  </div>;
+  </div></ShellContext.Provider>;
 }
 // The newest thing the Agent reported doing, in the words the Agent panel uses.
 // Paths inside the project read as the project names them.

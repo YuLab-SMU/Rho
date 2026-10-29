@@ -1,4 +1,4 @@
-# Rho local backend 0.4
+# Rho local backend 0.5.1
 
 Rho selects nine independent capability packages: annotations plus documents, files, R,
 requirements, tables, media, charts and Agent. Shared contracts contain generic envelopes/service ports and ordinary-file
@@ -45,7 +45,7 @@ An unavailable Rscript returns an unknown dependency probe and prevents managed 
 Other platforms and npm registry publication are unverified.
 
 ```sh
-npm install --prefix /absolute/install /absolute/rho-workspace-local-0.4.0.tgz
+npm install --prefix /absolute/install /absolute/rho-workspace-local-0.5.1.tgz
 /absolute/install/node_modules/.bin/rho \
   --root /absolute/projects --state-dir /absolute/service-state
 ```
@@ -119,7 +119,9 @@ credential. `rho --help` prints the usage; an unknown option exits 2 with it.
 
 Agent 0.4.11 provides persistent Claude and Codex ACP entries and retains each
 tool step's human title, ACP category and one identifying input (command, file path,
-pattern or query; bounded, with no raw tool output). The Agent panel
+pattern or query; bounded). Since 0.4.17 a command also keeps its exit code and the last
+20 lines it printed (at most 2 KiB), and Rho records when each step started; other tool
+output is not kept, and a message that is full gives up a command's output first. The Agent panel
 selects a backend for a new conversation; existing records retain their choice.
 `--claude PATH` / `RHO_CLAUDE` selects the native CLI; its existing provider/model
 configuration is used. The four Rho MCP tools retain a project grant, while native
@@ -365,7 +367,7 @@ RHO_CORE_BINARY=/absolute/rho-core npm run recovery
 RHO_CORE_BINARY=/absolute/rho-core npm run agent
 npm run pack:local -- --core /absolute/rho-core \
   --core-source /absolute/Rho-core --plugins /absolute/Rho-plugins
-node scripts/install-acceptance.mjs /absolute/rho-workspace-local-0.4.0.tgz \
+node scripts/install-acceptance.mjs /absolute/rho-workspace-local-0.5.1.tgz \
   /absolute/ordinary-project /absolute/paired-project
 ```
 
@@ -801,3 +803,43 @@ requirements, exact identities, filtered actual traces and failure accounting.
 The 900px view retains internal scrolling/column ellipsis. Human usability, accessibility, same-project multi-task, OS execution deduplication
 and official distribution are not accepted by this bounded flow. No registry
 publication or signing was performed.
+
+
+## Retained review evidence
+
+`resource.capture` copies a project file into Files' independent immutable store;
+`resource.register` retains its existing semantics. A Documents snapshot records
+its confirmed buffer version/dirty state separately from disk. `annotation.decide`
+is browser-person-only and records accepted, needs-changes (reason required) or a
+withdrawal/correction against an exact Agent reply and result refs. Agent grants do
+not include this operation. New results never inherit decisions. `data.compare`
+accepts `fields: [{leftField,rightField}, ...]` while preserving old single-field
+requests; stable keys, namespaces and an explicit mapping remain required.
+
+`conversation.start/send` accept optional `contexts` containing frozen context IDs.
+Those IDs join the original message digest. Only turns started by Rho automatically
+capture explicit file locations and final identified changes; reads do not backfill.
+`conversation.read.evidence` records captures, pending/interrupted/unavailable states
+and omissions. Buffer and disk bytes have separate provenance. A capture is an
+observation, not proof of process input/output. The browser Review/Graph and offline
+export share the Graph derivation of retained reported/named/observed relationships.
+
+Local-browser-only `evidence.preview` takes an annotation ID; `evidence.export`
+also requires the preview's digest and an original `exportId`. It writes a new
+`exports/ID` directory with static `index.html`, original selected bytes and the
+final `evidence.json`. It does not include full conversation/tool output or discover
+unstated dependencies. `rho --verify-evidence PATH` checks it without starting Rho.
+A complete package can contain explicit missing analysis evidence. This read-only
+format does not restore a workspace or run an analysis.
+
+| Protected resource | Configuration and default | Exhaustion |
+| --- | --- | --- |
+| Automatic file capture | `conversations.maxSnapshotBytes` 8 MiB | Keep a gap, no partial file. |
+| Turn captures | `maxCaptureFiles` 64, `maxCaptureBytes` 32 MiB in `conversations` | Keep obtained versions/output; count omissions. |
+| Project capture workers | `conversations.maxCaptureConcurrent` 2 (initial collector serializes) | Queue only bounded turn candidates. |
+| Project Files store | `resources.maxArtifactBytes` 512 MiB, `maxResources` 1024 | Refuse new versions, preserve earlier data. |
+| Offline package | `evidence.maxBytes` 512 MiB, `maxFiles` 128, `maxMetadataBytes` 4 MiB | Refuse expansion; retain incomplete directory without final success. |
+
+New capture/export limits can be lowered through `--limits`; observation diagnostics
+expose them. Table/text previews are bounded to 200 rows, 20 columns and 64 KiB.
+See the [episode](REVIEW-EVIDENCE-EPISODE.md) for actual trials and open user observation.

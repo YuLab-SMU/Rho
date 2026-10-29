@@ -55,6 +55,12 @@ typed client and its write conditions; do not create another document buffer or
 assume that selecting a row changes its identity. `requiredOperations` lets the
 shell explain unavailable views; it does not grant those operations.
 
+`shell` in `UiViewProps` carries the services the shell offers any view, each
+optional: `openPath` shows a project file as the person's own choice of it would,
+`imageUrl` gives a URL for a project image's current bytes, and
+`languageExtensions` and `highlight` give Rho's languages for an editor and for
+code in rendered text. A view works without them.
+
 The current `UiViewProps` contract remains `0.1-draft`. Pin the Rho SDK version and
 check compatibility when upgrading. Existing first-party adapters can still supply
 specialized capabilities such as framed bodies and feedback. The small extension
@@ -75,7 +81,9 @@ RHO_UI_EXTENSIONS=/absolute/path/notes-view/rho-selection.json npm run build:web
 entry and records its digest. The application build checks the selected package
 name/version, resolves the named export and generates its registry entry. No edit
 to `web/entries/`, `ui-entries.json` or generated operation contracts is needed.
-The default application selection is unchanged when `RHO_UI_EXTENSIONS` is absent.
+Rho's own `ui-extensions.json` selects its first-party extensions (the Markdown
+reader) in every build; `RHO_UI_EXTENSIONS` adds to them, and a component may be
+selected once.
 
 A selection has this shape:
 

@@ -34,8 +34,8 @@ source/tree, input, lock and artifact digests; installed acceptance runs outside
 the source checkouts. See [assembly instructions](HEADLESS.md#budgets-verification-and-assembly)
 and [accepted scope](BACKEND-ACCEPTANCE.md).
 
-This delivery is an unsigned local tarball on macOS arm64 with external Node,
-Python and R prerequisites. Browser assets, npm registry namespace/channel rights,
+This delivery is an unsigned local tarball on macOS arm64 with external Node and
+Python prerequisites; R is needed only for R execution. Browser assets, npm registry namespace/channel rights,
 other platforms and full product installation are not accepted by a headless run.
 No registry publication or signing is performed. npm publication would not itself
 establish a signed desktop distribution or require creating Rho-releases.
@@ -99,3 +99,22 @@ signing/notarization evidence,
 final artifact verification, successful publication and installation acceptance.
 Additional platforms, automatic updates and package-manager channels require their
 own selected scope and checks.
+
+
+## Version 0.5.1 preview
+
+The selected scope is an unsigned npm tarball with local WebUI on macOS arm64,
+including an explicitly selected, digest-checked Core. Native Agent work also
+starts without Core. A wrong platform or changed bundled binary is refused rather
+than replaced or downloaded. Windows/Linux folder picking, POSIX locking,
+executable discovery and installation remain portability work; component support
+is not application support.
+
+Install into a new directory with Node 22.22.x and Python 3 available. Claude Code
+or Codex and its configured provider are prerequisites for conversations; base R
+is needed for the R episodes. Rho does not install Agent credentials or silently
+replace runtimes. The accepted fixed artifact, checksums, component inventory and
+outside-checkout evidence are recorded with the preview after installation checks.
+The [review episode](REVIEW-EVIDENCE-EPISODE.md) describes capability evidence and
+separate offline-reader acceptance. No public npm, signing or Rho-releases action
+is included. Independent researcher observation remains a separate follow-up.

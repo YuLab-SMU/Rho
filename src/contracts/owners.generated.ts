@@ -4307,6 +4307,360 @@ export const ownerContracts: OwnerContractSnapshot = {
           },
           "requires": []
         },
+        "resource.capture": {
+          "effect": "metadata",
+          "inputSchema": {
+            "additionalProperties": false,
+            "oneOf": [
+              {
+                "not": {
+                  "required": [
+                    "document"
+                  ]
+                },
+                "required": [
+                  "path"
+                ]
+              },
+              {
+                "not": {
+                  "required": [
+                    "path"
+                  ]
+                },
+                "required": [
+                  "document"
+                ]
+              }
+            ],
+            "properties": {
+              "declaration": {
+                "oneOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "format": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "mimeType": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "mimeType"
+                        ],
+                        "type": "object"
+                      },
+                      "kind": {
+                        "const": "file"
+                      },
+                      "path": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "path",
+                      "kind",
+                      "format"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "format": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "columns": {
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "name": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "nullValues": {
+                                  "items": {
+                                    "type": "string"
+                                  },
+                                  "maxItems": 16,
+                                  "type": "array"
+                                },
+                                "type": {
+                                  "enum": [
+                                    "string",
+                                    "number",
+                                    "boolean"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "name",
+                                "type",
+                                "nullValues"
+                              ],
+                              "type": "object"
+                            },
+                            "maxItems": 256,
+                            "minItems": 1,
+                            "type": "array"
+                          },
+                          "encoding": {
+                            "enum": [
+                              "csv",
+                              "json-rows"
+                            ]
+                          },
+                          "key": {
+                            "anyOf": [
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "column": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "namespace": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "column",
+                                  "namespace"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "encoding",
+                          "columns",
+                          "key"
+                        ],
+                        "type": "object"
+                      },
+                      "kind": {
+                        "const": "table"
+                      },
+                      "path": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "path",
+                      "kind",
+                      "format"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "format": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "height": {
+                            "exclusiveMinimum": 0,
+                            "type": "number"
+                          },
+                          "mimeType": {
+                            "enum": [
+                              "image/png",
+                              "image/jpeg",
+                              "image/svg+xml",
+                              "application/pdf"
+                            ]
+                          },
+                          "pages": {
+                            "minimum": 1,
+                            "type": "integer"
+                          },
+                          "width": {
+                            "exclusiveMinimum": 0,
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "mimeType"
+                        ],
+                        "type": "object"
+                      },
+                      "kind": {
+                        "const": "media"
+                      },
+                      "path": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "path",
+                      "kind",
+                      "format"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "format": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "classes": {
+                            "items": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "maxItems": 32,
+                            "type": "array"
+                          },
+                          "encoding": {
+                            "const": "json"
+                          },
+                          "observation": {
+                            "const": "exported-snapshot"
+                          }
+                        },
+                        "required": [
+                          "encoding",
+                          "observation",
+                          "classes"
+                        ],
+                        "type": "object"
+                      },
+                      "kind": {
+                        "const": "object"
+                      },
+                      "path": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "path",
+                      "kind",
+                      "format"
+                    ],
+                    "type": "object"
+                  }
+                ]
+              },
+              "document": {
+                "additionalProperties": false,
+                "properties": {
+                  "documentId": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "version": {
+                    "minimum": 1,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "documentId",
+                  "version"
+                ],
+                "type": "object"
+              },
+              "expectedDigest": {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              "path": {
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [],
+            "type": "object"
+          },
+          "outputSchema": {
+            "additionalProperties": true,
+            "properties": {
+              "availability": {
+                "enum": [
+                  "available",
+                  "partial",
+                  "missing",
+                  "unknown"
+                ]
+              },
+              "bytes": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "coverage": {
+                "type": "object"
+              },
+              "format": {
+                "anyOf": [
+                  {
+                    "type": "object"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              },
+              "id": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "file",
+                  "table",
+                  "media",
+                  "object",
+                  "plot",
+                  "model"
+                ]
+              },
+              "owner": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "path": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "projectId": {
+                "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+                "type": "string"
+              },
+              "provenance": {
+                "type": "object"
+              },
+              "version": {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "version",
+              "projectId",
+              "owner",
+              "kind",
+              "path",
+              "bytes",
+              "provenance",
+              "coverage",
+              "availability"
+            ],
+            "type": "object"
+          },
+          "requires": []
+        },
         "resource.list": {
           "effect": "read",
           "inputSchema": {
@@ -5887,7 +6241,62 @@ export const ownerContracts: OwnerContractSnapshot = {
               },
               "options": {
                 "additionalProperties": false,
+                "oneOf": [
+                  {
+                    "not": {
+                      "required": [
+                        "fields"
+                      ]
+                    },
+                    "required": [
+                      "leftField",
+                      "rightField"
+                    ]
+                  },
+                  {
+                    "not": {
+                      "anyOf": [
+                        {
+                          "required": [
+                            "leftField"
+                          ]
+                        },
+                        {
+                          "required": [
+                            "rightField"
+                          ]
+                        }
+                      ]
+                    },
+                    "required": [
+                      "fields"
+                    ]
+                  }
+                ],
                 "properties": {
+                  "fields": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "leftField": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "rightField": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "leftField",
+                        "rightField"
+                      ],
+                      "type": "object"
+                    },
+                    "maxItems": 16,
+                    "minItems": 1,
+                    "type": "array"
+                  },
                   "join": {
                     "enum": [
                       "left",
@@ -5929,8 +6338,6 @@ export const ownerContracts: OwnerContractSnapshot = {
                   "leftNamespace",
                   "rightNamespace",
                   "mapping",
-                  "leftField",
-                  "rightField",
                   "join"
                 ],
                 "type": "object"
@@ -14724,6 +15131,37 @@ export const ownerContracts: OwnerContractSnapshot = {
                     "entities"
                   ],
                   "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "kind": {
+                      "const": "resource"
+                    },
+                    "resource": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "id": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "version": {
+                          "pattern": "^[a-f0-9]{64}$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "version"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "resource"
+                  ],
+                  "type": "object"
                 }
               ]
             },
@@ -14763,6 +15201,89 @@ export const ownerContracts: OwnerContractSnapshot = {
             "changeId",
             "anchor",
             "draft"
+          ],
+          "type": "object"
+        },
+        "annotation.decide": {
+          "additionalProperties": false,
+          "properties": {
+            "annotationId": {
+              "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+              "type": "string"
+            },
+            "changeId": {
+              "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+              "type": "string"
+            },
+            "draft": {
+              "additionalProperties": false,
+              "properties": {
+                "documentId": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "version": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "documentId",
+                "version"
+              ],
+              "type": "object"
+            },
+            "expectedVersion": {
+              "minimum": 1,
+              "type": "integer"
+            },
+            "resources": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "version": {
+                    "pattern": "^[a-f0-9]{64}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "version"
+                ],
+                "type": "object"
+              },
+              "maxItems": 16,
+              "minItems": 1,
+              "type": "array",
+              "uniqueItems": true
+            },
+            "status": {
+              "enum": [
+                "accepted",
+                "needs-changes",
+                "withdrawn"
+              ]
+            },
+            "supersedes": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "targetMessageId": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "annotationId",
+            "expectedVersion",
+            "changeId",
+            "targetMessageId",
+            "resources",
+            "status"
           ],
           "type": "object"
         },
@@ -14935,12 +15456,122 @@ export const ownerContracts: OwnerContractSnapshot = {
                     "entities"
                   ],
                   "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "kind": {
+                      "const": "resource"
+                    },
+                    "resource": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "id": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "version": {
+                          "pattern": "^[a-f0-9]{64}$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "version"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "resource"
+                  ],
+                  "type": "object"
                 }
               ]
             },
             "annotationId": {
               "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
               "type": "string"
+            },
+            "decisions": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "at": {
+                    "type": "string"
+                  },
+                  "author": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "draft": {
+                    "type": "object"
+                  },
+                  "id": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "reason": {
+                    "type": "string"
+                  },
+                  "resources": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "id": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "version": {
+                          "pattern": "^[a-f0-9]{64}$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "version"
+                      ],
+                      "type": "object"
+                    },
+                    "maxItems": 16,
+                    "type": "array",
+                    "uniqueItems": true
+                  },
+                  "status": {
+                    "enum": [
+                      "accepted",
+                      "needs-changes",
+                      "withdrawn"
+                    ]
+                  },
+                  "supersedes": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "targetMessageId": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "version": {
+                    "minimum": 1,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "id",
+                  "author",
+                  "at",
+                  "version",
+                  "targetMessageId",
+                  "resources",
+                  "status",
+                  "reason"
+                ],
+                "type": "object"
+              },
+              "maxItems": 256,
+              "type": "array"
             },
             "messages": {
               "items": {
@@ -15251,6 +15882,668 @@ export const ownerContracts: OwnerContractSnapshot = {
                     "text"
                   ],
                   "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "kind": {
+                      "const": "resource"
+                    },
+                    "metadata": {
+                      "type": "object"
+                    },
+                    "resource": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "id": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "version": {
+                          "pattern": "^[a-f0-9]{64}$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "version"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "resource",
+                    "metadata"
+                  ],
+                  "type": "object"
+                }
+              ]
+            },
+            "sourceStatus": {
+              "oneOf": [
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "anchoredVersion": {
+                      "minimum": 1,
+                      "type": "integer"
+                    },
+                    "currentVersion": {
+                      "minimum": 1,
+                      "type": "integer"
+                    },
+                    "state": {
+                      "enum": [
+                        "same-version",
+                        "version-differs"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "state",
+                    "currentVersion",
+                    "anchoredVersion"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "state": {
+                      "const": "same-version"
+                    }
+                  },
+                  "required": [
+                    "state"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "state": {
+                      "const": "snapshot-retained"
+                    }
+                  },
+                  "required": [
+                    "state"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "snapshot": {
+                      "const": "retained"
+                    },
+                    "state": {
+                      "const": "source-unavailable"
+                    }
+                  },
+                  "required": [
+                    "state",
+                    "snapshot"
+                  ],
+                  "type": "object"
+                }
+              ]
+            },
+            "version": {
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "annotationId",
+            "version",
+            "anchor",
+            "source",
+            "messages",
+            "receipts",
+            "retainedFromVersion"
+          ],
+          "type": "object"
+        },
+        "annotation.decide": {
+          "additionalProperties": false,
+          "properties": {
+            "anchor": {
+              "oneOf": [
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "documentId": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "from": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "kind": {
+                      "const": "document"
+                    },
+                    "to": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "version": {
+                      "minimum": 1,
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "documentId",
+                    "version",
+                    "from",
+                    "to"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "entities": {
+                      "items": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "maxItems": 1024,
+                      "minItems": 1,
+                      "type": "array",
+                      "uniqueItems": true
+                    },
+                    "kind": {
+                      "const": "table"
+                    },
+                    "resource": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "id": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "version": {
+                          "pattern": "^[a-f0-9]{64}$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "version"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "resource",
+                    "entities"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "kind": {
+                      "const": "resource"
+                    },
+                    "resource": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "id": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "version": {
+                          "pattern": "^[a-f0-9]{64}$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "version"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "resource"
+                  ],
+                  "type": "object"
+                }
+              ]
+            },
+            "annotationId": {
+              "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+              "type": "string"
+            },
+            "decisions": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "at": {
+                    "type": "string"
+                  },
+                  "author": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "draft": {
+                    "type": "object"
+                  },
+                  "id": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "reason": {
+                    "type": "string"
+                  },
+                  "resources": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "id": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "version": {
+                          "pattern": "^[a-f0-9]{64}$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "version"
+                      ],
+                      "type": "object"
+                    },
+                    "maxItems": 16,
+                    "type": "array",
+                    "uniqueItems": true
+                  },
+                  "status": {
+                    "enum": [
+                      "accepted",
+                      "needs-changes",
+                      "withdrawn"
+                    ]
+                  },
+                  "supersedes": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "targetMessageId": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "version": {
+                    "minimum": 1,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "id",
+                  "author",
+                  "at",
+                  "version",
+                  "targetMessageId",
+                  "resources",
+                  "status",
+                  "reason"
+                ],
+                "type": "object"
+              },
+              "maxItems": 256,
+              "type": "array"
+            },
+            "messages": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "at": {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  "author": {
+                    "maxLength": 128,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "draft": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "sha256": {
+                        "pattern": "^[a-f0-9]{64}$",
+                        "type": "string"
+                      },
+                      "source": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "dirty": {
+                            "type": "boolean"
+                          },
+                          "documentId": {
+                            "pattern": "^[a-f0-9]{64}$",
+                            "type": "string"
+                          },
+                          "kind": {
+                            "const": "buffer"
+                          },
+                          "path": {
+                            "maxLength": 4096,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "version": {
+                            "minimum": 1,
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "documentId",
+                          "version",
+                          "path",
+                          "dirty"
+                        ],
+                        "type": "object"
+                      },
+                      "text": {
+                        "maxLength": 1048576,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "source",
+                      "sha256",
+                      "text"
+                    ],
+                    "type": "object"
+                  },
+                  "id": {
+                    "pattern": "^[a-f0-9]{64}$",
+                    "type": "string"
+                  },
+                  "replyTo": {
+                    "pattern": "^[a-f0-9]{64}$",
+                    "type": "string"
+                  },
+                  "resources": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "id": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "version": {
+                          "pattern": "^[a-f0-9]{64}$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "version"
+                      ],
+                      "type": "object"
+                    },
+                    "maxItems": 16,
+                    "type": "array",
+                    "uniqueItems": true
+                  }
+                },
+                "required": [
+                  "id",
+                  "author",
+                  "at",
+                  "draft"
+                ],
+                "type": "object"
+              },
+              "maxItems": 256,
+              "minItems": 1,
+              "type": "array"
+            },
+            "receipt": {
+              "additionalProperties": false,
+              "properties": {
+                "at": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "author": {
+                  "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+                  "type": "string"
+                },
+                "changeId": {
+                  "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+                  "type": "string"
+                },
+                "requestDigest": {
+                  "pattern": "^[a-f0-9]{64}$",
+                  "type": "string"
+                },
+                "version": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "changeId",
+                "requestDigest",
+                "author",
+                "version",
+                "at"
+              ],
+              "type": "object"
+            },
+            "receipts": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "at": {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  "author": {
+                    "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+                    "type": "string"
+                  },
+                  "changeId": {
+                    "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+                    "type": "string"
+                  },
+                  "requestDigest": {
+                    "pattern": "^[a-f0-9]{64}$",
+                    "type": "string"
+                  },
+                  "version": {
+                    "minimum": 1,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "changeId",
+                  "requestDigest",
+                  "author",
+                  "version",
+                  "at"
+                ],
+                "type": "object"
+              },
+              "maxItems": 256,
+              "minItems": 1,
+              "type": "array"
+            },
+            "retainedFromVersion": {
+              "minimum": 1,
+              "type": "integer"
+            },
+            "source": {
+              "oneOf": [
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "entityKey": {
+                      "maxLength": 128,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "kind": {
+                      "const": "table"
+                    },
+                    "namespace": {
+                      "maxLength": 128,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "resource": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "id": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "version": {
+                          "pattern": "^[a-f0-9]{64}$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "version"
+                      ],
+                      "type": "object"
+                    },
+                    "rows": {
+                      "items": {
+                        "additionalProperties": {
+                          "type": [
+                            "string",
+                            "number",
+                            "boolean",
+                            "null"
+                          ]
+                        },
+                        "type": "object"
+                      },
+                      "maxItems": 1024,
+                      "minItems": 1,
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "resource",
+                    "namespace",
+                    "entityKey",
+                    "rows"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "from": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "kind": {
+                      "const": "document"
+                    },
+                    "sha256": {
+                      "pattern": "^[a-f0-9]{64}$",
+                      "type": "string"
+                    },
+                    "source": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "dirty": {
+                          "type": "boolean"
+                        },
+                        "documentId": {
+                          "pattern": "^[a-f0-9]{64}$",
+                          "type": "string"
+                        },
+                        "kind": {
+                          "const": "buffer"
+                        },
+                        "path": {
+                          "maxLength": 4096,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "version": {
+                          "minimum": 1,
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "documentId",
+                        "version",
+                        "path",
+                        "dirty"
+                      ],
+                      "type": "object"
+                    },
+                    "text": {
+                      "maxLength": 1048576,
+                      "type": "string"
+                    },
+                    "to": {
+                      "minimum": 0,
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "source",
+                    "sha256",
+                    "from",
+                    "to",
+                    "text"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "kind": {
+                      "const": "resource"
+                    },
+                    "metadata": {
+                      "type": "object"
+                    },
+                    "resource": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "id": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "version": {
+                          "pattern": "^[a-f0-9]{64}$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "version"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "resource",
+                    "metadata"
+                  ],
+                  "type": "object"
                 }
               ]
             },
@@ -15418,12 +16711,122 @@ export const ownerContracts: OwnerContractSnapshot = {
                       "entities"
                     ],
                     "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "kind": {
+                        "const": "resource"
+                      },
+                      "resource": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "id": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "version": {
+                            "pattern": "^[a-f0-9]{64}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "version"
+                        ],
+                        "type": "object"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "resource"
+                    ],
+                    "type": "object"
                   }
                 ]
               },
               "annotationId": {
                 "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
                 "type": "string"
+              },
+              "decisions": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "at": {
+                      "type": "string"
+                    },
+                    "author": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "draft": {
+                      "type": "object"
+                    },
+                    "id": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string"
+                    },
+                    "resources": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "id": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "version": {
+                            "pattern": "^[a-f0-9]{64}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "version"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 16,
+                      "type": "array",
+                      "uniqueItems": true
+                    },
+                    "status": {
+                      "enum": [
+                        "accepted",
+                        "needs-changes",
+                        "withdrawn"
+                      ]
+                    },
+                    "supersedes": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "targetMessageId": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "version": {
+                      "minimum": 1,
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "author",
+                    "at",
+                    "version",
+                    "targetMessageId",
+                    "resources",
+                    "status",
+                    "reason"
+                  ],
+                  "type": "object"
+                },
+                "maxItems": 256,
+                "type": "array"
               },
               "messages": {
                 "items": {
@@ -15734,6 +17137,41 @@ export const ownerContracts: OwnerContractSnapshot = {
                       "text"
                     ],
                     "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "kind": {
+                        "const": "resource"
+                      },
+                      "metadata": {
+                        "type": "object"
+                      },
+                      "resource": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "id": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "version": {
+                            "pattern": "^[a-f0-9]{64}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "version"
+                        ],
+                        "type": "object"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "resource",
+                      "metadata"
+                    ],
+                    "type": "object"
                   }
                 ]
               },
@@ -15902,12 +17340,122 @@ export const ownerContracts: OwnerContractSnapshot = {
                     "entities"
                   ],
                   "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "kind": {
+                      "const": "resource"
+                    },
+                    "resource": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "id": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "version": {
+                          "pattern": "^[a-f0-9]{64}$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "version"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "resource"
+                  ],
+                  "type": "object"
                 }
               ]
             },
             "annotationId": {
               "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
               "type": "string"
+            },
+            "decisions": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "at": {
+                    "type": "string"
+                  },
+                  "author": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "draft": {
+                    "type": "object"
+                  },
+                  "id": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "reason": {
+                    "type": "string"
+                  },
+                  "resources": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "id": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "version": {
+                          "pattern": "^[a-f0-9]{64}$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "version"
+                      ],
+                      "type": "object"
+                    },
+                    "maxItems": 16,
+                    "type": "array",
+                    "uniqueItems": true
+                  },
+                  "status": {
+                    "enum": [
+                      "accepted",
+                      "needs-changes",
+                      "withdrawn"
+                    ]
+                  },
+                  "supersedes": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "targetMessageId": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "version": {
+                    "minimum": 1,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "id",
+                  "author",
+                  "at",
+                  "version",
+                  "targetMessageId",
+                  "resources",
+                  "status",
+                  "reason"
+                ],
+                "type": "object"
+              },
+              "maxItems": 256,
+              "type": "array"
             },
             "messages": {
               "items": {
@@ -16216,6 +17764,41 @@ export const ownerContracts: OwnerContractSnapshot = {
                     "from",
                     "to",
                     "text"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "kind": {
+                      "const": "resource"
+                    },
+                    "metadata": {
+                      "type": "object"
+                    },
+                    "resource": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "id": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "version": {
+                          "pattern": "^[a-f0-9]{64}$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "version"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "resource",
+                    "metadata"
                   ],
                   "type": "object"
                 }
@@ -16384,12 +17967,122 @@ export const ownerContracts: OwnerContractSnapshot = {
                     "entities"
                   ],
                   "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "kind": {
+                      "const": "resource"
+                    },
+                    "resource": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "id": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "version": {
+                          "pattern": "^[a-f0-9]{64}$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "version"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "resource"
+                  ],
+                  "type": "object"
                 }
               ]
             },
             "annotationId": {
               "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
               "type": "string"
+            },
+            "decisions": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "at": {
+                    "type": "string"
+                  },
+                  "author": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "draft": {
+                    "type": "object"
+                  },
+                  "id": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "reason": {
+                    "type": "string"
+                  },
+                  "resources": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "id": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "version": {
+                          "pattern": "^[a-f0-9]{64}$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "version"
+                      ],
+                      "type": "object"
+                    },
+                    "maxItems": 16,
+                    "type": "array",
+                    "uniqueItems": true
+                  },
+                  "status": {
+                    "enum": [
+                      "accepted",
+                      "needs-changes",
+                      "withdrawn"
+                    ]
+                  },
+                  "supersedes": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "targetMessageId": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "version": {
+                    "minimum": 1,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "id",
+                  "author",
+                  "at",
+                  "version",
+                  "targetMessageId",
+                  "resources",
+                  "status",
+                  "reason"
+                ],
+                "type": "object"
+              },
+              "maxItems": 256,
+              "type": "array"
             },
             "messages": {
               "items": {
@@ -16698,6 +18391,41 @@ export const ownerContracts: OwnerContractSnapshot = {
                     "from",
                     "to",
                     "text"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "kind": {
+                      "const": "resource"
+                    },
+                    "metadata": {
+                      "type": "object"
+                    },
+                    "resource": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "id": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "version": {
+                          "pattern": "^[a-f0-9]{64}$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "version"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "resource",
+                    "metadata"
                   ],
                   "type": "object"
                 }
@@ -17590,7 +19318,7 @@ export const ownerContracts: OwnerContractSnapshot = {
   "provenance": {
     "documents": {
       "package": "@rho-workspace/plugin-documents",
-      "packageVersion": "0.4.5",
+      "packageVersion": "0.4.7",
       "entry": "./operations",
       "entryPath": "Projects/Rho-plugins/plugins/documents/dist/operations.js",
       "entrySha256": "a9b90047c1684ebd8369d899f86604c40a9cbe1beae37759042d22c090dae449",
@@ -17605,12 +19333,12 @@ export const ownerContracts: OwnerContractSnapshot = {
     },
     "files": {
       "package": "@rho-workspace/plugin-files",
-      "packageVersion": "0.4.1",
+      "packageVersion": "0.5.0",
       "entry": "./operations",
       "entryPath": "Projects/Rho-plugins/plugins/files/dist/operations.js",
-      "entrySha256": "f470e37666b9208f817d1c91fb898caee2cfa2893af8c412220da38d5c84c389",
+      "entrySha256": "162741d5ccba765337744c1ed8695272cba0139c28e6b1e9bc47dc6d601bc4bc",
       "exports": {
-        "operationContracts": "f6af04e7677662a8750e5cbeebfe0198637243b4910bb481a4aa8b49d37f1e7e"
+        "operationContracts": "134da47197c6ddcb331d646091b0d4d8bcad8de35661fd1257127f4498dc32eb"
       }
     },
     "r": {
@@ -17635,12 +19363,12 @@ export const ownerContracts: OwnerContractSnapshot = {
     },
     "tables": {
       "package": "@rho-workspace/plugin-tables",
-      "packageVersion": "0.4.3",
+      "packageVersion": "0.5.0",
       "entry": "./operations",
       "entryPath": "Projects/Rho-plugins/plugins/tables/dist/operations.js",
-      "entrySha256": "79886357e11b67c2d0d53bbb3047bdb27fc7aeee0ef3197f364b12b8325e92be",
+      "entrySha256": "d81a4871e7a3af64932a01c329e06d46619f1457a4a6f069e7bf0c7e297535f6",
       "exports": {
-        "operationContracts": "93fe5debf952dc9e21026b472882aededbe9442e540f575646e50d0ff810200a"
+        "operationContracts": "9da9ccc4b8a6becc1e268410443392d02aa24297536407993d25434aa4925db4"
       }
     },
     "media": {
@@ -17665,7 +19393,7 @@ export const ownerContracts: OwnerContractSnapshot = {
     },
     "agent": {
       "package": "@rho-workspace/plugin-agent",
-      "packageVersion": "0.4.16",
+      "packageVersion": "0.4.18",
       "entry": "./operations",
       "entryPath": "Projects/Rho-plugins/plugins/agent/dist/operations.js",
       "entrySha256": "08bb1c852cb89a17a2e307831ed2df5d6d16cbccaaf2971ec251bb9a1a34261f",
@@ -17675,7 +19403,7 @@ export const ownerContracts: OwnerContractSnapshot = {
     },
     "agent-feedback": {
       "package": "@rho-workspace/plugin-agent",
-      "packageVersion": "0.4.16",
+      "packageVersion": "0.4.18",
       "entry": "./feedback-contract",
       "entryPath": "Projects/Rho-plugins/plugins/agent/dist/feedback-contract.js",
       "entrySha256": "ecb1561d92b5953d2b786d29cfb57f6f8085d214dc1dec76f6e7bd7a5257cb75",
@@ -17685,7 +19413,7 @@ export const ownerContracts: OwnerContractSnapshot = {
     },
     "agent-native": {
       "package": "@rho-workspace/plugin-agent",
-      "packageVersion": "0.4.16",
+      "packageVersion": "0.4.18",
       "entry": "./contract",
       "entryPath": "Projects/Rho-plugins/plugins/agent/dist/contract.js",
       "entrySha256": "9e926081cb755a98d2b00d2a8488d8f4c6d25b3d5f1ec526d334ade633fe8a65",
@@ -17695,7 +19423,7 @@ export const ownerContracts: OwnerContractSnapshot = {
     },
     "agent-session": {
       "package": "@rho-workspace/plugin-agent",
-      "packageVersion": "0.4.16",
+      "packageVersion": "0.4.18",
       "entry": "./session-contract",
       "entryPath": "Projects/Rho-plugins/plugins/agent/dist/session-contract.js",
       "entrySha256": "bb5b118f965e208617781af3e8ad6b6739869bcc19f0092eab14468824693123",
@@ -17706,18 +19434,18 @@ export const ownerContracts: OwnerContractSnapshot = {
     },
     "annotations": {
       "package": "@rho-workspace/plugin-annotations",
-      "packageVersion": "0.4.6",
+      "packageVersion": "0.5.0",
       "entry": "./contract",
       "entryPath": "Projects/Rho-plugins/plugins/annotations/dist/contract.js",
-      "entrySha256": "20f5e9d2d610b0ae9345087cd34395725e58a1921bd9fad8de6a81230d514db4",
+      "entrySha256": "f40420c9d928fb09fc07450c7ea77c80565f5fb22de59d09ccad1522a38fe3cc",
       "exports": {
-        "inputs": "220bb12a4a0b19428bae0a4129a9a2835a48305081872c5702f1f167caf68be2",
-        "outputs": "9f7166ecd84ca2e7c82ea7d2e39737f650a2867bd16d95ba8352ebf10b0be669"
+        "inputs": "7997381ba0df87b4f3493a3850a9aef38811794b1b6d7c50dcd1de66c2157720",
+        "outputs": "651e8db49e69a8a726d5c0fee99ceb2918b69de0d3ad20495ec2d5e7fbeca1f0"
       }
     },
     "entry-files": {
       "package": "@rho-workspace/plugin-files",
-      "packageVersion": "0.4.1",
+      "packageVersion": "0.5.0",
       "entry": "./contract",
       "entryPath": "Projects/Rho-plugins/plugins/files/dist/contract.js",
       "entrySha256": "7be9bc400d57f7a7e67df1f1a086c477599bcea3fab39b95aa7ba535fc751063",
@@ -17727,7 +19455,7 @@ export const ownerContracts: OwnerContractSnapshot = {
     },
     "entry-tables": {
       "package": "@rho-workspace/plugin-tables",
-      "packageVersion": "0.4.3",
+      "packageVersion": "0.5.0",
       "entry": "./contract",
       "entryPath": "Projects/Rho-plugins/plugins/tables/dist/contract.js",
       "entrySha256": "fa014c3bf7aa36b550696fb312258b05eb734c1e8f660f3b1774fc2afeb7d55f",

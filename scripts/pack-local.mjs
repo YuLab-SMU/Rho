@@ -39,11 +39,12 @@ const selected = values['select-plugins'] === undefined ? pluginIds : values['se
 if (new Set(selected).size !== selected.length || selected.some(id => !pluginIds.includes(id))) throw new Error('Select unique known plugin IDs.');
 process.env.RHO_UI_PLUGINS = selected.join(',');
 run('npm', ['run', 'build'], root);
-const application = await source(root, ['src', 'web', 'scripts', 'protocol', 'fixtures', 'package.json', 'package-lock.json', 'tsconfig.json', 'tsconfig.web.json', 'vite.config.ts', 'ui-entries.json', 'README.md', 'LICENSE', 'docs/HEADLESS.md', 'docs/COLLABORATION.md', 'docs/FRONTEND.md', 'docs/PLUGIN-AUTHORING.md']);
-const plugins = await source(pluginRoot, ['packages/contracts', ...selected.map(id => 'plugins/' + id), 'scripts', 'package.json', 'package-lock.json', 'LICENSE']);
+const application = await source(root, ['src', 'web', 'scripts', 'protocol', 'fixtures', 'package.json', 'package-lock.json', 'tsconfig.json', 'tsconfig.web.json', 'vite.config.ts', 'ui-entries.json', 'ui-extensions.json', 'README.md', 'LICENSE', 'docs/HEADLESS.md', 'docs/COLLABORATION.md', 'docs/FRONTEND.md', 'docs/PLUGIN-AUTHORING.md']);
+const uiSources=[...new Set((await import('./ui-selection.mjs')).selectedUiEntries().filter(e=>e.extension&&e.directory).map(e=>path.relative(pluginRoot,e.directory)).filter(p=>p&&!p.startsWith('..')&&!path.isAbsolute(p)))];
+const plugins = await source(pluginRoot, ['packages/contracts', ...uiSources, ...selected.map(id => 'plugins/' + id), 'scripts', 'package.json', 'package-lock.json', 'LICENSE']);
 // The descriptive inventory contains all reviewed owners, including owners
 // physically omitted from a reduced package. Freeze those inputs too.
-const catalogSource = await source(pluginRoot, ['packages/contracts', ...pluginIds.map(id => 'plugins/' + id), 'scripts', 'package.json', 'package-lock.json', 'LICENSE']);
+const catalogSource = await source(pluginRoot, ['packages/contracts', ...uiSources, ...pluginIds.map(id => 'plugins/' + id), 'scripts', 'package.json', 'package-lock.json', 'LICENSE']);
 const binary = await fs.readFile(path.resolve(values.core));
 let core;
 if (values['core-composition']) {
@@ -73,7 +74,7 @@ await fs.writeFile(path.join(stage, 'package.json'), JSON.stringify(manifest, nu
 run('npm', ['install', '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund'], stage);
 const web = JSON.parse(await fs.readFile(path.join(stage, 'dist/web/composition.json'), 'utf8'));
 const catalogBytes = await fs.readFile(path.join(stage, 'dist/plugin-inventory.json'));
-const composition = { schemaVersion: 1, platform: process.platform + '-' + process.arch, node: process.version, application: { repository: 'https://github.com/YuLab-SMU/Rho', ...application }, plugins: { repository: 'https://github.com/YuLab-SMU/Rho-plugins', ...plugins, selected, packages: pluginPacks.packages.map(({ files, ...item }) => item) }, catalog: { path: 'dist/plugin-inventory.json', sha256: sha(catalogBytes), bytes: catalogBytes.length, source: catalogSource, scope: 'Descriptive inventory of all nine reviewed owners; contributes no runtime entry or authority.' }, core: { repository: 'https://github.com/YuLab-SMU/Rho-core', ...core, artifactSha256: sha(binary), bytes: binary.length }, web, productionLockSha256: sha(await fs.readFile(path.join(stage, 'package-lock.json'))), distribution: 'unsigned-local-npm-tarball', registryPublication: 'not-performed' };
+const composition = { schemaVersion: 1, platform: process.platform + '-' + process.arch, node: process.version, application: { repository: 'https://github.com/YuLab-SMU/Rho', ...application }, plugins: { repository: 'https://github.com/YuLab-SMU/Rho-plugins', ...plugins, selected, uiSources, packages: pluginPacks.packages.map(({ files, ...item }) => item) }, catalog: { path: 'dist/plugin-inventory.json', sha256: sha(catalogBytes), bytes: catalogBytes.length, source: catalogSource, scope: 'Descriptive inventory of all nine reviewed owners; contributes no runtime entry or authority.' }, core: { repository: 'https://github.com/YuLab-SMU/Rho-core', ...core, artifactSha256: sha(binary), bytes: binary.length }, web, productionLockSha256: sha(await fs.readFile(path.join(stage, 'package-lock.json'))), distribution: 'unsigned-local-npm-tarball', registryPublication: 'not-performed' };
 await fs.writeFile(path.join(stage, 'vendor/composition.json'), JSON.stringify(composition, null, 2) + '\n');
 const result = JSON.parse(run('npm', ['pack', '--ignore-scripts', '--json', '--pack-destination', destination], stage))[0];
 if (result.files.some(f => path.isAbsolute(f.path) || f.path.split('/').includes('..'))) throw new Error('Package contains a path outside the assembled root.');

@@ -5,7 +5,7 @@
 // value an accepted response carries. The service, the Node client and the browser
 // client are all written against these types; runtime validation stays with Ajv.
 //
-// Contract identity: apiVersion 2.0, schemaVersion 2, 105 operations.
+// Contract identity: apiVersion 2.0, schemaVersion 2, 109 operations.
 export interface RhoOperationError {
   kind:
     | 'invalid'
@@ -2087,6 +2087,13 @@ export interface AnnotationCreateInput {
           id: string;
           version: string;
         };
+      }
+    | {
+        kind: 'resource';
+        resource: {
+          id: string;
+          version: string;
+        };
       };
   annotationId: string;
   changeId: string;
@@ -2117,8 +2124,36 @@ export interface AnnotationCreateOutput {
           id: string;
           version: string;
         };
+      }
+    | {
+        kind: 'resource';
+        resource: {
+          id: string;
+          version: string;
+        };
       };
   annotationId: string;
+  /**
+   * @maxItems 256
+   */
+  decisions?: {
+    at: string;
+    author: string;
+    draft?: {};
+    id: string;
+    reason: string;
+    /**
+     * @maxItems 16
+     */
+    resources: {
+      id: string;
+      version: string;
+    }[];
+    status: 'accepted' | 'needs-changes' | 'withdrawn';
+    supersedes?: string;
+    targetMessageId: string;
+    version: number;
+  }[];
   /**
    * @minItems 1
    * @maxItems 256
@@ -2196,6 +2231,191 @@ export interface AnnotationCreateOutput {
         };
         text: string;
         to: number;
+      }
+    | {
+        kind: 'resource';
+        metadata: {};
+        resource: {
+          id: string;
+          version: string;
+        };
+      };
+  sourceStatus?:
+    | {
+        anchoredVersion: number;
+        currentVersion: number;
+        state: 'same-version' | 'version-differs';
+      }
+    | {
+        state: 'same-version';
+      }
+    | {
+        state: 'snapshot-retained';
+      }
+    | {
+        snapshot: 'retained';
+        state: 'source-unavailable';
+      };
+  version: number;
+}
+
+export interface AnnotationDecideInput {
+  projectId: string;
+  annotationId: string;
+  changeId: string;
+  draft?: {
+    documentId: string;
+    version: number;
+  };
+  expectedVersion: number;
+  /**
+   * @minItems 1
+   * @maxItems 16
+   */
+  resources: {
+    id: string;
+    version: string;
+  }[];
+  status: 'accepted' | 'needs-changes' | 'withdrawn';
+  supersedes?: string;
+  targetMessageId: string;
+}
+
+export interface AnnotationDecideOutput {
+  anchor:
+    | {
+        documentId: string;
+        from: number;
+        kind: 'document';
+        to: number;
+        version: number;
+      }
+    | {
+        /**
+         * @minItems 1
+         * @maxItems 1024
+         */
+        entities: string[];
+        kind: 'table';
+        resource: {
+          id: string;
+          version: string;
+        };
+      }
+    | {
+        kind: 'resource';
+        resource: {
+          id: string;
+          version: string;
+        };
+      };
+  annotationId: string;
+  /**
+   * @maxItems 256
+   */
+  decisions?: {
+    at: string;
+    author: string;
+    draft?: {};
+    id: string;
+    reason: string;
+    /**
+     * @maxItems 16
+     */
+    resources: {
+      id: string;
+      version: string;
+    }[];
+    status: 'accepted' | 'needs-changes' | 'withdrawn';
+    supersedes?: string;
+    targetMessageId: string;
+    version: number;
+  }[];
+  /**
+   * @minItems 1
+   * @maxItems 256
+   */
+  messages: {
+    at: string;
+    author: string;
+    draft: {
+      sha256: string;
+      source: {
+        dirty: boolean;
+        documentId: string;
+        kind: 'buffer';
+        path: string;
+        version: number;
+      };
+      text: string;
+    };
+    id: string;
+    replyTo?: string;
+    /**
+     * @maxItems 16
+     */
+    resources?: {
+      id: string;
+      version: string;
+    }[];
+  }[];
+  receipt?: {
+    at: string;
+    author: string;
+    changeId: string;
+    requestDigest: string;
+    version: number;
+  };
+  /**
+   * @minItems 1
+   * @maxItems 256
+   */
+  receipts: {
+    at: string;
+    author: string;
+    changeId: string;
+    requestDigest: string;
+    version: number;
+  }[];
+  retainedFromVersion: number;
+  source:
+    | {
+        entityKey: string;
+        kind: 'table';
+        namespace: string;
+        resource: {
+          id: string;
+          version: string;
+        };
+        /**
+         * @minItems 1
+         * @maxItems 1024
+         */
+        rows: {
+          [k: string]: string | number | boolean | null;
+        }[];
+      }
+    | {
+        from: number;
+        kind: 'document';
+        sha256: string;
+        source: {
+          dirty: boolean;
+          documentId: string;
+          kind: 'buffer';
+          path: string;
+          version: number;
+        };
+        text: string;
+        to: number;
+      }
+    | {
+        kind: 'resource';
+        metadata: {};
+        resource: {
+          id: string;
+          version: string;
+        };
       };
   sourceStatus?:
     | {
@@ -2240,8 +2460,36 @@ export type AnnotationListOutput = {
           id: string;
           version: string;
         };
+      }
+    | {
+        kind: 'resource';
+        resource: {
+          id: string;
+          version: string;
+        };
       };
   annotationId: string;
+  /**
+   * @maxItems 256
+   */
+  decisions?: {
+    at: string;
+    author: string;
+    draft?: {};
+    id: string;
+    reason: string;
+    /**
+     * @maxItems 16
+     */
+    resources: {
+      id: string;
+      version: string;
+    }[];
+    status: 'accepted' | 'needs-changes' | 'withdrawn';
+    supersedes?: string;
+    targetMessageId: string;
+    version: number;
+  }[];
   /**
    * @minItems 1
    * @maxItems 256
@@ -2319,6 +2567,14 @@ export type AnnotationListOutput = {
         };
         text: string;
         to: number;
+      }
+    | {
+        kind: 'resource';
+        metadata: {};
+        resource: {
+          id: string;
+          version: string;
+        };
       };
   sourceStatus?:
     | {
@@ -2364,8 +2620,36 @@ export interface AnnotationReadOutput {
           id: string;
           version: string;
         };
+      }
+    | {
+        kind: 'resource';
+        resource: {
+          id: string;
+          version: string;
+        };
       };
   annotationId: string;
+  /**
+   * @maxItems 256
+   */
+  decisions?: {
+    at: string;
+    author: string;
+    draft?: {};
+    id: string;
+    reason: string;
+    /**
+     * @maxItems 16
+     */
+    resources: {
+      id: string;
+      version: string;
+    }[];
+    status: 'accepted' | 'needs-changes' | 'withdrawn';
+    supersedes?: string;
+    targetMessageId: string;
+    version: number;
+  }[];
   /**
    * @minItems 1
    * @maxItems 256
@@ -2443,6 +2727,14 @@ export interface AnnotationReadOutput {
         };
         text: string;
         to: number;
+      }
+    | {
+        kind: 'resource';
+        metadata: {};
+        resource: {
+          id: string;
+          version: string;
+        };
       };
   sourceStatus?:
     | {
@@ -2502,8 +2794,36 @@ export interface AnnotationReplyOutput {
           id: string;
           version: string;
         };
+      }
+    | {
+        kind: 'resource';
+        resource: {
+          id: string;
+          version: string;
+        };
       };
   annotationId: string;
+  /**
+   * @maxItems 256
+   */
+  decisions?: {
+    at: string;
+    author: string;
+    draft?: {};
+    id: string;
+    reason: string;
+    /**
+     * @maxItems 16
+     */
+    resources: {
+      id: string;
+      version: string;
+    }[];
+    status: 'accepted' | 'needs-changes' | 'withdrawn';
+    supersedes?: string;
+    targetMessageId: string;
+    version: number;
+  }[];
   /**
    * @minItems 1
    * @maxItems 256
@@ -2581,6 +2901,14 @@ export interface AnnotationReplyOutput {
         };
         text: string;
         to: number;
+      }
+    | {
+        kind: 'resource';
+        metadata: {};
+        resource: {
+          id: string;
+          version: string;
+        };
       };
   sourceStatus?:
     | {
@@ -4688,6 +5016,7 @@ export interface ConversationPermissionOutput {
     steps: {
       kind: 'text' | 'tool' | 'error';
       at: string;
+      startedAt?: string;
       text?: string;
       cut?: boolean;
       id?: string;
@@ -4698,8 +5027,47 @@ export interface ConversationPermissionOutput {
         'read' | 'edit' | 'delete' | 'move' | 'search' | 'execute' | 'think' | 'fetch' | 'switch_mode' | 'other';
       detail?: string;
       outcome?: 'requested' | 'returned' | 'rejected' | 'unknown';
+      exitCode?: number;
+      output?: {
+        text: string;
+        lines: number;
+        bytes: number;
+        cut: boolean;
+      };
     }[];
     omitted: number;
+    evidence?: {
+      /**
+       * @maxItems 64
+       */
+      records: {
+        key: string;
+        path: string;
+        phase: string;
+        requestedAt: string;
+        state: 'pending' | 'captured' | 'unavailable' | 'interrupted';
+        reason?: string;
+        /**
+         * @maxItems 2
+         */
+        snapshots: {
+          resource: {
+            id: string;
+            version: string;
+          };
+          kind: string;
+          bytes: number;
+          observedAt: string;
+          source: {
+            [k: string]: unknown;
+          };
+        }[];
+      }[];
+      omitted: number;
+      bytes: number;
+      snapshots: number;
+    };
+    contexts?: string[];
     permissions?: {
       id: string;
       title: string;
@@ -4887,6 +5255,7 @@ export interface ConversationReadOutput {
     steps: {
       kind: 'text' | 'tool' | 'error';
       at: string;
+      startedAt?: string;
       text?: string;
       cut?: boolean;
       id?: string;
@@ -4897,8 +5266,47 @@ export interface ConversationReadOutput {
         'read' | 'edit' | 'delete' | 'move' | 'search' | 'execute' | 'think' | 'fetch' | 'switch_mode' | 'other';
       detail?: string;
       outcome?: 'requested' | 'returned' | 'rejected' | 'unknown';
+      exitCode?: number;
+      output?: {
+        text: string;
+        lines: number;
+        bytes: number;
+        cut: boolean;
+      };
     }[];
     omitted: number;
+    evidence?: {
+      /**
+       * @maxItems 64
+       */
+      records: {
+        key: string;
+        path: string;
+        phase: string;
+        requestedAt: string;
+        state: 'pending' | 'captured' | 'unavailable' | 'interrupted';
+        reason?: string;
+        /**
+         * @maxItems 2
+         */
+        snapshots: {
+          resource: {
+            id: string;
+            version: string;
+          };
+          kind: string;
+          bytes: number;
+          observedAt: string;
+          source: {
+            [k: string]: unknown;
+          };
+        }[];
+      }[];
+      omitted: number;
+      bytes: number;
+      snapshots: number;
+    };
+    contexts?: string[];
     permissions?: {
       id: string;
       title: string;
@@ -4987,6 +5395,10 @@ export interface ConversationSendInput {
   conversationId: string;
   changeId: string;
   text: string;
+  /**
+   * @maxItems 8
+   */
+  contexts?: string[];
 }
 
 export interface ConversationSendOutput {
@@ -5040,6 +5452,7 @@ export interface ConversationSendOutput {
     steps: {
       kind: 'text' | 'tool' | 'error';
       at: string;
+      startedAt?: string;
       text?: string;
       cut?: boolean;
       id?: string;
@@ -5050,8 +5463,47 @@ export interface ConversationSendOutput {
         'read' | 'edit' | 'delete' | 'move' | 'search' | 'execute' | 'think' | 'fetch' | 'switch_mode' | 'other';
       detail?: string;
       outcome?: 'requested' | 'returned' | 'rejected' | 'unknown';
+      exitCode?: number;
+      output?: {
+        text: string;
+        lines: number;
+        bytes: number;
+        cut: boolean;
+      };
     }[];
     omitted: number;
+    evidence?: {
+      /**
+       * @maxItems 64
+       */
+      records: {
+        key: string;
+        path: string;
+        phase: string;
+        requestedAt: string;
+        state: 'pending' | 'captured' | 'unavailable' | 'interrupted';
+        reason?: string;
+        /**
+         * @maxItems 2
+         */
+        snapshots: {
+          resource: {
+            id: string;
+            version: string;
+          };
+          kind: string;
+          bytes: number;
+          observedAt: string;
+          source: {
+            [k: string]: unknown;
+          };
+        }[];
+      }[];
+      omitted: number;
+      bytes: number;
+      snapshots: number;
+    };
+    contexts?: string[];
     permissions?: {
       id: string;
       title: string;
@@ -5335,6 +5787,10 @@ export interface ConversationStartInput {
   config?: {
     [k: string]: string | boolean;
   };
+  /**
+   * @maxItems 8
+   */
+  contexts?: string[];
 }
 
 export interface ConversationStartOutput {
@@ -5388,6 +5844,7 @@ export interface ConversationStartOutput {
     steps: {
       kind: 'text' | 'tool' | 'error';
       at: string;
+      startedAt?: string;
       text?: string;
       cut?: boolean;
       id?: string;
@@ -5398,8 +5855,47 @@ export interface ConversationStartOutput {
         'read' | 'edit' | 'delete' | 'move' | 'search' | 'execute' | 'think' | 'fetch' | 'switch_mode' | 'other';
       detail?: string;
       outcome?: 'requested' | 'returned' | 'rejected' | 'unknown';
+      exitCode?: number;
+      output?: {
+        text: string;
+        lines: number;
+        bytes: number;
+        cut: boolean;
+      };
     }[];
     omitted: number;
+    evidence?: {
+      /**
+       * @maxItems 64
+       */
+      records: {
+        key: string;
+        path: string;
+        phase: string;
+        requestedAt: string;
+        state: 'pending' | 'captured' | 'unavailable' | 'interrupted';
+        reason?: string;
+        /**
+         * @maxItems 2
+         */
+        snapshots: {
+          resource: {
+            id: string;
+            version: string;
+          };
+          kind: string;
+          bytes: number;
+          observedAt: string;
+          source: {
+            [k: string]: unknown;
+          };
+        }[];
+      }[];
+      omitted: number;
+      bytes: number;
+      snapshots: number;
+    };
+    contexts?: string[];
     permissions?: {
       id: string;
       title: string;
@@ -5499,6 +5995,7 @@ export interface ConversationStopOutput {
     steps: {
       kind: 'text' | 'tool' | 'error';
       at: string;
+      startedAt?: string;
       text?: string;
       cut?: boolean;
       id?: string;
@@ -5509,8 +6006,47 @@ export interface ConversationStopOutput {
         'read' | 'edit' | 'delete' | 'move' | 'search' | 'execute' | 'think' | 'fetch' | 'switch_mode' | 'other';
       detail?: string;
       outcome?: 'requested' | 'returned' | 'rejected' | 'unknown';
+      exitCode?: number;
+      output?: {
+        text: string;
+        lines: number;
+        bytes: number;
+        cut: boolean;
+      };
     }[];
     omitted: number;
+    evidence?: {
+      /**
+       * @maxItems 64
+       */
+      records: {
+        key: string;
+        path: string;
+        phase: string;
+        requestedAt: string;
+        state: 'pending' | 'captured' | 'unavailable' | 'interrupted';
+        reason?: string;
+        /**
+         * @maxItems 2
+         */
+        snapshots: {
+          resource: {
+            id: string;
+            version: string;
+          };
+          kind: string;
+          bytes: number;
+          observedAt: string;
+          source: {
+            [k: string]: unknown;
+          };
+        }[];
+      }[];
+      omitted: number;
+      bytes: number;
+      snapshots: number;
+    };
+    contexts?: string[];
     permissions?: {
       id: string;
       title: string;
@@ -5601,12 +6137,22 @@ export interface DataCompareInput {
     version: string;
   };
   options: {
+    [k: string]: unknown;
+  } & {
+    /**
+     * @minItems 1
+     * @maxItems 16
+     */
+    fields?: {
+      leftField: string;
+      rightField: string;
+    }[];
     join: 'left' | 'inner' | 'full';
-    leftField: string;
+    leftField?: string;
     leftKey: string;
     leftNamespace: string;
     mapping: 'equal-string';
-    rightField: string;
+    rightField?: string;
     rightKey: string;
     rightNamespace: string;
   };
@@ -6434,6 +6980,33 @@ export interface DocumentUndoOwnOutput {
     group: string;
   }[];
   version: number;
+}
+
+export interface EvidenceExportInput {
+  projectId: string;
+  annotationId: string;
+  exportId: string;
+  expectedDigest: string;
+}
+
+export interface EvidenceExportOutput {
+  destination: string;
+  state: 'complete';
+  files: number;
+  manifestDigest: string;
+  gaps: string[];
+}
+
+export interface EvidencePreviewInput {
+  projectId: string;
+  annotationId: string;
+}
+
+export interface EvidencePreviewOutput {
+  digest: string;
+  files: {}[];
+  gaps: string[];
+  bytes: number;
 }
 
 export interface FeedbackReadInput {
@@ -9224,6 +9797,85 @@ export interface RequirementsPrepareOutput {
   repairOf?: string;
 }
 
+export type ResourceCaptureInput = {
+  projectId: string;
+  declaration?:
+    | {
+        format: {
+          mimeType: string;
+        };
+        kind: 'file';
+        path: string;
+      }
+    | {
+        format: {
+          /**
+           * @minItems 1
+           * @maxItems 256
+           */
+          columns: {
+            name: string;
+            /**
+             * @maxItems 16
+             */
+            nullValues: string[];
+            type: 'string' | 'number' | 'boolean';
+          }[];
+          encoding: 'csv' | 'json-rows';
+          key: {
+            column: string;
+            namespace: string;
+          } | null;
+        };
+        kind: 'table';
+        path: string;
+      }
+    | {
+        format: {
+          height?: number;
+          mimeType: 'image/png' | 'image/jpeg' | 'image/svg+xml' | 'application/pdf';
+          pages?: number;
+          width?: number;
+        };
+        kind: 'media';
+        path: string;
+      }
+    | {
+        format: {
+          /**
+           * @maxItems 32
+           */
+          classes: string[];
+          encoding: 'json';
+          observation: 'exported-snapshot';
+        };
+        kind: 'object';
+        path: string;
+      };
+  document?: {
+    documentId: string;
+    version: number;
+  };
+  expectedDigest?: string;
+  path?: string;
+} & {
+  [k: string]: unknown;
+};
+
+export interface ResourceCaptureOutput {
+  availability: 'available' | 'partial' | 'missing' | 'unknown';
+  bytes: number;
+  coverage: {};
+  format?: {} | string;
+  id: string;
+  kind: 'file' | 'table' | 'media' | 'object' | 'plot' | 'model';
+  owner: string;
+  path: string;
+  projectId: string;
+  provenance: {};
+  version: string;
+}
+
 export interface ResourceListInput {
   projectId: string;
   operationId: string;
@@ -9486,6 +10138,7 @@ export interface SessionGrantInput {
     | 'agent.activity.outputs'
     | 'agent.activity.read'
     | 'annotation.create'
+    | 'annotation.decide'
     | 'annotation.list'
     | 'annotation.read'
     | 'annotation.reply'
@@ -9518,6 +10171,8 @@ export interface SessionGrantInput {
     | 'document.save'
     | 'document.undo'
     | 'document.undoOwn'
+    | 'evidence.export'
+    | 'evidence.preview'
     | 'feedback.read'
     | 'feedback.status'
     | 'feedback.submit'
@@ -9531,6 +10186,7 @@ export interface SessionGrantInput {
     | 'protocol.validate'
     | 'requirements.check'
     | 'requirements.prepare'
+    | 'resource.capture'
     | 'resource.list'
     | 'resource.read'
     | 'resource.register'
@@ -11277,6 +11933,7 @@ export interface RhoOperations {
   "agent.activity.outputs": { input: AgentActivityOutputsInput; output: AgentActivityOutputsOutput };
   "agent.activity.read": { input: AgentActivityReadInput; output: AgentActivityReadOutput };
   "annotation.create": { input: AnnotationCreateInput; output: AnnotationCreateOutput };
+  "annotation.decide": { input: AnnotationDecideInput; output: AnnotationDecideOutput };
   "annotation.list": { input: AnnotationListInput; output: AnnotationListOutput };
   "annotation.read": { input: AnnotationReadInput; output: AnnotationReadOutput };
   "annotation.reply": { input: AnnotationReplyInput; output: AnnotationReplyOutput };
@@ -11322,6 +11979,8 @@ export interface RhoOperations {
   "document.save": { input: DocumentSaveInput; output: DocumentSaveOutput };
   "document.undo": { input: DocumentUndoInput; output: DocumentUndoOutput };
   "document.undoOwn": { input: DocumentUndoOwnInput; output: DocumentUndoOwnOutput };
+  "evidence.export": { input: EvidenceExportInput; output: EvidenceExportOutput };
+  "evidence.preview": { input: EvidencePreviewInput; output: EvidencePreviewOutput };
   "feedback.read": { input: FeedbackReadInput; output: FeedbackReadOutput };
   "feedback.status": { input: FeedbackStatusInput; output: FeedbackStatusOutput };
   "feedback.submit": { input: FeedbackSubmitInput; output: FeedbackSubmitOutput };
@@ -11346,6 +12005,7 @@ export interface RhoOperations {
   "protocol.validate": { input: ProtocolValidateInput; output: ProtocolValidateOutput };
   "requirements.check": { input: RequirementsCheckInput; output: RequirementsCheckOutput };
   "requirements.prepare": { input: RequirementsPrepareInput; output: RequirementsPrepareOutput };
+  "resource.capture": { input: ResourceCaptureInput; output: ResourceCaptureOutput };
   "resource.list": { input: ResourceListInput; output: ResourceListOutput };
   "resource.read": { input: ResourceReadInput; output: ResourceReadOutput };
   "resource.register": { input: ResourceRegisterInput; output: ResourceRegisterOutput };
@@ -11377,5 +12037,5 @@ export type RhoInput<M extends RhoMethod> = RhoOperations[M]['input'];
 export type RhoOutput<M extends RhoMethod> = RhoOperations[M]['output'];
 
 /** The names a caller may pass to protocol.describe / protocol.validate. */
-export const rhoMethods = ["action.cancel","action.export","action.list","action.lookup","action.observe","action.output","action.retry","action.submit","agent.activity.capture","agent.activity.outputs","agent.activity.read","annotation.create","annotation.list","annotation.read","annotation.reply","artifact.check","binding.activity","binding.activity.append","binding.close","binding.list","binding.open","capability.configure","capability.index","capability.list","capability.resolve","composition.apply","composition.put","composition.read","composition.undo","context.create","context.read","conversation.configure","conversation.delete","conversation.list","conversation.permission","conversation.read","conversation.restore","conversation.send","conversation.settings.check","conversation.settings.read","conversation.settings.update","conversation.start","conversation.stop","conversation.trash","data.compare","data.page","data.plot","document.abandonSave","document.change.read","document.edit","document.history","document.open","document.read","document.revert","document.save","document.undo","document.undoOwn","feedback.read","feedback.status","feedback.submit","interaction.selection.read","interaction.selection.set","media.describe","object.read","observation.snapshot","project.create","project.createWorkspace","project.doctor","project.entries","project.list","project.open","project.openFile","project.pick","project.runs","project.source.add","project.source.pick","project.work.read","protocol.describe","protocol.validate","requirements.check","requirements.prepare","resource.list","resource.read","resource.register","selection.set","session.browser.pair","session.browser.revoke","session.connect","session.grant","skill.list","skill.read","task.map.declare","task.map.present","task.map.read","task.map.respond","task.routing.put","view.close","view.observations.read","view.observe","view.protection.set","workspace.enhance","workspace.export","workspace.observe","workspace.restore","workspace.save"] as const satisfies readonly RhoMethod[];
+export const rhoMethods = ["action.cancel","action.export","action.list","action.lookup","action.observe","action.output","action.retry","action.submit","agent.activity.capture","agent.activity.outputs","agent.activity.read","annotation.create","annotation.decide","annotation.list","annotation.read","annotation.reply","artifact.check","binding.activity","binding.activity.append","binding.close","binding.list","binding.open","capability.configure","capability.index","capability.list","capability.resolve","composition.apply","composition.put","composition.read","composition.undo","context.create","context.read","conversation.configure","conversation.delete","conversation.list","conversation.permission","conversation.read","conversation.restore","conversation.send","conversation.settings.check","conversation.settings.read","conversation.settings.update","conversation.start","conversation.stop","conversation.trash","data.compare","data.page","data.plot","document.abandonSave","document.change.read","document.edit","document.history","document.open","document.read","document.revert","document.save","document.undo","document.undoOwn","evidence.export","evidence.preview","feedback.read","feedback.status","feedback.submit","interaction.selection.read","interaction.selection.set","media.describe","object.read","observation.snapshot","project.create","project.createWorkspace","project.doctor","project.entries","project.list","project.open","project.openFile","project.pick","project.runs","project.source.add","project.source.pick","project.work.read","protocol.describe","protocol.validate","requirements.check","requirements.prepare","resource.capture","resource.list","resource.read","resource.register","selection.set","session.browser.pair","session.browser.revoke","session.connect","session.grant","skill.list","skill.read","task.map.declare","task.map.present","task.map.read","task.map.respond","task.routing.put","view.close","view.observations.read","view.observe","view.protection.set","workspace.enhance","workspace.export","workspace.observe","workspace.restore","workspace.save"] as const satisfies readonly RhoMethod[];
 export type RhoInputFor<M extends RhoMethod> = RhoOperations[M]['input'];

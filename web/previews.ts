@@ -36,17 +36,44 @@ export function readPreview(client: BrowserClient, snapshot: WorkspaceSnapshot, 
       return { kind: 'table', columns: page.columns.slice(0, previewLimits.columns).map(c => c.name), rows: page.rows, total: page.total, width: page.columns.length };
     }
     if ((node.bytes ?? 0) > previewLimits.figureBytes) return { kind: 'none', note: size(node.bytes ?? 0) + ' · select it to see it' };
-    let offset = 0, data = '';
-    for (;;) {
-      const page = await client.call('resource.read', { projectId, resource: ref, offset }) as { data: string; more: boolean; nextOffset: number };
-      data += atob(page.data);
-      if (!page.more || data.length > previewLimits.figureBytes) break;
-      offset = page.nextOffset;
-    }
-    const bytes = Uint8Array.from(data, c => c.charCodeAt(0));
+    const bytes = await readBytes(client, projectId, ref, previewLimits.figureBytes);
     const type = /\.svg$/i.test(node.path) ? 'image/svg+xml' : /\.png$/i.test(node.path) ? 'image/png' : 'image/jpeg';
     return { kind: 'image', url: URL.createObjectURL(new Blob([bytes], { type })) };
   }).catch((): Preview => ({ kind: 'none', note: 'Preview could not be read' }));
   previews.set(key, made);
+  return made;
+}
+// A resource's bytes, read page by page and stopped once past maxBytes.
+async function readBytes(client: BrowserClient, projectId: string, resource: { id: string; version: string }, maxBytes: number) {
+  let offset = 0, data = '';
+  for (;;) {
+    const page = await client.call('resource.read', { projectId, resource, offset }) as { data: string; more: boolean; nextOffset: number };
+    data += atob(page.data);
+    if (!page.more || data.length > maxBytes) break;
+    offset = page.nextOffset;
+  }
+  return Uint8Array.from(data, c => c.charCodeAt(0));
+}
+
+// Images a rendered document shows, each as its current bytes, read once per file version.
+// The protected resources are the service and the tab: at most this many images per page,
+// each within this many bytes; past either the document shows the image's description.
+export const imageLimits = { images: 64, bytes: 8 * 1024 * 1024 };
+const imageTypes: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', svg: 'image/svg+xml' };
+const images = new Map<string, Promise<string | null>>();
+export function readImage(client: BrowserClient, snapshot: WorkspaceSnapshot, file: PreviewFile): Promise<string | null> {
+  const type = imageTypes[file.path.split('.').at(-1)!.toLowerCase()];
+  if (!type || !canCapture(snapshot) || (file.bytes ?? 0) > imageLimits.bytes) return Promise.resolve(null);
+  const projectId = snapshot.project.id, key = projectId + ':' + file.path + ':' + file.bytes + ':' + file.modifiedAt;
+  const known = images.get(key);
+  if (known) return known;
+  if (images.size >= imageLimits.images) return Promise.resolve(null);
+  const made = slot(async () => {
+    const resource = await client.call('agent.activity.capture', { projectId, path: file.path });
+    const bytes = await readBytes(client, projectId, { id: resource.id, version: resource.version }, imageLimits.bytes);
+    return bytes.length > imageLimits.bytes ? null : URL.createObjectURL(new Blob([bytes], { type }));
+  });
+  images.set(key, made);
+  made.catch(() => images.delete(key));
   return made;
 }

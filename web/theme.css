@@ -49,6 +49,14 @@
   --agent-wash: var(--color-accent-soft);
   --waiting: var(--color-amber);
   --danger: var(--color-failed);
+  /* Code and Markdown, in the editor and in rendered documents: the palette's muted inks, comments in the meta grey. */
+  --code-keyword: var(--color-hue-iris-ink);
+  --code-string: var(--color-hue-moss-ink);
+  --code-number: var(--color-hue-clay-ink);
+  --code-function: var(--color-hue-sky-ink);
+  --code-comment: var(--color-meta);
+  --code-mark: var(--color-meta);
+  --code-link: var(--color-accent);
   font: 14px/1.5 var(--font-ui);
   color: var(--color-ink);
   background: var(--color-surface);
@@ -115,6 +123,20 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .nav-workspaces { margin-top: 28px; }
 .section-label { display: block; padding: 0 10px 9px; color: var(--color-meta); font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
 .navigation-footer { display: flex; flex-direction: column; margin-top: auto; padding-top: 24px; }
+/* Highlighted code: the classes web/languages.ts gives each kind of token. */
+.rho-tok-keyword { color: var(--code-keyword); }
+.rho-tok-string { color: var(--code-string); }
+.rho-tok-number { color: var(--code-number); }
+.rho-tok-comment { color: var(--code-comment); font-style: italic; }
+.rho-tok-function { color: var(--code-function); }
+.rho-tok-strong { font-weight: 650; }
+.rho-tok-emphasis { font-style: italic; }
+.rho-tok-strike { text-decoration: line-through; }
+.rho-tok-link { color: var(--code-link); }
+.rho-tok-mark { color: var(--code-mark); }
+.rho-tok-quote { color: var(--text-muted); }
+.rho-tok-invalid { color: var(--danger); }
+
 /* Project sidebar: the way back, the project, its places and its contents by kind. */
 .nav-back { align-self: flex-start; gap: 6px; min-height: 30px; padding: 4px 8px; border: 0; background: transparent; color: var(--color-muted); font-weight: 400; font-size: 13px; }
 .project-card { position: relative; margin: 14px 0 22px; }
@@ -625,7 +647,7 @@ ol.md-list { list-style-type: decimal; }
 /* The icon names the kind of action; its colour is the Agent's own tool status, not Rho's verification of the bytes. */
 .activity-icon { flex: none; display: inline-grid; place-content: center; width: 16px; height: 16px; color: var(--color-meta); }
 .activity-icon.requested { color: var(--color-accent); animation: activity-breathe 1.4s ease-in-out infinite; }
-.activity-icon.rejected { color: var(--color-failed); }
+.activity-icon.rejected, .activity-icon.failed { color: var(--color-failed); }
 .activity-icon.unknown { color: var(--color-amber); }
 @keyframes activity-breathe { 50% { opacity: .35; } }
 .activity-verb { flex: none; }
@@ -640,6 +662,12 @@ ol.md-list { list-style-type: decimal; }
 .activity-row[data-action="execute"] .activity-icon, .activity-row[data-action="execute"] > details > summary::after { margin-top: .2em; }
 .activity-flag { flex: none; color: var(--color-failed); font-size: 12px; }
 .activity-flag.unknown { color: var(--color-amber-text); }
+.activity-duration { flex: none; margin-left: auto; color: var(--color-meta); font-size: 12px; font-variant-numeric: tabular-nums; }
+.activity-row > details > summary:has(.activity-duration)::after { margin-left: 0; }
+/* What a command printed: its last lines, as a terminal shows them. */
+.activity-details .activity-printed { grid-column: 1 / -1; }
+.activity-output { margin: 0; max-height: 240px; overflow: auto; padding: 6px 8px; border-radius: 6px; background: var(--color-surface); border: 1px solid var(--color-hairline); font: 11px/1.45 var(--font-mono); white-space: pre; color: var(--color-ink); }
+.activity-cut { display: block; margin-top: 4px; color: var(--color-meta); }
 .activity-details { display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 5px 10px; margin: 4px 0 6px 18px; padding: 8px 12px; border-radius: 8px; background: var(--color-well); font-size: 12px; }
 .activity-details dt { color: var(--color-meta); }
 .activity-details dd { margin: 0; overflow-wrap: anywhere; }
@@ -815,3 +843,10 @@ dialog::backdrop { background: #13231c45; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; scroll-behavior: auto !important; transition: none !important; } }
 
 .external-reply { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; }
+
+.rho-review{max-width:1120px;margin:auto;padding:28px;line-height:1.6}.rho-review section,.review-reply,.review-question{margin:24px 0;padding-top:18px;border-top:1px solid var(--border)}.rho-review h1{font-size:24px}.rho-review h2{font-size:17px;margin-bottom:12px}.rho-review h3{font-size:15px}.review-choose{display:flex;gap:18px;flex-wrap:wrap}.rho-review select{max-width:100%;min-width:180px;padding:7px}.review-choose label{display:grid;gap:5px;min-width:0;flex:1}.rho-review button,.review-overlay button{font:inherit;padding:6px 11px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:inherit;cursor:pointer}.rho-review button:disabled{opacity:.5}.rho-review button+button{margin-left:8px}.review-draft{height:160px;border:1px solid var(--border);margin:12px 0;border-radius:8px;overflow:hidden}.review-history{padding:12px 16px;margin:12px 0;background:var(--surface-muted,#f4f6f5);border-radius:8px}.review-history p{white-space:pre-wrap}.review-fields{display:flex;gap:14px;flex-wrap:wrap;margin:10px 0}.review-table-scroll{overflow:auto;max-width:100%;margin:15px 0}.review-table-scroll table{border-collapse:collapse;font-variant-numeric:tabular-nums;white-space:nowrap}.review-table-scroll td,.review-table-scroll th{padding:8px 12px;text-align:right;border-bottom:1px solid var(--border)}.review-table-scroll tr[data-changed=true]{background:#fff6df}.review-table-scroll th:first-child{text-align:left}.review-overlay{position:fixed;inset:5vh 8vw;background:var(--surface,#fff);z-index:1000;padding:24px;overflow:auto;box-shadow:0 0 0 100vmax #0005;border:1px solid var(--border);border-radius:12px}.snapshot-view{min-width:0}.snapshot-view img{max-width:100%;height:auto}.snapshot-view pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px}.snapshot-view p{font-size:12px;color:var(--text-muted)}@media(max-width:768px){.rho-review{padding:16px}.review-overlay{inset:12px;padding:16px}.review-choose{display:block}.review-choose label{margin:12px 0}.rho-review select{width:100%}}
+.review-code-diff{white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;padding:14px;background:var(--surface-muted,#f5f7f5);max-height:480px;overflow:auto}.review-code-diff del{background:#ffe0e0;text-decoration:none}.review-code-diff ins{background:#d5f4dd;text-decoration:none}
+.review-fields label{display:flex;flex-direction:row;align-items:center;gap:6px}.rho-comparison summary{cursor:pointer;color:var(--text-muted)}.rho-comparison>p{margin:8px 0}
+
+.review-overlay::backdrop{background:rgb(20 38 30 / 35%)}
+dialog.review-overlay{border:1px solid var(--border);color:inherit;margin:auto;width:calc(100% - 32px);max-width:1100px;max-height:calc(100dvh - 32px);inset:0;overflow:auto}

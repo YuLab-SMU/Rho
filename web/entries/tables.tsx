@@ -10,4 +10,4 @@ function Body({ form, params, view, present, reportHidden }: FrameBodyProps) {
   if (!view) return null;
   return <TableCardBody form={form} params={params} projectId={view.projectId} client={view.client} resource={view.view.bindings.data as { id: string; version: string } | undefined} onParams={present} reportHidden={reportHidden} />;
 }
-export const entry: UiContribution = { ...tableEntry, entryVersion: '0.1-draft', packageVersion: '0.4.2', propsSchema: { type: 'object', properties: { title: { type: 'string' } } }, commands: [], View: Table, forms: tableForms, Body };
+export const entry: UiContribution = { ...tableEntry, entryVersion: '0.1-draft', packageVersion: '0.5.0', propsSchema: { type: 'object', properties: { title: { type: 'string' } } }, commands: [], View: Table, forms: tableForms, Body };

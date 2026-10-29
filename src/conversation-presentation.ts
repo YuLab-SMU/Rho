@@ -8,7 +8,8 @@ export type ConversationRead = RhoOutput<'conversation.read'>;
 export type ConversationTurn = ConversationRead['turns'][number];
 export type ConversationStep = ConversationTurn['steps'][number];
 export type SessionObservation = NonNullable<ConversationRead['observation']>;
-export type ActivityOutcome = NonNullable<ConversationStep['outcome']>;
+// A command that ran and exited with a failing code failed; the Agent may report it as refused.
+export type ActivityOutcome = NonNullable<ConversationStep['outcome']> | 'failed';
 export type AgentAction = 'read' | 'edit' | 'write' | 'delete' | 'move' | 'search' | 'execute' | 'fetch' | 'project' | 'agents' | 'plan' | 'other';
 export type TargetKind = 'path' | 'command' | 'query' | 'operation' | 'text' | null;
 
@@ -66,10 +67,34 @@ export function shortPath(value: string, root?: string | null) {
   return parts.length > 2 ? '…/' + parts.slice(-2).join('/') : value;
 }
 const looksLikePath = (value: string) => separator.test(value) || /\.[A-Za-z0-9]{1,8}$/.test(value);
+// A wrapper a person's own setup puts in front of commands: rtk compacts what a command
+// prints for the model. It changes the printing, not what runs, so a command is named
+// without it; the step's details keep what actually ran.
+export const displayCommand = (command: string) => command.replace(/(^|&&|\|\||[;|(])(\s*)rtk\s+(?:proxy\s+)?(?=\S)/g, '$1$2');
+// How long a step took, from the Agent's last description of it to its result; null while
+// it runs or when Rho heard of it only once.
+export function stepDuration(step: ConversationStep): number | null {
+  if (!step.startedAt || (step.outcome ?? 'requested') === 'requested') return null;
+  const ms = Date.parse(step.at) - Date.parse(step.startedAt);
+  return Number.isFinite(ms) && ms > 0 ? ms : null;
+}
+export function durationText(ms: number) {
+  if (ms < 10_000) return (Math.max(ms, 100) / 1000).toFixed(1) + ' s';
+  if (ms < 60_000) return Math.round(ms / 1000) + ' s';
+  const minutes = Math.floor(ms / 60_000), seconds = Math.round((ms % 60_000) / 1000);
+  return minutes + ' min' + (seconds ? ' ' + seconds + ' s' : '');
+}
+// How a command ended, in the words a person uses: its exit code when the Agent reported one.
+export function commandEnd(step: ConversationStep): string | null {
+  const outcome = step.outcome ?? 'requested';
+  if (outcome === 'requested') return null;
+  if (step.exitCode !== undefined) return step.exitCode === 0 ? 'Exit 0' : 'Exit ' + step.exitCode;
+  return outcome === 'returned' ? 'Finished' : outcome === 'rejected' ? (step.output ? 'Failed' : 'Refused') : 'Outcome unknown';
+}
 function rhoTool(tool: string, step: ConversationStep): Pick<Activity, 'action' | 'verb' | 'target' | 'targetKind'> | null {
-  if (tool === 'mcp__rho__rho_call') return { action: 'project', verb: 'Called', target: clean(step.operation) ?? 'a project operation', targetKind: step.operation ? 'operation' : 'text' };
-  if (tool === 'mcp__rho__rho_index') return { action: 'project', verb: 'Looked up', target: 'project operations', targetKind: 'text' };
-  if (tool === 'mcp__rho__rho_resolve') return { action: 'project', verb: 'Read', target: 'operation contracts', targetKind: 'text' };
+  if ((tool === 'mcp__rho__rho_call' || tool === 'mcp.rho.rho_call')) return { action: 'project', verb: 'Called', target: clean(step.operation) ?? 'a project operation', targetKind: step.operation ? 'operation' : 'text' };
+  if ((tool === 'mcp__rho__rho_index' || tool === 'mcp.rho.rho_index')) return { action: 'project', verb: 'Looked up', target: 'project operations', targetKind: 'text' };
+  if ((tool === 'mcp__rho__rho_resolve' || tool === 'mcp.rho.rho_resolve')) return { action: 'project', verb: 'Read', target: 'operation contracts', targetKind: 'text' };
   if (tool === 'mcp__rho__rho_read') return { action: 'project', verb: 'Read', target: 'a kept result', targetKind: 'text' };
   return null;
 }
@@ -79,7 +104,8 @@ export function toolActivity(step: ConversationStep, location: string | null, ro
   const detail = clean(step.detail), rawTitle = clean(step.title);
   // Some Agents repeat the command as the title; do not show it twice.
   const title = rawTitle && rawTitle !== detail ? rawTitle : null;
-  const outcome = step.outcome ?? 'requested';
+  const ran = step.exitCode !== undefined || step.output !== undefined;
+  const outcome: ActivityOutcome = step.exitCode !== undefined && step.exitCode !== 0 || step.outcome === 'rejected' && ran ? 'failed' : step.outcome ?? 'requested';
   const special = rhoTool(tool, step);
   if (special) return { key: key ?? step.id ?? tool, step, title, location, outcome, ...special };
   const action = byTool[tool.toLowerCase()] ?? byKind[step.toolKind ?? ''] ?? 'other';
@@ -89,7 +115,7 @@ export function toolActivity(step: ConversationStep, location: string | null, ro
   if (tool.toLowerCase() === 'toolsearch') { target = detail ?? title ?? 'Agent tools'; targetKind = detail ? 'query' : 'text'; }
   else if (action === 'project') { target = clean(step.operation) ?? title ?? detail; targetKind = step.operation ? 'operation' : 'text'; }
   else if (path) { target = detail ? shortPath(detail, root) : location ? shortPath(location, root) : title; targetKind = detail || location ? 'path' : 'text'; }
-  else if (action === 'execute') { target = detail ?? (title && title.toLowerCase() !== tool.toLowerCase() ? title : null); targetKind = detail ? 'command' : 'text'; }
+  else if (action === 'execute') { target = detail ? displayCommand(detail) : (title && title.toLowerCase() !== tool.toLowerCase() ? title : null); targetKind = detail ? 'command' : 'text'; }
   else if (action === 'search') { target = detail ?? title; targetKind = detail ? 'query' : 'text'; }
   else if (action === 'fetch') { target = detail ?? title; targetKind = 'text'; }
   else { target = title ?? detail; targetKind = detail && looksLikePath(detail) ? 'path' : 'text'; }
@@ -108,7 +134,9 @@ export function activitySummary(activities: Activity[]) {
     seen.set(activity.action, named);
   });
   const parts = [...seen].map(([action, named]) => summaries[action][named.size === 1 ? 0 : 1].replace('{n}', String(named.size)));
-  const refused = activities.filter(a => a.outcome === 'rejected').length, unknown = activities.filter(a => a.outcome === 'unknown').length;
+  const count = (outcome: ActivityOutcome) => activities.filter(a => a.outcome === outcome).length;
+  const failed = count('failed'), refused = count('rejected'), unknown = count('unknown');
+  if (failed) parts.push(failed + ' failed');
   if (refused) parts.push(refused + ' refused');
   if (unknown) parts.push(unknown + ' with unknown outcome');
   return parts.join(' · ');

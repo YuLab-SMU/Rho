@@ -74,6 +74,20 @@ export interface UiViewProps {
   feedbackConfiguration?: Omit<NonNullable<WorkspaceSnapshot['feedback']>, 'draftDocumentId'> & { draftDocumentId: string };
   // Present when the task map is available; the same frame every plugin uses.
   frame?: FrameContext & { form: string; params: Record<string, unknown>; item?: TaskItem };
+  shell?: ShellServices;
+}
+// What the shell offers any view that shows project content. Each service is optional and
+// a view works without it: a link to a project file stays a link, code stays plain.
+export interface ShellServices {
+  openReview?(annotationId?: string, anchor?: { kind: 'document'; documentId: string; version: number; from: number; to: number }): void;
+  // Shows a project file the way the person's own choice of it would, here or in Studio.
+  openPath?(path: string): void;
+  // A URL for the current bytes of a project image, or null when it cannot be shown.
+  imageUrl?(path: string): Promise<string | null>;
+  // CodeMirror extensions for a file's language (none when Rho has none for it).
+  languageExtensions?(path: string): Promise<unknown[]>;
+  // Code highlighted as the named language, as text and spans; null for a language Rho lacks.
+  highlight?(code: string, language: string): Promise<DocumentFragment | null>;
 }
 export interface UiContribution {
   entryVersion: '0.1-draft';
@@ -90,7 +104,7 @@ export interface UiContribution {
   // The full form inside a layout.
   View: ComponentType<UiViewProps>;
   // Optional object feedback supplied only by the selected Annotations entry.
-  TableQuestion?: ComponentType<Pick<UiViewProps, 'projectId' | 'viewId' | 'snapshot' | 'client' | 'principalId' | 'requestFeedback' | 'headerTarget' | 'selectionScope'> & {
+  TableQuestion?: ComponentType<Pick<UiViewProps, 'projectId' | 'viewId' | 'snapshot' | 'client' | 'principalId' | 'requestFeedback' | 'shell' | 'headerTarget' | 'selectionScope'> & {
     resource: { id: string; version: string };
     onOpenResource?: (ref: { id: string; version: string }) => void;
   }>;

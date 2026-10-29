@@ -1,7 +1,11 @@
+import { useContext } from 'react';
+import { ShellContext } from './shell-services.js';
+import { Snapshot } from './snapshot.js';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import type { BrowserClient, ViewDescription, WorkspaceSnapshot } from '../src/browser.js';
 import type { RhoOutput } from '../src/contract.generated.js';
 import { buildWorkGraph, laneLayout, lineage, type GraphEdge, type GraphEvent, type GraphNode, type GraphTurn, type LaneItem, type LaneLink, type WorkGraph as Graph } from '../src/work-graph.js';
+import { durationText } from '../src/conversation-presentation.js';
 import { agentName, type AgentNow } from './agent-now.js';
 import { openInWorkspace, viewFor } from './canvas.js';
 import { kindOf, type ProjectFiles } from './sources.js';
@@ -29,12 +33,12 @@ const kindLabel = (node: GraphNode) => node.kind === 'question' ? 'Question' : n
 const kindIcon = (node: GraphNode): IconName => node.kind === 'question' ? 'question' : node.kind === 'run' ? 'run'
   : node.category === 'figures' ? 'image' : node.category === 'code' ? 'code' : node.category === 'notes' ? 'document' : node.category ? 'table' : 'file';
 const tone = (node: GraphNode) => node.kind !== 'file' ? node.kind : node.category ?? 'other';
-const hasPreview = (node: GraphNode) => node.kind === 'file' && node.exists && (/\.(png|jpe?g|svg)$/i.test(node.path!) || /\.csv$/i.test(node.path!));
+const hasPreview = (node: GraphNode) => node.kind === 'file' && !!node.resource && (/\.(png|jpe?g|svg)$/i.test(node.path!) || /\.csv$/i.test(node.path!));
 const sizeOf = (node: GraphNode, proxy: boolean) => proxy ? { width: 228, height: 58 } : { width: node.kind === 'question' ? 300 : node.kind === 'run' ? 236 : 256, height: node.kind === 'question' ? (node.answer ? 160 : 116) : node.kind === 'run' ? 88 : hasPreview(node) ? (/\.csv$/i.test(node.path!) ? 198 : 184) : 96 };
 type Layout = ReturnType<typeof laneLayout>;
 // The Agent's answer in a sentence or two, as plain text, for the question's card.
 const gist = (markdown?: string) => markdown ? markdown.replace(/```[\s\S]*?```/g, ' ').replace(/[#>*_`|]+/g, ' ').replace(/\[([^\]]+)\]\([^)]*\)/g, '$1').replace(/\s+/g, ' ').trim().slice(0, 220) : '';
-const verbs: Record<string, string> = { read: 'Read', edit: 'Edited', write: 'Wrote', changed: 'Changed', run: 'Ran', ask: 'Asked', answer: 'Answered' };
+const verbs: Record<string, string> = { read: 'Read', edit: 'Edited', write: 'Wrote', changed: 'Changed', capture: 'Captured', run: 'Ran', ask: 'Asked', answer: 'Answered' };
 // A card's one line about what happened to it, newest last: "Read · Edited 2×".
 function happened(node: GraphNode) {
   const counts = new Map<string, number>();
@@ -42,7 +46,9 @@ function happened(node: GraphNode) {
   return [...counts].map(([action, n]) => (verbs[action] ?? action) + (n > 1 ? ' ' + n + '×' : '')).join(' · ');
 }
 const ended: Record<string, string> = { completed: 'Answered', failed: 'Failed', stopped: 'Stopped', running: 'Working', unknown: 'Outcome unknown' };
-const outcomes: Record<string, string> = { returned: 'Returned', requested: 'Running', rejected: 'Refused', unknown: 'Outcome unknown' };
+// A command's output opens at its end, where its result or error is.
+const atEnd = (element: HTMLElement | null) => { if (element) element.scrollTop = element.scrollHeight; };
+const outcomes: Record<string, string> = { returned: 'Returned', requested: 'Running', failed: 'Failed', rejected: 'Refused', unknown: 'Outcome unknown' };
 
 // The conversations the graph draws, read again when their recorded version changes.
 function useTurns(client: BrowserClient, snapshot: WorkspaceSnapshot) {
@@ -69,13 +75,13 @@ function useTurns(client: BrowserClient, snapshot: WorkspaceSnapshot) {
 
 function CardPreview({ client, snapshot, node, shown }: { client: BrowserClient; snapshot: WorkspaceSnapshot; node: GraphNode; shown: boolean }) {
   // A file that changes again is previewed again; until then the card keeps what it read.
-  const version = node.path + ':' + node.bytes + ':' + node.modifiedAt;
+  const version = node.resource?.id + '@' + node.resource?.version;
   const [read, setRead] = useState<{ version: string; preview: Preview } | null>(null);
   const preview = read?.preview ?? null;
   useEffect(() => {
-    if (!shown || read?.version === version) return;
+    if (!shown || !node.resource || read?.version === version) return;
     let live = true;
-    readPreview(client, snapshot, { path: node.path!, bytes: node.bytes, modifiedAt: node.modifiedAt }).then(value => { if (live) setRead({ version, preview: value }); });
+    readPreview(client, snapshot, { path: node.path!, bytes: node.bytes, modifiedAt: node.modifiedAt, resource: node.resource ? { ...node.resource, kind: snapshot.resources.find(r => r.id === node.resource!.id)?.kind ?? 'file' } : undefined }).then(value => { if (live) setRead({ version, preview: value }); });
     return () => { live = false; };
   }, [shown, version]);
   if (!preview) return <span className="graph-preview loading" aria-hidden="true" />;
@@ -95,8 +101,8 @@ const zoomLimits = { min: 0.2, max: 2 };
 // Below this zoom a card's text is too small to read; the graph opens no smaller than this.
 const readable = 0.78;
 
-export function WorkGraph({ client, snapshot, files, agentNow, following, principalId, onFollow, onStopFollowing, onStudio, workspace, onAbout, onAgent }: {
-  client: BrowserClient; snapshot: WorkspaceSnapshot; files: ProjectFiles; agentNow: AgentNow | null; following: boolean; principalId?: string;
+export function WorkGraph({ initialResource, client, snapshot, files, agentNow, following, principalId, onFollow, onStopFollowing, onStudio, workspace, onAbout, onAgent }: {
+  initialResource?: {id:string;version:string}|null; client: BrowserClient; snapshot: WorkspaceSnapshot; files: ProjectFiles; agentNow: AgentNow | null; following: boolean; principalId?: string;
   onFollow: () => void; onStopFollowing: () => void; onStudio: (compositionId: string, viewId?: string) => void; workspace: () => string;
   onAbout: (pluginId: string) => void; onAgent: (conversationId?: string) => void;
 }) {
@@ -117,6 +123,7 @@ export function WorkGraph({ client, snapshot, files, agentNow, following, princi
 
   // Selecting a node shows the path it came by and what it fed; everything else steps back.
   const [selected, setSelected] = useState<string | null>(null);
+  useEffect(()=>{if(initialResource){const node=graph.nodes.find(n=>n.resource?.id===initialResource.id&&n.resource.version===initialResource.version);if(node)setSelected(node.id);}},[initialResource?.id,initialResource?.version,shape]);
   const focus = useMemo(() => selected && byId.has(selected) ? lineage(graph, selected) : null, [selected, graph]);
   const [query, setQuery] = useState('');
   const matches = useMemo(() => { const q = query.trim().toLowerCase(); return q ? new Set(graph.nodes.filter(n => (n.title + ' ' + (n.path ?? '') + ' ' + (n.text ?? '') + ' ' + (n.command ?? '')).toLowerCase().includes(q)).map(n => n.id)) : null; }, [query, graph]);
@@ -268,6 +275,8 @@ export function WorkGraph({ client, snapshot, files, agentNow, following, princi
       {agentNow?.running && <button className={'follow-toggle' + (following ? ' on' : '')} aria-pressed={following} title={following ? 'The graph keeps the Agent in view, and its files open in your workspace.' : 'Keep the Agent in view as it works.'} onClick={following ? onStopFollowing : onFollow}>
         {following ? <><span className="pulse-dot" aria-hidden="true" />Following {agentNow.agent}</> : <><Icon name="follow" size={15} />Follow {agentNow.agent}</>}</button>}
     </GraphHead>
+    {initialResource && !loading && !graph.nodes.some(n=>n.resource?.id===initialResource.id&&n.resource.version===initialResource.version) && <p className="canvas-note">The selected result version is outside this retained Graph window. Its review still holds the exact reference.</p>}
+    {!!graph.omittedNodes && <p className="canvas-note">{graph.omittedNodes} nodes are outside the drawing budget. This is a partial view of the retained work.</p>}
     {problem && <p className="inline-error graph-problem" role="alert">{problem}</p>}
     <div className="graph-body">
       <div ref={canvas} className={'graph-canvas' + (focus ? ' focusing' : '') + (cursor !== null ? ' replaying' : '')} tabIndex={-1} onPointerDown={pan} onKeyDown={walk}>
@@ -279,7 +288,7 @@ export function WorkGraph({ client, snapshot, files, agentNow, following, princi
               if (item.proxy) return <Reference key={item.id} item={item} node={node} place={p} home={layout.rows.findIndex(r => r.lane === items.get(item.node)!.lane) + 1}
                 dimmed={!!dim(item.node)} later={!proxyShown(item)} selected={selected === item.node} live={flag} onSelect={() => choose(item.node, true)} />;
               return <Card key={item.id} node={node} place={p} client={client} snapshot={snapshot} near={near}
-                selected={selected === node.id} dimmed={!!dim(node.id)} later={!shown(node.id)} current={current?.node === node.id} arrived={arrived.has(node.id)}
+                selected={selected === node.id} dimmed={!!dim(node.id)} later={!shown(node.id) || cursor !== null && (node.capturedAt ?? 0) > cursor} current={current?.node === node.id} arrived={arrived.has(node.id)}
                 live={flag} onSelect={() => choose(selected === node.id ? null : node.id)} onOpen={() => choose(node.id, true)} />;
             })}
           </div>
@@ -299,7 +308,7 @@ export function WorkGraph({ client, snapshot, files, agentNow, following, princi
           </div>
         </>}
       </div>
-      {selectedNode && <Inspector key={selectedNode.id} node={selectedNode} graph={graph} byId={byId} client={client} snapshot={snapshot} principalId={principalId} workspace={workspace}
+      {selectedNode && <Inspector key={selectedNode.id} node={cursor !== null && (selectedNode.capturedAt ?? 0) > cursor ? { ...selectedNode, resource: undefined, gap: 'This snapshot was captured after the selected replay time.' } : selectedNode} graph={graph} byId={byId} client={client} snapshot={snapshot} principalId={principalId} workspace={workspace}
         onStudio={onStudio} onAbout={onAbout} onAgent={onAgent} onSelect={id => choose(id, true)} onClose={() => setSelected(null)} />}
     </div>
     {graph.events.length > 0 && <Timeline graph={graph} cursor={cursor} playing={playing} running={!!agentNow?.running} speed={speed} onSpeed={setSpeed}
@@ -357,7 +366,7 @@ function Card({ node, place, client, snapshot, near, selected, dimmed, later, cu
 }) {
   const last = node.events.at(-1);
   const meta = node.kind === 'question' ? [node.agent, ended[node.state ?? ''] ?? node.state, clock(node.at)].filter(Boolean).join(' · ')
-    : node.kind === 'run' ? [outcomes[node.outcome ?? ''] ?? node.outcome, clock(node.at)].join(' · ')
+    : node.kind === 'run' ? [node.end ?? outcomes[node.outcome ?? ''] ?? node.outcome, node.durationMs ? durationText(node.durationMs) : null, clock(node.at)].filter(Boolean).join(' · ')
     : [happened(node), last ? clock(last.at) : ''].filter(Boolean).join(' · ');
   const folder = node.path?.includes('/') ? node.path.split('/').slice(0, -1).join('/') : '';
   const label = `${kindLabel(node)}: ${node.kind === 'file' ? node.path : node.title}. ${meta}`;
@@ -368,7 +377,8 @@ function Card({ node, place, client, snapshot, near, selected, dimmed, later, cu
     <span className="graph-node-head"><span className="graph-node-icon"><Icon name={kindIcon(node)} size={15} stroke={1.8} /></span><span className="graph-node-kind">{kindLabel(node)}{folder && <span className="graph-node-folder"> · {folder}</span>}</span></span>
     <strong className="graph-node-title" title={node.kind === 'question' ? node.text : node.path ?? node.command}>{node.title}</strong>
     {node.kind === 'question' && node.answer && <span className="graph-node-answer">{gist(node.answer)}</span>}
-    {hasPreview(node) && <CardPreview client={client} snapshot={snapshot} node={node} shown={near && !later} />}
+    {hasPreview(node) && (node.capturedAt === undefined || !later) && <CardPreview client={client} snapshot={snapshot} node={node} shown={near && !later} />}
+    {node.kind === 'file' && !node.resource && <span className="graph-node-meta">Historical version not captured</span>}
     <span className="graph-node-meta">{node.kind === 'file' && !node.exists ? 'Not in the folder now' : meta}</span>
   </button>;
 }
@@ -412,15 +422,9 @@ function Inspector({ node, graph, byId, client, snapshot, principalId, workspace
   node: GraphNode; graph: Graph; byId: Map<string, GraphNode>; client: BrowserClient; snapshot: WorkspaceSnapshot; principalId?: string; workspace: () => string;
   onStudio: (compositionId: string, viewId?: string) => void; onAbout: (pluginId: string) => void; onAgent: (conversationId?: string) => void; onSelect: (id: string) => void; onClose: () => void;
 }) {
-  const [view, setView] = useState<ViewDescription | null | 'none'>(null), [placing, setPlacing] = useState(false), [problem, setProblem] = useState('');
-  const [header, setHeader] = useState<HTMLDivElement | null>(null);
-  useEffect(() => {
-    if (node.kind !== 'file' || !node.exists) return;
-    let live = true;
-    viewFor(client, snapshot, node.path!).then(made => { if (live) setView(made ? { id: made.node.id, component: String(made.node.component), version: String(made.node.version), props: made.node.props ?? {}, bindings: made.node.bindings } as unknown as ViewDescription : 'none'); },
-      error => { if (live) { setView('none'); setProblem(error instanceof Error ? error.message : 'This file could not be opened.'); } });
-    return () => { live = false; };
-  }, [node.id]);
+  const shell = useContext(ShellContext);
+  const related = snapshot.annotations.filter((t: any) => node.resource && (t.anchor?.resource?.id === node.resource.id && t.anchor?.resource?.version === node.resource.version || t.messages?.some((m: any) => m.resources?.some((r: any) => r.id === node.resource!.id && r.version === node.resource!.version))));
+  const [placing,setPlacing] = useState(false), [problem,setProblem] = useState('');
   async function open() {
     setPlacing(true); setProblem('');
     try { const placed = await openInWorkspace(client, snapshot, workspace(), node.path!); if (placed) onStudio(placed.compositionId, placed.viewId); else setProblem('Rho has no viewer for this kind of file yet.'); }
@@ -443,14 +447,12 @@ function Inspector({ node, graph, byId, client, snapshot, principalId, workspace
         {node.answer && <div className="graph-answer"><AgentMarkdown text={node.answer} streaming={node.state === 'running'} /></div>}
         <button onClick={() => onAgent(node.conversationId)}><Icon name="prompt" size={15} />Show the conversation</button></section>}
       {node.waiting && <Choice key={node.waiting.permission} waiting={node.waiting} client={client} projectId={snapshot.project.id} />}
-      {node.kind === 'run' && <section className="graph-said"><pre className="graph-command">{node.command}</pre><p className="graph-facts">{outcomes[node.outcome ?? ''] ?? node.outcome} · {clock(node.at, true)} · for “{turnTitle(node.turn!)}”</p></section>}
-      {node.kind === 'file' && <div className="graph-actions">{node.exists && <button className="primary" disabled={placing} onClick={() => void open()}><Icon name="layout" size={15} />{placing ? 'Opening…' : 'Open in workspace'}</button>}</div>}
+      {node.kind === 'run' && <section className="graph-said"><pre className="graph-command" title={node.ran}>{node.command}</pre><p className="graph-facts">{[node.end ?? outcomes[node.outcome ?? ''] ?? node.outcome, node.durationMs ? 'took ' + durationText(node.durationMs) : null, clock(node.at, true)].filter(Boolean).join(' · ')} · for “{turnTitle(node.turn!)}”</p>
+        {node.output && <><h3 className="caption">{node.output.text ? node.output.cut ? `Printed · last ${node.output.text.split('\n').length} of ${node.output.lines} lines` : 'Printed' : 'Printed nothing'}</h3>{node.output.text && <pre className="graph-output" ref={atEnd}>{node.output.text}</pre>}</>}
+        {node.ran && node.ran !== node.command && <p className="graph-facts">As run: <code>{node.ran}</code></p>}</section>}
+      {node.kind === 'file' && <><p className="graph-facts">{node.resource ? 'Captured ' + new Date(node.capturedAt!).toLocaleString() + ' · ' + node.captureSource + ' · producer unconfirmed' : node.gap}</p>{node.resource && <Snapshot client={client} projectId={snapshot.project.id} resource={node.resource} path={node.path}/>}<div className="graph-actions">{node.exists && <button className="primary" disabled={placing} onClick={() => void open()}><Icon name="layout" size={15} />{placing ? 'Opening…' : 'Open current file in workspace'}</button>}</div></>}
+      {related.map((t: any) => <button key={t.annotationId} onClick={() => shell?.openReview?.(t.annotationId)}>Review: {t.messages[0].draft.text.slice(0,70)}</button>)}
       {problem && <p className="canvas-note" role="alert">{problem}</p>}
-      {node.kind === 'file' && node.exists && <div className="graph-file">
-        <div ref={setHeader} className="graph-file-header" />
-        {view && view !== 'none' ? <OwnerView key={view.id} active params={{ view, snapshot, client, principalId, compositionId: 'graph', compositionVersion: 0, contextTarget: null, headerTarget: header, renderAllowed: true, onAbout }} />
-          : view === 'none' ? <p className="muted">Rho has no viewer for this kind of file yet.</p> : <div className="loading-state" role="status"><span className="loading-dot" /><span>Opening {node.title}…</span></div>}
-      </div>}
       {node.kind === 'file' && !node.exists && <p className="muted">This file was not in the project folders when they were last read. It may have been moved or removed.</p>}
       {from.length > 0 && <section><h3 className="caption">Comes from</h3><ul className="graph-relations">{relation(from, 'from')}</ul></section>}
       {to.length > 0 && <section><h3 className="caption">Leads to</h3><ul className="graph-relations">{relation(to, 'to')}</ul></section>}
@@ -482,11 +484,11 @@ function Choice({ waiting, client, projectId }: { waiting: NonNullable<GraphNode
 const timelineKinds = [
   { key: 'ask', label: 'Asked', actions: ['ask'] }, { key: 'read', label: 'Read', actions: ['read'] },
   { key: 'edit', label: 'Edited', actions: ['edit', 'write'] }, { key: 'run', label: 'Ran', actions: ['run'] },
-  { key: 'changed', label: 'Changed on disk', actions: ['changed'] }, { key: 'answer', label: 'Answered', actions: ['answer'] },
+  { key: 'changed', label: 'Changed on disk', actions: ['changed'] }, { key: 'capture', label: 'Captured', actions: ['capture'] }, { key: 'answer', label: 'Answered', actions: ['answer'] },
 ] as const;
 type TimelineKind = typeof timelineKinds[number]['key'];
 const kindOfAction = (action: string): TimelineKind => timelineKinds.find(k => (k.actions as readonly string[]).includes(action))?.key ?? 'read';
-const failed = (e: GraphEvent) => e.outcome === 'rejected' || e.outcome === 'unknown';
+const failed = (e: GraphEvent) => e.outcome === 'failed' || e.outcome === 'rejected' || e.outcome === 'unknown';
 // Ticks a reader can tell apart: the shortest step that leaves this much room between labels.
 const tickSteps = [10e3, 30e3, 60e3, 120e3, 300e3, 600e3, 900e3, 1800e3, 3600e3, 7200e3, 21600e3];
 
@@ -578,7 +580,7 @@ function Timeline({ graph, cursor, playing, running, speed, onSpeed, onCursor, o
       <div className="graph-timeline-text"><strong>{events.filter(e => e.action !== 'ask' && e.action !== 'answer').length} actions</strong><span>{graph.turns.length} {graph.turns.length === 1 ? 'message' : 'messages'} · {span(duration)}{lanes.length > 1 ? ` · ${lanes.length} conversations` : ''}</span></div>
       <div className="tl-legend" role="group" aria-label="Show one kind of action">
         {counts.map(k => <button key={k.key} className={'tl-kind ' + k.key} aria-pressed={only === k.key} onClick={() => setOnly(only === k.key ? null : k.key)}><i aria-hidden="true" /><span>{k.label}</span><small>{k.count}</small></button>)}
-        {refused > 0 && <span className="tl-kind failed"><i aria-hidden="true" /><span>Refused or unknown</span><small>{refused}</small></span>}
+        {refused > 0 && <span className="tl-kind failed"><i aria-hidden="true" /><span>Failed, refused or unknown</span><small>{refused}</small></span>}
       </div>
       {!compact && <>
         <div className="tl-speed" role="group" aria-label="Replay speed">
@@ -603,7 +605,7 @@ function Timeline({ graph, cursor, playing, running, speed, onSpeed, onCursor, o
             style={{ left: toX(e.at), top: (laneOf.get(e.turn) ?? 0) * laneHeight + 5 }} />)}
           <span className="graph-head-line" style={{ left: head, height: lanes.length * laneHeight + 22 }}>{cursor !== null && <time>{clock(cursor, true)}</time>}</span>
           {hover && <div className="tl-tip" style={{ left: Math.min(Math.max(hover.x, 110), width - 110), top: hover.lane * laneHeight }} role="tooltip">
-            <time>{clock(hover.event.at, true)}</time><span>{caption(hover.event, new Map(graph.nodes.map(n => [n.id, n])))}</span>{failed(hover.event) && <small>{hover.event.outcome === 'rejected' ? 'Refused' : 'Outcome unknown'}</small>}
+            <time>{clock(hover.event.at, true)}</time><span>{caption(hover.event, new Map(graph.nodes.map(n => [n.id, n])))}</span>{failed(hover.event) && <small>{outcomes[hover.event.outcome!]}</small>}
           </div>}
         </div>
         <div className="tl-axis" aria-hidden="true">
@@ -617,7 +619,7 @@ function Timeline({ graph, cursor, playing, running, speed, onSpeed, onCursor, o
 
 // The Overview's glance at the same record: the timeline without its controls, and the way to
 // the Graph. It reads the conversations as the Graph does, and shows nothing until they are read.
-export function WorkStrip({ client, snapshot, files, onOpen, onConversations }: { client: BrowserClient; snapshot: WorkspaceSnapshot; files: ProjectFiles; onOpen: () => void; onConversations: () => void }) {
+export function WorkStrip({ client, snapshot, files, onOpen, onConversations }: { initialResource?: {id:string;version:string}|null; client: BrowserClient; snapshot: WorkspaceSnapshot; files: ProjectFiles; onOpen: () => void; onConversations: () => void }) {
   const { turns, loading } = useTurns(client, snapshot);
   const graph = useMemo(() => buildWorkGraph({ turns, files: files.files.map(f => ({ path: f.path, bytes: f.bytes, modifiedAt: f.modifiedAt, category: f.category })), project: snapshot.project, kindOf, now: Date.now() }),
     [turns, files.files, snapshot.project]);

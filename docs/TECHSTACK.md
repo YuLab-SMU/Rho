@@ -10,7 +10,9 @@ framework. [Architecture](ARCHITECTURE.md) defines source ownership.
 | Public API | Generated JSON Schema request/response contracts; authenticated JSON and SSE |
 | Browser application | React/React DOM 19.3.1, Vite 8.3.4, TypeScript |
 | Workspace | Rho renders the owner's conditional composition tree as tabs and splits |
-| Documents | Documents owner with a CodeMirror 6 view |
+| Documents | Documents owner with a CodeMirror 6 view; Rho adds Python (lang-python), R (legacy mode) and Markdown (lang-markdown) by file name, each loaded on first use |
+| Markdown | Markdown reader (UI extension over Documents) with markdown-it 14.3.2 and KaTeX 0.16.47, loaded when a Markdown view first shows |
+| Review evidence | Files immutable captures, Annotations append-only human decisions, owner code/table comparison; Rho Graph and static offline export |
 | Tables | Tables owner with AG Grid Community |
 | Figures and charts | Original versioned media; Charts owner with ECharts |
 | External Agent | Project-scoped MCP adapter and selected external Agent client |

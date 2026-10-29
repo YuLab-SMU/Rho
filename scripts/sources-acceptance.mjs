@@ -30,7 +30,7 @@ try {
   for (const [file, text] of Object.entries({
     'data/airquality.csv': 'month,temp,ozone\n5,67,41\n6,72,36\n7,84,59\n', 'data/stations.csv': 'id,name\n1,Central Park\n2,La Guardia\n',
     'analysis.R': '# analysis\nair <- read.csv("data/airquality.csv")\nsummary(air)\n', 'scripts/plot.R': 'library(ggplot2)\n',
-    'notes.md': '# Notes\n\nOzone by month. 臭氧\n',
+    'notes.md': '# Notes\n\nOzone by month. 臭氧 See [the script](analysis.R); temperature explains half ($R^2 = 0.49$).\n\n![Wind](figures/wind.svg)\n\n| Month | Ozone |\n|---|--:|\n| 5 | 41 |\n\n```r\nair <- read.csv("data/airquality.csv") # load\n```\n',
     'results/ozone.svg': svg('#2a78d6', 60), 'results/temp.svg': svg('#c0504d', 80), 'figures/wind.svg': svg('#4f9d69', 40),
   })) { await fs.mkdir(path.dirname(path.join(project, file)), { recursive: true }); await fs.writeFile(path.join(project, file), text); }
   service = await new RhoService({ root, stateDir: path.join(root, '.service'), coreBinary: path.join(root, 'absent-core'), rscript: 'Rscript' }).start();
@@ -92,8 +92,12 @@ try {
   await page.waitForFunction(() => /summary\(air\)/.test(document.querySelector('.preview-body .cm-content')?.textContent ?? ''), null, { timeout: 20000 });
   await editor.click(); await page.keyboard.press('ArrowRight'); await page.keyboard.press('ArrowLeft'); await page.waitForTimeout(300);
   assert.equal((await state()).title, 'analysis.R', 'arrow keys in the editor move the cursor');
+  // The script is highlighted as R once its language loads: comment and string in the code colours.
+  const colour = text => page.evaluate(t => { const span = [...document.querySelectorAll('.preview-body .cm-content span')].find(s => s.textContent === t); return span ? getComputedStyle(span).color : null; }, text);
+  await page.waitForFunction(() => [...document.querySelectorAll('.preview-body .cm-content span')].some(s => s.textContent === '# analysis'), null, { timeout: 20000 });
+  assert.equal(await colour('# analysis'), 'rgb(104, 115, 111)'); assert.equal(await colour('"data/airquality.csv"'), 'rgb(61, 103, 67)');
   await shot('04-code');
-  passed('a CSV shows in its table and a script in the editor; arrow keys inside a view stay with that view');
+  passed('a CSV shows in its table and a script in the editor, highlighted as R; arrow keys inside a view stay with that view');
 
   await page.getByRole('button', { name: 'Open in Studio' }).click();
   await page.locator('.studio-tab[aria-current=page]').waitFor();
@@ -108,6 +112,27 @@ try {
   await nav.locator('.nav-file').first().waitFor({ timeout: 20000 });
   assert.deepEqual(await files(), ['airquality.csv', 'stations.csv', 'analysis.R', 'plot.R', 'wind.svg', 'ozone.svg', 'temp.svg']);
   passed('the unfolded kinds are kept when the page is reloaded');
+
+  await nav.getByRole('button', { name: 'Notes', exact: true }).click();
+  await nav.locator('.nav-file').filter({ hasText: 'notes.md' }).click(); await shown('notes.md');
+  const reader = page.locator('.preview-body .rho-md-page');
+  await reader.locator('h1', { hasText: 'Notes' }).waitFor({ timeout: 20000 });
+  await page.waitForFunction(() => { const img = document.querySelector('.preview-body .rho-md-page img'); return img?.complete && img.naturalWidth > 0; }, null, { timeout: 20000 });
+  assert.equal(await reader.locator('.katex').count(), 1);
+  assert.equal(await reader.locator('td').nth(1).textContent(), '41');
+  assert.match(await reader.textContent(), /臭氧/);
+  await page.waitForFunction(() => document.querySelector('.preview-body pre[data-language=r] .rho-tok-string'), null, { timeout: 20000 });
+  assert.equal(await reader.locator('pre .rho-tok-string').evaluate(e => getComputedStyle(e).color), 'rgb(61, 103, 67)');
+  await shot('06-markdown');
+  // Another writer's edit to the shared buffer, as an Agent's would be, shows in the reader.
+  const notes = await admin.call('document.open', { projectId: opened.id, path: 'notes.md' });
+  await admin.call('document.edit', { projectId: opened.id, documentId: notes.id, expectedVersion: notes.version, edits: [{ from: 2, to: 7, insert: 'Field notes' }], undoGroup: 'acceptance-notes' });
+  await reader.locator('h1', { hasText: 'Field notes' }).waitFor({ timeout: 20000 });
+  await page.getByRole('button', { name: 'Source', exact: true }).click();
+  await page.waitForFunction(() => /# Field notes/.test(document.querySelector('.preview-body .cm-content')?.textContent ?? ''), null, { timeout: 20000 });
+  await page.getByRole('button', { name: 'Read', exact: true }).click();
+  await reader.getByRole('link', { name: 'the script' }).click(); await shown('analysis.R');
+  passed('a Markdown note reads as formatted text with its image, math, table and highlighted code; an edit to its buffer shows; Source shows the editor; a link opens the file');
 
   await nav.locator('.nav-file').filter({ hasText: 'temp.svg' }).click(); await shown('temp.svg');
   for (const width of [1024, 390]) {

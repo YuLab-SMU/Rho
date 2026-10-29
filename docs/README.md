@@ -18,11 +18,14 @@ were withdrawn on 2026-10-25; Git keeps their history.
 | [The Agent panel](AGENT-PANEL-EPISODE.md) | The 2026-10-28 pass over the conversation window: work folded under each answer, the answer's type, the message box and usage line; runs, checks and limits |
 | [Agent panel live activity](AGENT-UI-EPISODE.md) | Streaming replies, per-action rows, permission and plan treatment, Markdown and reading position; observations, checks and limits |
 | [An Agent's edit beside unsaved text](DOCUMENTS-EPISODE.md) | Claude Code's native edit while a person has unsaved text in Studio: the fork observed, the owner merge and Studio's follow, the Documents hook that sends the Agent to the shared buffer, real runs, checks and limits |
+| [Result review and retained evidence](REVIEW-EVIDENCE-EPISODE.md) | Immutable capture, version-bound human decisions, historical Graph, offline packages and observed trials |
+| [Code, Markdown and runs in a project](CODE-MARKDOWN-EPISODE.md) | Python, R and a Markdown report in the test project: what Rho showed, highlighting by language through the Documents editor, then Markdown rendering and legible Agent runs |
 | [Agent activity](AGENT-ACTIVITY.md) | Live Claude Code/dsh observations, errors, captured outputs, recovery and real-run evidence |
 | [Conversation episode](CONVERSATION-EPISODE.md) | Conversations with Claude Code started in Rho, who holds a session's input, limits, real runs and their reviews |
 | [Claude ACP episode](ACP-EPISODE.md) | Agent-owned ACP, real Westlake HPC multi-turn conversation, cancellation and recovery; legacy compatibility and limits |
 | [Claude, Codex and external ACP](ACP-MULTI-AGENT-EPISODE.md) | Second Agent, external-client relay, shared workspace loops and installed Westlake HPC acceptance |
 | [Base-R episode](BASE-R-EPISODE.md) | Real selected-row question, external Agent edit, result comparison and browser recovery; evidence, limits and the review that sets the next run |
+| [What Rho-core earns](CORE-VALUE-EPISODE.md) | A real analysis run through plain tools, a 30-line convention and the Core CLI, plus two Agents on the same task: what Core costs, what only it can report, and which parts to keep, simplify or drop |
 | [Plugin authoring](PLUGIN-AUTHORING.md) | Create, preview, check and select an independent UI extension |
 | [Architecture](ARCHITECTURE.md) | Source ownership, state and lifecycle boundaries |
 | [Technology stack](TECHSTACK.md) | Libraries and runtimes used by the current implementation |

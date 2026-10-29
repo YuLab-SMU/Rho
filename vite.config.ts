@@ -30,6 +30,7 @@ export default defineConfig({
   base: '/',
   oxc: { jsx: { runtime: 'automatic' } },
   // Linked owner UI entries must share the shell's single React/CodeMirror/grid instance.
-  resolve: { dedupe: ['react', 'react-dom', '@codemirror/state', '@codemirror/view', 'ag-grid-community', 'ag-grid-react'] },
-  build: { outDir: process.env.RHO_WEB_OUTPUT ? path.resolve(process.env.RHO_WEB_OUTPUT) : '../dist/web', emptyOutDir: true, manifest: true, sourcemap: false, license: { fileName: 'licenses.md' } },
+  resolve: { dedupe: ['react', 'react-dom', '@codemirror/state', '@codemirror/view', '@codemirror/language', '@lezer/common', '@lezer/highlight', 'ag-grid-community', 'ag-grid-react'] },
+  // Fonts stay files: the page's policy loads fonts only from the service.
+  build: { assetsInlineLimit: (file: string) => /\.(woff2?|ttf)$/.test(file) ? false : undefined, outDir: process.env.RHO_WEB_OUTPUT ? path.resolve(process.env.RHO_WEB_OUTPUT) : '../dist/web', emptyOutDir: true, manifest: true, sourcemap: false, license: { fileName: 'licenses.md' } },
 });

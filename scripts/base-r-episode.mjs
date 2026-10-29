@@ -75,7 +75,7 @@ try {
   page.setDefaultTimeout(15000);
   await page.goto(service.url);
   await page.locator('.project-row').filter({ hasText: project.name }).click();
-  await page.locator('.project-nav').getByRole('button', { name: /^workspace/ }).click();
+  await page.locator('.project-nav').getByRole('button', { name: /^workspace/i }).click();
   const tab = name => page.getByRole('tab', { name, exact: true });
   const grid = id => page.locator(`[data-owner-view="${id}"]`);
   const header = id => page.locator(`[data-owner-header="${id}"]`);

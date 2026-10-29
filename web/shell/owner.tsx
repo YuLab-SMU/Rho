@@ -1,8 +1,10 @@
+import { useContext } from 'react';
 import type { BrowserClient, ViewDescription, WorkspaceSnapshot } from '../../src/browser.js';
 import { pluginPresentation } from '../../src/plugin-presentation.js';
 import { Icon, type IconName } from '../icons.js';
 import { resourceIcon } from '../project.js';
 import { registry } from '../registry.js';
+import { ShellContext } from '../shell-services.js';
 import { selectionScope } from '../../src/shell-layout.js';
 
 export interface OwnerParams {
@@ -76,7 +78,7 @@ function besideOf(view: ViewDescription, snapshot: WorkspaceSnapshot) {
 // One owner view in the layout. The owner draws its content; the shell attaches the exact
 // layout/build/client identity to the owner's own visibility evidence.
 export function OwnerView({ params, active }: { params: OwnerParams; active: boolean }) {
-  const { view, snapshot } = params;
+  const { view, snapshot } = params, shell = useContext(ShellContext);
   const entry = availableEntry(view, snapshot);
   if (entry && !params.renderAllowed) return <section className="unavailable" role="status"><h2>This layout has reached its view limit</h2><p>Existing views and input are kept. Close another view before opening this one.</p></section>;
   if (entry) {
@@ -88,7 +90,7 @@ export function OwnerView({ params, active }: { params: OwnerParams; active: boo
       try { await params.client.call('view.observe', input); }
       catch (error: any) { if (error?.error?.kind || error?.kind) throw error; await params.client.call('view.observe', input); }
     } : undefined;
-    return <div className="shell-owner" data-owner-body=""><entry.View viewId={view.id} view={view} projectId={snapshot.project.id} snapshot={snapshot} client={params.client} active={active} contextTarget={params.contextTarget} principalId={params.principalId} selectionScope={selectionScope(view)} headerTarget={params.headerTarget} renderObservation={observation} requestFeedback={params.onRequestFeedback ? () => params.onRequestFeedback!(view.id) : undefined} /></div>;
+    return <div className="shell-owner" data-owner-body=""><entry.View viewId={view.id} view={view} projectId={snapshot.project.id} snapshot={snapshot} client={params.client} active={active} contextTarget={params.contextTarget} principalId={params.principalId} selectionScope={selectionScope(view)} headerTarget={params.headerTarget} renderObservation={observation} requestFeedback={params.onRequestFeedback ? () => params.onRequestFeedback!(view.id) : undefined} shell={shell} /></div>;
   }
   const why = explain(view, snapshot), fallback = besideOf(view, snapshot);
   return <section className="unavailable" aria-label={title(view)}>

@@ -3,7 +3,7 @@ import type { ProjectSummary, ResourceSummary, WorkspaceSnapshot, CompositionSum
 import { compositionName } from './canvas.js';
 import { Icon, type IconName } from './icons.js';
 
-export type Section = 'overview' | 'documents' | 'files' | 'agent' | 'settings' | 'sources' | 'file' | 'graph';
+export type Section = 'overview' | 'documents' | 'files' | 'agent' | 'settings' | 'sources' | 'file' | 'graph' | 'review';
 export interface Entry { path: string; name: string; kind: 'file' | 'folder'; bytes: number; hidden: boolean; modifiedAt?: string }
 export function size(bytes: number) {
   if (bytes < 1024) return bytes + ' B';
@@ -55,6 +55,7 @@ export function ProjectNavigation({ project, snapshot, current, sources, partial
         {layouts.map(c => <button key={c.compositionId} className="nav-row nav-sub-row" aria-current={current === 'studio:' + c.compositionId ? 'page' : undefined} onClick={() => onLayout(c.compositionId)}><span className="nav-row-name">{compositionName(c.compositionId)}</span><span className="nav-row-count" title={views(c)}>{c.views.length}</span></button>)}
       </div>}
       {row('graph', 'Graph', 'graph', () => onSection('graph'))}
+      {row('review', 'Review', 'question', () => onSection('review'))}
       {/* The Agent's place is what it did here; its panel, opened from the top bar beside any page, is where to talk to it. */}
       <button className="nav-row" aria-label={'Agent' + (agent.waiting ? ', needs your choice' : agent.running ? ', working' : '')} aria-current={current === 'agent' ? 'page' : undefined} onClick={() => onSection('agent')}><Icon name="spark" size={18} /><span className="nav-row-name">Agent</span>{agentState}</button>
     </div>

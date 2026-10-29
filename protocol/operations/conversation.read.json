@@ -787,6 +787,10 @@
                     "type": "string",
                     "minLength": 1
                   },
+                  "startedAt": {
+                    "type": "string",
+                    "minLength": 1
+                  },
                   "text": {
                     "type": "string"
                   },
@@ -834,6 +838,36 @@
                       "rejected",
                       "unknown"
                     ]
+                  },
+                  "exitCode": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "output": {
+                    "type": "object",
+                    "properties": {
+                      "text": {
+                        "type": "string"
+                      },
+                      "lines": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "bytes": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "cut": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "text",
+                      "lines",
+                      "bytes",
+                      "cut"
+                    ],
+                    "additionalProperties": true
                   }
                 },
                 "required": [
@@ -846,6 +880,126 @@
             "omitted": {
               "type": "integer",
               "minimum": 0
+            },
+            "evidence": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "records",
+                "omitted",
+                "bytes",
+                "snapshots"
+              ],
+              "properties": {
+                "records": {
+                  "type": "array",
+                  "maxItems": 64,
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "key",
+                      "path",
+                      "phase",
+                      "requestedAt",
+                      "state",
+                      "snapshots"
+                    ],
+                    "properties": {
+                      "key": {
+                        "type": "string"
+                      },
+                      "path": {
+                        "type": "string"
+                      },
+                      "phase": {
+                        "type": "string"
+                      },
+                      "requestedAt": {
+                        "type": "string"
+                      },
+                      "state": {
+                        "enum": [
+                          "pending",
+                          "captured",
+                          "unavailable",
+                          "interrupted"
+                        ]
+                      },
+                      "reason": {
+                        "type": "string"
+                      },
+                      "snapshots": {
+                        "type": "array",
+                        "maxItems": 2,
+                        "items": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "resource",
+                            "kind",
+                            "bytes",
+                            "observedAt",
+                            "source"
+                          ],
+                          "properties": {
+                            "resource": {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "version": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "version"
+                              ]
+                            },
+                            "kind": {
+                              "type": "string"
+                            },
+                            "bytes": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "observedAt": {
+                              "type": "string"
+                            },
+                            "source": {
+                              "type": "object",
+                              "additionalProperties": true
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                "omitted": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "bytes": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "snapshots": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            },
+            "contexts": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              }
             },
             "permissions": {
               "type": "array",

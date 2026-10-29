@@ -102,7 +102,7 @@ export function folderName(path: string, project: ProjectLike) {
   const source = parts[0].startsWith('@') ? project.sources?.find(entry => '@' + entry.id === parts[0]) : undefined;
   return [source ? source.name : parts[0], ...parts.slice(1)].join('/');
 }
-export const isResult = (resource: ResourceLike) => (resource.provenance as { source?: string } | undefined)?.source !== 'current-filesystem-observation';
+export const isResult = (resource: ResourceLike) => !['current-filesystem-observation','captured-observation'].includes((resource.provenance as { source?: string } | undefined)?.source ?? '');
 const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
 // Of several versions of one result, the one its latest run made, as the Results list orders them.
 export function sourceItems(row: SourceRow, files: ProjectFile[], resources: ResourceLike[], project: ProjectLike, runs: Array<{ operationId: string; acceptedAt: string }> = []): SourceItem[] {

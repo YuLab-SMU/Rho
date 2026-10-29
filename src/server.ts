@@ -1,3 +1,4 @@
+import { EvidenceExporter, evidenceExportLimits } from './evidence-export.js';
 import { Discovery } from './discovery.js';
 import * as http from 'node:http';
 import * as fs from 'node:fs/promises';
@@ -40,7 +41,7 @@ export interface NativeAdapterRegistration {
   proof: { kind: 'claude-code-init'; sessionId: string; clientVersion: string };
 }
 export const serviceLimits = { maxRequestBytes: 1024 * 1024, maxEventBytes: 65536, eventRetention: 256, maxSubscriptions: 8, maxQueue: 32, maxContexts: 128, maxBindings: 64, maxActivities: 256, maxContextBytes: 1024 * 1024, maxRetainedMetadataBytes: 32 * 1024 * 1024 };
-export interface ServiceConfig extends Partial<typeof serviceLimits>, Partial<typeof requestLimits>, PluginConfig { root: string; stateDir: string; coreBinary?: string; rscript: string; port?: number; nativeFolders?: Partial<typeof nativeFolderLimits>; workspace?: Partial<typeof workspaceLimits>; interactions?: Partial<typeof interactionLimits>; taskMap?: Partial<typeof taskMapLimits>; browser?: Partial<typeof browserLimits>; webRoot?: string; agentNativeActivity?: Partial<typeof nativeActivityLimits>; presentationWitness?: Partial<typeof presentationWitnessLimits>; visibility?: Partial<typeof visibilityLimits>; agentDelivery?: Partial<typeof agentDeliveryLimits>; deliveryTransportTimeoutMs?: number; claude?: string; agentBackend?: ConversationConfig['backend']; claudeAcp?: ConversationConfig['claudeAcp']; codex?: string; codexAcp?: ConversationConfig['codexAcp']; conversations?: Partial<typeof conversationLimits>; connect?: Partial<typeof connectLimits> }
+export interface ServiceConfig extends Partial<typeof serviceLimits>, Partial<typeof requestLimits>, PluginConfig { root: string; stateDir: string; coreBinary?: string; rscript: string; port?: number; nativeFolders?: Partial<typeof nativeFolderLimits>; workspace?: Partial<typeof workspaceLimits>; interactions?: Partial<typeof interactionLimits>; taskMap?: Partial<typeof taskMapLimits>; browser?: Partial<typeof browserLimits>; webRoot?: string; agentNativeActivity?: Partial<typeof nativeActivityLimits>; presentationWitness?: Partial<typeof presentationWitnessLimits>; visibility?: Partial<typeof visibilityLimits>; agentDelivery?: Partial<typeof agentDeliveryLimits>; deliveryTransportTimeoutMs?: number; claude?: string; agentBackend?: ConversationConfig['backend']; claudeAcp?: ConversationConfig['claudeAcp']; codex?: string; codexAcp?: ConversationConfig['codexAcp']; conversations?: Partial<typeof conversationLimits>; evidence?: Partial<typeof evidenceExportLimits>; connect?: Partial<typeof connectLimits> }
 const ajv = new Ajv({ allErrors: true, strict: false, allowUnionTypes: true });
 // The same timestamp check every published contract uses; an unknown format would be skipped silently.
 ajv.addFormat('date-time', { type: 'string', validate: isNativeTime });
@@ -352,6 +353,39 @@ export class RhoService {
         return { file, principal: 'agent:' + digest(project.id + ':' + session).slice(0, 32) };
       },
       directory: project => this.dataDir(project),
+      context: async (project, id) => {
+        const context = await this.plugins.project(project.root, project.id).need('agent').peekContext(id);
+        requireThat(context.projectId === project.id, 'scope', 'The context belongs to another project.');
+        return context;
+      },
+      capture: (project, file, maximum, count) => this.serial(project.id, async () => {
+        const owners = this.plugins.project(project.root, project.id), files = owners.need('files');
+        const snapshots: import('./evidence-capture.js').EvidenceSnapshot[] = []; let reason: string | undefined;
+        const add = (resource: any, source: any) => { snapshots.push({ resource: { id: resource.id, version: resource.version }, kind: resource.kind, bytes: resource.bytes, observedAt: now(), source }); maximum -= resource.bytes; };
+        try {
+          const registry = await files.list();
+          const known = [...registry].reverse().find(r => (r.path === file || r.provenance.originalPath === file) && r.kind === 'table');
+          const captured = await files.capture(file, { maxBytes: maximum, describe: (data, relative) => {
+            if (known && owners.tables) return { path: relative, kind: 'table', format: known.format as any };
+            if (/\.csv$/i.test(relative) && owners.tables) return this.plugins.need('tables').lexicalCsvDeclaration(data, relative);
+            const mime: Record<string,string> = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', svg: 'image/svg+xml', pdf: 'application/pdf' };
+            const type = mime[relative.split('.').at(-1)!.toLowerCase()];
+            return { path: relative, kind: type && owners.media ? 'media' : 'file', format: { mimeType: type ?? 'text/plain' } };
+          } });
+          add(captured, { kind: 'disk', path: file });
+        } catch (error) { reason = error instanceof Fault ? error.message : 'The disk version could not be captured.'; }
+        if (snapshots.length < count && owners.documents) {
+          const document = (await owners.documents.summaries()).find(d => d.path === file);
+          if (document) try {
+            const snapshot = await owners.documents.snapshot(document.id, document.version);
+            requireThat(Buffer.byteLength(snapshot.code) <= maximum, 'limit', 'The remaining turn snapshot budget cannot hold this buffer.');
+            const captured = await files.captureBytes(Buffer.from(snapshot.code), { path: file, kind: 'file', format: { mimeType: 'text/plain' } }, snapshot.source, snapshot.sha256);
+            add(captured, snapshot.source);
+          } catch { reason = [reason, 'The buffer version could not be captured.'].filter(Boolean).join(' '); }
+        }
+        if (snapshots.length) await this.emit(project, 'resource.changed', snapshots[0].resource.id);
+        return { snapshots, ...(reason ? { reason } : {}) };
+      }),
       // Queued behind the project's own writes; it never waits for them, so a write that
       // started a conversation is not held up by its own notification.
       claudePlugins: async () => {
@@ -395,8 +429,8 @@ export class RhoService {
     const capabilities = new Capabilities(this.plugins, project);
     const state = await capabilities.state();
     // The shared project listing remains available alongside an Agent's native tools.
-    const available = Object.keys(operations).filter(m => !m.startsWith('agent.activity.') && !m.startsWith('session.') && !m.startsWith('conversation.') && (!m.startsWith('project.') || m === 'project.entries') && !m.startsWith('requirements.prepare') && !m.startsWith('workspace.restore') && !['task.routing.put', 'binding.activity.append', 'feedback.submit', 'view.observe', 'view.observations.read', 'task.map.respond'].includes(m));
-    const profileMethods = profile === 'layered-presentation' ? ['binding.open', 'capability.index', 'capability.resolve', 'workspace.observe', 'workspace.enhance'] : available.filter(m => !['workspace.observe', 'workspace.enhance'].includes(m));
+    const available = Object.keys(operations).filter(m => !m.startsWith('agent.activity.') && !m.startsWith('session.') && !m.startsWith('conversation.') && (!m.startsWith('project.') || m === 'project.entries') && !m.startsWith('requirements.prepare') && !m.startsWith('workspace.restore') && !['task.routing.put', 'binding.activity.append', 'feedback.submit', 'view.observe', 'view.observations.read', 'task.map.respond', 'annotation.decide', 'evidence.export', 'evidence.preview'].includes(m));
+    const profileMethods = profile === 'layered-presentation' ? ['binding.open', 'capability.index', 'capability.resolve', 'workspace.observe', 'workspace.enhance'] : available.filter(m => !['workspace.observe', 'workspace.enhance', ...(profile ? ['skill.list','skill.read','protocol.describe'] : [])].includes(m));
     const selected = methods ?? (profile === 'layered-presentation' ? profileMethods : (await Promise.all(profileMethods.map(async method => [method, await capabilities.isAvailable(method, state)] as const))).filter(([, enabled]) => enabled).map(([method]) => method));
     requireThat(profile !== 'layered-presentation' || selected.every(m => profileMethods.includes(m)), 'scope', 'The selected role cannot receive broader methods.');
     requireThat(selected.every(m => !!operations[m] && !m.startsWith('session.') && !m.startsWith('conversation.') && (!m.startsWith('project.') || m === 'project.entries') && m !== 'task.routing.put'), 'invalid', 'Unknown or operator-only Agent capability.');
@@ -927,7 +961,7 @@ export class RhoService {
       if (method === 'agent.activity.outputs') return agent.activityOutputs(p.root, b.directory);
       if (method === 'agent.activity.capture') {
         const files = owners.need('files');
-        const capture = { restore: files.restore.bind(files), validateDeclaration: (declaration: Parameters<typeof files.validateDeclaration>[0]) => {
+        const capture = { restore: files.restore.bind(files), captureBytes: files.captureBytes.bind(files), validateDeclaration: (declaration: Parameters<typeof files.validateDeclaration>[0]) => {
           requireThat(selection.enabled.includes(declaration.kind === 'table' ? 'tables' : 'media'), 'unavailable', 'Enable the output type owner before opening this file.');
           files.validateDeclaration(declaration);
         } };
@@ -935,6 +969,21 @@ export class RhoService {
           owners.tables ? this.plugins.need('tables').lexicalCsvDeclaration : undefined);
         await this.emit(p, 'resource.changed', result.id); return result;
       }
+    }
+    if (method === 'evidence.preview' || method === 'evidence.export') {
+      requireThat(principal.id === localBrowserId, 'scope', 'Only the person at this machine selects an evidence export.');
+      const exporter = new EvidenceExporter(p.root, { thread: id => owners.need('annotations').read(id), resources: () => owners.need('files').list(), bytes: ref => owners.need('files').bytes(ref), observations: id => this.conversations.reviewEvidence(p,id), ...(owners.tables?{table: (ref: any) => owners.need('tables').page(ref,0,200)}:{}) },this.config.evidence);
+      return method === 'evidence.preview' ? exporter.preview(b.annotationId) : exporter.export(b);
+    }
+    if (method === 'resource.capture') {
+      const files = owners.need('files');
+      let result;
+      if (b.document) {
+        const snapshot = await owners.need('documents').snapshot(b.document.documentId, b.document.version);
+        requireThat(!b.declaration, 'invalid', 'Buffer captures use their document path and text format.');
+        result = await files.captureBytes(Buffer.from(snapshot.code), { path: String(snapshot.source.path), kind: 'file', format: { mimeType: 'text/plain' } }, snapshot.source, b.expectedDigest);
+      } else result = await files.capture(b.path, { expectedDigest: b.expectedDigest, declaration: b.declaration });
+      await this.emit(p, 'resource.changed', result.id); return result;
     }
     if (method === 'resource.register') {
       requireThat(!b.declaration.path.split('/').some((part: string) => ['.rho', '.git'].includes(part)), 'scope', 'Register a project file outside internal state.');
@@ -974,7 +1023,8 @@ export class RhoService {
       const a = owners.need('annotations');
       if (method === 'annotation.read') return a.read(b.annotationId);
       if (method === 'annotation.list') return a.list();
-      const result = method === 'annotation.create' ? await a.create(b, principal.id) : await a.reply(b, principal.id);
+      if (method === 'annotation.decide') requireThat(principal.kind === 'browser', 'unauthorized', 'Only a browser person records a review decision.');
+      const result = method === 'annotation.decide' ? await a.decide(b, principal.id, true) : method === 'annotation.create' ? await a.create(b, principal.id) : await a.reply(b, principal.id);
       await this.emit(p, 'annotation.changed', b.annotationId); return result;
     }
     if (method === 'composition.put') { const result = await workspace.put(b); await this.emit(p, 'composition.changed', b.compositionId); return result; }
@@ -1074,7 +1124,7 @@ export class RhoService {
       }
       const result = await owners.need('agent').readContext(b.contextId, principal.id); await this.emit(p, 'context.changed', result.contextId, principal.id); if (result.principal !== principal.id) await this.emit(p, 'context.changed', result.contextId, result.principal); return result;
     }
-    if (method === 'observation.snapshot') return { project: p, catalog: await capabilities.catalog(principal), documents: await owners.documentSummaries(), operations: (await requests.list(principal)).map(publicOperation), resources: (await owners.retainedResources()).map(publicResource), compositions: await workspace.compositions(), feedback: await routing.feedbackConfiguration().then(async configuration => { const route = await routing.read(); return configuration ? { taskId: route.taskId, compositionId: route.compositionId, taskVersion: route.version, targetBindingId: route.feedbackOwnerBindingId, draftDocumentId: configuration.draftDocumentId, relatedDocumentId: configuration.relatedDocumentId } : null; }), presentation: await routing.read().then(async route => route ? { taskId: route.taskId, pending: (await new Presentation(p, workspace, this.config.presentationWitness, this.config.visibility).state()).pending ?? null, witnesses: await new Presentation(p, workspace, this.config.presentationWitness, this.config.visibility).witnesses() } : null), interactions: await interactions.list(principal.id), taskMap: await new TaskMap(p, this.config.taskMap).read(), annotations: await owners.retainedAnnotations(), contexts: await owners.agent?.contextStates(principal.id) ?? [], activity: await this.projectActivity(p), agents: await this.agentSummaries(p), conversations: principal.id === localBrowserId ? await this.conversations.list(p) : [], selection: await readJson(path.join(await this.dataDir(p), 'selection.json'), null), bindings: (await readJson<any[]>(path.join(await this.dataDir(p), 'bindings.json'), [])).filter(x => x.principal === principal.id), cursor: (await this.events(p)).cursor, host: await this.bridge.capability(p.root), limits: { ...serviceLimits, ...requestLimits, documents: owners.documents?.limits ?? {}, r: this.plugins.optional('r') ? { ...this.plugins.need('r').executionLimits, ...this.config.r } : {}, resources: { ...owners.files?.limits, ...owners.tables?.limits, ...owners.charts?.limits }, ...Object.fromEntries(Object.entries(this.config).filter(([, v]) => typeof v === 'number')) } };
+    if (method === 'observation.snapshot') return { project: p, catalog: await capabilities.catalog(principal), documents: await owners.documentSummaries(), operations: (await requests.list(principal)).map(publicOperation), resources: (await owners.retainedResources()).map(publicResource), compositions: await workspace.compositions(), feedback: await routing.feedbackConfiguration().then(async configuration => { const route = await routing.read(); return configuration ? { taskId: route.taskId, compositionId: route.compositionId, taskVersion: route.version, targetBindingId: route.feedbackOwnerBindingId, draftDocumentId: configuration.draftDocumentId, relatedDocumentId: configuration.relatedDocumentId } : null; }), presentation: await routing.read().then(async route => route ? { taskId: route.taskId, pending: (await new Presentation(p, workspace, this.config.presentationWitness, this.config.visibility).state()).pending ?? null, witnesses: await new Presentation(p, workspace, this.config.presentationWitness, this.config.visibility).witnesses() } : null), interactions: await interactions.list(principal.id), taskMap: await new TaskMap(p, this.config.taskMap).read(), annotations: await owners.retainedAnnotations(), contexts: await owners.agent?.contextStates(principal.id) ?? [], activity: await this.projectActivity(p), agents: await this.agentSummaries(p), conversations: principal.id === localBrowserId ? await this.conversations.list(p) : [], selection: await readJson(path.join(await this.dataDir(p), 'selection.json'), null), bindings: (await readJson<any[]>(path.join(await this.dataDir(p), 'bindings.json'), [])).filter(x => x.principal === principal.id), cursor: (await this.events(p)).cursor, host: await this.bridge.capability(p.root), limits: { ...serviceLimits, ...requestLimits, conversations:this.conversations.limits,evidence:{...evidenceExportLimits,...this.config.evidence}, documents: owners.documents?.limits ?? {}, r: this.plugins.optional('r') ? { ...this.plugins.need('r').executionLimits, ...this.config.r } : {}, resources: { ...owners.files?.limits, ...owners.tables?.limits, ...owners.charts?.limits }, ...Object.fromEntries(Object.entries(this.config).filter(([, v]) => typeof v === 'number')) } };
     throw new Fault('unavailable', 'This catalog operation has not been installed.', { operation: method });
   }
   private async events(p: Project) { return readJson<any>(path.join(await this.dataDir(p), 'events.json'), { cursor: 0, events: [] }); }
