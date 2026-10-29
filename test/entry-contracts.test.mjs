@@ -58,3 +58,8 @@ test('every served operation has an owner or an application handler, never neith
     assert.ok(responses[method] !== undefined, method + ' has no response definition');
   }
 });
+
+test('owner contract entry provenance remains package-relative in source checkouts',async()=>{
+ const {ownerContracts}=await import('../dist/contracts/owners.generated.js');
+ for(const p of Object.values(ownerContracts.provenance))if(p.entryPath){assert.ok(p.entryPath.startsWith(p.package+'/'));assert.ok(!p.entryPath.includes('Projects/'));assert.ok(!p.entryPath.includes('candidate-checkouts/'));}
+});

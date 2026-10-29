@@ -1,5 +1,6 @@
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, realpath } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
+import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 // Rho describes selected component contracts even when the component package is
@@ -57,13 +58,16 @@ async function build() {
     const specifier = owner.package + ('./' === owner.entry ? '' : '/' + owner.entry.slice(2));
     const resolved = fileURLToPath(import.meta.resolve(specifier));
     const bytes = await readFile(resolved);
+    const packageRoot=await realpath(new URL('node_modules/'+owner.package+'/',root));
+    const relativeEntry=path.relative(packageRoot,resolved);
+    if(path.isAbsolute(relativeEntry)||relativeEntry.startsWith('..'))throw new Error('Owner entry is outside its selected package.');
     const pkg = JSON.parse(await readFile(fileURLToPath(new URL('node_modules/' + owner.package + '/package.json', root)), 'utf8'));
     const module = await import(specifier);
     const missing = owner.take.filter(name => !(name in module));
     if (missing.length) throw new Error(`${owner.package}${owner.entry} does not export ${missing.join(', ')}`);
     const exports = Object.fromEntries(owner.take.map(name => [name, sortKeys(module[name])]));
     selected[owner.id] = exports;
-    provenance[owner.id] = { package: owner.package, packageVersion: pkg.version, entry: owner.entry, entryPath: resolved.slice(resolved.indexOf('/node_modules/') + 14), entrySha256: sha(bytes), exports: Object.fromEntries(owner.take.map(name => [name, sha(JSON.stringify(exports[name]))])) };
+    provenance[owner.id] = { package: owner.package, packageVersion: pkg.version, entry: owner.entry, entryPath: owner.package+'/'+relativeEntry.split(path.sep).join('/'), entrySha256: sha(bytes), exports: Object.fromEntries(owner.take.map(name => [name, sha(JSON.stringify(exports[name]))])) };
   }
   const execution = await composeExecutionInput(selected);
   selected.execution = { input: execution.schema };
