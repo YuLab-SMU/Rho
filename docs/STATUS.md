@@ -16,7 +16,7 @@ Native tools remain normal; Core is optional. No Core execution behavior changed
 | Agent feedback | Frozen contexts join message identities; direct sends are separate from deciding; external handoff copies | Real Claude and Codex trials; context fetch differs from explicit reply |
 | Graph | Exact captured refs and capture times, current-file action separate, honest reported/named/observed links, bounded focus | Same-path versions and 160-node-cap regressions; old records show gaps |
 | Offline evidence | Preview one review and explicit refs; static reader/original files/manifest; read-only verifier | Service closed/project moved; four browser widths; tamper detection |
-| macOS 0.5.1 | Unsigned npm tarball/local WebUI selected; Core bundled explicitly | Fixed-candidate outside-checkout acceptance recorded after assembly |
+| macOS 0.5.1 | Unsigned npm tarball/local WebUI selected; Core bundled explicitly | [Fixed tarball installed and exercised](PREVIEW-0.5.1.md) |
 | Independent researcher use | Unobserved | Trial guide in the episode; no usability claim |
 
 M0 retains the completed Python/R highlighting, Markdown reading and native command
@@ -24,6 +24,10 @@ exit/time/bounded-output work ([record](CODE-MARKDOWN-EPISODE.md)). The real
 Python/R report trial also retains scripts/results/report after originals change.
 The first Codex feedback attempt was incorrectly cancelled by the acceptance
 permission selector; the failure remains recorded. The corrected trial completed.
+Annotations 0.5.1 retains a newly created Review conversation for subsequent feedback;
+candidate 2 repeats that browser path and both real client loops. Installed Codex
+needed an explicitly selected 64-choice native permission budget after hitting the
+default 32; its grant scope did not change.
 
 ## Existing application
 
@@ -59,9 +63,10 @@ original scope; they do not establish usability of later changes.
 
 Baseline: Plugins 104/104 and Rho 223/223 with an explicit unchanged Core binary.
 The first full changed run passed Plugins 109/109 and Rho 227/228; an undeclared
-new CSS variable caused the application failure and was corrected. Final reruns
-and contract/browser/installed results are recorded in the
-Current checks: Rho 229/229, Plugins 110/110 in the [ledger](VERIFICATION.json) and [episode](REVIEW-EVIDENCE-EPISODE.md).
+new CSS variable caused the application failure and was corrected. Current checks: Rho 230/230, Plugins 110/110 in the [ledger](VERIFICATION.json).
+The [episode](REVIEW-EVIDENCE-EPISODE.md) records contract, browser and installed results.
+The fixed candidate passed 230/230; installed review/Graph/restart and both real
+clients passed. See the [preview](PREVIEW-0.5.1.md) for identities and limits.
 No failures are converted into passes by omitting the failed run.
 
 Automatic capture defaults: 8 MiB/snapshot, 64 snapshots and 32 MiB/turn, at most

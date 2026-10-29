@@ -113,8 +113,8 @@ is not application support.
 Install into a new directory with Node 22.22.x and Python 3 available. Claude Code
 or Codex and its configured provider are prerequisites for conversations; base R
 is needed for the R episodes. Rho does not install Agent credentials or silently
-replace runtimes. The accepted fixed artifact, checksums, component inventory and
-outside-checkout evidence are recorded with the preview after installation checks.
+replace runtimes. The [accepted preview](PREVIEW-0.5.1.md) records the fixed artifact, checksums,
+component inventory and outside-checkout checks.
 The [review episode](REVIEW-EVIDENCE-EPISODE.md) describes capability evidence and
 separate offline-reader acceptance. No public npm, signing or Rho-releases action
 is included. Independent researcher observation remains a separate follow-up.

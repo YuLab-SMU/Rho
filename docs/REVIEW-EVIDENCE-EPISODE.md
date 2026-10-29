@@ -129,7 +129,8 @@ usability, physical IME behavior, scientific validity or Windows/Linux support.
 
 ## Final source checks
 
-The serial source suite passed Rho 229/229 and Plugins 110/110. Generated contract
+The serial source suite passed Rho 229/229 and Plugins 110/110 before assembly.
+The later contract-path portability regression raised the frozen run to 230/230. Generated contract
 checks passed. Final capture/export/Graph/native-path regressions passed 15/15
 following the last Graph correction. Frontend's 13 browser checks passed. Sources
 exposed duplicate historical captures in the current result list: the application
@@ -140,3 +141,45 @@ focus, selection after reload, exact Graph focus and offline reading with browse
 networking disabled. Earlier failed runs remain in the local evidence directory.
 The changed documentation batch rendered 43 browser pages without overflow or
 broken local links, and every page was visually inspected.
+
+
+## Fixed preview and installed checks
+
+The [0.5.1 preview](PREVIEW-0.5.1.md) pins the clean application/Plugins selections,
+reuses the digest-verified Core and records the unchanged tarball's identities.
+The frozen source passed 230/230. The same installed artifact passed the full
+review episode, Graph backlink/focus, normal restart and offline reading with
+networking disabled. Both real installed clients completed their feedback loops.
+An initial Codex attempt exhausted the default 32 native permission records;
+the explicit 64-choice repeat passed. This changes retention budget, not authority.
+The actual native chooser returned a directory, while its cancellation branch
+was not observed. The selected directory's contents were not edited. Owned-project
+unsaved Unicode text survived a separate normal installed restart. Platform/digest
+refusals and the existing no-Core path were checked. The standalone package,
+checksum, composition, machine-readable acceptance and valid example evidence
+remain in the delivery directory; no accepted artifact was rebuilt or replaced.
+
+
+## Candidate 2 and conversation reuse
+
+The last requirement audit found that choosing New conversation in Review kept
+that option for the next send. Annotations 0.5.1 now records the returned conversation
+ID as the next target, including after original-identity retry, and holds the
+selector while submission is pending. The browser episode sends twice from Review
+and confirms two turns in the same new conversation with no additional Agent.
+The first tarball remains with a superseded-candidate record. Candidate 2 has new
+source/component/artifact identities and repeats installation and relevant checks;
+it does not replace the first tarball's bytes. Export metadata/HTML also explicitly
+separates package generation from analysis evidence completeness. Both suites again
+passed Rho 230/230 and Plugins 110/110 before candidate assembly.
+
+Candidate 2’s installed Claude and Codex trials completed with exact result refs and
+human follow-up (`work/review-agent/claude-1793272446374/report.json` and
+`work/review-agent/codex-1793272446375/report.json`). Claude used three retained
+permission records with a 32-choice limit; Codex used 41 with a selected 64-choice
+limit. The installed browser trial also repeated normal restart, Python/R report
+capture, platform/digest refusals, the no-Core path and Unicode buffer recovery.
+The picker’s candidate-1 observation is reused only for byte-identical picker code;
+its cancellation remains unobserved. The new delivery zip was extracted and all
+nine inventory entries verified with the same installed CLI. The final review,
+Graph, export and offline screenshots were read at all recorded widths.
