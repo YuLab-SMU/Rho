@@ -231,11 +231,14 @@ try {
   assert.equal(await page.locator('.cm-content:visible').count(), 0);
   await page.screenshot({ path: path.join(directory, 'exact-unavailable-1600.png'), fullPage: true });
   await tab('Editor-A');
-  // Eight mounted heavy entries is a rendering budget, never a buffer eviction.
+  // Eight mounted heavy entries is a rendering budget, never a buffer eviction: the view on
+  // screen renders even after eight others were shown, and at most eight stay mounted.
   const extra = Array.from({ length: 9 }, (_, n) => view('Budget-' + n, live));
   await call('composition.apply', { compositionId: 'budget', expectedVersion: 0, changeId: 'budget', operations: [{ op: 'replace', rootId: 'root', nodes: [{ id: 'root', kind: 'group', children: extra.map(v => v.id) }, ...extra] }] });
-  await page.locator('.nav-row').filter({ hasText: 'budget' }).click(); await tab('Budget-8');
-  await page.getByRole('heading', { name: 'This layout has reached its view limit', exact: true }).waitFor();
+  await page.locator('.nav-row').filter({ hasText: 'budget' }).click();
+  for (let n = 0; n < 9; n++) await tab('Budget-' + n);
+  await page.locator('.cm-content:visible').first().waitFor();
+  assert.equal(await page.getByRole('heading', { name: 'This layout has reached its view limit', exact: true }).count(), 0);
   assert.ok(await page.locator('.cm-editor').count() <= 8);
   await page.screenshot({ path: path.join(directory, 'view-budget-1600.png'), fullPage: true });
   await page.locator('.nav-row').filter({ hasText: 'workspace' }).click(); await tab('Editor-A');

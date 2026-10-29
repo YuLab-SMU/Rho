@@ -239,6 +239,25 @@ test('native folder selection grants only the selected project to that browser a
   } finally { await restarted?.close(); await f.cleanup(); await fs.rm(outside, { recursive: true, force: true }); }
 });
 
+test('a folder the person at this machine chose stays in their list after a restart, and only theirs', async () => {
+  const f = await fixture();
+  const outside = await fs.mkdtemp('/private/tmp/rho-native-local-');
+  let restarted;
+  try {
+    const chosen = path.join(outside, 'chosen'); await fs.mkdir(chosen);
+    f.service.folderPicker.choose = async () => chosen;
+    const local = (url, method, body) => fetch(url + '/api/v2/' + method, { method: 'POST', headers: { 'content-type': 'application/json', origin: url }, body: JSON.stringify(body) }).then(r => r.json());
+    const picked = (await local(f.service.url, 'project.pick', {})).value.project;
+    assert.ok((await local(f.service.url, 'project.list', {})).value.some(p => p.id === picked.id));
+    const port = Number(new URL(f.service.url).port); await f.service.close();
+    restarted = await new RhoService({ ...f.config, port }).start();
+    assert.ok((await local(restarted.url, 'project.list', {})).value.some(p => p.id === picked.id), 'the choice survives the restart');
+    const pairing = await restarted.browser.createPairing();
+    const grant = (await (await fetch(restarted.url + '/api/browser/pair', { method: 'POST', headers: { origin: restarted.url, 'content-type': 'application/json' }, body: JSON.stringify({ code: pairing.code }) })).json()).value;
+    assert.deepEqual((await new BrowserClient({ url: restarted.url, ...grant }).call('project.list', {})).map(p => p.id).filter(id => id === picked.id), [], 'a linked tab is not given it');
+  } finally { await restarted?.close(); await f.cleanup(); await fs.rm(outside, { recursive: true, force: true }); }
+});
+
 test('native selection cancellation, concurrent windows, revocation and internal-state refusal grant nothing', async () => {
   const f = await fixture();
   const outside = await fs.mkdtemp('/private/tmp/rho-native-revoke-');

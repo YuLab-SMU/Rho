@@ -143,6 +143,13 @@
 .graph-said > button { align-self: flex-start; }
 .graph-command { margin: 0; padding: 10px 12px; border-radius: 8px; background: var(--color-well); font: 12.5px/1.55 var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere; }
 .graph-output { margin: 0; max-height: 260px; overflow: auto; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--color-hairline); font: 11.5px/1.45 var(--font-mono); white-space: pre; }
+/* A folded card's commands: each one line that opens to what it printed. */
+.graph-commands { display: flex; flex-direction: column; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.graph-commands summary { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: baseline; padding: 4px 6px; border-radius: 6px; cursor: pointer; }
+.graph-commands summary:hover { background: var(--color-hover); }
+.graph-commands code { overflow: hidden; font: 12px/1.5 var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }
+.graph-commands small { color: var(--color-meta); font-size: 11.5px; white-space: nowrap; }
+.graph-commands .graph-output { margin: 4px 0 6px; }
 .graph-relations, .graph-history { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; }
 .graph-relations li { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .graph-link { justify-content: flex-start; gap: 7px; min-width: 0; min-height: 28px; padding: 3px 7px; border: 0; background: transparent; color: var(--color-ink); font-size: 13px; text-align: left; }

@@ -13,6 +13,7 @@ import { AgentActivity } from './agent-activity.js';
 import { AgentPage } from './agent-manage.js';
 import { AgentAccess } from './agents.js';
 import { SharedNotes, TouchedFiles, useProjectWork, WorkSessions } from './work-progress.js';
+import { LatestAnswer } from './agent-work.js';
 import { readPreview, type Preview } from './previews.js';
 import './overview.css';
 
@@ -61,6 +62,10 @@ function MiniLayout({ composition }: { composition: CompositionSummary }) {
   return <span className="mini-layout" aria-hidden="true">{draw(root)}</span>;
 }
 
+// A kept version is stored under a content address; it is named by the project file it was taken from.
+function shownPathOf(resource: { path: string; provenance?: unknown }) {
+  return (resource.provenance as { originalPath?: string } | undefined)?.originalPath ?? resource.path;
+}
 function shownPath(at: string, project: ProjectSummary) {
   if (!at) return projectName(project);
   const [head, ...rest] = at.split('/');
@@ -176,7 +181,7 @@ export function ProjectOverview({ project, snapshot, client, section, workspace,
   const error = (text: string, retry: () => void) => text && <div className="inline-error" role="alert"><p>{text}</p><button onClick={retry}>Try again</button></div>;
   const resultList = <ul className="result-list">{artifacts.map(({ resource, run, earlier }) => {
     const spot = places.get(resource.id + '@' + resource.version);
-    const content = <><span className="file-symbol"><Icon name={resourceIcon(resource.kind)} size={19} stroke={1.6} /></span><span className="result-name"><strong>{shortPath(resource.path)}</strong><small>{resource.kind}{earlier ? ` · ${earlier} earlier version${earlier === 1 ? '' : 's'}` : ''}{run ? ' · ' + run.operationId : ''}</small></span><span className="result-state">{run ? integrityWord(run.integrity) : availability(resource)}</span>{spot && <Icon name="chevron" size={14} />}</>;
+    const content = <><span className="file-symbol"><Icon name={resourceIcon(resource.kind)} size={19} stroke={1.6} /></span><span className="result-name"><strong title={shownPathOf(resource)}>{shortPath(shownPathOf(resource))}</strong><small>{resource.kind}{earlier ? ` · ${earlier} earlier version${earlier === 1 ? '' : 's'}` : ''}{run ? ' · ' + run.operationId : ''}</small></span><span className="result-state">{run ? integrityWord(run.integrity) : availability(resource)}</span>{spot && <Icon name="chevron" size={14} />}</>;
     return <li key={resource.id + resource.version}>{spot ? <button className="result-row" onClick={() => onLayout(spot.compositionId, spot.viewId)}>{content}</button> : <div className="result-row">{content}<small>No open view</small></div>}</li>;
   })}</ul>;
   const visible = folder?.entries.filter(e => !query || e.name.toLocaleLowerCase().includes(query.toLocaleLowerCase())) ?? [];
@@ -201,6 +206,7 @@ export function ProjectOverview({ project, snapshot, client, section, workspace,
       {files && !!snapshot.conversations?.length && <Suspense fallback={null}><WorkStrip client={client} snapshot={snapshot} files={files} onOpen={() => onSection('graph')} onConversations={() => onSection('agent')} /></Suspense>}
       <div className={'project-columns' + (side ? '' : ' single')}>
         <div className="project-primary">
+          {!!snapshot.conversations?.length && <LatestAnswer client={client} snapshot={snapshot} onOpen={id => onAgent(id)} />}
           <section className="project-section figures-section"><div className="section-heading"><h2>Results &amp; figures{figures.length > 0 && <span className="section-count">{figures.length}</span>}</h2><button className="text-button" onClick={() => onSection('files')}>All files <Icon name="chevron" size={12} /></button></div>
             {figures.length ? <ul className={'figure-grid count-' + shownFigures + (shownFigures >= 3 ? ' featured' : '')}>{figures.slice(0, shownFigures).map(item => <li key={item.key}>
               <button className="figure-card" onClick={() => onFile?.('results', item)} title={item.path}>

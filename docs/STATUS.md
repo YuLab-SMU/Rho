@@ -29,6 +29,16 @@ candidate 2 repeats that browser path and both real client loops. Installed Code
 needed an explicitly selected 64-choice native permission budget after hitting the
 default 32; its grant scope did not change.
 
+A [simulated-project episode](SIMULATED-PROJECT-EPISODE.md) ran two rho-bio-eval
+capsule projects through Rho with Claude Code and changed what their screens showed:
+Studio's eight-view budget now renders the views on screen first, Overview opens with
+the latest answer, the Graph folds a message's versions of one file and its unrelated
+commands, Review (Annotations 0.5.2) offers questions and kept results as choices,
+a folder chosen in the system dialog stays in the local person's list across
+restarts, and a tab on this machine names its principal again, so the person's own
+edits read "You". Row questions on an ordinary CSV still need an identity choice (a declared
+key column or a row position within one exact version); pages have no addresses yet.
+
 ## Existing application
 
 - Projects opens selected folders and manages finite source folders. Sources counts
@@ -63,9 +73,9 @@ original scope; they do not establish usability of later changes.
 
 Baseline: Plugins 104/104 and Rho 223/223 with an explicit unchanged Core binary.
 The first full changed run passed Plugins 109/109 and Rho 227/228; an undeclared
-new CSS variable caused the application failure and was corrected. Current checks: Rho 230/230, Plugins 110/110 in the [ledger](VERIFICATION.json).
+new CSS variable caused the application failure and was corrected. Current checks: Rho 232/232, Plugins 110/110 in the [ledger](VERIFICATION.json).
 The [episode](REVIEW-EVIDENCE-EPISODE.md) records contract, browser and installed results.
-The fixed candidate passed 230/230; installed review/Graph/restart and both real
+The fixed 0.5.1 candidate passed 230/230; installed review/Graph/restart and both real
 clients passed. See the [preview](PREVIEW-0.5.1.md) for identities and limits.
 No failures are converted into passes by omitting the failed run.
 

@@ -54,6 +54,10 @@ export interface GraphNode {
   id: string; kind: NodeKind; title: string; at: number;
   turn?: string; conversationId?: string; agent?: string; state?: string; answer?: string; model?: string | null; text?: string;
   resource?: { id: string; version: string }; capturedAt?: number; captureSource?: string; gap?: string;
+  // Every exact version one message captured of this file, oldest first, when it captured more than one.
+  versions?: Array<{ resource: { id: string; version: string }; capturedAt: number; captureSource?: string; bytes?: number }>;
+  // The commands one card stands for when a message's commands that touched no project file fold together.
+  commands?: GraphNode[];
   path?: string; category?: FileKind; exists?: boolean; bytes?: number; modifiedAt?: string;
   // A run: the command as named and as it actually ran, how it ended (its exit code when
   // the Agent reported one), how long it ran and the last lines it printed.
@@ -235,6 +239,56 @@ export function buildWorkGraph(input: GraphInput): WorkGraph {
     events: events.filter(e => nodes.has(e.node)).sort((a, b) => a.at - b.at), turns: spans.filter(s => nodes.has('q:' + s.id)),
     live: live && nodes.has(live.node) ? live : null, omittedTurns, omittedNodes,
   };
+}
+
+// One card per file per message: the versions a message captured of the same file fold into the
+// newest, which keeps every exact version, oldest first, and the events and edges of all of them.
+// A message that rewrites its script nine times draws one script, not a column of nine.
+// A "captured" edge beside the message's own edit or write of that file says nothing more.
+// Commands of one message that read, ran or changed no project file — looking around, checking an
+// environment, computing in a heredoc — fold the same way into one card that lists each of them,
+// so the commands that made the results stand out.
+export const foldLimits = { otherCommands: 3 };
+export function foldVersions(graph: WorkGraph): WorkGraph {
+  // A file only named by a command has no events of its own; its edge says which message it is in.
+  const home = (node: GraphNode) => node.events[0]?.turn ?? graph.edges.find(e => e.from === node.id || e.to === node.id)?.turn ?? '';
+  const groups = new Map<string, GraphNode[]>();
+  for (const node of graph.nodes) if (node.kind === 'file' && node.path) {
+    const key = node.path + '\n' + home(node);
+    groups.set(key, [...(groups.get(key) ?? []), node]);
+  }
+  const into = new Map<string, string>(), folded = new Map<string, GraphNode>();
+  for (const group of groups.values()) {
+    if (group.length < 2) continue;
+    const ordered = [...group].sort((a, b) => (a.capturedAt ?? a.at) - (b.capturedAt ?? b.at));
+    const newest = ordered.at(-1)!;
+    const versions = ordered.filter(n => n.resource).map(n => ({ resource: n.resource!, capturedAt: n.capturedAt!, captureSource: n.captureSource, bytes: n.bytes }));
+    const events = ordered.flatMap(n => n.events).map(e => ({ ...e, node: newest.id })).sort((a, b) => a.at - b.at);
+    folded.set(newest.id, { ...newest, at: Math.min(...ordered.map(n => n.at)), events, ...(versions.length > 1 ? { versions } : {}) });
+    for (const n of ordered) into.set(n.id, newest.id);
+  }
+  const quiet = new Map<string, GraphNode[]>();
+  for (const node of graph.nodes) if (node.kind === 'run' && node.turn && node.outcome !== 'requested' && !node.waiting
+    && graph.edges.every(e => (e.from !== node.id && e.to !== node.id) || (e.to === node.id && e.from === 'q:' + node.turn))) quiet.set(node.turn, [...(quiet.get(node.turn) ?? []), node]);
+  for (const [turn, runs] of quiet) {
+    if (runs.length < foldLimits.otherCommands) continue;
+    const id = 'r:' + turn + ':others', last = runs.at(-1)!;
+    const events = runs.flatMap(n => n.events).map(e => ({ ...e, node: id })).sort((a, b) => a.at - b.at);
+    const failed = runs.filter(n => n.outcome !== 'returned' || (n.end && !/^exit 0\b/i.test(n.end))).length;
+    folded.set(id, { id, kind: 'run', title: runs.length + ' other commands', at: runs[0].at, turn, outcome: last.outcome, end: failed ? failed + ' did not finish cleanly' : 'All finished', durationMs: runs.reduce((sum, n) => sum + (n.durationMs ?? 0), 0) || null, events, commands: runs });
+    for (const n of runs) into.set(n.id, id);
+  }
+  const to = (id: string) => into.get(id) ?? id;
+  const nodes = [...graph.nodes.filter(n => to(n.id) === n.id).map(n => folded.get(n.id) ?? n), ...[...folded.values()].filter(n => !graph.nodes.some(o => o.id === n.id))].sort((a, b) => a.at - b.at);
+  const edges = new Map<string, GraphEdge>();
+  for (const e of [...graph.edges].sort((a, b) => a.at - b.at)) {
+    const from = to(e.from), target = to(e.to);
+    if (from === target) continue;
+    const id = from + '>' + target + ':' + e.label;
+    if (!edges.has(id)) edges.set(id, { ...e, id, from, to: target });
+  }
+  for (const e of [...edges.values()]) if (e.label === 'captured observation' && [...edges.values()].some(o => o !== e && o.from === e.from && o.to === e.to)) edges.delete(e.id);
+  return { ...graph, nodes, edges: [...edges.values()], events: graph.events.map(e => into.has(e.node) ? { ...e, node: to(e.node) } : e), live: graph.live && { ...graph.live, node: to(graph.live.node) } };
 }
 
 // Upstream and downstream of one node: the path a result came by and what it fed.

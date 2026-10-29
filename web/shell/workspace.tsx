@@ -124,19 +124,22 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
     start: id => setDragging({ id, target: null }), end: () => setDragging(null),
     over: target => setDragging(d => d && { ...d, target }), drop: dropTab
   } : undefined;
-  // Eight mounted heavy entries is a rendering budget, never a buffer eviction: render
-  // rights go to the first eight available views in layout order, and a view mounts the
-  // first time it shows.
+  // Eight mounted heavy entries is a rendering budget, never a buffer eviction: the views on
+  // screen always render, then the most recently shown, then the rest in layout order. A view
+  // mounts the first time it shows; a hidden one past the budget unmounts and mounts again from
+  // its owner when shown, which keeps buffers and undo but not its scroll or selection.
   const feedbackEntry = registry.entries.find(e => e.component === 'rho.feedback');
   const feedbackAllowed = !!snapshot.feedback && feedbackEntry?.requiredOperations.every(method => snapshot.catalog.operations.some(o => o.method === method && o.authorized && o.state === 'available'));
   const [feedbackSource, setFeedbackSource] = useState<string | null>(null), [feedbackLimit, setFeedbackLimit] = useState(false);
   useEffect(() => { setFeedbackSource(null); setFeedbackLimit(false); }, [snapshot.project.id, layout.compositionId, snapshot.feedback?.taskId, principalId]);
   const maxMounted = Math.max(1, Math.min(8, Number(import.meta.env.VITE_RHO_MAX_HEAVY_VIEWS) || 8));
-  const rights = useRef(new Set<string>()), seen = useRef(new Set<string>());
-  for (const id of rights.current) if (!byId.has(id)) rights.current.delete(id);
+  const rights = useRef(new Set<string>()), seen = useRef(new Set<string>()), recent = useRef<string[]>([]);
   for (const id of seen.current) if (!byId.has(id)) seen.current.delete(id);
+  const onScreen = visible.filter(id => id && byId.has(id));
+  recent.current = [...onScreen, ...recent.current.filter(id => byId.has(id) && !onScreen.includes(id))];
   const reserve = contextTarget && feedbackContextActive && feedbackSource && !feedbackLimit ? 1 : 0;
-  for (const id of order) if (rights.current.size < maxMounted - reserve && availableEntry(byId.get(id)!, snapshot)) rights.current.add(id);
+  rights.current = new Set();
+  for (const id of [...recent.current, ...order]) if (rights.current.size < maxMounted - reserve && !rights.current.has(id) && availableEntry(byId.get(id)!, snapshot)) rights.current.add(id);
   for (const id of visible) seen.current.add(id);
   const requestFeedback = feedbackAllowed ? (viewId: string) => { setFeedbackLimit(rights.current.size >= maxMounted); setFeedbackSource(viewId); onShowContext(); } : undefined;
   // One element per view for as long as it is in the layout.

@@ -10,6 +10,20 @@ export type ProjectState = 'working' | 'waiting';
 export function initials(project: ProjectSummary) {
   return projectName(project).split(/[\s_.-]+/).filter(Boolean).slice(0, 2).map(w => [...w][0]!.toUpperCase()).join('') || 'P';
 }
+// Each rail mark tells its project apart from the others shown: projects whose initials match
+// are marked by where their names differ, "swarm-bix18" and "swarm-bix41" as 18 and 41.
+export function railMarks(projects: ProjectSummary[]) {
+  const marks = new Map(projects.map(p => [p.id, initials(p)]));
+  for (const project of projects) {
+    const same = projects.filter(other => other.id !== project.id && initials(other) === initials(project));
+    if (!same.length) continue;
+    const name = [...projectName(project).toUpperCase()];
+    const shared = Math.max(...same.map(other => { const o = [...projectName(other).toUpperCase()]; let i = 0; while (i < name.length && name[i] === o[i]) i++; return i; }));
+    const rest = name.slice(shared).filter(c => /[\p{L}\p{N}]/u.test(c));
+    if (rest.length) marks.set(project.id, /\p{N}/u.test(rest[0]) ? rest.slice(0, 2).join('') : name[0] + rest[0]);
+  }
+  return marks;
+}
 // The projects the rail shows: the most recently opened, kept in the order the service lists
 // them so a project does not move under the pointer when another one is opened.
 export function railProjects(projects: ProjectSummary[]) {
@@ -47,12 +61,13 @@ export function ProjectRail({ projects, current, home, states, onHome, onProject
   projects: ProjectSummary[]; current: string | null; home: boolean; states: Record<string, ProjectState>;
   onHome: () => void; onProject: (project: ProjectSummary) => void; onAccess: () => void; accessOpen: boolean; accessTrigger?: RefObject<HTMLButtonElement | null>;
 }) {
+  const marks = railMarks(projects);
   return <nav className="project-rail" aria-label="Projects">
     <button className="rail-home" aria-label="All projects" data-tip="All projects" aria-current={home ? 'page' : undefined} onClick={onHome}><span className="brand-mark" aria-hidden="true">ρ</span></button>
     <ul className="rail-projects">{projects.map(project => {
       const state = states[project.id], label = projectName(project) + (state ? ' · ' + stateWords[state] : '');
       return <li key={project.id}><button className={'rail-project' + (state ? ' ' + state : '')} aria-label={label} data-tip={label} aria-current={!home && current === project.id ? 'page' : undefined} onClick={() => onProject(project)}>
-        <span className={'project-avatar ' + projectHue(project.id + projectName(project))} aria-hidden="true">{initials(project)}</span>
+        <span className={'project-avatar ' + projectHue(project.id + projectName(project))} aria-hidden="true">{marks.get(project.id)}</span>
         {state && <span className="rail-state" aria-hidden="true" />}
       </button></li>;
     })}</ul>

@@ -33,7 +33,9 @@ const sessionKey = 'rho.browser.session.v1', projectKey = 'rho.browser.project.v
 const linked = new URLSearchParams(location.hash.slice(1)), linkCode = linked.get('pair');
 if (linkCode !== null) history.replaceState(null, '', location.pathname + location.search);
 let linkRedeemed = false;
-const localConnection: BrowserConnection = { url: location.origin };
+// The service records that person as `browser:local`; naming it here lets owners tell their own
+// changes and undo from another tab's.
+const localConnection: BrowserConnection = { url: location.origin, principalId: 'browser:local' };
 function restoreSession(): BrowserConnection | null {
   try {
     const saved = JSON.parse(sessionStorage.getItem(sessionKey) ?? 'null');

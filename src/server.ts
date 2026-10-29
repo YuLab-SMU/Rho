@@ -411,8 +411,12 @@ export class RhoService {
     await this.state.addPrincipal({ id: 'operator', tokenHash: digest(this.adminToken), methods: Object.keys(operations) });
     // Opening this service in a browser on this machine is the local person: one principal,
     // no credential, no expiry. It is registered once per start, replacing any earlier copy.
+    // The folders this person chose in the system dialog stay theirs across restarts: the earlier
+    // copy's grants carry over, each naming exactly one project still registered, nothing wider.
+    const earlier = this.state.principals.find(p => p.id === localBrowserId);
+    const chosen = (earlier?.selectedProjects ?? []).filter(id => this.state.projects.some(p => p.id === id && p.nativeSelected));
     this.state.principals = this.state.principals.filter(p => p.id !== localBrowserId);
-    await this.state.addPrincipal(localBrowserPrincipal(await fs.realpath(this.config.root)));
+    await this.state.addPrincipal({ ...localBrowserPrincipal(await fs.realpath(this.config.root)), ...(chosen.length ? { selectedProjects: chosen } : {}) });
     await new Promise<void>((resolve, reject) => { this.server.once('error', reject); this.server.listen(this.config.port ?? 0, '127.0.0.1', () => resolve()); });
     this.url = 'http://127.0.0.1:' + (this.server.address() as any).port;
     await atomicJson(path.join(this.state.directory, 'connection.json'), { url: this.url, token: this.adminToken, apiVersion: '2.0' });

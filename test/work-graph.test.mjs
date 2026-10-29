@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildWorkGraph, laneLayout, layoutGraph, lineage } from '../dist/work-graph.js';
+import { buildWorkGraph, foldVersions, laneLayout, layoutGraph, lineage } from '../dist/work-graph.js';
 
 const root = '/work/project';
 const kindOf = path => /\.R$/.test(path) ? 'code' : /\.svg$/.test(path) ? 'figures' : /^results\//.test(path) ? 'results' : /\.csv$/.test(path) ? 'data' : /\.md$/.test(path) ? 'notes' : null;
@@ -153,4 +153,34 @@ test('one oversized turn respects the drawing cap and all drawn links reference 
  const t=turn('t','Many outputs',0,20,Array.from({length:220},(_,i)=>tool('w'+i,'Write',3,root+'/results/'+i+'.csv')));
  const graph=buildWorkGraph(input([t],[]));assert.equal(graph.nodes.length,160);assert.ok(graph.omittedNodes>0);
  const ids=new Set(graph.nodes.map(n=>n.id));assert.ok(graph.edges.every(e=>ids.has(e.from)&&ids.has(e.to)));assert.ok(ids.has('q:c1/t'));
+});
+
+test('one message draws one card per file with every captured version, and folds commands that touched no project file', () => {
+  const captured = (id, s) => ({ resource: { id, version: id.repeat(64) }, kind: 'file', bytes: 9, observedAt: at(s), source: { kind: 'disk', path: 'analysis.R' } });
+  const t = turn('t1', 'Compare the ratios', 0, 60, [
+    tool('w', 'Write', 2, root + '/analysis.R'),
+    tool('c1', 'Bash', 4, 'python3 -c "import scipy"'),
+    tool('c2', 'Bash', 6, 'ls -la'),
+    tool('e1', 'Edit', 8, root + '/analysis.R'),
+    tool('c3', 'Bash', 10, "Rscript - <<'RS'"),
+    tool('e2', 'Edit', 12, root + '/analysis.R'),
+    tool('r', 'Bash', 20, 'Rscript analysis.R')]);
+  t.evidence = { records: [{ key: 'a', path: 'analysis.R', phase: 'tool', state: 'captured', snapshots: [captured('a', 3), captured('b', 9), captured('c', 13)] }], omitted: 0, bytes: 27, snapshots: 3 };
+  const raw = buildWorkGraph(input([t], [{ path: 'analysis.R', bytes: 9, modifiedAt: at(12), category: 'code' }]));
+  // Three captured versions, and the write before the first capture, which has none.
+  assert.equal(raw.nodes.filter(n => n.path === 'analysis.R').length, 4);
+  const graph = foldVersions(raw);
+  const scripts = graph.nodes.filter(n => n.path === 'analysis.R');
+  assert.equal(scripts.length, 1);
+  assert.deepEqual(scripts[0].versions.map(v => v.resource.id), ['a', 'b', 'c'], 'every exact version stays, oldest first');
+  assert.equal(scripts[0].resource.id, 'c', 'the card shows the newest');
+  assert.equal(scripts[0].events.length, raw.nodes.filter(n => n.path === 'analysis.R').reduce((sum, n) => sum + n.events.length, 0));
+  const others = graph.nodes.find(n => n.id === 'r:c1/t1:others');
+  assert.deepEqual(others.commands.map(n => n.command), ['python3 -c "import scipy"', 'ls -la', "Rscript - <<'RS'"]);
+  assert.ok(graph.nodes.some(n => n.kind === 'run' && n.command === 'Rscript analysis.R'), 'the command that ran the script stays its own card');
+  const ids = new Set(graph.nodes.map(n => n.id));
+  assert.ok(graph.edges.every(e => ids.has(e.from) && ids.has(e.to) && e.from !== e.to));
+  assert.ok(graph.events.every(e => ids.has(e.node)));
+  assert.equal(graph.events.length, raw.events.length, 'the timeline keeps every step');
+  assert.ok(!graph.edges.some(e => e.label === 'captured observation' && graph.edges.some(o => o !== e && o.from === e.from && o.to === e.to)));
 });

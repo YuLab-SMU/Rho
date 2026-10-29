@@ -98,6 +98,33 @@ function TurnWork({ turn, snapshot, observation, exists, onPath }: { turn: Turn;
   </li>;
 }
 
+// The newest finished answer in the project, as the Agent wrote it: what was asked, the answer
+// with its numbers and the method it names, and how that message ended. A person sees what the
+// work concluded without opening the conversation; the whole record stays on the Agent page.
+export function LatestAnswer({ client, snapshot, onOpen }: { client: BrowserClient; snapshot: WorkspaceSnapshot; onOpen: (conversationId: string) => void }) {
+  const latest = [...(snapshot.conversations ?? [])].filter(c => c.state === 'completed')
+    .sort((a, b) => (b.lastAt ?? b.updatedAt).localeCompare(a.lastAt ?? a.updatedAt))[0];
+  const [read, setRead] = useState<{ id: string; turn: Turn; observation: Read['observation'] } | null>(null);
+  useEffect(() => {
+    if (!latest) return;
+    let live = true;
+    client.call('conversation.read', { projectId: snapshot.project.id, conversationId: latest.conversationId, limit: 1 })
+      .then(value => { const turn = value.turns.at(-1); if (live) setRead(turn ? { id: latest.conversationId, turn, observation: value.observation } : null); }, () => { if (live) setRead(null); });
+    return () => { live = false; };
+  }, [client, snapshot.project.id, latest?.conversationId, latest?.version]);
+  if (!latest || read?.id !== latest.conversationId || read.turn.state !== 'completed') return null;
+  const { turn, observation } = read;
+  const answer = [...conversationBlocks(turn, null, snapshot.project.root)].reverse().find(block => block.kind === 'text');
+  const text = answer?.kind === 'text' ? answer.step.text ?? '' : '';
+  if (!text.trim()) return null;
+  return <section className="project-section latest-answer" aria-labelledby="latest-answer-title">
+    <div className="section-heading"><h2 id="latest-answer-title">Latest answer</h2><button className="text-button" onClick={() => onOpen(latest.conversationId)}>Open conversation <Icon name="chevron" size={12} /></button></div>
+    <p className="latest-ask" title={turn.text.trim()}>{turn.text.trim()}</p>
+    <Answer text={text} streaming={false} />
+    <p className="work-ending">{day(turn.endedAt ?? turn.sentAt)}{took(turn.startedAt ?? turn.sentAt, turn.endedAt) && <> · took {took(turn.startedAt ?? turn.sentAt, turn.endedAt)}</>}{turn.model && <span title={turn.model}> · {valueName(modelSetting(observation?.config?.options), turn.model)}</span>}</p>
+  </section>;
+}
+
 // One conversation's latest messages, read when shown and again when its recorded version
 // changes, at most every second while the Agent is answering.
 export function ConversationTurns({ client, snapshot, summary, exists, onContinue, onPath }: { client: BrowserClient; snapshot: WorkspaceSnapshot; summary: Pick<Summary, 'conversationId' | 'state' | 'version'>; exists: (path: string) => boolean; onContinue?: (id: string) => void; onPath: (path: string) => void }) {

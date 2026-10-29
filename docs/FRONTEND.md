@@ -19,11 +19,13 @@ inspect what happened. The application gives those actions direct places:
   in, opens folders and creates a named project from selected source folders. It
   opens as one list with one primary action, and with no projects it shows what can
   be started instead of an empty page.
-- **Overview** leads with what the Agent did in small: a count for each kind of step
+- **Overview** opens with the latest answer: the newest finished conversation's question
+  and last answer, its time, duration and model, and Open conversation. Then comes what
+  the Agent did in small: a count for each kind of step
   (asked, read, edited, ran, changed on disk, answered), which is also the legend and
   filter of the Graph's timeline below it, one lane per conversation. The results follow
   as pictures, newest first: the newest at twice the size, then two or five more, with
-  the rest in Files. A side column draws each workspace as its panes, opens the shared
+  the rest in Files; a kept version is named by the project file it was taken from. A side column draws each workspace as its panes, opens the shared
   notes, and lists the files the Agent's tools named, most used first, each with a bar
   for its tool calls. Its Work progress shows a conversation while
   it answers or waits for a choice; finished ones are listed on the Agent page. A project with nothing recorded yet shows its two next steps —
@@ -71,22 +73,31 @@ inspect what happened. The application gives those actions direct places:
   action on every project page. Choosing another view, typing, dragging a tab or
   leaving stops following until the person follows again
   ([canvas episode](AGENT-CANVAS-EPISODE.md), [one workspace](GRAPH-EPISODE.md)).
+  Eight views render at once: those on screen, then the most recently shown, then the
+  rest in layout order. A hidden view past that unmounts and mounts again from its
+  owner when shown, keeping its buffer and undo but not its scroll or selection.
 - **Review** brings a frozen question, explicit Agent replies, exact result versions, keyed
   table differences, captured code changes and append-only human decisions together. Table
   row and document selection controls open the same record; whole-resource questions cover
-  figures. Sending a frozen context is a separate action from deciding. A result can focus
+  figures. The page offers the person's questions and the kept results as choices, the
+  newest version of each result first with a count of earlier ones; any other exact
+  version stays selectable. Sending a frozen context is a separate action from deciding. A result can focus
   Graph; Graph links back. Reload restores Review and its selected record. Evidence export
   previews that record and its retained references before writing a static offline reader
   ([episode](REVIEW-EVIDENCE-EPISODE.md)).
 - **Graph** draws what the Agent did: each message a row from the files it read to
   the question, what it edited and ran, and what changed on disk while its command
   ran; a later row refers to an earlier output. Lines say whether the Agent reported
-  it, a command named it, or a change was seen on disk. Cards preview tables and
+  it, a command named it, or a change was seen on disk. A message draws one card per
+  file holding every version kept during it, and three or more of its commands that
+  touched no project file fold into one card listing each with its ending, duration
+  and output. Cards preview tables and
   figures from captured versions; choosing one shows those retained bytes and related
   reviews. Older records explicitly lack a historical snapshot. Opening the current
   file is a separate action, and replay hides captures later than its cursor. The timeline
   below gives each conversation a lane and each step a block coloured by kind (asked,
-  read, edited, ran, changed on disk, answered); the legend counts and filters them,
+  read, edited, ran, changed on disk, answered), lanes with the same title carrying
+  their start time; the legend counts and filters them,
   refused or unknown steps are marked, pauses fold to a short gap, and the work
   replays at 1×, 2× or 4×. While the Agent works the Graph stays and follows it, and its
   files still open in the shared workspace; a step waiting for the person's choice
@@ -109,7 +120,7 @@ inspect what happened. The application gives those actions direct places:
   ([conversation episode](CONVERSATION-EPISODE.md)). Its left edge drags, or moves
   24 px per arrow key, between 280 px and 760 px (at most 60% of the window); a
   double-click returns it to 340 px, and each browser keeps its own width. One chip under the message box
-  names the model, its provider, the effort and what is switched on: the saved choices
+  names the model (Default model until one is chosen), its provider, the effort and what is switched on: the saved choices
   for a new conversation and the open conversation's own, changed between messages. It
   opens a short menu with a row per setting the Agent offers (the Agent for a new
   conversation, the model with its search, effort, mode); a row opens its list in place,
@@ -117,12 +128,13 @@ inspect what happened. The application gives those actions direct places:
   panel. Each ending names the model that answered ([settings pass](AGENT-CANVAS-EPISODE.md#choosing-the-agent-and-its-model)). The panel renders the retained
   record rather than protocol events ([panel pass](AGENT-PANEL-EPISODE.md)): the
   Agent's last words stay open as Markdown prose, lists, code with Copy and tables
-  that wrap; what it did before them folds into one line ("Worked · Ran 8 commands ·
+  that scroll sideways with their numbers whole; what it did before them folds into one line ("Worked · Ran 8 commands ·
   Edited 1 file · 6 choices"), open while it works. Inside, each tool step names what it
   did (`Read data.csv`, `Ran Rscript analysis.R`, `Wrote results/summary.csv`,
   `Called data.page`) with an icon for its kind and the Agent's title and reported path
   behind a disclosure; files are counted once; answered choices stay in the fold. Each
-  message ends with its outcome, model, time and Copy. A native permission request is
+  message ends with its outcome, model, time and Copy; a failure the Agent's last words
+  already state is shown once. A native permission request is
   an amber choice card. The message box is one rounded surface with the settings chip and
   a round Send or Stop; under it, the plan entry in progress and the context and cost
   the Agent reported open a card with context as a bar, the cost and the whole plan. New activity is followed only while
@@ -137,7 +149,8 @@ inspect what happened. The application gives those actions direct places:
 The topbar names the way back — the projects list, then the project, then the open
 workspace — and keeps only the current place below 768 CSS px. A rail at the far left
 belongs to the application: Rho opens the projects list, then the eight most recently
-opened projects as avatars in the service's order, a dot on each one whose Agent is
+opened projects as avatars in the service's order (where initials collide, by the part
+of the name that differs, such as 18 and 41), a dot on each one whose Agent is
 answering (from one bounded `conversation.list` per project every five seconds while
 the page is visible; the open project's own record also says when it needs a choice),
 and Open or create a project. Choosing a project there returns to where it was left in
@@ -155,7 +168,9 @@ rail beside the project sidebar. Narrow screens show one workspace view at a tim
 Closing a panel does not cancel work.
 
 The [home and project episode](HOME-PROJECT-EPISODE.md) records the 2026-10-27 pass
-over these screens, its checks and the listing gap it left open.
+over these screens, its checks and the listing gap it left open. The
+[simulated-project episode](SIMULATED-PROJECT-EPISODE.md) records the 2026-10-29 run
+of two capsule projects and the changes it led to.
 
 ## State and code
 
@@ -188,7 +203,8 @@ command's name; the row's details keep what ran.
 `src/work-graph.ts` builds the Graph from `conversation.read` records (a finished
 message keeps the project files that changed on disk while it ran) and the folder walk
 (`project.entries` gives each file's `modifiedAt`), and lays each message out as a row; `web/graph.tsx` draws it, the inspector, the timeline and the
-Overview's `WorkStrip`. `web/previews.ts` reads the card and Overview previews from a captured
+Overview's `WorkStrip`. For the Graph, `foldVersions` merges a message's versions of one
+file and folds its unrelated commands (`foldLimits`); the `WorkStrip` keeps every step. `web/previews.ts` reads the card and Overview previews from a captured
 snapshot, or a registered result at its exact version: at most 16 files, two at a time, figures
 up to 2 MiB and tables to 3 rows by 4 columns.
 `web/work-progress.tsx` reads `project.work.read` for the local person's project

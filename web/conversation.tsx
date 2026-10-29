@@ -26,6 +26,15 @@ const seconds = (ms: number) => ms < 60000 ? Math.max(1, Math.round(ms / 1000)) 
 const liveTime = (s: number) => s < 60 ? s + ' s' : Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
 const clientName = (client?: string | null) => client === 'codex' ? 'Codex' : client === 'claude-code' ? 'Claude Code' : '';
 const actionIcon: Record<AgentAction, IconName> = { read: 'file', edit: 'pencil', write: 'pencil', delete: 'trash', move: 'move', search: 'search', execute: 'prompt', fetch: 'globe', project: 'spark', agents: 'spark', plan: 'list', other: 'tool' };
+// A failure the Agent already put in its own words above is not said a second time. Rho masks
+// private values in its copy, so those parts match anything.
+function repeats(message: string, turn: Turn) {
+  const said = turn.steps.filter(step => step.kind === 'text').at(-1)?.text?.trim();
+  const core = message.replace(/^Internal error:\s*/i, '').trim();
+  if (!said || core.length < 24) return false;
+  const pattern = core.split(/\[private(?: URL)?\]/).map(part => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('[^\\s]*');
+  return new RegExp(pattern).test(said);
+}
 function ending(turn: Turn) {
   if (turn.state === 'running') {
     if (turn.stop) return 'Stopping…';
@@ -42,7 +51,8 @@ function ending(turn: Turn) {
   }
   if (turn.state === 'failed') {
     if (turn.result?.kind === 'error_max_turns') return 'Stopped at the step limit for one message. Ask it to continue.';
-    return 'Not answered. ' + (turn.result?.message ?? turn.problem ?? '');
+    const message = turn.result?.message ?? turn.problem ?? '';
+    return repeats(message, turn) ? 'Not answered.' : 'Not answered. ' + message;
   }
   return turn.problem ?? 'Outcome unknown.';
 }

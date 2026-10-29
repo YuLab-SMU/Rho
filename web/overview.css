@@ -17,8 +17,9 @@
    line of every cell that starts a row. */
 .graph-timeline.compact .tl-legend { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 12px 0; margin-left: -16px; overflow: hidden; }
 /* Narrower cards set the kinds in rows of three, then two, so every label stays whole. */
+@container (max-width: 1180px) { .graph-timeline.compact .tl-legend { grid-auto-flow: row; grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 @container (max-width: 820px) { .graph-timeline.compact .tl-legend { grid-auto-flow: row; grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-@container (max-width: 460px) { .graph-timeline.compact .tl-legend { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@container (max-width: 460px) { .graph-timeline.compact .tl-legend { grid-template-columns: repeat(2, minmax(0, 1fr)); } .graph-timeline.compact .tl-kind > span { white-space: normal; } }
 .graph-timeline.compact .tl-kind { display: grid; grid-template-columns: 9px minmax(0, 1fr); grid-template-areas: "n n" "i l"; align-items: center; justify-items: start; gap: 0 7px; min-width: 0; min-height: 0; padding: 0 16px; border: 0; border-radius: 0; background: transparent; box-shadow: -1px 0 0 var(--color-divider); text-align: left; }
 .graph-timeline.compact .tl-kind small { grid-area: n; color: var(--color-ink); font-size: 22px; font-weight: 550; line-height: 1.3; letter-spacing: -.3px; }
 .graph-timeline.compact .tl-kind > span { grid-area: l; overflow: hidden; color: var(--color-meta); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
@@ -131,3 +132,9 @@
   .figure-grid.count-3 > li:first-child .figure-thumb { min-height: 168px; }
   .workspace-grid { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* The newest answer leads the page: the question in one line, then the Agent's own words with
+   room for its numbers and the method it names before the fold. */
+.latest-answer { gap: 10px; }
+.latest-ask { overflow: hidden; color: var(--color-meta); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.latest-answer .work-answer.clamped .turn-text { max-height: 18em; }

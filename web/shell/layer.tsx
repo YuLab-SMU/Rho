@@ -123,6 +123,9 @@ export function AgentColumn({ live, agents, contexts = [], prepare, principalId,
   const referenceFor = (file: string) => outputs?.sourceKey ? Object.values(state.refs).find(ref => ref.artifact === outputs.sourceKey + '/' + file && ref.run === producer?.run) : undefined;
   // The newest question leads; earlier ones fold behind it.
   const shownQuestions = earlier ? questions : questions.slice(0, 1);
+  // Nothing to report and not asked for: the conversation above stays the whole panel. Activity
+  // in the workspace bar still opens the recorded calls here.
+  if (!running && !screen.items.length && !outputs?.declared.length && !questions.length && !evidence) return null;
   return <aside ref={column} className={'agent-column' + (onClose ? ' drawer' : '')} aria-label={who} data-scroll-region="" tabIndex={0} onKeyDown={event => { if (onClose && event.key === 'Escape') { event.stopPropagation(); onClose(); } }}>
     <section className="agent-card">
       <header className="agent-card-head"><span className={'agent-dot' + (running ? ' running' : '')} aria-hidden="true" /><strong>{who}</strong>

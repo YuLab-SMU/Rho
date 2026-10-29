@@ -4,7 +4,7 @@ import { Snapshot } from './snapshot.js';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import type { BrowserClient, ViewDescription, WorkspaceSnapshot } from '../src/browser.js';
 import type { RhoOutput } from '../src/contract.generated.js';
-import { buildWorkGraph, laneLayout, lineage, type GraphEdge, type GraphEvent, type GraphNode, type GraphTurn, type LaneItem, type LaneLink, type WorkGraph as Graph } from '../src/work-graph.js';
+import { buildWorkGraph, foldVersions, laneLayout, lineage, type GraphEdge, type GraphEvent, type GraphNode, type GraphTurn, type LaneItem, type LaneLink, type WorkGraph as Graph } from '../src/work-graph.js';
 import { durationText } from '../src/conversation-presentation.js';
 import { agentName, type AgentNow } from './agent-now.js';
 import { openInWorkspace, viewFor } from './canvas.js';
@@ -38,11 +38,11 @@ const sizeOf = (node: GraphNode, proxy: boolean) => proxy ? { width: 228, height
 type Layout = ReturnType<typeof laneLayout>;
 // The Agent's answer in a sentence or two, as plain text, for the question's card.
 const gist = (markdown?: string) => markdown ? markdown.replace(/```[\s\S]*?```/g, ' ').replace(/[#>*_`|]+/g, ' ').replace(/\[([^\]]+)\]\([^)]*\)/g, '$1').replace(/\s+/g, ' ').trim().slice(0, 220) : '';
-const verbs: Record<string, string> = { read: 'Read', edit: 'Edited', write: 'Wrote', changed: 'Changed', capture: 'Captured', run: 'Ran', ask: 'Asked', answer: 'Answered' };
+const verbs: Record<string, string> = { read: 'Read', edit: 'Edited', write: 'Wrote', changed: 'Changed', capture: 'Kept', run: 'Ran', ask: 'Asked', answer: 'Answered' };
 // A card's one line about what happened to it, newest last: "Read · Edited 2×".
 function happened(node: GraphNode) {
   const counts = new Map<string, number>();
-  for (const e of node.events) if (e.action !== 'ask' && e.action !== 'answer') counts.set(e.action, (counts.get(e.action) ?? 0) + 1);
+  for (const e of node.events) if (e.action !== 'ask' && e.action !== 'answer' && !(e.action === 'capture' && node.versions)) counts.set(e.action, (counts.get(e.action) ?? 0) + 1);
   return [...counts].map(([action, n]) => (verbs[action] ?? action) + (n > 1 ? ' ' + n + '×' : '')).join(' · ');
 }
 const ended: Record<string, string> = { completed: 'Answered', failed: 'Failed', stopped: 'Stopped', running: 'Working', unknown: 'Outcome unknown' };
@@ -109,7 +109,7 @@ export function WorkGraph({ initialResource, client, snapshot, files, agentNow, 
   const { turns, problem, loading, omitted } = useTurns(client, snapshot);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => { if (!agentNow?.running) return; const timer = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer); }, [agentNow?.running]);
-  const graph = useMemo(() => buildWorkGraph({ turns, files: files.files.map(f => ({ path: f.path, bytes: f.bytes, modifiedAt: f.modifiedAt, category: f.category })), project: snapshot.project, kindOf, now: agentNow?.running ? now : Date.now() }),
+  const graph = useMemo(() => foldVersions(buildWorkGraph({ turns, files: files.files.map(f => ({ path: f.path, bytes: f.bytes, modifiedAt: f.modifiedAt, category: f.category })), project: snapshot.project, kindOf, now: agentNow?.running ? now : Date.now() })),
     [turns, files.files, snapshot.project, agentNow?.running ? now : 0]);
   const shape = graph.nodes.map(n => n.id + (hasPreview(n) ? '+' : '') + (n.answer ? 'a' : '')).join('|') + '#' + graph.edges.map(e => e.id + '@' + e.turn).join('|');
   const layout = useMemo(() => laneLayout(graph, sizeOf, { x: 108, y: 26, lane: 64 }), [shape]);
@@ -123,7 +123,7 @@ export function WorkGraph({ initialResource, client, snapshot, files, agentNow, 
 
   // Selecting a node shows the path it came by and what it fed; everything else steps back.
   const [selected, setSelected] = useState<string | null>(null);
-  useEffect(()=>{if(initialResource){const node=graph.nodes.find(n=>n.resource?.id===initialResource.id&&n.resource.version===initialResource.version);if(node)setSelected(node.id);}},[initialResource?.id,initialResource?.version,shape]);
+  useEffect(()=>{if(initialResource){const node=graph.nodes.find(n=>(n.versions??(n.resource?[{resource:n.resource}]:[])).some(v=>v.resource.id===initialResource.id&&v.resource.version===initialResource.version));if(node)setSelected(node.id);}},[initialResource?.id,initialResource?.version,shape]);
   const focus = useMemo(() => selected && byId.has(selected) ? lineage(graph, selected) : null, [selected, graph]);
   const [query, setQuery] = useState('');
   const matches = useMemo(() => { const q = query.trim().toLowerCase(); return q ? new Set(graph.nodes.filter(n => (n.title + ' ' + (n.path ?? '') + ' ' + (n.text ?? '') + ' ' + (n.command ?? '')).toLowerCase().includes(q)).map(n => n.id)) : null; }, [query, graph]);
@@ -262,7 +262,7 @@ export function WorkGraph({ initialResource, client, snapshot, files, agentNow, 
   const dim = (id: string) => (focus && !focus.nodes.has(id)) || (matches && !matches.has(id));
   const selectedNode = selected ? byId.get(selected) : undefined;
   const live = cursor === null && agentNow?.running ? graph.live : null;
-  const counts = { questions: graph.nodes.filter(n => n.kind === 'question').length, files: graph.nodes.filter(n => n.kind === 'file').length, runs: graph.nodes.filter(n => n.kind === 'run').length };
+  const counts = { questions: graph.nodes.filter(n => n.kind === 'question').length, files: graph.nodes.filter(n => n.kind === 'file').length, runs: graph.nodes.filter(n => n.kind === 'run').reduce((sum, n) => sum + (n.commands?.length ?? 1), 0) };
 
   if (!snapshot.conversations?.length) return <section className="graph-page"><GraphHead counts={null} /><div className="studio-empty"><span className="empty-symbol"><Icon name="graph" size={26} stroke={1.5} /></span><h2>Nothing to draw yet</h2>
     <p>When you ask the Agent something here, the files it reads, the scripts it changes and runs, and what they produce are drawn as one graph.</p>
@@ -367,7 +367,7 @@ function Card({ node, place, client, snapshot, near, selected, dimmed, later, cu
   const last = node.events.at(-1);
   const meta = node.kind === 'question' ? [node.agent, ended[node.state ?? ''] ?? node.state, clock(node.at)].filter(Boolean).join(' · ')
     : node.kind === 'run' ? [node.end ?? outcomes[node.outcome ?? ''] ?? node.outcome, node.durationMs ? durationText(node.durationMs) : null, clock(node.at)].filter(Boolean).join(' · ')
-    : [happened(node), last ? clock(last.at) : ''].filter(Boolean).join(' · ');
+    : [node.versions ? node.versions.length + ' versions' : '', happened(node), last ? clock(last.at) : ''].filter(Boolean).join(' · ');
   const folder = node.path?.includes('/') ? node.path.split('/').slice(0, -1).join('/') : '';
   const label = `${kindLabel(node)}: ${node.kind === 'file' ? node.path : node.title}. ${meta}`;
   return <button className={'graph-node kind-' + node.kind + ' tone-' + tone(node)} data-node={node.id} style={{ left: place.x, top: place.y, width: place.width, height: place.height }}
@@ -438,7 +438,7 @@ function Inspector({ node, graph, byId, client, snapshot, principalId, workspace
   return <aside className="graph-inspector" aria-label={kindLabel(node) + ' ' + node.title}>
     <header className="graph-inspector-head">
       <span className={'graph-node-icon tone-' + tone(node)}><Icon name={kindIcon(node)} size={16} stroke={1.8} /></span>
-      <div><small>{kindLabel(node)}</small><h2 title={node.path ?? node.text}>{node.kind === 'file' ? node.title : node.kind === 'run' ? 'Ran a command' : 'You asked'}</h2>{node.kind === 'file' && <p>{node.path}{node.bytes !== undefined && node.exists ? ' · ' + size(node.bytes) : ''}</p>}</div>
+      <div><small>{kindLabel(node)}</small><h2 title={node.path ?? node.text}>{node.kind === 'file' ? node.title : node.kind === 'run' ? (node.commands ? node.title : 'Ran a command') : 'You asked'}</h2>{node.kind === 'file' && <p>{node.path}{node.bytes !== undefined && node.exists ? ' · ' + size(node.bytes) : ''}</p>}</div>
       <button className="icon-button" aria-label="Close" onClick={onClose}><Icon name="close" size={17} /></button>
     </header>
     <div className="graph-inspector-body">
@@ -447,10 +447,13 @@ function Inspector({ node, graph, byId, client, snapshot, principalId, workspace
         {node.answer && <div className="graph-answer"><AgentMarkdown text={node.answer} streaming={node.state === 'running'} /></div>}
         <button onClick={() => onAgent(node.conversationId)}><Icon name="prompt" size={15} />Show the conversation</button></section>}
       {node.waiting && <Choice key={node.waiting.permission} waiting={node.waiting} client={client} projectId={snapshot.project.id} />}
-      {node.kind === 'run' && <section className="graph-said"><pre className="graph-command" title={node.ran}>{node.command}</pre><p className="graph-facts">{[node.end ?? outcomes[node.outcome ?? ''] ?? node.outcome, node.durationMs ? 'took ' + durationText(node.durationMs) : null, clock(node.at, true)].filter(Boolean).join(' · ')} · for “{turnTitle(node.turn!)}”</p>
+      {node.commands && <section className="graph-said"><p className="graph-facts">Commands that read, ran or changed no project file, for “{turnTitle(node.turn!)}”</p>
+        <ol className="graph-commands">{node.commands.map(run => <li key={run.id}><details><summary><code title={run.ran}>{run.command}</code><small>{[run.end ?? outcomes[run.outcome ?? ''] ?? run.outcome, run.durationMs ? durationText(run.durationMs) : null, clock(run.at)].filter(Boolean).join(' · ')}</small></summary>
+          {run.output?.text ? <pre className="graph-output">{run.output.text}</pre> : <p className="muted">Printed nothing.</p>}</details></li>)}</ol></section>}
+      {node.kind === 'run' && !node.commands && <section className="graph-said"><pre className="graph-command" title={node.ran}>{node.command}</pre><p className="graph-facts">{[node.end ?? outcomes[node.outcome ?? ''] ?? node.outcome, node.durationMs ? 'took ' + durationText(node.durationMs) : null, clock(node.at, true)].filter(Boolean).join(' · ')} · for “{turnTitle(node.turn!)}”</p>
         {node.output && <><h3 className="caption">{node.output.text ? node.output.cut ? `Printed · last ${node.output.text.split('\n').length} of ${node.output.lines} lines` : 'Printed' : 'Printed nothing'}</h3>{node.output.text && <pre className="graph-output" ref={atEnd}>{node.output.text}</pre>}</>}
         {node.ran && node.ran !== node.command && <p className="graph-facts">As run: <code>{node.ran}</code></p>}</section>}
-      {node.kind === 'file' && <><p className="graph-facts">{node.resource ? 'Captured ' + new Date(node.capturedAt!).toLocaleString() + ' · ' + node.captureSource + ' · producer unconfirmed' : node.gap}</p>{node.resource && <Snapshot client={client} projectId={snapshot.project.id} resource={node.resource} path={node.path}/>}<div className="graph-actions">{node.exists && <button className="primary" disabled={placing} onClick={() => void open()}><Icon name="layout" size={15} />{placing ? 'Opening…' : 'Open current file in workspace'}</button>}</div></>}
+      {node.kind === 'file' && <><p className="graph-facts">{node.resource ? (node.versions ? `Newest of ${node.versions.length} versions kept during this message, ` : 'Version kept ') + new Date(node.capturedAt!).toLocaleString() + (node.captureSource === 'buffer' ? ' from the open editor' : node.captureSource === 'disk' ? ' from disk' : '') + ' · which step made it is not confirmed' : node.gap}</p>{node.resource && <Snapshot client={client} projectId={snapshot.project.id} resource={node.resource} path={node.path}/>}<div className="graph-actions">{node.exists && <button className="primary" disabled={placing} onClick={() => void open()}><Icon name="layout" size={15} />{placing ? 'Opening…' : 'Open current file in workspace'}</button>}</div></>}
       {related.map((t: any) => <button key={t.annotationId} onClick={() => shell?.openReview?.(t.annotationId)}>Review: {t.messages[0].draft.text.slice(0,70)}</button>)}
       {problem && <p className="canvas-note" role="alert">{problem}</p>}
       {node.kind === 'file' && !node.exists && <p className="muted">This file was not in the project folders when they were last read. It may have been moved or removed.</p>}
@@ -484,7 +487,7 @@ function Choice({ waiting, client, projectId }: { waiting: NonNullable<GraphNode
 const timelineKinds = [
   { key: 'ask', label: 'Asked', actions: ['ask'] }, { key: 'read', label: 'Read', actions: ['read'] },
   { key: 'edit', label: 'Edited', actions: ['edit', 'write'] }, { key: 'run', label: 'Ran', actions: ['run'] },
-  { key: 'changed', label: 'Changed on disk', actions: ['changed'] }, { key: 'capture', label: 'Captured', actions: ['capture'] }, { key: 'answer', label: 'Answered', actions: ['answer'] },
+  { key: 'changed', label: 'Changed on disk', actions: ['changed'] }, { key: 'capture', label: 'Versions kept', actions: ['capture'] }, { key: 'answer', label: 'Answered', actions: ['answer'] },
 ] as const;
 type TimelineKind = typeof timelineKinds[number]['key'];
 const kindOfAction = (action: string): TimelineKind => timelineKinds.find(k => (k.actions as readonly string[]).includes(action))?.key ?? 'read';
@@ -591,7 +594,11 @@ function Timeline({ graph, cursor, playing, running, speed, onSpeed, onCursor, o
     </div>
     <div className="tl-body">
       <ol className="tl-names" aria-label="Conversations">
-        {lanes.map(l => { const brand = brandOf(l.agent); return <li key={l.id} title={l.title}>{brand ? <BrandMark brand={brand} size={13} /> : <Icon name="chat" size={13} />}<span>{l.title}</span></li>; })}
+        {lanes.map(l => {
+          // Conversations that share a title lead with when they started, which a cut name still shows.
+          const brand = brandOf(l.agent), twin = lanes.some(o => o !== l && o.title === l.title), name = twin && l.turns[0] ? clock(l.turns[0].start) + ' · ' + l.title : l.title;
+          return <li key={l.id} title={name}>{brand ? <BrandMark brand={brand} size={13} /> : <Icon name="chat" size={13} />}<span>{name}</span></li>;
+        })}
       </ol>
       <div className="tl-plot">
         <div ref={track} className="graph-track" {...(compact ? { role: 'img', 'aria-label': `${events.length} steps over ${lanes.length} ${lanes.length === 1 ? 'conversation' : 'conversations'}` } : { role: 'slider', tabIndex: 0, 'aria-label': 'When', 'aria-valuemin': 0, 'aria-valuemax': events.length, 'aria-valuenow': index,

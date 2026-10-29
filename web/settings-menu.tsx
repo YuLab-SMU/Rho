@@ -51,7 +51,8 @@ export function SettingsMenu({ agent, options, values, allowDefault, disabled, d
     else if (event.key === 'ArrowLeft' && !typing && view.kind !== 'root') { event.preventDefault(); back(); }
     else if (event.key === 'ArrowRight' && !typing && (event.target as HTMLElement).dataset.opens) { event.preventDefault(); (event.target as HTMLElement).click(); }
   }
-  const modelName = model ? split(shown(model)) : { name: 'Model', group: '' };
+  // Before the Agent reports its models, the chip says the Agent will use its own default.
+  const modelName = model ? split(shown(model)) : { name: 'Default model', group: '' };
   const effortName = effort ? shown(effort) : '';
   const option = view.kind === 'option' ? (options ?? []).find(o => o.id === view.id) ?? null : null;
   // A setting that is only on or off, as a boolean or as a list of On and Off, is a switch.
