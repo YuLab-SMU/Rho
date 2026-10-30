@@ -42,7 +42,7 @@ export interface NativeAdapterRegistration {
   proof: { kind: 'claude-code-init'; sessionId: string; clientVersion: string };
 }
 export const serviceLimits = { maxRequestBytes: 1024 * 1024, maxEventBytes: 65536, eventRetention: 256, maxSubscriptions: 8, maxQueue: 32, maxContexts: 128, maxBindings: 64, maxActivities: 256, maxContextBytes: 1024 * 1024, maxRetainedMetadataBytes: 32 * 1024 * 1024 };
-export interface ServiceConfig extends Partial<typeof serviceLimits>, Partial<typeof requestLimits>, PluginConfig { root: string; stateDir: string; coreBinary?: string; rscript: string; port?: number; nativeFolders?: Partial<typeof nativeFolderLimits>; workspace?: Partial<typeof workspaceLimits>; interactions?: Partial<typeof interactionLimits>; taskMap?: Partial<typeof taskMapLimits>; browser?: Partial<typeof browserLimits>; webRoot?: string; agentNativeActivity?: Partial<typeof nativeActivityLimits>; presentationWitness?: Partial<typeof presentationWitnessLimits>; visibility?: Partial<typeof visibilityLimits>; agentDelivery?: Partial<typeof agentDeliveryLimits>; deliveryTransportTimeoutMs?: number; claude?: string; agentBackend?: ConversationConfig['backend']; claudeAcp?: ConversationConfig['claudeAcp']; codex?: string; codexAcp?: ConversationConfig['codexAcp']; conversations?: Partial<typeof conversationLimits>; describe?: Partial<typeof describeLimits>; modelsDev?: { url?: string; maxBytes?: number; timeoutMs?: number; refreshMs?: number; retryMs?: number }; evidence?: Partial<typeof evidenceExportLimits>; connect?: Partial<typeof connectLimits> }
+export interface ServiceConfig extends Partial<typeof serviceLimits>, Partial<typeof requestLimits>, PluginConfig { root: string; stateDir: string; coreBinary?: string; rscript: string; python?: string; port?: number; nativeFolders?: Partial<typeof nativeFolderLimits>; workspace?: Partial<typeof workspaceLimits>; interactions?: Partial<typeof interactionLimits>; taskMap?: Partial<typeof taskMapLimits>; browser?: Partial<typeof browserLimits>; webRoot?: string; agentNativeActivity?: Partial<typeof nativeActivityLimits>; presentationWitness?: Partial<typeof presentationWitnessLimits>; visibility?: Partial<typeof visibilityLimits>; agentDelivery?: Partial<typeof agentDeliveryLimits>; deliveryTransportTimeoutMs?: number; claude?: string; agentBackend?: ConversationConfig['backend']; claudeAcp?: ConversationConfig['claudeAcp']; codex?: string; codexAcp?: ConversationConfig['codexAcp']; conversations?: Partial<typeof conversationLimits>; describe?: Partial<typeof describeLimits>; modelsDev?: { url?: string; maxBytes?: number; timeoutMs?: number; refreshMs?: number; retryMs?: number }; evidence?: Partial<typeof evidenceExportLimits>; connect?: Partial<typeof connectLimits> }
 const ajv = new Ajv({ allErrors: true, strict: false, allowUnionTypes: true });
 // The same timestamp check every published contract uses; an unknown format would be skipped silently.
 ajv.addFormat('date-time', { type: 'string', validate: isNativeTime });
@@ -111,6 +111,10 @@ function lifetime(run: { native?: unknown }) {
 // facts and the end of the retained stderr, where R writes its error. `from` says where the
 // excerpt starts, so a cut is never mistaken for the whole stream.
 export const runContextLimits = { errorExcerptBytes: 8192 };
+// The methods one layered Agent grant may hold. The Agent pages through them (20 a page, at
+// most 64 KiB), so this bounds the grant rather than the Agent's context. A default business
+// grant that would exceed it is refused, never silently cut.
+export const layeredGrantLimits = { maxMethods: 96 };
 async function runContext(project: Project, requests: Requests, principal: Principal, operationId: string): Promise<RunContext> {
   const run = await requests.lookup(principal, operationId, true), facts = await runFacts(project, run);
   // The stored count can trail what Core has retained since it was recorded. When Core's reply
@@ -188,6 +192,7 @@ export class RhoService {
   // Conversations the local person starts here; Rho holds their input and runs Claude Code.
   conversations: Conversations;
   private consoles = new Map<string, import('@rho-workspace/plugin-console').ConsoleRunner>();
+  private kernels = new Map<string, import('@rho-workspace/plugin-kernel').KernelHost>();
   private feedback(project: Project, owners = this.plugins.project(project.root, project.id)) {
     const agent = owners.need('agent');
     return new (this.plugins.need('agent').FeedbackDelivery)(project.root, project.id, { agent, annotations: owners.annotations, binding: async (id: string) => (await readJson<any[]>(path.join(await this.dataDir(project), 'bindings.json'), [])).find(b => b.id === id) }, this.config.agentDelivery);
@@ -355,6 +360,7 @@ export class RhoService {
         return { file, principal: 'agent:' + digest(project.id + ':' + session).slice(0, 32) };
       },
       directory: project => this.dataDir(project),
+      notebook: () => this.plugins.availableIds().includes('kernel'),
       context: async (project, id) => {
         const context = await this.plugins.project(project.root, project.id).need('agent').peekContext(id);
         requireThat(context.projectId === project.id, 'scope', 'The context belongs to another project.');
@@ -463,13 +469,13 @@ export class RhoService {
     const capabilities = new Capabilities(this.plugins, project);
     const state = await capabilities.state();
     // The shared project listing remains available alongside an Agent's native tools.
-    const available = Object.keys(operations).filter(m => !m.startsWith('agent.activity.') && !m.startsWith('session.') && !m.startsWith('conversation.') && (!m.startsWith('project.') || m === 'project.entries') && !m.startsWith('requirements.prepare') && !m.startsWith('workspace.restore') && !['task.routing.put', 'binding.activity.append', 'feedback.submit', 'view.observe', 'view.observations.read', 'task.map.respond', 'annotation.decide', 'evidence.export', 'evidence.preview', 'console.run', 'console.stop'].includes(m));
+    const available = Object.keys(operations).filter(m => !m.startsWith('agent.activity.') && !m.startsWith('session.') && !m.startsWith('conversation.') && (!m.startsWith('project.') || m === 'project.entries') && !m.startsWith('requirements.prepare') && !m.startsWith('workspace.restore') && !['task.routing.put', 'binding.activity.append', 'feedback.submit', 'view.observe', 'view.observations.read', 'task.map.respond', 'annotation.decide', 'evidence.export', 'evidence.preview', 'console.run', 'console.stop', 'kernel.stop'].includes(m));
     const profileMethods = profile === 'layered-presentation' ? ['binding.open', 'capability.index', 'capability.resolve', 'workspace.observe', 'workspace.enhance'] : available.filter(m => !['workspace.observe', 'workspace.enhance', ...(profile ? ['skill.list','skill.read','protocol.describe'] : [])].includes(m));
     const selected = methods ?? (profile === 'layered-presentation' ? profileMethods : (await Promise.all(profileMethods.map(async method => [method, await capabilities.isAvailable(method, state)] as const))).filter(([, enabled]) => enabled).map(([method]) => method));
     requireThat(profile !== 'layered-presentation' || selected.every(m => profileMethods.includes(m)), 'scope', 'The selected role cannot receive broader methods.');
-    requireThat(selected.every(m => !!operations[m] && !m.startsWith('session.') && !m.startsWith('conversation.') && (!m.startsWith('project.') || m === 'project.entries') && !['task.routing.put', 'console.run', 'console.stop'].includes(m)), 'invalid', 'Unknown or operator-only Agent capability.');
+    requireThat(selected.every(m => !!operations[m] && !m.startsWith('session.') && !m.startsWith('conversation.') && (!m.startsWith('project.') || m === 'project.entries') && !['task.routing.put', 'console.run', 'console.stop', 'kernel.stop'].includes(m)), 'invalid', 'Unknown or operator-only Agent capability.');
     requireThat(await Promise.all(selected.map(method => capabilities.isAvailable(method, state))).then(values => values.every(Boolean)), 'unavailable', 'A requested Agent operation has no selected provider.');
-    requireThat(!profile || new Set(['capability.index', 'capability.resolve', ...selected]).size <= 64, 'limit', 'Layered connection methods exceed the selected 64-method profile; choose an explicit narrower grant.');
+    requireThat(!profile || new Set(['capability.index', 'capability.resolve', ...selected]).size <= layeredGrantLimits.maxMethods, 'limit', `Layered connection methods exceed the ${layeredGrantLimits.maxMethods}-method profile; choose an explicit narrower grant.`, { limit: 'maxMethods', maximum: layeredGrantLimits.maxMethods });
     const token = randomBytes(32).toString('hex');
     const id = 'agent:' + digest(projectId + ':' + externalSessionId).slice(0, 32);
     this.state.principals = this.state.principals.filter(p => p.id !== id);
@@ -566,7 +572,15 @@ export class RhoService {
       requireThat(read.ok, read.ok ? 'invalid' : read.kind, read.ok ? '' : (read.problems[0]?.fix ? `Request does not match the versioned schema: ${read.problems[0].fix}` : 'Request does not match the versioned schema.'), read.ok ? {} : { problems: read.problems, remedy: 'Fix the named fields and resend the same request identity.' });
       const request = read.request, contractRef = typeof req.headers['x-rho-contract-ref'] === 'string' ? req.headers['x-rho-contract-ref'] : undefined;
       let value;
-      if (body.projectId && method !== 'project.source.add') {
+      if (body.projectId && method.startsWith('kernel.')) {
+        // A cell may run for minutes and a run may wait for it. The live sessions keep their own
+        // order, so waiting holds no other request of the project, an interrupt among them.
+        const projectId = body.projectId;
+        try { value = await this.dispatch(request, principal, contractRef); }
+        catch (e) { await this.serial(projectId, () => this.recordActivity(principal, method, body, undefined, e instanceof Fault ? e.kind : 'storage')); throw e; }
+        const result = value;
+        await this.serial(projectId, () => this.recordActivity(principal, method, body, result));
+      } else if (body.projectId && method !== 'project.source.add') {
         value = await this.serial(body.projectId, async () => {
           try {
             const result = await this.dispatch(request, principal, contractRef);
@@ -647,6 +661,22 @@ export class RhoService {
       this.consoles.set(p.id, runner);
     }
     return runner;
+  }
+  // One pair of live sessions per project for the life of this service, shared by the person
+  // and their Agent. Changes reach open pages at most four times a second.
+  private kernelFor(p: Project) {
+    let host = this.kernels.get(p.id);
+    if (!host) {
+      const { KernelHost } = this.plugins.need('kernel');
+      let pending: NodeJS.Timeout | undefined;
+      const changed = () => {
+        if (pending || this.closing) return;
+        pending = setTimeout(() => { pending = undefined; void this.serial(p.id, () => this.emit(p, 'kernel.changed', p.id, localBrowserId)).catch(() => {}); }, 250);
+      };
+      host = new KernelHost(p.root, { limits: this.config.kernel, rscript: this.bridge.rscript, python: this.config.python, onChange: changed });
+      this.kernels.set(p.id, host);
+    }
+    return host;
   }
   // The discriminated union is what gives every branch below a typed body: after the
   // `method` comparison TypeScript narrows `request`, so `b` is that operation's own
@@ -939,6 +969,18 @@ export class RhoService {
       if (method === 'console.list') return runner.list(b.limit);
       if (method === 'console.output') return runner.output(b.commandId, b.offset, b.maxBytes);
       if (method === 'console.stop') return { command: await runner.stop(b.commandId, principal.id) };
+    }
+    // The person and their Agent run and interrupt cells in the same sessions; only the person
+    // ends a session, since its values are gone with it.
+    if (method.startsWith('kernel.')) {
+      if (method === 'kernel.stop') requireThat(principal.id === localBrowserId, 'unauthorized', 'Only the person at this machine ends a live session. Open Rho in a browser on this machine.');
+      await capabilities.assertAvailable(method, principal);
+      const host = this.kernelFor(p);
+      if (method === 'kernel.run') return host.run({ language: b.language, code: b.code, purpose: b.purpose, changeId: b.changeId, by: principal.id, waitMs: b.waitMs });
+      if (method === 'kernel.read') return host.read(b.limit, b.cellId);
+      if (method === 'kernel.plot') return host.plot(b.cellId, b.plot);
+      if (method === 'kernel.interrupt') return host.interrupt(b.cellId, principal.id);
+      if (method === 'kernel.stop') return host.stop(b.sessionId, principal.id);
     }
     if (method === 'capability.index' || method === 'capability.resolve' || contractRef) {
       const route = await routing.read(), bindings = await readJson<any[]>(path.join(await this.dataDir(p), 'bindings.json'), []);
@@ -1251,6 +1293,8 @@ export class RhoService {
     await this.conversations.close();
     // Commands the person started keep running; the next start records how each is found.
     for (const runner of this.consoles.values()) await runner.close();
+    // Live sessions end with Rho: their values live only in their processes.
+    for (const host of this.kernels.values()) await host.close();
     const shutdown = await this.bridge.close(); await this.state.close(); return shutdown;
   }
 }

@@ -1,0 +1,52 @@
+{
+  "method": "kernel.plot",
+  "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "projectId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "cellId": {
+        "pattern": "^k-[a-f0-9]{16}$",
+        "type": "string"
+      },
+      "plot": {
+        "maximum": 64,
+        "minimum": 1,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "projectId",
+      "cellId",
+      "plot"
+    ],
+    "type": "object"
+  },
+  "outputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "data": {
+        "type": "string"
+      },
+      "height": {
+        "type": "integer"
+      },
+      "mediaType": {
+        "const": "image/png"
+      },
+      "width": {
+        "type": "integer"
+      }
+    },
+    "required": [
+      "mediaType",
+      "data",
+      "width",
+      "height"
+    ],
+    "type": "object"
+  },
+  "description": "One plot a cell kept, as PNG bytes."
+}

@@ -655,9 +655,11 @@ The selected Agent source candidate is 0.4.3; Documents/Tables/Annotations keep
 0.4.1/0.4.2/0.4.1 and Core is unchanged. `session.grant` or the trusted Node
 `agentConnection(..., pluginFilter, profile)` explicitly chooses
 `layered-business` or `layered-presentation`. Existing descriptors without a
-profile retain compatibility behavior. A layered descriptor has at most 64
-methods, and a default business grant that would exceed this is refused. In the
-current composition the default business grant has exactly 64. Its authenticated principal retains the profile and plugin filter;
+profile retain compatibility behavior. A layered descriptor has at most
+`layeredGrantLimits.maxMethods` methods (96 since the Notebook; 64 before), and a
+default business grant that would exceed this is refused, never cut. The Agent pages
+through its methods 20 at a time, so the limit bounds the grant rather than the Agent's
+context. In the current composition the default business grant has 68. Its authenticated principal retains the profile and plugin filter;
 changing a model argument or local tool request cannot widen that grant.
 
 A presentation grant supplies only index/resolve, `workspace.observe/enhance`
@@ -913,3 +915,50 @@ then kills it after a grace period. After a restart, a command still alive reads
 | Kept output | `maxOutputBytes` 1 MiB, then `tailBytes` 64 KiB | Keep head and tail, count the bytes between. |
 | Output reads | `maxReadBytes` 64 KiB per page | Refuse a larger page. |
 | Stop | `stopGraceMs` 3000 | SIGKILL the process group. |
+
+### Live R and Python sessions (Notebook)
+
+Notebook 0.1.0 (`@rho-workspace/plugin-kernel`) keeps one live R session and one
+live Python session per project, in the project folder, shared by the person and
+their Agent. `kernel.run` queues a cell in its language's session and starts the
+session when none is live; `waitMs` waits up to `maxWaitMs` for it to end.
+`kernel.read` returns the sessions, their variables and the cells, and never starts
+a session. `kernel.plot` returns one kept plot as PNG bytes. `kernel.interrupt` names
+a cell: a running cell is stopped with SIGINT and its session and values stay; a
+waiting cell is not run; an ended cell is returned unchanged. `kernel.stop` names a
+session and ends it (SIGTERM, then SIGKILL after `stopGraceMs`); its running cell
+ends with an error and its waiting cells are not run. Agent grants receive run, read,
+plot and interrupt; `kernel.stop` accepts only the local browser principal. These
+operations do not wait in the project's request queue (only their activity record
+does), so a run waiting for a long cell holds no read and no interrupt.
+
+A cell keeps its `changeId` per caller: the same identity returns the same cell and
+never runs it twice. Cells run one at a time per session, in the order they came,
+and record who ran them (`by`), their purpose, code, printed output, messages,
+warnings and error in the order printed, plots, and how they ended: `done`,
+`error`, `interrupted` (with who asked and when), `not-run` or `unknown`. R output
+reaches Rho as it is printed; each answer about a cell follows a numbered mark on
+standard output, so it lands after the text printed before it. After each cell the
+session lists its variables (type, size, one-line summary; Python leaves out modules
+and imported classes and functions). State lives in `.rho/plugins/kernel/` in the
+project. Variables live only in their process: when Rho closes, its sessions end,
+and the next start records each as `rho-closed`, a running cell as `unknown` and a
+waiting one as `not-run`. Nothing runs again. Rho-started sessions are told to run
+exploratory code there and to keep the code results rest on in scripts.
+
+| Protected resource | `kernel` in `--limits`, default | Exhaustion |
+| --- | --- | --- |
+| Processes | One session per language per project | A cell joins its language's session. |
+| Waiting cells | `maxQueued` 16 per session | Refuse the cell (`limit`, named). |
+| Code | `maxCodeBytes` 64 KiB | Refuse the cell (`invalid`). |
+| Kept output | `maxOutputBytes` 256 KiB per cell | Keep the first bytes, count the rest, mark the cell `cut`. |
+| Plots | `maxPlots` 8 per cell, `maxPlotBytes` 4 MiB each | Keep the first plots; a larger file is dropped with a note in the cell. |
+| Cell records | `maxCells` 500 | The oldest ended cell and its plots make room. |
+| Variables listed | `maxVariables` 200 | List the first, count the rest (`variablesOmitted`). |
+| Waiting for a cell | `maxWaitMs` 10 min | Return the cell as it stands; read it later. |
+| Start | `startTimeoutMs` 30 s | Kill the process; waiting cells are not run, with what it printed. |
+| Stop | `stopGraceMs` 3000 | SIGKILL the process group. |
+| Ended sessions kept | `maxEndedSessions` 20 | The oldest ended session record goes. |
+
+Memory and time used by a cell's own code are not bounded. `--python` (or
+`RHO_PYTHON`) names Python; R is `--rscript` and needs the `jsonlite` package.

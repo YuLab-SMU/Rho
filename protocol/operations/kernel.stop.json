@@ -1,0 +1,213 @@
+{
+  "method": "kernel.stop",
+  "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "projectId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "sessionId": {
+        "pattern": "^s-[a-f0-9]{16}$",
+        "type": "string"
+      }
+    },
+    "required": [
+      "projectId",
+      "sessionId"
+    ],
+    "type": "object"
+  },
+  "outputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "session": {
+        "additionalProperties": false,
+        "properties": {
+          "cells": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "endedAt": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ending": {
+            "anyOf": [
+              {
+                "enum": [
+                  "stopped",
+                  "exited",
+                  "rho-closed",
+                  "not-started"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "language": {
+            "enum": [
+              "r",
+              "python"
+            ]
+          },
+          "pid": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "problem": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sessionId": {
+            "pattern": "^s-[a-f0-9]{16}$",
+            "type": "string"
+          },
+          "startedAt": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "startedBy": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "starting",
+              "idle",
+              "busy",
+              "ended"
+            ]
+          },
+          "stop": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "at": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "by": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "by",
+                  "at"
+                ],
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "variables": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "bytes": {
+                  "minimum": 0,
+                  "type": "number"
+                },
+                "name": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "size": {
+                  "type": "string"
+                },
+                "summary": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "name",
+                "type",
+                "size",
+                "bytes",
+                "summary"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "variablesAt": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "variablesOmitted": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "sessionId",
+          "language",
+          "state",
+          "version",
+          "pid",
+          "startedAt",
+          "startedBy",
+          "endedAt",
+          "ending",
+          "stop",
+          "problem",
+          "variables",
+          "variablesOmitted",
+          "variablesAt",
+          "cells"
+        ],
+        "type": "object"
+      }
+    },
+    "required": [
+      "session"
+    ],
+    "type": "object"
+  },
+  "description": "Person at this machine only: end one live session. Its values are gone, the running cell ends with an error and waiting cells are not run. A session that has ended is returned unchanged."
+}

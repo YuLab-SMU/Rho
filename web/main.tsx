@@ -26,6 +26,7 @@ const ProjectOverview = lazy(() => import('./overview.js').then(module => ({ def
 const FilePreview = lazy(() => import('./preview.js').then(module => ({ default: module.FilePreview })));
 const WorkGraph = lazy(() => import('./graph.js').then(module => ({ default: module.WorkGraph })));
 const ConsolePage = lazy(() => import('./console.js').then(module => ({ default: module.ConsolePage })));
+const NotebookPage = lazy(() => import('./notebook.js').then(module => ({ default: module.NotebookPage })));
 const ProcessStudio = lazy(() => import('./studio-process.js').then(module => ({ default: module.ProcessStudio })));
 
 const sessionKey = 'rho.browser.session.v1', projectKey = 'rho.browser.project.v1';
@@ -293,7 +294,7 @@ function App() {
       return;
     }
     followTarget.current = sharedWorkspace();
-    if (!(screen === 'project' && overview && (section === 'graph' || section === 'console'))) showOverview();
+    if (!(screen === 'project' && overview && (section === 'graph' || section === 'console' || section === 'notebook'))) showOverview();
     setFollowing(true);
   }
   // The conversations shown as Studios, newest first; those moved to the trash are left out.
@@ -556,6 +557,8 @@ function App() {
               : section === 'review' ? <Suspense fallback={<Loading text="Opening review…" />}><Reviews key={snapshot.project.id+':'+connection.principalId} client={client!} snapshot={snapshot} principalId={connection.principalId} annotationId={reviewId} initialAnchor={reviewAnchor} onGraph={ref=>{showSection('graph');setGraphResource(ref);}} onSent={id => { setSelectedConversation(id); setAgentOpen(true); }} /></Suspense>
               : section === 'console' ? <section className="project-page console-section" aria-labelledby="console-title"><header className="page-heading"><div><h1 id="console-title">Console</h1></div></header>
                   <Suspense fallback={<Loading text="Opening the Console…" />}><ConsolePage client={client!} snapshot={snapshot} files={files} focusTurn={consoleTurn} onPath={showPath} onConversation={id => { setSelectedConversation(id); setAgentOpen(true); setContext(false); }} /></Suspense></section>
+              : section === 'notebook' ? <section className="project-page notebook-section" aria-labelledby="notebook-title"><header className="page-heading"><div><h1 id="notebook-title">Notebook</h1><p>Live R and Python sessions you share with the Agent</p></div></header>
+                  <Suspense fallback={<Loading text="Opening the Notebook…" />}><NotebookPage client={client!} snapshot={snapshot} onConversation={id => { setSelectedConversation(id); setAgentOpen(true); setContext(false); }} /></Suspense></section>
               : section === 'graph' ? <Suspense fallback={<Loading text="Opening the graph…" />}><WorkGraph initialResource={graphResource} client={client!} snapshot={snapshot} files={files} agentNow={agentNow} following={following} principalId={connection.principalId} notesText={notes.text}
                   onFollow={() => follow()} onStopFollowing={() => setFollowing(false)} onStudio={layout} workspace={sharedWorkspace} onAbout={about} onAgent={id => { if (id) setSelectedConversation(id); setAgentOpen(true); setContext(false); }} /></Suspense>
               : <Suspense fallback={<Loading text="Opening project…" />}><ProjectOverview key={project.id} section={section} notesText={notes.text} workspace={sharedWorkspace} category={category} files={files} sources={sources} onFile={showFile} linked={!!link} onPath={showPath} onNewConversation={() => talk()} onSection={showSection} onConsole={showConsole} onAgent={id => { if (id) setSelectedConversation(id); setAgentOpen(true); }} client={client!} onProjectChanged={next => { setProject(next); setProjects(list => list.map(p => p.id === next.id ? next : p)); }} project={project} snapshot={snapshot} onLayout={layout} onOpened={(id, view) => { layout(id, view); reread(); }} /></Suspense>}

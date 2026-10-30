@@ -193,6 +193,9 @@ export function ProcessStudio({ client, snapshot, files, conversationId, notesTe
   const component = (id: string) => snapshot.catalog.components.find(c => c.id === id);
   const firstRun = graph.nodes.filter(n => n.kind === 'run').reduce((min, n) => Math.min(min, n.at), Infinity);
   const firstEver = whole.nodes.filter(n => n.kind === 'run').reduce((min, n) => Math.min(min, n.at), Infinity);
+  // When the Agent first ran code in a live session, from its own calls.
+  const firstCell = (list: typeof turns) => list.flatMap(t => t.turn.steps ?? []).filter(s => s.kind === 'tool' && s.operation?.startsWith('kernel.run')).reduce((min, s) => Math.min(min, Date.parse(s.startedAt ?? s.at)), Infinity);
+  const firstCellShown = useMemo(() => firstCell(shownTurns), [shownTurns]), firstCellEver = useMemo(() => firstCell(turns), [turns]);
   const tree = useMemo((): LayoutTree | null => {
     const node = (file: StudioFile): LayoutNode | null => {
       const props = { title: file.title };
@@ -209,15 +212,16 @@ export function ProcessStudio({ client, snapshot, files, conversationId, notesTe
     };
     const views = shown.flatMap(file => { const n = node(file); return n ? [{ role: file.role, node: n, figure: n.component === 'rho.media' }] : []; });
     const commands: LayoutNode | null = Number.isFinite(firstRun) ? { id: studioIds.console, kind: 'view', component: 'rho.console', version: '1', props: { title: 'Commands' }, bindings: {} } : null;
-    const derived = studioTree(views, commands);
+    const session: LayoutNode | null = Number.isFinite(firstCellShown) ? { id: studioIds.session, kind: 'view', component: 'rho.notebook', version: '1', props: { title: 'Session' }, bindings: {} } : null;
+    const derived = studioTree(views, commands, session);
     const saved = snapshot.compositions.find(c => c.compositionId === compositionId) as CompositionSummary | undefined;
     if (!saved?.rootId || !saved.nodes?.length) return derived;
     const savedTree: LayoutTree = { rootId: saved.rootId, nodes: saved.nodes as unknown as LayoutNode[] };
     // The person saw every file the work had when they last arranged it; those they closed stay closed.
     const arranged = Date.parse(saved.acknowledgedAt ?? '');
-    const first = (id: string) => id === studioIds.console ? firstEver : every.find(f => viewId(f.path) === id)?.first ?? Infinity;
+    const first = (id: string) => id === studioIds.console ? firstEver : id === studioIds.session ? firstCellEver : every.find(f => viewId(f.path) === id)?.first ?? Infinity;
     return studioMerge(savedTree, derived ?? { rootId: '', nodes: [] }, id => !Number.isFinite(arranged) || first(id) <= arranged);
-  }, [shown, every, docs, captured, at, firstRun, firstEver, snapshot.compositions, snapshot.catalog]);
+  }, [shown, every, docs, captured, at, firstRun, firstEver, firstCellShown, firstCellEver, snapshot.compositions, snapshot.catalog]);
   const saved = snapshot.compositions.find(c => c.compositionId === compositionId);
   const signature = JSON.stringify(tree) + ':' + (saved?.version ?? 0);
   const composition = useMemo((): CompositionSummary | null => tree ? { ...(saved ?? {}), compositionId, version: saved?.version ?? 0, rootId: tree.rootId, nodes: tree.nodes as never, views: tree.nodes.filter(n => n.kind === 'view') as never } : null, [signature]);
@@ -243,7 +247,7 @@ export function ProcessStudio({ client, snapshot, files, conversationId, notesTe
   const latest = at === null ? null : [...events].reverse().find(e => e.at <= at && e.action !== 'capture');
   const step = latest && ([...events].reverse().find(e => e.at <= at! && e.at >= Math.floor(latest.at / 1000) * 1000 && (e.action === 'write' || e.action === 'edit')) ?? latest);
   const stepNode = step ? graph.nodes.find(n => n.id === step.node) : null;
-  const working = live ? (live.latest?.action === 'execute' ? studioIds.console : forPath(live.files.at(-1)?.path)) : stepNode ? (stepNode.kind === 'run' ? studioIds.console : forPath(stepNode.path)) : undefined;
+  const working = live ? (live.latest?.step.operation?.startsWith('kernel.') && views.has(studioIds.session) ? studioIds.session : live.latest?.action === 'execute' ? studioIds.console : forPath(live.files.at(-1)?.path)) : stepNode ? (stepNode.kind === 'run' ? studioIds.console : forPath(stepNode.path)) : undefined;
   const openView = (chosen && views.has(chosen) ? chosen : undefined) ?? (following || at !== null ? working : undefined);
   useEffect(() => { setChosen(null); }, [at === null, conversationId]);
   const presence = live && working && views.has(working) ? { viewId: working, label: live.title, verb: working === studioIds.console ? 'Running' : live.files.at(-1)?.verb ?? 'Working', live: live.latest?.outcome === 'requested' } : null;

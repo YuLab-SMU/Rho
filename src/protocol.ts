@@ -50,7 +50,7 @@ function scoped(input: JsonSchema): JsonSchema {
 }
 
 const ownerOperations: Record<string, OwnerOperationContract> = {};
-for (const owner of ['documents', 'files', 'r', 'requirements', 'tables', 'media', 'charts', 'agent', 'console']) {
+for (const owner of ['documents', 'files', 'r', 'requirements', 'tables', 'media', 'charts', 'agent', 'console', 'kernel']) {
   for (const [method, contract] of Object.entries(ownerSchemaRecord(owner, 'operationContracts') as unknown as Record<string, OwnerOperationContract>)) {
     ownerOperations[method] = contract;
   }
@@ -420,6 +420,11 @@ export const descriptions = {
   'console.list': 'The commands run from the Console, newest first, with how each ended as Rho observed it: an exit code or signal, a requested stop, still continuing outside Rho, or unknown.',
   'console.output': 'One bounded page of what a Console command printed. Output past the kept size is counted in a note, not silently dropped.',
   'console.stop': 'Person at this machine only: ask a running Console command and the processes it started to stop; they are killed after a short grace period.',
+  'kernel.run': 'Run a cell of R or Python in the project\'s live session of that language, which the Agent and the person share: what one cell defines stays for the next. Starts the session when none is live. The same changeId from the same caller returns the same cell and never runs it twice. waitMs waits for the cell to end.',
+  'kernel.read': 'The live sessions and their cells, oldest cell first: code, purpose, who ran it, what it printed, its plots and how it ended, and each session\'s variables. Reading never starts a session.',
+  'kernel.plot': 'One plot a cell kept, as PNG bytes.',
+  'kernel.interrupt': 'Interrupt one cell: a running cell stops and its session and values stay; a waiting cell is not run. A cell that has ended is returned unchanged.',
+  'kernel.stop': 'Person at this machine only: end one live session. Its values are gone, the running cell ends with an error and waiting cells are not run. A session that has ended is returned unchanged.',
   'conversation.delete': 'Person at this machine only: delete Rho\'s record of a conversation in the trash. The Agent\'s own session files are not touched. Repeating the request that started it is then refused.',
   'conversation.settings.read': 'Person at this machine only: read the Agent and settings chosen for new conversations and what each Agent last offered. Reading starts nothing.',
   'conversation.settings.update': 'Person at this machine only: choose the Agent and its settings for new conversations, among the values that Agent last offered, and whether a model describes the files a message writes. A stale expectedVersion is refused.',
@@ -449,4 +454,4 @@ export const errorKinds = base.errorKinds;
 export const errorSchema = base.definitions.error;
 export const errorEnvelope = obj({ apiVersion: { const: '2.0' }, ok: { const: false }, error: errorSchema });
 export const responseEnvelope = (method: string) => obj({ apiVersion: { const: '2.0' }, ok: { const: true }, value: responses[method] });
-export const protocol = { ...base, apiVersion: '2.0', schemaVersion: 2, transport: 'HTTP JSON POST /api/v2/{operation}; GET /api/v2/events', eventTypes: [...new Set([...base.eventTypes, 'project.sources.changed', 'capability.changed', 'view.closed', 'interaction.selection.changed', 'annotation.changed', 'context.changed', 'workspace.restored', 'task.routing.changed', 'binding.native.changed', 'feedback.changed', 'task.map.changed', 'feedback.changed', 'activity.changed', 'resource.changed', 'conversation.changed', 'console.changed'])], operations, responses, descriptions: orderedDescriptions, definitions, errorEnvelope, status: 'One versioned contract. Retained operations stay observable through the current API; requests this contract does not accept receive a typed refusal rather than a second dialect.' };
+export const protocol = { ...base, apiVersion: '2.0', schemaVersion: 2, transport: 'HTTP JSON POST /api/v2/{operation}; GET /api/v2/events', eventTypes: [...new Set([...base.eventTypes, 'project.sources.changed', 'capability.changed', 'view.closed', 'interaction.selection.changed', 'annotation.changed', 'context.changed', 'workspace.restored', 'task.routing.changed', 'binding.native.changed', 'feedback.changed', 'task.map.changed', 'feedback.changed', 'activity.changed', 'resource.changed', 'conversation.changed', 'console.changed', 'kernel.changed'])], operations, responses, descriptions: orderedDescriptions, definitions, errorEnvelope, status: 'One versioned contract. Retained operations stay observable through the current API; requests this contract does not accept receive a typed refusal rather than a second dialect.' };

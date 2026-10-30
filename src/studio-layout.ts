@@ -21,7 +21,7 @@ export interface StudioFile {
 // The protected resource is the screen: past these, a role's further files stay in the list of
 // the step they belong to, and Files keeps them all.
 export const studioLimits = { input: 3, code: 3, result: 6, report: 2 };
-export const studioIds = { root: 'studio', left: 'studio-left', input: 'studio-input', code: 'studio-code', commands: 'studio-commands', right: 'studio-right', figures: 'studio-figures', result: 'studio-result', console: 'studio-console' };
+export const studioIds = { root: 'studio', left: 'studio-left', input: 'studio-input', code: 'studio-code', commands: 'studio-commands', right: 'studio-right', figures: 'studio-figures', result: 'studio-result', console: 'studio-console', session: 'studio-session' };
 const unlimited = { supporting: 64, method: 64, run: 64, input: 64, report: 64 } satisfies typeof boardLimits;
 const rank: Record<StudioRole, number> = { code: 0, result: 1, report: 2, input: 3 };
 
@@ -77,7 +77,8 @@ const split = (id: string, axis: 'horizontal' | 'vertical', parts: Array<{ id: s
 
 // The arrangement the roles call for, from nothing. A figure is drawn at its own size, so the
 // figures have their own place above the tables and reports that scroll.
-export function studioTree(views: Array<{ role: StudioRole; node: LayoutNode; figure?: boolean }>, commands: LayoutNode | null): LayoutTree | null {
+// The cells the Agent ran in a live session share the commands' place, as another way it ran code.
+export function studioTree(views: Array<{ role: StudioRole; node: LayoutNode; figure?: boolean }>, commands: LayoutNode | null, session: LayoutNode | null = null): LayoutTree | null {
   const nodes: LayoutNode[] = [];
   const region = (id: string, members: LayoutNode[]) => { if (!members.length) return null; nodes.push(group(id, members.map(m => m.id)), ...members); return id; };
   const of = (role: StudioRole) => views.filter(v => v.role === role).slice(0, studioLimits[role]);
@@ -87,7 +88,7 @@ export function studioTree(views: Array<{ role: StudioRole; node: LayoutNode; fi
     nodes.push(split(id, 'vertical', present)); return id;
   };
   const input = region(studioIds.input, of('input').map(v => v.node)), code = region(studioIds.code, of('code').map(v => v.node));
-  const run = commands ? region(studioIds.commands, [commands]) : null;
+  const run = region(studioIds.commands, [commands, session].filter((n): n is LayoutNode => !!n));
   const made = [...of('result'), ...of('report')];
   const figures = region(studioIds.figures, made.filter(v => v.figure).map(v => v.node)), result = region(studioIds.result, made.filter(v => !v.figure).map(v => v.node));
   const leftId = column(studioIds.left, [input ? { id: input, weight: 1 } : null, code ? { id: code, weight: 1.8 } : null, run ? { id: run, weight: 1.2 } : null]);

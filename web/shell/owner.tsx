@@ -25,6 +25,7 @@ export function title(view: ViewDescription) {
 // The tab icon follows what the view is bound to.
 export function viewIcon(view: ViewDescription, snapshot: WorkspaceSnapshot): IconName {
   if (view.component === 'rho.console') return 'prompt';
+  if (view.component === 'rho.notebook') return 'code';
   if (view.component === 'rho.execution' || view.component === 'rho.action') return 'layout';
   if (view.component === 'rho.media') return 'image';
   const [, first] = bindings(view)[0] ?? [];

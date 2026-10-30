@@ -4,8 +4,8 @@
   "schemaVersion": 2,
   "shared": {
     "path": "operations/shared.json",
-    "bytes": 75297,
-    "sha256": "8b1778a15f7fedce512babf2f1b805dc67aca0143428a2da41c828cc70e7afc2"
+    "bytes": 75319,
+    "sha256": "f3f11ec319ba56ba1d4ab320a0fab880e4dc67c9daa247d353a155093fb1f422"
   },
   "operations": {
     "action.cancel": {
@@ -428,6 +428,36 @@
       "bytes": 8788,
       "sha256": "eb10497e17d14eca90237d20bde0eaad9296a7c50a39f285b899c06878d73ebc"
     },
+    "kernel.interrupt": {
+      "summary": "Interrupt one cell: a running cell stops and its session and values stay; a waiting cell is not run. A cell that has ended is returned unchanged.",
+      "path": "operations/kernel.interrupt.json",
+      "bytes": 4895,
+      "sha256": "83024b1f09d4e9fab9188f149eaa682b025c1ac5bd8163ccb10b5da2da54679c"
+    },
+    "kernel.plot": {
+      "summary": "One plot a cell kept, as PNG bytes.",
+      "path": "operations/kernel.plot.json",
+      "bytes": 964,
+      "sha256": "61471baff849ddb88fd04c673369869b49a24f7b4391fd137e38e501cb865d05"
+    },
+    "kernel.read": {
+      "summary": "The live sessions and their cells, oldest cell first: code, purpose, who ran it, what it printed, its plots and how it ended, and each session's variables. Reading never starts a session.",
+      "path": "operations/kernel.read.json",
+      "bytes": 10111,
+      "sha256": "75184f1194f1ea70ca7353466067f2ac35fb582e471d41d0c8971c2a4b7292c0"
+    },
+    "kernel.run": {
+      "summary": "Run a cell of R or Python in the project's live session of that language, which the Agent and the person share: what one cell defines stays for the next. Starts the session when none is live. The same changeId from the same caller returns the same cell and never runs it twice. waitMs waits for the cell to end.",
+      "path": "operations/kernel.run.json",
+      "bytes": 9646,
+      "sha256": "f3be63da74e33ee89e0d070f99ad6061320b159961af0f71df2958096d7c6417"
+    },
+    "kernel.stop": {
+      "summary": "Person at this machine only: end one live session. Its values are gone, the running cell ends with an error and waiting cells are not run. A session that has ended is returned unchanged.",
+      "path": "operations/kernel.stop.json",
+      "bytes": 4905,
+      "sha256": "921079ceaaebb33c651bf27549f6064bee4bf6043ccad8251c0f604f0d28e448"
+    },
     "media.describe": {
       "summary": "media.describe",
       "path": "operations/media.describe.json",
@@ -593,8 +623,8 @@
     "session.grant": {
       "summary": "session.grant",
       "path": "operations/session.grant.json",
-      "bytes": 4203,
-      "sha256": "cea5e9395dd143b3cd0b63f358dae1ebfff2b6b05f50b28a80be5fdc3dbdf362"
+      "bytes": 4342,
+      "sha256": "55b7a28891bda576c4e02efc9a15982c045e60c802a9df1c4a330e527c17c3a0"
     },
     "skill.list": {
       "summary": "List the application and enabled provider Skills shipped in the selected package. Skills guide discovery but do not grant authorization.",

@@ -45,10 +45,12 @@ export const conversationMethods = ['session.connect', 'conversation.start', 'co
 export const localBrowserId = 'browser:local';
 // Commands the person types in the Console run with their own shell, so only they hold these.
 export const consoleMethods = ['console.run', 'console.list', 'console.output', 'console.stop'];
+// The project's live R and Python sessions, which the person shares with their Agent.
+export const kernelMethods = ['kernel.run', 'kernel.read', 'kernel.plot', 'kernel.interrupt', 'kernel.stop'];
 export function localBrowserPrincipal(root: string): Principal {
   // The empty token hash can never match a request digest, so no header impersonates this
   // identity: it is chosen because the request carried no credential at all.
-  return { id: localBrowserId, kind: 'browser', tokenHash: '', projectRoot: root, methods: [...browserMethods, ...conversationMethods, ...consoleMethods] };
+  return { id: localBrowserId, kind: 'browser', tokenHash: '', projectRoot: root, methods: [...browserMethods, ...conversationMethods, ...consoleMethods, ...kernelMethods] };
 }
 interface Pairing { hash: string; root: string; methods: string[]; expires: number; selectedProjects: string[] }
 export class BrowserAccess {

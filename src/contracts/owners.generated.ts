@@ -19163,6 +19163,1291 @@ export const ownerContracts: OwnerContractSnapshot = {
         }
       }
     },
+    "kernel": {
+      "operationContracts": {
+        "kernel.interrupt": {
+          "effect": "native",
+          "inputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "cellId": {
+                "pattern": "^k-[a-f0-9]{16}$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "cellId"
+            ],
+            "type": "object"
+          },
+          "outputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "cell": {
+                "additionalProperties": false,
+                "properties": {
+                  "by": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "bytes": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "cellId": {
+                    "pattern": "^k-[a-f0-9]{16}$",
+                    "type": "string"
+                  },
+                  "changeId": {
+                    "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+                    "type": "string"
+                  },
+                  "code": {
+                    "type": "string"
+                  },
+                  "cut": {
+                    "type": "boolean"
+                  },
+                  "endedAt": {
+                    "anyOf": [
+                      {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "interrupt": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "at": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "by": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "by",
+                          "at"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "kept": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "language": {
+                    "enum": [
+                      "r",
+                      "python"
+                    ]
+                  },
+                  "number": {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "outputs": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "height": {
+                          "type": "integer"
+                        },
+                        "kind": {
+                          "enum": [
+                            "stdout",
+                            "stderr",
+                            "warning",
+                            "error",
+                            "plot"
+                          ]
+                        },
+                        "plot": {
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        "text": {
+                          "type": "string"
+                        },
+                        "width": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "kind"
+                      ],
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
+                  "problem": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "purpose": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "queuedAt": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "sessionId": {
+                    "pattern": "^s-[a-f0-9]{16}$",
+                    "type": "string"
+                  },
+                  "startedAt": {
+                    "anyOf": [
+                      {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "state": {
+                    "enum": [
+                      "queued",
+                      "running",
+                      "done",
+                      "error",
+                      "interrupted",
+                      "not-run",
+                      "unknown"
+                    ]
+                  }
+                },
+                "required": [
+                  "cellId",
+                  "changeId",
+                  "by",
+                  "sessionId",
+                  "language",
+                  "code",
+                  "purpose",
+                  "queuedAt",
+                  "startedAt",
+                  "endedAt",
+                  "state",
+                  "number",
+                  "outputs",
+                  "bytes",
+                  "kept",
+                  "cut",
+                  "interrupt",
+                  "problem"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "cell"
+            ],
+            "type": "object"
+          },
+          "requires": []
+        },
+        "kernel.plot": {
+          "effect": "read",
+          "inputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "cellId": {
+                "pattern": "^k-[a-f0-9]{16}$",
+                "type": "string"
+              },
+              "plot": {
+                "maximum": 64,
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "cellId",
+              "plot"
+            ],
+            "type": "object"
+          },
+          "outputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "data": {
+                "type": "string"
+              },
+              "height": {
+                "type": "integer"
+              },
+              "mediaType": {
+                "const": "image/png"
+              },
+              "width": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "mediaType",
+              "data",
+              "width",
+              "height"
+            ],
+            "type": "object"
+          },
+          "requires": []
+        },
+        "kernel.read": {
+          "effect": "read",
+          "inputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "cellId": {
+                "pattern": "^k-[a-f0-9]{16}$",
+                "type": "string"
+              },
+              "limit": {
+                "maximum": 500,
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "required": [],
+            "type": "object"
+          },
+          "outputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "cells": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "by": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "bytes": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "cellId": {
+                      "pattern": "^k-[a-f0-9]{16}$",
+                      "type": "string"
+                    },
+                    "changeId": {
+                      "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "cut": {
+                      "type": "boolean"
+                    },
+                    "endedAt": {
+                      "anyOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "interrupt": {
+                      "anyOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "at": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "by": {
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "by",
+                            "at"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "kept": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "language": {
+                      "enum": [
+                        "r",
+                        "python"
+                      ]
+                    },
+                    "number": {
+                      "minimum": 1,
+                      "type": "integer"
+                    },
+                    "outputs": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "height": {
+                            "type": "integer"
+                          },
+                          "kind": {
+                            "enum": [
+                              "stdout",
+                              "stderr",
+                              "warning",
+                              "error",
+                              "plot"
+                            ]
+                          },
+                          "plot": {
+                            "minimum": 1,
+                            "type": "integer"
+                          },
+                          "text": {
+                            "type": "string"
+                          },
+                          "width": {
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "problem": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "purpose": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "queuedAt": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "sessionId": {
+                      "pattern": "^s-[a-f0-9]{16}$",
+                      "type": "string"
+                    },
+                    "startedAt": {
+                      "anyOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "state": {
+                      "enum": [
+                        "queued",
+                        "running",
+                        "done",
+                        "error",
+                        "interrupted",
+                        "not-run",
+                        "unknown"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "cellId",
+                    "changeId",
+                    "by",
+                    "sessionId",
+                    "language",
+                    "code",
+                    "purpose",
+                    "queuedAt",
+                    "startedAt",
+                    "endedAt",
+                    "state",
+                    "number",
+                    "outputs",
+                    "bytes",
+                    "kept",
+                    "cut",
+                    "interrupt",
+                    "problem"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "omitted": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "sessions": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "cells": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "endedAt": {
+                      "anyOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "ending": {
+                      "anyOf": [
+                        {
+                          "enum": [
+                            "stopped",
+                            "exited",
+                            "rho-closed",
+                            "not-started"
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "language": {
+                      "enum": [
+                        "r",
+                        "python"
+                      ]
+                    },
+                    "pid": {
+                      "anyOf": [
+                        {
+                          "type": "integer"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "problem": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "sessionId": {
+                      "pattern": "^s-[a-f0-9]{16}$",
+                      "type": "string"
+                    },
+                    "startedAt": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "startedBy": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "state": {
+                      "enum": [
+                        "starting",
+                        "idle",
+                        "busy",
+                        "ended"
+                      ]
+                    },
+                    "stop": {
+                      "anyOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "at": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "by": {
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "by",
+                            "at"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "variables": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "bytes": {
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          "name": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "size": {
+                            "type": "string"
+                          },
+                          "summary": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "type",
+                          "size",
+                          "bytes",
+                          "summary"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "variablesAt": {
+                      "anyOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "variablesOmitted": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "version": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "sessionId",
+                    "language",
+                    "state",
+                    "version",
+                    "pid",
+                    "startedAt",
+                    "startedBy",
+                    "endedAt",
+                    "ending",
+                    "stop",
+                    "problem",
+                    "variables",
+                    "variablesOmitted",
+                    "variablesAt",
+                    "cells"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "sessions",
+              "cells",
+              "omitted"
+            ],
+            "type": "object"
+          },
+          "requires": []
+        },
+        "kernel.run": {
+          "effect": "native",
+          "inputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "changeId": {
+                "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+                "type": "string"
+              },
+              "code": {
+                "maxLength": 65536,
+                "minLength": 1,
+                "type": "string"
+              },
+              "language": {
+                "enum": [
+                  "r",
+                  "python"
+                ]
+              },
+              "purpose": {
+                "maxLength": 200,
+                "type": "string"
+              },
+              "waitMs": {
+                "maximum": 600000,
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "language",
+              "code",
+              "changeId"
+            ],
+            "type": "object"
+          },
+          "outputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "cell": {
+                "additionalProperties": false,
+                "properties": {
+                  "by": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "bytes": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "cellId": {
+                    "pattern": "^k-[a-f0-9]{16}$",
+                    "type": "string"
+                  },
+                  "changeId": {
+                    "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+                    "type": "string"
+                  },
+                  "code": {
+                    "type": "string"
+                  },
+                  "cut": {
+                    "type": "boolean"
+                  },
+                  "endedAt": {
+                    "anyOf": [
+                      {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "interrupt": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "at": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "by": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "by",
+                          "at"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "kept": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "language": {
+                    "enum": [
+                      "r",
+                      "python"
+                    ]
+                  },
+                  "number": {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "outputs": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "height": {
+                          "type": "integer"
+                        },
+                        "kind": {
+                          "enum": [
+                            "stdout",
+                            "stderr",
+                            "warning",
+                            "error",
+                            "plot"
+                          ]
+                        },
+                        "plot": {
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        "text": {
+                          "type": "string"
+                        },
+                        "width": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "kind"
+                      ],
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
+                  "problem": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "purpose": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "queuedAt": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "sessionId": {
+                    "pattern": "^s-[a-f0-9]{16}$",
+                    "type": "string"
+                  },
+                  "startedAt": {
+                    "anyOf": [
+                      {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "state": {
+                    "enum": [
+                      "queued",
+                      "running",
+                      "done",
+                      "error",
+                      "interrupted",
+                      "not-run",
+                      "unknown"
+                    ]
+                  }
+                },
+                "required": [
+                  "cellId",
+                  "changeId",
+                  "by",
+                  "sessionId",
+                  "language",
+                  "code",
+                  "purpose",
+                  "queuedAt",
+                  "startedAt",
+                  "endedAt",
+                  "state",
+                  "number",
+                  "outputs",
+                  "bytes",
+                  "kept",
+                  "cut",
+                  "interrupt",
+                  "problem"
+                ],
+                "type": "object"
+              },
+              "session": {
+                "additionalProperties": false,
+                "properties": {
+                  "cells": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "endedAt": {
+                    "anyOf": [
+                      {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "ending": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "stopped",
+                          "exited",
+                          "rho-closed",
+                          "not-started"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "language": {
+                    "enum": [
+                      "r",
+                      "python"
+                    ]
+                  },
+                  "pid": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "problem": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "sessionId": {
+                    "pattern": "^s-[a-f0-9]{16}$",
+                    "type": "string"
+                  },
+                  "startedAt": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "startedBy": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "state": {
+                    "enum": [
+                      "starting",
+                      "idle",
+                      "busy",
+                      "ended"
+                    ]
+                  },
+                  "stop": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "at": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "by": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "by",
+                          "at"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "variables": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "bytes": {
+                          "minimum": 0,
+                          "type": "number"
+                        },
+                        "name": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "size": {
+                          "type": "string"
+                        },
+                        "summary": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "type",
+                        "size",
+                        "bytes",
+                        "summary"
+                      ],
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
+                  "variablesAt": {
+                    "anyOf": [
+                      {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "variablesOmitted": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "version": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "sessionId",
+                  "language",
+                  "state",
+                  "version",
+                  "pid",
+                  "startedAt",
+                  "startedBy",
+                  "endedAt",
+                  "ending",
+                  "stop",
+                  "problem",
+                  "variables",
+                  "variablesOmitted",
+                  "variablesAt",
+                  "cells"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "cell",
+              "session"
+            ],
+            "type": "object"
+          },
+          "requires": []
+        },
+        "kernel.stop": {
+          "effect": "native",
+          "inputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "sessionId": {
+                "pattern": "^s-[a-f0-9]{16}$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "sessionId"
+            ],
+            "type": "object"
+          },
+          "outputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "session": {
+                "additionalProperties": false,
+                "properties": {
+                  "cells": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "endedAt": {
+                    "anyOf": [
+                      {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "ending": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "stopped",
+                          "exited",
+                          "rho-closed",
+                          "not-started"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "language": {
+                    "enum": [
+                      "r",
+                      "python"
+                    ]
+                  },
+                  "pid": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "problem": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "sessionId": {
+                    "pattern": "^s-[a-f0-9]{16}$",
+                    "type": "string"
+                  },
+                  "startedAt": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "startedBy": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "state": {
+                    "enum": [
+                      "starting",
+                      "idle",
+                      "busy",
+                      "ended"
+                    ]
+                  },
+                  "stop": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "at": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "by": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "by",
+                          "at"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "variables": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "bytes": {
+                          "minimum": 0,
+                          "type": "number"
+                        },
+                        "name": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "size": {
+                          "type": "string"
+                        },
+                        "summary": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "type",
+                        "size",
+                        "bytes",
+                        "summary"
+                      ],
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
+                  "variablesAt": {
+                    "anyOf": [
+                      {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "variablesOmitted": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "version": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "sessionId",
+                  "language",
+                  "state",
+                  "version",
+                  "pid",
+                  "startedAt",
+                  "startedBy",
+                  "endedAt",
+                  "ending",
+                  "stop",
+                  "problem",
+                  "variables",
+                  "variablesOmitted",
+                  "variablesAt",
+                  "cells"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "session"
+            ],
+            "type": "object"
+          },
+          "requires": []
+        }
+      }
+    },
     "entry-files": {
       "declarationSchema": {
         "additionalProperties": false,
@@ -20096,6 +21381,16 @@ export const ownerContracts: OwnerContractSnapshot = {
       "entrySha256": "98d45ada88d73afa451a7367f2752054dc4817f2a17a977ae3e7cf243a2fd5cf",
       "exports": {
         "operationContracts": "3e4024720d41605e740d7fd6e0b39df2e6c69c8303acd39a3821b91b6ed5a967"
+      }
+    },
+    "kernel": {
+      "package": "@rho-workspace/plugin-kernel",
+      "packageVersion": "0.1.0",
+      "entry": "./operations",
+      "entryPath": "@rho-workspace/plugin-kernel/dist/operations.js",
+      "entrySha256": "ebd291a8b4ba0b30daa7c959983b0fea1c33ca9101d70d6d16b5495c88fe7489",
+      "exports": {
+        "operationContracts": "7c591049a5f0da2f019f1b11e9d2630191d66e10ae484f6244c04198e7f118da"
       }
     },
     "entry-files": {

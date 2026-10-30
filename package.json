@@ -77,6 +77,7 @@
     "test:annotations": "node --test ../Rho-plugins/test/annotations.test.mjs",
     "test:media": "node --test ../Rho-plugins/test/owners.test.mjs",
     "test:console": "node --test ../Rho-plugins/test/console.test.mjs && node --test --test-name-pattern='Console commands' test/answer-decisions.test.mjs",
+    "test:notebook": "node --test ../Rho-plugins/test/kernel.test.mjs && node --test test/notebook.test.mjs",
     "test:requirements": "node --test --test-name-pattern='base-R requirements' ../Rho-plugins/test/resources.test.mjs",
     "test:native": "node --test test/native-artifacts.test.mjs",
     "test:feedback": "node --test test/feedback-delivery.test.mjs",
@@ -122,6 +123,7 @@
     "@rho-workspace/plugin-contracts": "file:../Rho-plugins/packages/contracts",
     "@rho-workspace/plugin-documents": "file:../Rho-plugins/plugins/documents",
     "@rho-workspace/plugin-files": "file:../Rho-plugins/plugins/files",
+    "@rho-workspace/plugin-kernel": "file:../Rho-plugins/plugins/kernel",
     "@rho-workspace/plugin-media": "file:../Rho-plugins/plugins/media",
     "@rho-workspace/plugin-r": "file:../Rho-plugins/plugins/r",
     "@rho-workspace/plugin-requirements": "file:../Rho-plugins/plugins/requirements",
@@ -164,7 +166,8 @@
     "@rho-workspace/plugin-charts",
     "@rho-workspace/plugin-agent",
     "@rho-workspace/plugin-annotations",
-    "@rho-workspace/plugin-console"
+    "@rho-workspace/plugin-console",
+    "@rho-workspace/plugin-kernel"
   ],
   "private": true
 }

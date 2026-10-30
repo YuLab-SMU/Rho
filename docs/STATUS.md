@@ -107,6 +107,16 @@ from rho-bio-eval ran in Rho: bix-18 (Python) had 4 of 5 answers in range twice,
 miss being a proportion against a range written as a percentage; bix-51 (R) had 7 of 7.
 The Choices and the Console were redrawn from what these runs showed.
 
+The [Notebook](SIMULATED-PROJECT-EPISODE.md#the-notebook) (Notebook 0.1.0) keeps a live R
+and a live Python session per project that the person shares with the Agent. Its page lists
+cells in the order they ran with who ran them and why, the code, output streamed as it is
+printed with messages and warnings in place, plots, and the session's variables; the person
+runs, edits, reruns and interrupts cells, and only they stop a session. A conversation's
+Studio shows the cells its Agent ran. In fresh quick checks the Agent ran its script in the
+session (bix-51 7 of 7 in 5 cells, bix-18 4 of 5 in 4 cells) rather than exploring cell by
+cell. The default Agent grant had reached its 64-method limit, so the limit is now 96
+(`layeredGrantLimits.maxMethods`); a larger grant is still refused.
+
 ## Existing application
 
 - Projects opens selected folders and manages finite source folders. Sources counts
@@ -144,10 +154,11 @@ The first full changed run passed Plugins 109/109 and Rho 227/228; an undeclared
 new CSS variable caused the application failure and was corrected. The second pass
 (answer board, decisions, Console, Agent 0.4.19) passed Rho 240/240. The process Studio
 pass first failed 244/245 on another undeclared CSS variable, which was corrected;
-Rho 245/245 and Plugins 117/117. The choices and Console pass records Rho 260/260 and
-Plugins 125/125 in the [ledger](VERIFICATION.json), with the contract check and the
+Rho 245/245 and Plugins 117/117. The Notebook pass first failed Rho 257/260: two
+checks still held the 64-method limit and the plugin count, and the Skill's verify
+command was not an application script. Corrected, it records Rho 261/261 and Plugins 132/132 in the [ledger](VERIFICATION.json), with the contract check and the
 agent-canvas, graph, agent-page, agent-ui, review, ui:u2 and sources browser
-acceptances. Earlier passes: figures and cost Rho 258/258; project notes Rho 249/249 and Plugins 120/120 (ui:u2 first
+acceptances. Earlier passes: choices and Console Rho 260/260 and Plugins 125/125; figures and cost Rho 258/258; project notes Rho 249/249 and Plugins 120/120 (ui:u2 first
 failed until the notes stopped opening with every project); meaning layer Rho 253/253;
 descriptions Rho 257/257 and Plugins 122/122, each with the same seven acceptances.
 The [episode](REVIEW-EVIDENCE-EPISODE.md) records contract, browser and installed results.

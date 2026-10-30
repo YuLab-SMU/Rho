@@ -185,6 +185,8 @@ export interface ConversationPorts {
   // models.dev lists about that model.
   describe?(project: Project, request: DescribeRequest): Promise<{ text: string; model: string | null; cost: Cost }>;
   modelFacts?(model: string): Promise<{ images: boolean; listed: string } | null>;
+  // Whether the project's live R and Python sessions are selected, which the session is told about.
+  notebook?(): boolean;
 }
 export interface DescribeRequest {
   path: string; facts: string; request: string; model: string | null; strategy: Strategy;
@@ -673,7 +675,7 @@ export class Conversations {
         if (learned) void this.offer(c.backend as Backend, { at: config.at, source: 'conversation', adapter: c.adapter ?? null, options: config.options, omitted: config.omitted }).catch(() => {});
       } };
       // Every session started here is told about the project's shared notes and its section.
-      const instructions = notesInstructions(c.id);
+      const instructions = notesInstructions(c.id, { notebook: !!this.ports.notebook?.() });
       const common = { cwd: project.root, mcpServers, limits: this.limits, sessionId: c.acpSessionId, config: c.config, instructions, ...observed };
       const driver = c.backend === 'codex-acp'
         ? new CodexAcpConversation({ ...this.config.codexAcp, ...common, codex: this.config.codex })

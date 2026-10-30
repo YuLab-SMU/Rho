@@ -1,0 +1,135 @@
+/* The Notebook: cells in the order they ran beside the live sessions, their variables and plots. */
+.notebook-section { max-width: 1280px; container-type: inline-size; }
+.nb-page { display: grid; grid-template-columns: minmax(0, 1fr) 17.5rem; gap: 28px; align-items: start; }
+.nb-main { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.nb-cells { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+
+/* One cell: its language and number in the gutter; who ran it, why and how it ended; then its code and what it printed. */
+.nb-cell { display: grid; grid-template-columns: 3.4rem minmax(0, 1fr); gap: 14px; padding: 16px 0 14px; border-top: 1px solid var(--color-divider); scroll-margin-top: 16px; }
+.nb-cells > .nb-cell:first-child { border-top: 0; padding-top: 4px; }
+.nb-gutter { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; padding-top: 2px; }
+.nb-lang { padding: 1px 7px; border-radius: 999px; font-size: 11px; font-weight: 650; letter-spacing: .2px; }
+.nb-lang.r { background: var(--color-hue-sky); color: var(--color-hue-sky-ink); }
+.nb-lang.python { background: var(--color-hue-clay); color: var(--color-hue-clay-ink); }
+.nb-number { color: var(--color-meta); font: 12px var(--font-mono); font-variant-numeric: tabular-nums; }
+.nb-body { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.nb-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: baseline; gap: 10px; }
+.nb-who { color: var(--color-meta); font-size: 12px; font-weight: 600; white-space: nowrap; }
+.nb-who .text-button { min-height: 0; padding: 0; color: var(--color-accent-strong); font-size: 12px; font-weight: 600; }
+.nb-who .text-button:hover { text-decoration: underline; background: none; }
+.nb-cell.mine .nb-who { color: var(--color-ink); }
+.nb-purpose { min-width: 0; color: var(--color-ink); font-size: 14px; font-weight: 600; line-height: 1.4; }
+.nb-unnamed { color: var(--color-muted); font-weight: 500; }
+.nb-when { display: flex; gap: 8px; color: var(--color-meta); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.nb-ending { display: inline-flex; align-items: center; gap: 6px; }
+.nb-ending.running { color: var(--color-accent); font-weight: 600; }
+.nb-ending.waiting { color: var(--color-amber-text); font-weight: 600; }
+.nb-ending.failed { color: var(--color-failed); font-weight: 600; }
+
+.nb-code { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; align-self: stretch; }
+.nb-code pre { width: 100%; margin: 0; padding: 9px 12px; overflow-x: auto; border-radius: 8px; background: var(--color-well); font: 12.5px/1.5 var(--font-mono); color: var(--color-ink); tab-size: 4; }
+.nb-more { min-height: 0; padding: 2px 0; color: var(--color-accent-strong); font-size: 12px; font-weight: 600; }
+.nb-out-more { align-self: flex-start; margin-left: 12px; }
+/* What it printed reads as the session wrote it: fixed columns keep R's tables aligned. */
+.nb-out { margin: 0; padding: 2px 12px; max-height: 26em; overflow: auto; font: 12.5px/1.45 var(--font-mono); color: var(--color-ink); white-space: pre; }
+.nb-out.stderr { color: var(--color-muted); white-space: pre-wrap; overflow-wrap: anywhere; }
+.nb-out.warning { padding: 6px 12px; border-left: 3px solid var(--color-amber-line); background: var(--color-amber-soft); color: var(--color-amber-text); white-space: pre-wrap; overflow-wrap: anywhere; }
+.nb-out.error { padding: 7px 12px; border-left: 3px solid var(--color-failed); background: color-mix(in srgb, var(--color-failed) 7%, var(--color-surface)); color: var(--color-failed-strong); white-space: pre-wrap; overflow-wrap: anywhere; }
+.nb-plot { margin: 4px 0 2px 12px; }
+.nb-plot img { display: block; width: 100%; height: auto; border: 1px solid var(--color-hairline); border-radius: 6px; background: #fff; }
+.nb-plot-wait { display: block; width: 100%; border-radius: 6px; background: var(--color-well); }
+.nb-note { color: var(--color-meta); font-size: 12px; }
+.nb-body > .nb-note { padding-left: 12px; }
+.nb-problem { padding-left: 12px; color: var(--color-amber-text); font-size: 12.5px; }
+.nb-actions { display: flex; gap: 16px; padding-left: 12px; }
+.nb-actions .text-button { display: inline-flex; align-items: center; gap: 5px; min-height: 0; padding: 2px 0; color: var(--color-meta); font-size: 12px; font-weight: 600; }
+.nb-actions .text-button:hover { color: var(--color-accent-strong); background: none; }
+.nb-cell.running .nb-code pre { box-shadow: inset 3px 0 0 var(--color-accent); }
+.nb-cell.queued .nb-code pre { box-shadow: inset 3px 0 0 var(--color-amber-line); }
+
+/* Where a session started or ended, among the cells. */
+.nb-mark { display: flex; flex-direction: column; gap: 2px; padding: 8px 0 8px calc(3.4rem + 14px); color: var(--color-meta); font-size: 12px; }
+.nb-mark > span { display: flex; align-items: center; gap: 10px; }
+.nb-mark > span::after { content: ""; flex: 1; height: 1px; background: var(--color-hairline); }
+.nb-mark.ended > span { color: var(--color-ink); font-weight: 600; }
+.nb-mark.problem > span { color: var(--color-amber-text); }
+.nb-mark small { color: var(--color-meta); font-size: 12px; }
+.nb-cells > .nb-mark + .nb-cell { border-top: 0; padding-top: 6px; }
+
+.nb-empty { display: flex; flex-direction: column; gap: 8px; padding: 28px 0 20px; }
+.nb-empty h2 { font-size: 18px; }
+.nb-empty p { max-width: 62ch; color: var(--color-muted); font-size: 14px; line-height: 1.55; }
+.nb-empty-line { color: var(--color-meta); font-size: 13px; }
+
+/* The person's own cell stays at the foot of the page while the cells scroll. */
+.nb-composer { position: sticky; bottom: 0; z-index: 2; display: flex; flex-direction: column; gap: 6px; margin-top: 10px; padding: 10px 12px 10px; border: 1px solid var(--color-hairline-strong); border-radius: 12px; background: var(--color-surface); box-shadow: 0 -10px 18px -12px rgb(0 0 0 / 18%); }
+.nb-composer:focus-within { border-color: var(--color-accent); box-shadow: 0 0 0 3px var(--color-accent-soft); }
+.nb-compose-bar { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.nb-compose-bar label { min-width: 0; overflow: hidden; color: var(--color-meta); font-size: 12px; font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
+.nb-composer textarea { width: 100%; min-height: 0; padding: 4px 2px; border: 0; outline: 0; resize: none; background: none; box-shadow: none; font: 13px/1.5 var(--font-mono); color: var(--color-ink); }
+.nb-compose-foot { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
+.nb-compose-foot small { margin-right: auto; color: var(--color-meta); font-size: 12px; }
+.nb-tabs { display: inline-flex; flex: none; padding: 2px; border-radius: 8px; background: var(--color-well); }
+.nb-tabs button { min-height: 0; padding: 3px 10px; border: 0; border-radius: 6px; background: none; color: var(--color-muted); font-size: 12px; font-weight: 600; box-shadow: none; }
+.nb-tabs button[aria-pressed="true"] { background: var(--color-surface); color: var(--color-ink); box-shadow: 0 1px 2px rgb(0 0 0 / 10%); }
+
+/* The sessions, the variables of one and the latest plots, beside the cells. */
+.nb-rail { position: sticky; top: 16px; display: flex; flex-direction: column; gap: 22px; max-height: calc(100vh - 32px); overflow-y: auto; padding-bottom: 8px; }
+.nb-rail-section { display: flex; flex-direction: column; gap: 8px; }
+.nb-rail-section > header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.nb-rail-section h2 { color: var(--color-meta); font-size: 12px; font-weight: 650; letter-spacing: .3px; text-transform: uppercase; }
+.nb-session { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 9px 10px; border: 1px solid var(--color-hairline); border-radius: 10px; background: var(--color-surface); }
+.nb-session > div:nth-child(2) { display: flex; flex-direction: column; min-width: 0; }
+.nb-session strong { font-size: 13px; }
+.nb-session small { color: var(--color-meta); font-size: 12px; }
+.nb-session.off { background: none; border-style: dashed; }
+.nb-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--color-offline); }
+.nb-session.idle .nb-dot { background: var(--color-verified); }
+.nb-session.busy .nb-dot { background: var(--color-accent); animation: pulse 1.6s ease-out infinite; }
+.nb-session.starting .nb-dot { background: var(--color-amber); }
+.nb-session.off .nb-dot { background: none; border: 1.5px solid var(--color-control-border); }
+.nb-session-actions { display: flex; align-items: center; gap: 8px; }
+.nb-session-actions button { min-height: 28px; padding: 3px 10px; font-size: 12px; }
+.nb-session-actions .text-button { padding: 3px 4px; color: var(--color-meta); }
+.nb-session-actions .text-button:hover { color: var(--color-failed); background: none; }
+.nb-vars { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.nb-vars li { display: grid; grid-template-columns: minmax(0, auto) minmax(0, 1fr); column-gap: 8px; padding: 6px 2px; border-top: 1px solid var(--color-divider); }
+.nb-vars li:first-child { border-top: 0; }
+.nb-var-name { overflow: hidden; font: 600 12.5px var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }
+.nb-var-type { overflow: hidden; color: var(--color-meta); font-size: 12px; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
+.nb-var-summary { grid-column: 1 / -1; overflow: hidden; color: var(--color-muted); font: 11.5px/1.4 var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }
+.nb-thumbs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.nb-thumb { display: flex; flex-direction: column; align-items: stretch; gap: 4px; min-height: 0; padding: 4px; border: 1px solid var(--color-hairline); border-radius: 8px; background: var(--color-surface); font-weight: 400; text-align: left; }
+.nb-thumb:hover { border-color: var(--color-hairline-strong); background: var(--color-surface); }
+.nb-thumb img, .nb-thumb .nb-plot-wait { width: 100%; aspect-ratio: 7 / 5; object-fit: contain; border-radius: 4px; background: #fff; }
+.nb-thumb > span:last-child { overflow: hidden; color: var(--color-muted); font-size: 11.5px; text-overflow: ellipsis; white-space: nowrap; }
+
+/* In a Studio: the cells fill the view, the sessions fold into one line above them. */
+.nb-page.compact { display: block; padding: 10px 14px 0; }
+.nb-page.compact .nb-cell { grid-template-columns: 2.6rem minmax(0, 1fr); gap: 10px; }
+.nb-page.compact .nb-mark { padding-left: calc(2.6rem + 10px); }
+/* There the person's cell is one line that grows as they write: language, code, Run. */
+.nb-page.compact .nb-composer { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin-bottom: 10px; padding: 6px 6px 6px 8px; border-radius: 10px; }
+.nb-page.compact .nb-compose-bar label, .nb-page.compact .nb-compose-foot small { display: none; }
+.nb-page.compact .nb-composer textarea { flex: 1 1 8rem; width: auto; min-width: 0; }
+.nb-page.compact .nb-compose-foot button { min-height: 30px; padding: 4px 12px; }
+.nb-page.compact .nb-composer .inline-error { flex-basis: 100%; }
+.nb-strip { margin-bottom: 6px; border-bottom: 1px solid var(--color-divider); }
+.nb-strip > summary { display: flex; flex-wrap: wrap; gap: 6px 16px; padding: 4px 0 8px; color: var(--color-meta); font-size: 12px; cursor: pointer; }
+.nb-strip-session { display: inline-flex; align-items: center; gap: 6px; }
+.nb-strip-session.idle .nb-dot { background: var(--color-verified); }
+.nb-strip-session.busy .nb-dot { background: var(--color-accent); animation: pulse 1.6s ease-out infinite; }
+.nb-strip > .nb-rail-section { padding-bottom: 10px; }
+@container (max-width: 820px) {
+  .nb-page { grid-template-columns: minmax(0, 1fr); gap: 18px; }
+  .nb-rail { position: static; order: -1; max-height: none; overflow: visible; display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: 16px; }
+}
+@container (max-width: 560px) {
+  .nb-cell { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .nb-gutter { flex-direction: row; align-items: center; justify-content: flex-start; }
+  .nb-head { grid-template-columns: minmax(0, 1fr) auto; }
+  .nb-who { grid-row: 2; grid-column: 1 / -1; }
+  .nb-mark { padding-left: 0; }
+  .nb-plot { margin-left: 0; }
+  .nb-compose-bar label { display: none; }
+}

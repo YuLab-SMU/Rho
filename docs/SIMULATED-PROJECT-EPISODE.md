@@ -876,3 +876,97 @@ Code (DeepSeek V4.1 Flash) with no permission requests.
 - **Studio's columns** stay narrow while the notes and the Agent panel are open, and the
   command pane is cramped there.
 - **No independent person** has used the new screens.
+
+## The Notebook
+
+The person asked for interactive computing, as in RStudio, marimo or Jupyter, to be shown in
+Rho. Of the forms offered they chose a live session the Agent and they share, with R and
+Python together: the Agent and the person run code in the same resident session, and Rho
+shows each cell, its output, its plots and the session's variables as they come.
+
+### What was built
+
+- **Notebook 0.1.0** (`@rho-workspace/plugin-kernel`) runs one R and one Python process per
+  project. `kernel.run`, `kernel.read`, `kernel.plot`, `kernel.interrupt` and `kernel.stop`
+  carry a cell's identity, order, output, plots and ending, and record a session's end
+  honestly after a restart ([limits](HEADLESS.md#live-r-and-python-sessions-notebook)).
+- **Rho** wires the operations: Agent grants receive all but `kernel.stop`, which only the
+  person at this machine may call. It adds a Notebook page and tells sessions it starts
+  to run exploratory code there and keep the code results rest on in scripts.
+
+### The runs
+
+Fresh copies of the two quick checks ran on Claude Code (DeepSeek V4.1 Flash) with no
+permission requests; the watcher answered nothing.
+
+- **The first bix-51 run was refused** before the Agent did anything: "Layered connection
+  methods exceed the selected 64-method profile". The default business grant had exactly
+  64 methods, and the four the Agent may use made 68. The
+  [conversation episode](CONVERSATION-EPISODE.md) had left this limit open with three
+  ways out. The smallest was taken: the limit is now `layeredGrantLimits.maxMethods`, 96,
+  and a grant over it is still refused.
+- **bix-51 (R)** then took 3 min with 7 of 7 answers in range. The Agent read the
+  spreadsheet once with `python3 -c` before it found the session, wrote `analysis.R` and ran
+  5 cells, each with a purpose ("Check R working directory and required packages", "Run
+  the logistic regression analysis script", …); the last four ran `source("analysis.R")`,
+  the later ones after edits to the script.
+- **The person's cell.** From the Notebook, a cell plotting the data with the Agent's
+  `fit_age` curve drew in the same session, from the Agent's values.
+- **bix-18 (Python)** took 98 s with 4 of 5 in range, bix-18-q5 missing as before. Its
+  first cell checked Python and its packages; the other three ran `analysis.py` with
+  `exec`. The first of those failed because the script used `Path(__file__)`, which a
+  session has no value for, and the Agent set `__file__` and ran it again.
+
+### What the screens showed
+
+- **Output did not stream in R.** A loop printing once a second showed nothing for its
+  first 3 s: the `evaluate` package passes on a top-level expression's output when the
+  expression ends. The R runner now evaluates expression by expression itself and prints
+  to standard output, with each message, warning, error and plot answer following a
+  numbered mark there; the host places the answer after that mark. Python already wrote
+  each print as it came.
+- **The four runs of one script** repeated the same 40-odd lines; output longer than 16 lines
+  now shows its first 12 with Show all. The hint in the person's cell read `summary(d)`,
+  a name the session did not have; it is now drawn from the session (`summary(dat)`). A
+  data frame's summary repeated its size; it now lists its columns. Python listed `Path`
+  and `sem`, imported names; imported classes and functions are left out.
+- **The Agent's Studio** showed its script, Commands and results but not its cells. A
+  Session view now sits beside Commands once the Agent runs a cell, scoped to the sessions
+  it used and cut at the moment shown; with the notes and the Agent panel open it is too
+  small to read more than the person's line.
+- **Restart and stop.** A session alive when the test service restarted reads "R session
+  ended · Rho closed". Stop asks first, and the list then says the session was stopped by
+  you and that values from before are gone. Interrupt left "Interrupted by you" and the
+  session's `i`.
+- **Found in review, not on screen.** Every request naming a project waited in that
+  project's one queue, so a run waiting for a long cell would have held the page's reads
+  and the person's Interrupt until it ended; the cells here took 0.1 s. `kernel.*`
+  requests now run beside the queue, and the plugin reads its record once and queues,
+  interrupts and stops one request at a time, so a repeated request still names one cell.
+- Two sessions read "its process ended (exit by a signal)": the runner processes were
+  killed by a cleanup command run for the plugin test. Once, the service still held the
+  previous host code while the new R runner was on disk, and the numbered marks showed as
+  text in one cell.
+
+### Verification
+
+- `npm run test:notebook` runs the plugin's 7 tests (both languages: values that stay, output
+  in order while a cell runs, plots, variables, identity, order, requests that arrive
+  together, interrupt, stop, restart, limits and a missing program) and Rho's wiring test
+  (who may run and stop, the shared session, the Agent grant, an interrupt while a run
+  waits). The final suites, `check:contracts` and browser acceptances
+  are in the Status ledger.
+- The Notebook was read at 1440, 760 and 390 px with the Agent's cells, a person's R plot
+  and Python cell, a stop, a streaming cell and an interrupt; the Studio's Session view at
+  1440 px with and without the side panels.
+
+### Left open
+
+- **The Agent ran scripts, not cells.** It used the session to run its script again rather
+  than to look at data step by step, and read the spreadsheet with Bash first.
+- **Plots** follow a cell's printed output rather than the line that drew them, and a
+  later cell cannot draw over an earlier cell's plot.
+- **Python scripts** that use `__file__` need it set before they run in a session.
+- **Studio's Session view** is cramped while the side panels are open.
+- **A cell's own memory and time** are not bounded.
+- **No independent person** has used the Notebook.

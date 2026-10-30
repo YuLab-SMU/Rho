@@ -5,7 +5,7 @@ import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { once } from 'node:events';
 import { digest } from '@rho-workspace/plugin-contracts';
-import { RhoService } from '../dist/server.js';
+import { RhoService, layeredGrantLimits } from '../dist/server.js';
 import { CheckedClient } from './checked-client.mjs';
 
 test('browser observes only its project and selected caller; reads never create a Host or widen default Agent grants', async () => {
@@ -27,7 +27,7 @@ test('browser observes only its project and selected caller; reads never create 
     await assert.rejects(fs.stat(path.join(project.root, '.rho/host.sock')), { code: 'ENOENT' });
     await assert.rejects(person.call('agent.activity.read', { projectId: other.id }), /scope|outside|authorized|include/i);
     const connection = await service.agentConnection(project.id, 'default-grant', path.join(root, 'connection.json'));
-    assert.ok(connection.methods.length <= 64);
+    assert.ok(connection.methods.length <= layeredGrantLimits.maxMethods);
     assert.ok(connection.methods.every(m => !m.startsWith('agent.activity.')));
     const socket = path.join(project.root, '.rho/host.sock');
     host = spawn(binary, ['serve', '--project', project.root, '--state-dir', path.join(project.root, '.rho')], { stdio: ['ignore', 'pipe', 'ignore'] });

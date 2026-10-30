@@ -11,6 +11,7 @@ import { AgentColumn, Bar, Digest, Evidence, Interruption, waiting } from './lay
 import { openRun, runFirstLine, RunView, SourceLine } from './facts.js';
 import { ActionForm } from './action-form.js';
 import { CommandPane } from '../console.js';
+import { SessionPane } from '../notebook.js';
 import { useProcess } from '../process-context.js';
 import { ProcessFrame } from './process-views.js';
 import { boundResource } from '../executions.js';
@@ -185,6 +186,7 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
     const view = byId.get(id)!, isVisible = visible.includes(id);
     if (view.component === 'rho.action') return <ActionForm view={view} snapshot={snapshot} client={client} live={live} />;
     if (view.component === 'rho.console') return <CommandPane client={client} snapshot={snapshot} />;
+    if (view.component === 'rho.notebook') return <SessionPane client={client} snapshot={snapshot} />;
     if (view.component === 'rho.execution') {
       const operationId = String(view.props.operationId ?? id);
       return <RunView snapshot={snapshot} client={client} operationId={operationId} runs={live.runs} readRuns={live.readRuns} firstLine={runFirstLine(live, operationId)} opener={ref => () => openRef(ref)} onOpenRun={other => openRun(live, other)} chain />;

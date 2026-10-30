@@ -20,7 +20,7 @@ test('browser catalogs and snapshots preserve owner presentation through project
     const { value } = await paired.json();
     const browser = new BrowserClient({ url: service.url, ...value });
     const catalog = await browser.call('capability.list', { projectId: project.id });
-    assert.equal(service.plugins.descriptors().length, 10);
+    assert.equal(service.plugins.descriptors().length, 11);
     for (const descriptor of service.plugins.descriptors()) {
       assert.deepEqual(catalog.plugins.find(p => p.id === descriptor.id).presentation, descriptor.presentation);
       for (const operation of descriptor.operations) assert.deepEqual(catalog.operations.find(o => o.method === operation.method).presentation, operation.presentation);

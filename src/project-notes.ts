@@ -12,7 +12,7 @@ export const sessionMarker = (conversationId: string) => `<!-- rho:session ${con
 
 // What a session started in Rho is told about the notes, appended to its Agent's own system
 // prompt. It asks for the section; it grants nothing.
-export function notesInstructions(conversationId: string): string {
+export function notesInstructions(conversationId: string, options: { notebook?: boolean } = {}): string {
   return [
     `This session was started in Rho as session ${conversationId}. The person reads your replies in Rho next to the project's files and its shared notes.`,
     `The project keeps one set of shared notes in ${projectNotesPath} at the project root, one section per session; the person and other sessions read and edit it too. The person follows your work through this section while you work, so keep it current as the work goes, in the language the person writes in:`,
@@ -28,6 +28,12 @@ export function notesInstructions(conversationId: string): string {
     '- Leave a subsection empty until you have something for it; do not write placeholders such as "to be filled".',
     `- Create ${projectNotesPath} if it does not exist. Change only your own section, and keep other sections and the person's edits as they are.`,
     '- Add each finding and choice when you have it, and update the section as results, files or to-dos change.',
+    ...(options.notebook ? [
+      'Rho keeps a live R session and a live Python session for this project, which the person watches on its Notebook page and runs cells in too.',
+      '- Run exploratory code there instead of Rscript -e, python3 -c or a throwaway script: find kernel.run with rho_index and rho_resolve once, then call it with rho_call, giving language "r" or "python", the code, a short purpose that says what the cell is for, and waitMs (for example 120000) to wait for it to finish.',
+      '- What a cell defines stays for your next cells, so load data once and build on it. kernel.read shows the cells, including any the person ran, and the variables.',
+      '- Keep the code your results rest on in script files as well, so they can be run again without the session.',
+    ] : []),
   ].join('\n');
 }
 

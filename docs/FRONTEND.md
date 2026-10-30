@@ -72,6 +72,19 @@ inspect what happened. The application gives those actions direct places:
   into the prompt to check before Run. The board's command count opens the Console
   at that message. Only the person at this machine can run or stop commands; an
   Agent may read them ([episode](SIMULATED-PROJECT-EPISODE.md#second-pass)).
+- **Notebook** shows the project's live R and Python sessions, which the person shares
+  with the Agent (listed while the Notebook plugin is selected). Cells read in the order
+  they ran: language and number in the gutter, who ran it (the Agent's name opens its
+  conversation) and its purpose, how long it took or how it ended, the code highlighted,
+  then what it printed, streamed while it runs, with messages, warnings and errors in
+  their place and its plots. Long code and output show their first lines. Where a session
+  started or ended the list says so, and that values from before an end are gone. Each
+  cell has Edit and run and Run again. Beside the cells: each session's state with
+  Interrupt and Stop (Stop asks first), its variables with type, size and summary, and
+  the latest plots. The person's cell stays at the foot, with R or Python, a hint from
+  what the session holds and ⌘/Ctrl+Enter. Below 820 px the sessions move above the cells.
+  A conversation's Studio has a Session view of the sessions its Agent ran cells in,
+  cut at the moment shown ([episode](SIMULATED-PROJECT-EPISODE.md#the-notebook)).
 - **Files** opens documents, browses the project's folder and the source folders it
   works in, and filters the current folder. A source folder is named as the person
   named it and opens one level at a time, the same way any other folder does.
@@ -108,7 +121,8 @@ inspect what happened. The application gives those actions direct places:
   stage, open only when asked, and a window that narrows closes them. The notes take no
   place in a conversation's Studio layout. A conversation's Studio
   lays its files out by what each is to the work, as the answer board names them: the
-  data it read above the script it wrote and a Commands view of what ran, figures above
+  data it read above the script it wrote and a Commands view of what ran, with a Session
+  view beside it once the Agent ran cells in a live session, figures above
   the tables and reports beside them, each role in one place up to its limit
   (`studioLimits`). A file's view says which kept version it shows, with earlier and later.
   The parts of the work sit in a chip in the Studio bar, named by the Agent's own words
@@ -232,7 +246,7 @@ and Open or create a project. Choosing a project there returns to where it was l
 this tab; choosing one from the projects list opens its Overview. The projects list has
 no project sidebar. The project sidebar starts with All projects and the project (its
 menu switches to another open project), then Overview, Studio with its sessions and
-workspaces, Graph, Console, and Agent (Working or
+workspaces, Graph, Console, Notebook, and Agent (Working or
 Needs you while a turn runs), then Sources, with Project settings and Plugins at its
 foot. Connection & access, at the foot of the rail, opens a drawer: the focused document's Changes, then the connection (its state,
 when it was last read, Refresh or Reconnect, and why the service did not answer) and this
@@ -285,6 +299,8 @@ the same graph: `answerBoard` gives each file and command of a message a role,
 about, and `src/asking.ts` writes and reads back what a question was asked about.
 `web/answer-board.tsx` draws the board and records decisions (`conversation.decide`);
 `web/console.tsx` draws the Console from the same graph and `console.list`.
+`web/notebook.tsx` draws the Notebook from `kernel.read` and the Studio's Session view
+(`SessionPane`) from the same, scoped to the conversation's principal and moment.
 A conversation's Studio (`web/studio-process.tsx`) reads its record, builds the graph
 whole and as cut at the moment shown (`turnsAt` in `src/replay.ts`), takes each file's
 role and kept versions from the whole record (`studioFiles` in `src/studio-layout.ts`)

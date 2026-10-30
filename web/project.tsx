@@ -4,7 +4,7 @@ import { compositionName, processConversation } from './canvas.js';
 import { Icon, type IconName } from './icons.js';
 import { when } from './home.js';
 
-export type Section = 'overview' | 'documents' | 'files' | 'agent' | 'settings' | 'sources' | 'file' | 'graph' | 'review' | 'console';
+export type Section = 'overview' | 'documents' | 'files' | 'agent' | 'settings' | 'sources' | 'file' | 'graph' | 'review' | 'console' | 'notebook';
 export interface Entry { path: string; name: string; kind: 'file' | 'folder'; bytes: number; hidden: boolean; modifiedAt?: string }
 export function size(bytes: number) {
   if (bytes < 1024) return bytes + ' B';
@@ -67,6 +67,7 @@ export function ProjectNavigation({ project, snapshot, current, sources, partial
       </div>}
       {row('graph', 'Graph', 'graph', () => onSection('graph'))}
       {row('console', 'Console', 'prompt', () => onSection('console'))}
+      {snapshot?.catalog.plugins.some(p => p.id === 'kernel') && row('notebook', 'Notebook', 'code', () => onSection('notebook'))}
       {/* Asking about an answer and deciding on it happen on the answer itself; the review records
           made before keep their page while a project has them. */}
       {((snapshot?.annotations?.length ?? 0) > 0 || current === 'review') && row('review', 'Review', 'question', () => onSection('review'), count(snapshot?.annotations?.length, 'question'))}

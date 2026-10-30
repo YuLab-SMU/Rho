@@ -1,0 +1,418 @@
+{
+  "method": "kernel.run",
+  "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "projectId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "changeId": {
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+        "type": "string"
+      },
+      "code": {
+        "maxLength": 65536,
+        "minLength": 1,
+        "type": "string"
+      },
+      "language": {
+        "enum": [
+          "r",
+          "python"
+        ]
+      },
+      "purpose": {
+        "maxLength": 200,
+        "type": "string"
+      },
+      "waitMs": {
+        "maximum": 600000,
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "projectId",
+      "language",
+      "code",
+      "changeId"
+    ],
+    "type": "object"
+  },
+  "outputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "cell": {
+        "additionalProperties": false,
+        "properties": {
+          "by": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "bytes": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "cellId": {
+            "pattern": "^k-[a-f0-9]{16}$",
+            "type": "string"
+          },
+          "changeId": {
+            "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "cut": {
+            "type": "boolean"
+          },
+          "endedAt": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "interrupt": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "at": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "by": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "by",
+                  "at"
+                ],
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "kept": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "language": {
+            "enum": [
+              "r",
+              "python"
+            ]
+          },
+          "number": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "outputs": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "height": {
+                  "type": "integer"
+                },
+                "kind": {
+                  "enum": [
+                    "stdout",
+                    "stderr",
+                    "warning",
+                    "error",
+                    "plot"
+                  ]
+                },
+                "plot": {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "text": {
+                  "type": "string"
+                },
+                "width": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "kind"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "problem": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "purpose": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "queuedAt": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "sessionId": {
+            "pattern": "^s-[a-f0-9]{16}$",
+            "type": "string"
+          },
+          "startedAt": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "state": {
+            "enum": [
+              "queued",
+              "running",
+              "done",
+              "error",
+              "interrupted",
+              "not-run",
+              "unknown"
+            ]
+          }
+        },
+        "required": [
+          "cellId",
+          "changeId",
+          "by",
+          "sessionId",
+          "language",
+          "code",
+          "purpose",
+          "queuedAt",
+          "startedAt",
+          "endedAt",
+          "state",
+          "number",
+          "outputs",
+          "bytes",
+          "kept",
+          "cut",
+          "interrupt",
+          "problem"
+        ],
+        "type": "object"
+      },
+      "session": {
+        "additionalProperties": false,
+        "properties": {
+          "cells": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "endedAt": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ending": {
+            "anyOf": [
+              {
+                "enum": [
+                  "stopped",
+                  "exited",
+                  "rho-closed",
+                  "not-started"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "language": {
+            "enum": [
+              "r",
+              "python"
+            ]
+          },
+          "pid": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "problem": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sessionId": {
+            "pattern": "^s-[a-f0-9]{16}$",
+            "type": "string"
+          },
+          "startedAt": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "startedBy": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "starting",
+              "idle",
+              "busy",
+              "ended"
+            ]
+          },
+          "stop": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "at": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "by": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "by",
+                  "at"
+                ],
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "variables": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "bytes": {
+                  "minimum": 0,
+                  "type": "number"
+                },
+                "name": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "size": {
+                  "type": "string"
+                },
+                "summary": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "name",
+                "type",
+                "size",
+                "bytes",
+                "summary"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "variablesAt": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "variablesOmitted": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "sessionId",
+          "language",
+          "state",
+          "version",
+          "pid",
+          "startedAt",
+          "startedBy",
+          "endedAt",
+          "ending",
+          "stop",
+          "problem",
+          "variables",
+          "variablesOmitted",
+          "variablesAt",
+          "cells"
+        ],
+        "type": "object"
+      }
+    },
+    "required": [
+      "cell",
+      "session"
+    ],
+    "type": "object"
+  },
+  "description": "Run a cell of R or Python in the project's live session of that language, which the Agent and the person share: what one cell defines stays for the next. Starts the session when none is live. The same changeId from the same caller returns the same cell and never runs it twice. waitMs waits for the cell to end."
+}

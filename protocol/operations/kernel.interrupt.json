@@ -1,0 +1,213 @@
+{
+  "method": "kernel.interrupt",
+  "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "projectId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "cellId": {
+        "pattern": "^k-[a-f0-9]{16}$",
+        "type": "string"
+      }
+    },
+    "required": [
+      "projectId",
+      "cellId"
+    ],
+    "type": "object"
+  },
+  "outputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "cell": {
+        "additionalProperties": false,
+        "properties": {
+          "by": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "bytes": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "cellId": {
+            "pattern": "^k-[a-f0-9]{16}$",
+            "type": "string"
+          },
+          "changeId": {
+            "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "cut": {
+            "type": "boolean"
+          },
+          "endedAt": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "interrupt": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "at": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "by": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "by",
+                  "at"
+                ],
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "kept": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "language": {
+            "enum": [
+              "r",
+              "python"
+            ]
+          },
+          "number": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "outputs": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "height": {
+                  "type": "integer"
+                },
+                "kind": {
+                  "enum": [
+                    "stdout",
+                    "stderr",
+                    "warning",
+                    "error",
+                    "plot"
+                  ]
+                },
+                "plot": {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "text": {
+                  "type": "string"
+                },
+                "width": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "kind"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "problem": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "purpose": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "queuedAt": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "sessionId": {
+            "pattern": "^s-[a-f0-9]{16}$",
+            "type": "string"
+          },
+          "startedAt": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "state": {
+            "enum": [
+              "queued",
+              "running",
+              "done",
+              "error",
+              "interrupted",
+              "not-run",
+              "unknown"
+            ]
+          }
+        },
+        "required": [
+          "cellId",
+          "changeId",
+          "by",
+          "sessionId",
+          "language",
+          "code",
+          "purpose",
+          "queuedAt",
+          "startedAt",
+          "endedAt",
+          "state",
+          "number",
+          "outputs",
+          "bytes",
+          "kept",
+          "cut",
+          "interrupt",
+          "problem"
+        ],
+        "type": "object"
+      }
+    },
+    "required": [
+      "cell"
+    ],
+    "type": "object"
+  },
+  "description": "Interrupt one cell: a running cell stops and its session and values stay; a waiting cell is not run. A cell that has ended is returned unchanged."
+}
