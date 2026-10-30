@@ -91,6 +91,17 @@ test('files take their role from the whole record and join a replay when the wor
   assert.equal(later.find(f => f.path === 'results/figure.png').role, 'result', 'a result read back mid-way is still a result');
 });
 
+test('the project notes a session keeps take no place in its Studio', () => {
+  const turn = work();
+  turn.steps.splice(-1, 0, tool('n', 'Write', 52, root + '/project-notes.md'));
+  turn.evidence.records.push(record('n', 'project-notes.md', [captured('project-notes.md', 'e', 52)]));
+  turn.files.changed.push({ path: 'project-notes.md', change: 'created', modifiedAt: at(52) });
+  turn.steps.at(-1).text = 'Four ratios differ; see results/figure.png and project-notes.md.';
+  const graph = buildWorkGraph({ turns: [{ conversationId: 'c1', conversationTitle: 'Swarming', agent: 'Claude Code', turn }], files: [...files, { path: 'project-notes.md', bytes: 400, modifiedAt: at(52), category: 'notes' }], project: { root }, kindOf, now: ms(90) });
+  assert.ok(graph.nodes.some(n => n.path === 'project-notes.md'), 'the record has the notes');
+  assert.ok(!studioFiles(graph).some(f => f.path === 'project-notes.md'));
+});
+
 const view = id => ({ id, kind: 'view', component: 'rho.editor', version: '1', props: { title: id }, bindings: {} });
 test('the layout places inputs, code and commands down one side and figures above tables on the other', () => {
   const tree = studioTree([

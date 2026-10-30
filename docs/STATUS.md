@@ -52,12 +52,22 @@ results. Agent-declared choices with Agree/No were agreed but not built (see the
 
 The [process Studio](SIMULATED-PROJECT-EPISODE.md#process-studio) pass made Studio show
 how a conversation's work was done. Each conversation started in Rho has its own
-Studio tab, laid out from its record by role: data, script and a Commands view down one
+Studio, laid out from its record by role: data, script and a Commands view down one
 side, figures above tables and reports on the other, each file's view naming the kept
 version it shows. A chip names the part of the work in progress, and a timeline runs
 beside the Agent panel. A moment chosen there replays the views, commands, part and
 conversation together. Arranging saves the layout as `conversation-<id>`. The person's
 own workspace still opens nothing by itself.
+
+The [project notes](SIMULATED-PROJECT-EPISODE.md#project-notes) pass lists the sessions
+under Studio in the sidebar, then the person's workspaces, and shares one set of notes
+(`project-notes.md`) beside every Studio layout. Rho asks each session it starts, in
+its Agent's instructions (Agent 0.4.20), to keep one section: a heading naming its task
+with its session marker, then Question, Data & method, Key results with a figure and
+To do. That heading titles the session. In a live run Claude Code (DeepSeek V4.1 Flash)
+wrote its section unprompted by the message, and the title followed within seconds.
+The panel reads the notes formatted, ticks to-dos in place and edits them with a
+toolbar (Markdown 0.2.0, Documents 0.4.8); the person's edits save after a pause.
 
 ## Existing application
 
@@ -96,9 +106,10 @@ The first full changed run passed Plugins 109/109 and Rho 227/228; an undeclared
 new CSS variable caused the application failure and was corrected. The second pass
 (answer board, decisions, Console, Agent 0.4.19) passed Rho 240/240. The process Studio
 pass first failed 244/245 on another undeclared CSS variable, which was corrected;
-the [ledger](VERIFICATION.json) records Rho 245/245 and Plugins 117/117.
-The agent-canvas, graph, agent-page, agent-ui, review, ui:u2 and sources browser
-acceptances passed on that build.
+Rho 245/245 and Plugins 117/117. The project notes pass records Rho 249/249 and
+Plugins 120/120 in the [ledger](VERIFICATION.json). The agent-canvas, graph,
+agent-page, agent-ui, review, ui:u2 and sources browser acceptances passed on that
+build; ui:u2 first failed until the notes stopped opening with every project.
 The [episode](REVIEW-EVIDENCE-EPISODE.md) records contract, browser and installed results.
 The fixed 0.5.1 candidate passed 230/230; installed review/Graph/restart and both real
 clients passed. See the [preview](PREVIEW-0.5.1.md) for identities and limits.

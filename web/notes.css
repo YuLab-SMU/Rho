@@ -1,0 +1,23 @@
+/* The project's notes beside Studio: one column the width of a page of notes, its section for the
+   session on screen marked, and the reader's text sized for a column rather than a page. */
+.notes-panel { flex: none; width: clamp(300px, 30%, 420px); display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--color-hairline); background: var(--color-surface); }
+.notes-head { display: flex; align-items: center; gap: 8px; min-height: 52px; padding: 8px 10px 8px 14px; border-bottom: 1px solid var(--color-hairline); }
+.notes-head > svg { flex: none; color: var(--color-accent); }
+.notes-title { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; white-space: nowrap; }
+.notes-title strong { overflow: hidden; text-overflow: ellipsis; font-weight: 650; font-size: 14px; color: var(--color-ink); }
+.notes-save { color: var(--color-meta); font-size: 11.5px; }
+.notes-save.failed { color: var(--color-failed); }
+.notes-modes { display: flex; align-items: center; margin-left: auto; }
+.notes-modes .rho-md-modes { margin-right: 0; }
+/* The notes save themselves, so the editor's own pane controls stay out of this column. */
+.notes-modes > :not(.rho-md-modes) { display: none; }
+.notes-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.notes-note { margin: 0; padding: 14px 16px; color: var(--color-muted); font-size: 13px; line-height: 1.5; }
+.notes-body .notes-note + .shell-owner { border-top: 1px solid var(--color-divider); }
+.notes-body .rho-md-page { padding: 14px 18px 48px; font-size: 14px; line-height: 1.6; }
+.notes-body .rho-md-page h1 { font-size: 1.35em; }
+.notes-body .rho-md-page h2 { font-size: 1.15em; scroll-margin-top: 8px; }
+.notes-body .rho-md-page h3 { font-size: 1em; color: var(--color-muted); }
+.notes-body .rho-md-page img { max-width: 100%; height: auto; border: 1px solid var(--color-hairline); border-radius: 8px; }
+.notes-body .rho-md-page h2.notes-current { border-bottom-color: var(--color-accent); color: var(--color-accent-strong); }
+.notes-body .rho-md-bar { padding: 6px 10px; justify-content: flex-start; }

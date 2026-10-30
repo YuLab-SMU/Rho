@@ -50,7 +50,8 @@ inspect what happened. The application gives those actions direct places:
   folder, at most 40 there with the rest on the kind's page. Choosing one shows it
   in place in its own view, without writing a layout: a CSV or image as a snapshot
   of its current bytes in the table or media view, a Markdown file in the Markdown
-  reader (Source shows the editor), other text in the editor, highlighted when Rho
+  reader (its to-dos tick in place; Edit shows the editor with a formatting toolbar,
+  Source when the tab cannot edit), other text in the editor, highlighted when Rho
   has its language, a registered result as its exact version. ← and → or the buttons beside "3 of 6" move through
   the kind, ↑ and ↓ move in the sidebar, and Open in Studio places the file in the
   workspace ([pass](AGENT-CANVAS-EPISODE.md#browsing-sources-from-the-sidebar)).
@@ -83,9 +84,22 @@ inspect what happened. The application gives those actions direct places:
   ([activity episode](AGENT-ACTIVITY.md), [Agents and conversations](AGENT-PAGE-EPISODE.md),
   [Agents outside Rho](AGENT-PANEL-EPISODE.md#agents-outside-rho)).
 - **Project settings** manages source folders and explicitly checks available tools.
-- **Studio** shows how a conversation's work was done. Its tabs are the conversations
-  started in Rho (the three newest, the one shown and any the person arranged), then the
-  person's own workspaces, which the sidebar lists under Studio. A conversation's Studio
+- **Studio** shows how a conversation's work was done. The sidebar lists under Studio
+  each session started in Rho, newest first (eight, then All sessions), and then the
+  person's own workspaces; the Studio bar names the one shown. A session is titled by its
+  section of the project notes, else by the Agent's title, else by its first message.
+  The **project notes** (`project-notes.md` at the project root) are one Markdown file
+  shared by the person and every session, shown beside any Studio layout and hidden or
+  shown from the bar. Rho appends to each session's Agent instructions that it keep one
+  section there: a level-2 heading naming its task with a `<!-- rho:session <id> -->`
+  marker below it, then Question, Data & method, Key results with a figure, and To do as
+  a task list. The panel reads the file formatted, opens at the shown session's section,
+  ticks to-dos in place, and edits it as Markdown with a formatting toolbar; the person's
+  own edits are saved after a 1.5 s pause (`notesTiming`) with the buffer's write
+  conditions, and the Agent's edits arrive through the file. The notes are opened only
+  when the project has sessions or the panel is shown; below 768 px they replace the
+  stage, open only when asked, and a window that narrows closes them. The notes take no
+  place in a conversation's Studio layout. A conversation's Studio
   lays its files out by what each is to the work, as the answer board names them: the
   data it read above the script it wrote and a Commands view of what ran, figures above
   the tables and reports beside them, each role in one place up to its limit
@@ -98,7 +112,7 @@ inspect what happened. The application gives those actions direct places:
   the second, and a text file shows its version kept then, read only. Arranging the
   views saves the layout as `conversation-<id>`; later files join their role's place and
   files the person closed stay closed. Studio opens on the work going on now, else the
-  tab last open, else the newest conversation's. The person's workspace is shared with
+  Studio last open, else the newest conversation's. The person's workspace is shared with
   the Agent: nothing opens there by itself. Sending a message from another page follows
   the turn on the Overview's board; sent from Studio, it leaves the person where they
   are (a new conversation started from a conversation's Studio opens its own), and
@@ -191,7 +205,8 @@ the page is visible; the open project's own record also says when it needs a cho
 and Open or create a project. Choosing a project there returns to where it was left in
 this tab; choosing one from the projects list opens its Overview. The projects list has
 no project sidebar. The project sidebar starts with All projects and the project (its
-menu switches to another open project), then Overview, Studio, and Agent (Working or
+menu switches to another open project), then Overview, Studio with its sessions and
+workspaces, Graph, Console, and Agent (Working or
 Needs you while a turn runs), then Sources, with Project settings and Plugins at its
 foot. Connection & access, at the foot of the rail, opens a drawer: the focused document's Changes, then the connection (its state,
 when it was last read, Refresh or Reconnect, and why the service did not answer) and this
@@ -248,6 +263,10 @@ A conversation's Studio (`web/studio-process.tsx`) reads its record, builds the 
 whole and as cut at the moment shown (`turnsAt` in `src/replay.ts`), takes each file's
 role and kept versions from the whole record (`studioFiles` in `src/studio-layout.ts`)
 and lays the files out (`studioTree`, `studioMerge` over a saved arrangement).
+`src/project-notes.ts` reads the notes' sections and session markers (`notesSections`,
+`sessionTitles`, bounded by `notesLimits`) and writes the instructions a session is
+given; `web/project-notes.tsx` keeps the notes' one buffer open for the project, saves the
+person's edits and draws the panel.
 `src/studio-chapters.ts` names the parts of a message. The views find their file and
 moment through `web/process-context.ts`; `web/shell/process-views.tsx` frames a file's
 versions and `CommandPane` in `web/console.tsx` shows the conversation's commands. For the Graph, `foldVersions` merges a message's versions of one
@@ -329,7 +348,8 @@ runs project files and writes an output no step names. It checks the sidebar cou
 that a message sent from Studio leaves the person's workspace as they arranged it,
 the edited text on disk in the open editor, that nothing else opened there, the Agent
 page's record of the turn and a file it names shown in place, that Follow opens the
-conversation's Studio with its data, script, commands, output, parts and timeline, that
+conversation's Studio, marked in the sidebar's sessions, with its data, script,
+commands, output, parts and timeline, that
 a moment chosen on the timeline shows the views and the conversation as they were then,
 that the answer board is led by the figure the turn made, with the next question and its
 answer under it, and overflow at 1024/390. Evidence goes to
@@ -359,8 +379,8 @@ figures in two output folders from the sidebar, without a model. It checks the
 unfolded lists and their order, a file shown in place with no layout written, ←/→,
 the buttons and ↑/↓, the table and editor keeping their own arrow keys, an R script's
 colours, Open in Studio, unfolded kinds after a reload, a Markdown note read with its
-image, math, table and highlighted code, following another writer's edit, Source and a
-link to a script, and the 390 px drawer. Evidence goes to
+image, math, table and highlighted code, following another writer's edit, Edit and Read,
+a link to a script, and the 390 px drawer. Evidence goes to
 `work/sources-acceptance/` by default.
 
 `npm run acceptance:agent-ui` drives a controlled ACP peer through the real service

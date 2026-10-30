@@ -1,4 +1,5 @@
 import { projectPath, commandFiles, buildWorkGraph } from './work-graph.js';
+import { notesInstructions } from './project-notes.js';
 import { toolActivity } from './conversation-presentation.js';
 import {privateEvidencePath, type CapturePort, type TurnEvidence} from './evidence-capture.js';
 import * as fs from 'node:fs/promises';
@@ -627,12 +628,14 @@ export class Conversations {
         // A first session opened without the person's choices shows what the Agent offers by default.
         if (learned) void this.offer(c.backend as Backend, { at: config.at, source: 'conversation', adapter: c.adapter ?? null, options: config.options, omitted: config.omitted }).catch(() => {});
       } };
-      const common = { cwd: project.root, mcpServers, limits: this.limits, sessionId: c.acpSessionId, config: c.config, ...observed };
+      // Every session started here is told about the project's shared notes and its section.
+      const instructions = notesInstructions(c.id);
+      const common = { cwd: project.root, mcpServers, limits: this.limits, sessionId: c.acpSessionId, config: c.config, instructions, ...observed };
       const driver = c.backend === 'codex-acp'
         ? new CodexAcpConversation({ ...this.config.codexAcp, ...common, codex: this.config.codex })
         : c.backend === 'claude-acp'
           ? new ClaudeAcpConversation({ ...this.config.claudeAcp, ...common, claude: this.binary, plugins: [...this.config.claudeAcp?.plugins ?? [], ...await this.ports.claudePlugins?.(project) ?? []] })
-          : new ClaudeCliConversation({ cwd: project.root, binary: this.binary, sessionId: c.nativeSessionId!, confirmed: c.confirmed, projectName: project.name ?? path.basename(project.root), mcpServers, limits: this.limits });
+          : new ClaudeCliConversation({ cwd: project.root, binary: this.binary, sessionId: c.nativeSessionId!, confirmed: c.confirmed, projectName: project.name ?? path.basename(project.root), mcpServers, limits: this.limits, instructions });
       this.drivers.set(key, { driver, project, conversation: c }); return driver;
     });
   }

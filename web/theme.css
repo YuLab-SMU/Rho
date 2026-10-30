@@ -189,13 +189,22 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .agent-chip.waiting { border-color: var(--color-amber-line); background: var(--color-amber-soft); color: var(--color-amber-text); }
 .agent-chip.waiting .pulse-dot { background: var(--color-amber); animation: none; }
 .agent-chip.waiting .agent-chip-what { color: var(--color-amber-text); font-family: var(--font-ui); }
-/* Studio: the workspaces as tabs, following the Agent, and arranging views. */
+/* Studio: which session or workspace this is, its steps, following the Agent, the notes and
+   arranging views. The sessions and workspaces themselves are listed under Studio in the sidebar. */
+.studio-with-notes { flex: 1; min-height: 0; display: flex; }
+.studio-main { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; container-type: inline-size; }
+/* A narrow Studio keeps its title and steps readable; the controls keep their icons and names in tooltips. */
+@container (max-width: 640px) { .studio-bar .notes-toggle > span, .studio-bar .view-menu summary > span { display: none; } }
 .studio-bar { display: flex; align-items: center; gap: 10px; padding: 8px 14px; min-height: 52px; border-bottom: 1px solid var(--color-hairline); background: var(--color-surface); }
-.studio-tabs { display: flex; gap: 4px; flex: 1; min-width: 0; overflow-x: auto; scrollbar-width: none; }
-.studio-tab { flex: none; gap: 7px; min-height: 34px; padding: 5px 12px; border: 0; border-radius: 8px; background: transparent; color: var(--color-muted); font-weight: 500; }
-.studio-tab small { color: var(--color-meta); font-size: 11.5px; font-weight: 400; }
-.studio-tab[aria-current=page] { background: var(--color-well); color: var(--color-ink); font-weight: 650; }
-.studio-tab > svg { color: var(--color-accent); }
+.studio-title { display: flex; align-items: center; gap: 8px; flex: 0 1 auto; min-width: 56px; margin: 0; font-size: 14px; font-weight: 650; color: var(--color-ink); }
+.studio-title > span:not(.pulse-dot) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.studio-title > svg { flex: none; color: var(--color-accent); }
+/* The title and steps on the left, the controls on the right. The steps keep their own width;
+   the title, also in the breadcrumb and the sidebar, shortens first. */
+.studio-bar > .steps-slot { flex: 0 0 auto; max-width: 45%; }
+.studio-bar > :is(.studio-title, .steps-slot):not(:has(+ .steps-slot)) { margin-right: auto; }
+.notes-toggle { flex: none; min-height: 32px; padding: 4px 11px; border-radius: 8px; font-size: 12.5px; gap: 6px; }
+.notes-toggle[aria-pressed=true] { border-color: var(--color-accent); background: var(--color-accent-soft); color: var(--color-accent-strong); }
 .follow-toggle { flex: none; min-height: 32px; padding: 4px 12px; border-radius: 999px; font-size: 12.5px; gap: 7px; }
 .follow-toggle.on { border-color: var(--color-accent); background: var(--color-accent-soft); color: var(--color-accent-strong); }
 .canvas-note { display: flex; align-items: center; gap: 12px; padding: 8px 16px; background: var(--color-well); border-bottom: 1px solid var(--color-hairline); color: var(--color-muted); font-size: 12.5px; }
@@ -839,9 +848,10 @@ dialog::backdrop { background: #13231c45; }
   .project-recent .activity-row > svg { display: none; }
   .workspace-tools { gap: 8px; padding: 6px 10px; }
   .agent-chip { max-width: 44px; padding: 4px 10px; } .agent-chip strong, .agent-chip-what { display: none; }
-  .studio-bar { padding: 6px 10px; gap: 6px; } .studio-tab small { display: none; } .follow-toggle { padding: 4px 9px; }
+  .studio-bar { padding: 6px 10px; gap: 6px; } .follow-toggle { padding: 4px 9px; }
+  .studio-with-notes.notes-open > .studio-main { display: none; }
+  .studio-with-notes.notes-open > .notes-panel { flex: 1; width: auto; border-right: 0; }
   .workspace-question { display: none; }
-  .view-menu { margin-left: auto; }
   .command-footer .command-keys { display: none; }
   .run-dialog { padding: 12px; }
 }

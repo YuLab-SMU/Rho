@@ -1,4 +1,5 @@
 import type { Conversations } from './conversations.js';
+import { projectNotesPath } from './project-notes.js';
 import type { Project } from './state.js';
 import type { observeSessionFiles, readAgentActivity, readExternalAcp } from '@rho-workspace/plugin-agent';
 import type { RhoOutput } from './contract.generated.js';
@@ -12,7 +13,7 @@ export async function projectWork(input: {
   native: Awaited<ReturnType<typeof readAgentActivity>> | null;
   external?: ReturnType<typeof readExternalAcp>; inspect?: typeof observeSessionFiles;
 }): Promise<RhoOutput<'project.work.read'>> {
-  const notesPath = 'project-notes.md', note = input.documents.find(d => d.path === notesPath);
+  const notesPath = projectNotesPath, note = input.documents.find(d => d.path === notesPath);
   const owned = input.conversations.sessions.map(c => {
     const calls = input.activity.filter(a => a.principal === c.principal && a.outcome === 'returned');
     return { id: 'conversation:' + c.conversationId, source: c.backend !== 'claude-cli' ? 'acp' as const : 'claude-cli' as const, sessionId: c.sessionId,

@@ -1,6 +1,7 @@
 import { answerBoard, boardLimits } from './answer-board.js';
 import type { GraphNode, WorkGraph } from './work-graph.js';
 import type { LayoutNode, LayoutTree } from './shell-layout.js';
+import { projectNotesPath } from './project-notes.js';
 
 // Studio's layout for one conversation, written from what each file is to the work rather than
 // from when the Agent touched it. The roles are the answer board's: the data it read, the
@@ -46,7 +47,8 @@ export function studioFiles(graph: WorkGraph): StudioFile[] {
   const found = new Map<string, StudioFile>();
   const firstOf = (path: string) => Math.min(...graph.nodes.filter(n => n.path === path).flatMap(n => [n.at, ...n.events.map(e => e.at)]));
   const take = (node: GraphNode, role: StudioRole, lead: boolean) => {
-    if (!node.path) return;
+    // The project's notes have their own panel beside every Studio, so they take no place here.
+    if (!node.path || node.path === projectNotesPath) return;
     const known = found.get(node.path);
     if (known && rank[known.role] < rank[role]) return;
     if (known && known.role === role) { known.lead ||= lead; return; }

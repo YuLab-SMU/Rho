@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 
 import type { ProjectSummary, ResourceSummary, WorkspaceSnapshot, CompositionSummary } from '../src/browser.js';
 import { compositionName, processConversation } from './canvas.js';
 import { Icon, type IconName } from './icons.js';
+import { when } from './home.js';
 
 export type Section = 'overview' | 'documents' | 'files' | 'agent' | 'settings' | 'sources' | 'file' | 'graph' | 'review' | 'console';
 export interface Entry { path: string; name: string; kind: 'file' | 'folder'; bytes: number; hidden: boolean; modifiedAt?: string }
@@ -24,8 +25,11 @@ export interface AgentBadge { running: boolean; waiting: boolean; conversations:
 // The project's places: what it is about, where the work is laid out, the Agent, what ran,
 // and its contents by the kind of file a person looks for. Counts come from one bounded
 // walk of the project folders; a partial walk says so instead of claiming totals.
-export function ProjectNavigation({ project, snapshot, current, sources, partial, agent, onOverview, onStudio, onLayout, onSection, onSources, onFile, onAddSource, adding }: {
-  project: ProjectSummary; snapshot: WorkspaceSnapshot | null; current: string;
+export interface SessionRow { id: string; title: string; running: boolean; when: string }
+// How many sessions Studio lists before the rest are reached from the Agent's place.
+export const sessionRows = 8;
+export function ProjectNavigation({ project, snapshot, current, sources, partial, agent, sessions, onOverview, onStudio, onLayout, onSection, onSources, onFile, onAddSource, adding }: {
+  project: ProjectSummary; snapshot: WorkspaceSnapshot | null; current: string; sessions: SessionRow[];
   sources: Record<SourceRow, SourceItem[]> | null; partial: boolean; agent: AgentBadge; adding: boolean;
   onOverview: () => void; onStudio: () => void; onLayout: (id: string) => void; onSection: (section: Section) => void;
   onSources: (row: SourceRow) => void; onFile: (row: SourceRow, item: SourceItem) => void; onAddSource: () => void;
@@ -41,8 +45,10 @@ export function ProjectNavigation({ project, snapshot, current, sources, partial
     setUnfolded(next);
     try { sessionStorage.setItem(openKey, JSON.stringify(next)); } catch { /* the choice lasts for this page only */ }
   }
-  // A conversation's own Studio is reached from Studio's tabs; these are the person's workspaces.
+  // Under Studio: each session's own Studio, newest first and named by its section of the notes,
+  // then the workspaces the person arranged.
   const layouts = (snapshot?.compositions ?? []).filter(c => !processConversation(c.compositionId));
+  const shownSessions = sessions.filter((s, i) => i < sessionRows || current === 'studio:' + s.id);
   // A row is named by its place; the count beside it is a glance, repeated in its tooltip.
   const count = (value: number | null | undefined, noun: string) => value === null || value === undefined ? undefined
     : { title: `${value}${partial && noun !== 'run' ? ' or more' : ''} ${noun}${value === 1 ? '' : 's'}`, node: <span className="nav-row-count" aria-hidden="true">{value}{partial && noun !== 'run' ? '+' : ''}</span> };
@@ -51,7 +57,11 @@ export function ProjectNavigation({ project, snapshot, current, sources, partial
   return <nav aria-label="Project">
     <div className="nav-group">
       {row('overview', 'Overview', 'overview', onOverview)}
-      <button className={'nav-row' + (current.startsWith('studio:') ? ' within' : '')} aria-current={current.startsWith('studio:') && !layouts.some(c => current === 'studio:' + c.compositionId) ? 'page' : undefined} onClick={onStudio}><Icon name="layout" size={18} /><span className="nav-row-name">Studio</span></button>
+      <button className={'nav-row' + (current.startsWith('studio:') ? ' within' : '')} aria-current={current.startsWith('studio:') && !layouts.some(c => current === 'studio:' + c.compositionId) && !sessions.some(s => current === 'studio:' + s.id) ? 'page' : undefined} onClick={onStudio}><Icon name="layout" size={18} /><span className="nav-row-name">Studio</span></button>
+      {sessions.length > 0 && <div role="group" aria-label="Sessions" className="nav-sub">
+        {shownSessions.map(s => { const at = when(s.when); return <button key={s.id} className="nav-row nav-sub-row nav-session" title={s.title + (at.full ? '\n' + at.full : '')} aria-current={current === 'studio:' + s.id ? 'page' : undefined} onClick={() => onLayout(s.id)}>{s.running ? <span className="pulse-dot" aria-label="Working" /> : null}<span className="nav-row-name">{s.title}</span></button>; })}
+        {sessions.length > shownSessions.length && <button className="nav-row nav-sub-row nav-more" onClick={() => onSection('agent')}><span className="nav-row-name">All {sessions.length} sessions</span></button>}
+      </div>}
       {layouts.length > 0 && <div role="group" aria-label="Workspaces" className="nav-sub">
         {layouts.map(c => <button key={c.compositionId} className="nav-row nav-sub-row" aria-current={current === 'studio:' + c.compositionId ? 'page' : undefined} onClick={() => onLayout(c.compositionId)}><span className="nav-row-name">{compositionName(c.compositionId)}</span><span className="nav-row-count" title={views(c)}>{c.views.length}</span></button>)}
       </div>}

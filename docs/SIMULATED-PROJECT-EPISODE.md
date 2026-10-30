@@ -385,3 +385,105 @@ than declaring it, as in the second pass.
   removed.
 - Agent-declared choices, row identity on an ordinary CSV and page addresses remain
   as recorded in the second pass.
+
+## Project notes
+
+After the process Studio the person asked for the notes to be organized: a project
+has several sessions and several Studio layouts, so Studio should list the sessions
+under it with fitting titles, and the whole project should share one set of notes, a
+special component. Their sketch put a notes column with Question, Data & method, Key
+results (with a figure) and To do beside the code, commands, figure, table, timeline and
+Agent panel. They chose one section per session in a shared file, titled by the
+Agent's heading there, read formatted with tickable to-dos and a toolbar that writes
+the Markdown.
+
+### Changes
+
+- **Sessions under Studio** (`web/project.tsx`): the sidebar lists each session
+  started in Rho under Studio, newest first (eight, then All sessions), then the
+  person's workspaces. The Studio bar names the one shown, with its steps, Follow,
+  Notes and Arrange views; the tabs across the bar are gone.
+- **One set of notes** (`src/project-notes.ts`, `web/project-notes.tsx`):
+  `project-notes.md` at the project root, an ordinary file every session reads and
+  edits with its own tools. Rho appends to a session's Agent instructions that it keep
+  one section there: a level-2 heading naming its task, `<!-- rho:session <id> -->` on
+  the next line, then Question, Data & method, Key results with a figure and To do as
+  a task list, changing only its own section (Agent 0.4.20 passes them as ACP
+  `systemPrompt`, append, on session/new and session/load). A session's title is its
+  heading there, else the Agent's title, else its first message.
+- **The notes panel**: one view of the file's shared buffer beside any Studio layout,
+  opened at the shown session's section and hidden or shown from the bar (remembered
+  in this browser; hidden at first below 768 px, where it replaces the stage).
+  Markdown 0.2.0 ticks a to-do by editing its line through the buffer, hides
+  comment-only lines and gives its editor bold, italic, two heading levels, lists and
+  to-dos (Documents 0.4.8 hands it the editor). The person's edits are saved after a
+  1.5 s pause with the buffer's write conditions; the editor's own Save and highlight
+  controls stay out of the column.
+
+### What the runs showed
+
+**The recorded bix-41 run with notes.** A notes file was written by hand into the
+third copy, with a section for its conversation and one of the person's own with no
+marker. The session's row under Studio, the Studio bar and the breadcrumb took the
+section's heading in place of the conversation's first-message title, and the panel
+opened with that heading marked. Three defects showed and were fixed. The to-do boxes sat centred
+on lines of their own: Rho's form styles make a `label` a column. After a blank line
+the list turned loose (`<li><p><label>`), so the reader's fix now matches any label in
+a to-do. The steps chip overlapped the Notes button, because its slot had no width of
+its own; the date left the bar and the buttons drop their names when the Studio is
+narrow. In Edit the editor's Save and highlight controls covered the panel's title, and
+the Read button disappeared: the reader had stopped rendering its own modes in Edit,
+so a workspace pane could not return to Read either. A ticked box and a typed line
+each reached the file about 1.5 s later and the panel said Saved; hiding, showing and
+760 px behaved. A project with no notes showed the hint and wrote no file.
+
+**A live session keeping its section.** A fourth copy of the bix-41 inputs (the question
+file and the data only) was answered from Studio by Claude Code (DeepSeek V4.1 Flash)
+in 5.6 min, with no permission requests and no page errors. Near the end the Agent
+created `project-notes.md` with its own tools, in the asked shape: a level-2 heading
+naming the task, its session marker on the next line, then Question, Data & method (the
+data file, the tests and the script), Key results with the figure embedded, and To do
+with every item ticked. About 6 s later, while the turn was still running, the sidebar
+row, the Studio bar and the breadcrumb took that heading, and the panel showed the
+section with its figure. The Agent's answer pointed to the notes. The same screen had
+the notes twice: as an output the Agent wrote, the file took a place among the results.
+The project notes now take no place in a conversation's Studio. A long title squeezed
+the steps chip to two letters; the chip now keeps its width and the title shortens. A
+wrapped to-do continued under its box; to-dos now hang under their text.
+
+**Opening a project.** The U2 acceptance then failed on its 200-row table blocks. Two
+3-row reads of the same table came from the Overview's result cards before the
+workspace opened. With this pass's views but the notes hook disabled it passed, as it
+did with the previous views. Opening `project-notes.md` as every project opened had
+added a round trip that kept the Overview on screen a little longer. The notes are now
+opened only when the project has sessions started in Rho or the panel is shown, and
+the unchanged acceptance passes. The same run showed that notes open on a wide window
+took the whole page when it narrowed, so the views disappeared without the person
+doing anything. A window that narrows now closes the notes without changing the wide
+window's choice; at phone width they open only when asked.
+
+### Verification
+
+- `test/project-notes.test.mjs`: sections and markers outside code, a duplicate, late
+  or fenced marker, the title and byte limits, and instructions that name the file and
+  marker and carry nothing of the person's question.
+- `test/studio-process.test.mjs`: a session's project notes take no place in its Studio
+  (the test fails without the change).
+- Plugins: Agent instructions appended on session/new and session/load; Markdown to-do
+  source lines, comment-only lines, ticking and the formatting edits.
+- `acceptance:agent-canvas` checks the conversation's row under Studio and the Studio
+  title; `acceptance:sources` uses Edit and returns with Read.
+- Browser checks on disposable copies: ticking and typing reached the file and said
+  Saved; the toolbar wrote to-dos; hide, show, 760 px and a project with no notes.
+
+### Left open
+
+- No independent person has used the notes or the session list.
+- In a project without sessions, leaving Studio within the pause keeps the person's
+  edit in the buffer, unsaved, until the notes are next shown.
+- An Agent writing its section while the person has unsaved notes edits was not
+  observed. Documents merges a file change into unsaved text when the lines differ;
+  otherwise the save fails on its disk condition and the panel says Not saved.
+- Sessions cannot be renamed from Rho; the title follows the heading in the file.
+- The sketch's dark terminal, labelled figure versions, compare button and file cards
+  in the Agent panel were not built.

@@ -91,12 +91,6 @@
   .steps-round, .steps-count { display: none; }
 }
 
-/* Studio's tabs: each conversation's Studio first, then the person's own workspaces. */
-.conversation-tab { max-width: 260px; }
-.conversation-tab > span:not(.pulse-dot) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.conversation-tab > svg { color: var(--color-meta); }
-.studio-tabs-sep { flex: none; align-self: center; width: 1px; height: 20px; margin: 0 4px; background: var(--color-hairline); }
-
 /* In the narrow Commands view a command's files read as one line of links, and a replayed file
    is named by the frame above it. */
 .command-pane .console-changed { gap: 2px 10px; }

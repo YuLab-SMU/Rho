@@ -154,7 +154,8 @@ try {
   await page.getByRole('button', { name: 'Send', exact: true }).click();
   await page.locator('.follow-toggle[aria-pressed=false]').click();
   await page.locator('.location-name').filter({ hasText: /^Studio · / }).waitFor();
-  await page.locator('.conversation-tab[aria-current=page]').waitFor();
+  await nav.locator('.nav-session[aria-current=page]').waitFor();
+  await page.locator('.studio-title').waitFor();
   await until(tabs, list => ['airquality.csv', 'analysis.R', 'Commands', 'ozone.svg'].every(name => list.some(tab => tab.name === name)), 'the conversation\'s files and commands in its Studio');
   await page.locator('.side-timeline .side-tl-mark').first().waitFor();
   await page.locator('.steps-chip').waitFor();

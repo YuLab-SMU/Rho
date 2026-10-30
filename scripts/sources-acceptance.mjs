@@ -100,7 +100,7 @@ try {
   passed('a CSV shows in its table and a script in the editor, highlighted as R; arrow keys inside a view stay with that view');
 
   await page.getByRole('button', { name: 'Open in Studio' }).click();
-  await page.locator('.studio-tab[aria-current=page]').waitFor();
+  await page.locator('.nav-sub-row[aria-current=page]').waitFor();
   await page.getByRole('tab', { name: 'analysis.R' }).waitFor();
   await page.locator('[data-owner-view] .cm-content').first().waitFor();
   await shot('05-studio');
@@ -128,11 +128,11 @@ try {
   const notes = await admin.call('document.open', { projectId: opened.id, path: 'notes.md' });
   await admin.call('document.edit', { projectId: opened.id, documentId: notes.id, expectedVersion: notes.version, edits: [{ from: 2, to: 7, insert: 'Field notes' }], undoGroup: 'acceptance-notes' });
   await reader.locator('h1', { hasText: 'Field notes' }).waitFor({ timeout: 20000 });
-  await page.getByRole('button', { name: 'Source', exact: true }).click();
+  await page.getByRole('button', { name: /^(Edit|Source)$/ }).click();
   await page.waitForFunction(() => /# Field notes/.test(document.querySelector('.preview-body .cm-content')?.textContent ?? ''), null, { timeout: 20000 });
   await page.getByRole('button', { name: 'Read', exact: true }).click();
   await reader.getByRole('link', { name: 'the script' }).click(); await shown('analysis.R');
-  passed('a Markdown note reads as formatted text with its image, math, table and highlighted code; an edit to its buffer shows; Source shows the editor; a link opens the file');
+  passed('a Markdown note reads as formatted text with its image, math, table and highlighted code; an edit to its buffer shows; Edit shows the editor and Read returns; a link opens the file');
 
   await nav.locator('.nav-file').filter({ hasText: 'temp.svg' }).click(); await shown('temp.svg');
   for (const width of [1024, 390]) {
