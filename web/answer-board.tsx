@@ -10,6 +10,8 @@ import { kindOf, type ProjectFiles } from './sources.js';
 import { readPreview, readTable, readText, type Preview, type TablePage } from './previews.js';
 import { Answer, day, took, pathIcon } from './agent-work.js';
 import { Icon } from './icons.js';
+import { HoldsText } from './holds.js';
+import type { Holds } from '../src/file-describer.js';
 import './board.css';
 import { useMeaning } from './meaning.js';
 import { ChoiceOptions } from './choices.js';
@@ -130,8 +132,8 @@ function Said({ text }: { text: string }) {
 }
 
 function Item({ client, snapshot, item, onPath, said, span, ask, holds }: { client: BrowserClient; snapshot: WorkspaceSnapshot; item: BoardItem; onPath: (path: string) => void; said?: string; span?: number; ask?: { open: boolean; toggle: () => void; box: React.ReactNode };
-  // What the project notes say this file holds.
-  holds?: string }) {
+  // What the file holds: the notes' words, else a model's sentence, else facts read from it.
+  holds?: Holds }) {
   const { node, role } = item;
   const figure = node.category === 'figures', table = /\.(csv|tsv)$/i.test(node.path ?? '');
   const body = role === 'run' ? null : figure ? <Figure client={client} snapshot={snapshot} node={node} />
@@ -142,7 +144,7 @@ function Item({ client, snapshot, item, onPath, said, span, ask, holds }: { clie
   return <article className={'board-item role-' + role + (span ? ' span-' + span : '') + (ask?.open ? ' asking' : '')}>
     <header><div className="board-item-title"><button className="board-name" title={'Show ' + node.path} onClick={() => onPath(node.path!)}><Icon name={pathIcon(node.path!)} size={15} stroke={1.7} /><strong>{node.title}</strong></button>
       {ask && <button className="text-button board-ask-button" aria-expanded={ask.open} onClick={ask.toggle}>Ask</button>}</div>
-      {holds && <p className="board-holds" title={holds}>{holds}</p>}
+      {holds && <HoldsText className="board-holds" holds={holds} />}
       {item.why !== said && <small className="board-why"><Said text={item.why} /></small>}</header>
     {ask?.open && ask.box}
     {body}
@@ -209,7 +211,7 @@ export function AnswerBoard({ client, snapshot, files, notesText = '', onConvers
   const graphFiles = useMemo(() => files.files.map(f => ({ path: f.path, bytes: f.bytes, modifiedAt: f.modifiedAt, category: f.category })), [files.files]);
   const graph = useMemo(() => foldVersions(buildWorkGraph({ turns, files: graphFiles, project: snapshot.project, kindOf, now: Date.now() })), [turns, graphFiles, snapshot.project]);
   // What the notes say each file holds, and the choices this conversation's section records.
-  const meaning = useMeaning(client, snapshot, graph, graphFiles, notesText);
+  const meaning = useMeaning(client, snapshot, graph, graphFiles, notesText, turns);
   const threads = useMemo(() => boardThreads(graph), [graph]);
   // The newest answer is shown, and a new one takes its place, unless the person chose another.
   const [chosen, setChosen] = useState<string | null>(null);
@@ -272,7 +274,7 @@ export function AnswerBoard({ client, snapshot, files, notesText = '', onConvers
   // A question asked since that the Agent is answering now, named where the eye starts.
   const running = followUps.find(t => t.running), askingNow = running ? { id: running.id, title: clip(askedAbout(graph.nodes.find(n => n.id === 'q:' + running.id)?.text ?? '').question.split('\n')[0]!, 60) } : null;
   const results = [primary, ...supporting].filter(Boolean) as BoardItem[];
-  const holds = (item: BoardItem) => meaning.descriptions.get(item.node.path ?? '')?.text;
+  const holds = (item: BoardItem) => item.node.path ? meaning.holds(item.node.path) : undefined;
   const section = meaning.meanings.find(m => m.conversationId === conversationId);
   const choices = section?.statements.filter(s => s.kind === 'choice') ?? [];
   const said = results.length > 1 && results.every(i => i.why === results[0].why) ? results[0].why : undefined;

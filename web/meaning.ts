@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { BrowserClient, WorkspaceSnapshot } from '../src/browser.js';
-import type { GraphFile, WorkGraph } from '../src/work-graph.js';
+import type { GraphFile, GraphTurn, WorkGraph } from '../src/work-graph.js';
+import { describedFiles, holdsOf, type Holds } from '../src/file-describer.js';
 import { notesMeaning, traceStatement, fileDescriptions, type NotesVersion, type Statement, type Trace, type SessionMeaning, type Described } from '../src/notes-meaning.js';
 import { meaningLayer, type MeaningLayer } from '../src/meaning-graph.js';
 import { notesLimits, projectNotesPath } from '../src/project-notes.js';
@@ -13,11 +14,13 @@ import { readBytes } from './previews.js';
 export const meaningLimits = { versions: 24 };
 const versionTexts = new Map<string, Promise<string>>();
 
-export interface Meaning { meanings: SessionMeaning[]; traces: Map<Statement, Trace>; layer: MeaningLayer; descriptions: Map<string, Described>; versions: { read: number; kept: number } }
+export interface Meaning { meanings: SessionMeaning[]; traces: Map<Statement, Trace>; layer: MeaningLayer; descriptions: Map<string, Described>; versions: { read: number; kept: number };
+  // What a file holds: the notes' words, else a model's sentence, else facts read from it.
+  holds(path: string): Holds | undefined }
 // What the project notes say about the work, each statement traced to the kept version of the
 // notes it first appeared in and the files it names to their versions then. Follows the notes
-// as they change while the Agent works.
-export function useMeaning(client: BrowserClient, snapshot: WorkspaceSnapshot, process: WorkGraph, files: GraphFile[], notesText: string): Meaning {
+// as they change while the Agent works, with what the messages' files were read to hold.
+export function useMeaning(client: BrowserClient, snapshot: WorkspaceSnapshot, process: WorkGraph, files: GraphFile[], notesText: string, turns: GraphTurn[] = []): Meaning {
   const projectId = snapshot.project.id;
   // Every version of the notes the Agent's record kept, with the message that kept it.
   const kept = useMemo(() => process.nodes.filter(n => n.kind === 'file' && n.path === projectNotesPath).flatMap(n => (n.versions ?? (n.resource ? [{ resource: n.resource, capturedAt: n.capturedAt ?? n.at }] : []))
@@ -41,7 +44,8 @@ export function useMeaning(client: BrowserClient, snapshot: WorkspaceSnapshot, p
     const changedAt = (path: string) => { const f = files.find(x => x.path === path); return f?.modifiedAt ? Date.parse(f.modifiedAt) : null; };
     const traces = new Map<Statement, Trace>();
     for (const session of meanings) for (const statement of session.statements) traces.set(statement, traceStatement(statement, versions, keptOf, changedAt));
-    const layer = meaningLayer({ process, meanings, traces, files, kindOf: path => kindOf(path) });
-    return { meanings, traces, layer, descriptions: fileDescriptions(meanings), versions: { read: versions.length, kept: kept.length } };
-  }, [notesText, versions, process, files]);
+    const described = describedFiles(turns), descriptions = fileDescriptions(meanings);
+    const layer = meaningLayer({ process, meanings, traces, files, kindOf: path => kindOf(path), described });
+    return { meanings, traces, layer, descriptions, versions: { read: versions.length, kept: kept.length }, holds: path => holdsOf(path, descriptions, described) };
+  }, [notesText, versions, process, files, turns]);
 }

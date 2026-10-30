@@ -588,6 +588,114 @@
               "pattern": "^[a-f0-9]{64}$"
             }
           },
+          "descriptions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "version": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$"
+                },
+                "bytes": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "modifiedAt": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "observedAt": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "facts": {
+                  "type": "string"
+                },
+                "partial": {
+                  "type": "boolean"
+                },
+                "sentence": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "text": {
+                          "type": "string"
+                        },
+                        "version": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "model": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "at": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "facts": {
+                          "type": "string"
+                        },
+                        "costUsd": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "text",
+                        "version",
+                        "model",
+                        "at"
+                      ],
+                      "additionalProperties": true
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "state": {
+                  "enum": [
+                    "describing",
+                    "described",
+                    "facts",
+                    "failed",
+                    "unknown"
+                  ]
+                },
+                "reason": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "path",
+                "version",
+                "bytes",
+                "modifiedAt",
+                "observedAt",
+                "facts",
+                "sentence",
+                "state"
+              ],
+              "additionalProperties": true
+            }
+          },
+          "descriptionsOmitted": {
+            "type": "integer",
+            "minimum": 0
+          },
           "decisions": {
             "type": "array",
             "items": {

@@ -231,6 +231,12 @@ const conversationStep = response({ kind: { enum: ['text', 'tool', 'error'] }, a
 const conversationTurn = response({ id: text, by: text, text: { type: 'string' }, sentAt: text, state: { enum: ['running', 'completed', 'failed', 'stopped', 'unknown'] }, startedAt: { anyOf: [text, { type: 'null' }] }, endedAt: { anyOf: [text, { type: 'null' }] }, model: { anyOf: [text, { type: 'null' }] },
   stop: { anyOf: [response({ requestedAt: text, by: text, reason: { enum: ['person', 'closing', 'wall-limit', 'output-limit', 'line-limit', 'identity'] } }), { type: 'null' }] },
   steps: array(conversationStep), omitted: integer, evidence: evidenceSchema, contexts: array(digest),
+  // What the files it wrote hold: facts read from each file, then a model's sentence naming the
+  // version it read and the model (Rho's describeLimits).
+  descriptions: array(response({ path: text, version: digest, bytes: integer, modifiedAt: text, observedAt: text, facts: { type: 'string' }, partial: { type: 'boolean' },
+    sentence: { anyOf: [response({ text: { type: 'string' }, version: digest, model: { anyOf: [text, { type: 'null' }] }, at: text, facts: { type: 'string' }, costUsd: { type: 'number' } }, ['text', 'version', 'model', 'at']), { type: 'null' }] },
+    state: { enum: ['describing', 'described', 'facts', 'failed', 'unknown'] }, reason: { type: 'string' } }, ['path', 'version', 'bytes', 'modifiedAt', 'observedAt', 'facts', 'sentence', 'state'])),
+  descriptionsOmitted: integer,
   decisions: array(response({ changeId: text, requestDigest: digest, decision: { enum: ['accepted', 'needs-changes'] }, note: { anyOf: [{ type: 'string' }, { type: 'null' }] }, by: text, at: text, supersedes: { anyOf: [text, { type: 'null' }] }, results: array(response({ path: text, resource: response({ id: text, version: text }) })) })),
   permissions: array(response({ id: text, title: { type: 'string' }, toolCallId: text, details: { type: 'string' }, options: array(response({ id: text, name: text, kind: text })), state: { enum: ['pending', 'selected', 'cancelled'] }, selected: text }, ['id', 'title', 'toolCallId', 'options', 'state'])),
   retry: { anyOf: [response({ attempt: { anyOf: [integer, { type: 'null' }] }, of: { anyOf: [integer, { type: 'null' }] }, status: { anyOf: [integer, { type: 'null' }] }, at: text }), { type: 'null' }] },

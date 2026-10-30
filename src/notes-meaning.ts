@@ -55,9 +55,12 @@ function linksOf(source: string): string[] {
 // The statement as a person reads it: link labels, image descriptions and code without marks.
 export function plainText(source: string): string {
   const unmarked = source.replace(linkPattern, (_, _image, label) => label).replace(/^\s*(?:[-*+]|\d+[.)])\s+(\[[ xX]\]\s+)?/gm, '');
-  // Emphasis outside code; an underscore inside a word, as in a file name, is not emphasis.
-  return unmarked.split('`').map((part, i) => i % 2 ? part : part.replace(/(\*{1,3})(?=\S)([^*]+?)(?<=\S)\1/g, '$2').replace(/(^|[^\w])(_{1,3})(?=\S)([^_]+?)(?<=\S)\2(?![\w])/g, '$1$3'))
-    .join('').replace(/\s+/g, ' ').trim();
+  // Emphasis outside code, which may span a code span; an underscore inside a word, as in a file
+  // name, is not emphasis. Code spans are set aside first so their contents stay as written.
+  const code: string[] = [];
+  const held = unmarked.replace(/`([^`]*)`/g, (_, inner) => '\u0000' + (code.push(inner) - 1) + '\u0000');
+  const plain = held.replace(/(\*{1,3})(?=\S)([^*]+?)(?<=\S)\1/g, '$2').replace(/(^|[^\w])(_{1,3})(?=\S)([^_]+?)(?<=\S)\2(?![\w])/g, '$1$3');
+  return plain.replace(/\u0000(\d+)\u0000/g, (_, i) => code[Number(i)]!).replace(/\s+/g, ' ').trim();
 }
 
 const bullet = /^(\s*)([-*+]|\d+[.)])\s+(.*)$/;

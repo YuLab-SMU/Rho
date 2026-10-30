@@ -1,0 +1,8 @@
+/* What a file holds, marked by where it comes from: the notes' words plain, a model's sentence
+   followed by the model's name, the facts read from the file muted. */
+.holds-facts .holds-text { color: var(--color-muted); }
+.holds-by { margin-left: 6px; color: var(--color-meta); font-size: 11px; white-space: nowrap; }
+.process-holds.holds { display: flex; align-items: baseline; }
+.process-holds .holds-text { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The sentence keeps the room; the model's name gives way first and stays in the title. */
+.process-holds .holds-by { flex: 0 1 auto; min-width: 0; max-width: 35%; overflow: hidden; text-overflow: ellipsis; }

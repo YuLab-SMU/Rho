@@ -261,6 +261,7 @@
 .graph-node.meaning .meaning-text { -webkit-line-clamp: 3; font-weight: 550; }
 .graph-node.meaning.kind-finding .meaning-text, .graph-node.meaning.kind-choice .meaning-text { -webkit-line-clamp: 3; font-size: 13.5px; font-weight: 500; line-height: 1.4; }
 .graph-node.meaning.kind-file .meaning-text { -webkit-line-clamp: 2; font-size: 13.5px; }
+.graph-node.meaning .meaning-text.holds-facts { color: var(--color-muted); font-weight: 500; }
 .graph-node-path { overflow: hidden; color: var(--color-muted); font-family: var(--font-mono); font-size: 11.5px; text-overflow: ellipsis; white-space: nowrap; }
 .meaning-changed { color: var(--color-amber-text); }
 .tone-finding .graph-node-icon, .graph-node-icon.tone-finding { background: var(--color-hue-moss); color: var(--color-hue-moss-ink); }

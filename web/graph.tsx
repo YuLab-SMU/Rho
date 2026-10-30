@@ -18,6 +18,7 @@ import { readPreview, type Preview } from './previews.js';
 import { useTurns } from './work-turns.js';
 import { clock, failed, kindOfAction, span, timelineKinds, type TimelineKind } from './timeline-kinds.js';
 import { layered, type GraphLayer } from '../src/meaning-graph.js';
+import { modelName } from '../src/file-describer.js';
 import type { Trace } from '../src/notes-meaning.js';
 import { useMeaning } from './meaning.js';
 import { ChoiceOptions } from './choices.js';
@@ -37,7 +38,7 @@ const tone = (node: GraphNode) => node.kind !== 'file' ? node.kind : node.catego
 const hasPreview = (node: GraphNode) => node.kind === 'file' && !!node.resource && (/\.(png|jpe?g|svg)$/i.test(node.path!) || /\.csv$/i.test(node.path!));
 const sizeOf = (node: GraphNode, proxy: boolean) => proxy ? { width: 228, height: 58 }
   // The meaning layer's cards carry a statement or a description and where it came from.
-  : node.meaning ? { width: node.kind === 'file' ? 256 : 300, height: node.kind === 'question' ? 138 : node.kind === 'finding' || node.kind === 'choice' ? 124 : (hasPreview(node) ? (/\.csv$/i.test(node.path!) ? 226 : 212) : 112) }
+  : node.meaning ? { width: node.kind === 'file' ? 256 : 300, height: node.kind === 'question' ? 138 : node.kind === 'finding' || node.kind === 'choice' ? 124 : (hasPreview(node) ? (/\.csv$/i.test(node.path!) ? 226 : 212) : 128) }
   : { width: node.kind === 'question' ? 300 : node.kind === 'run' ? 236 : 256, height: node.kind === 'question' ? (node.answer ? 160 : 116) : node.kind === 'run' ? 88 : hasPreview(node) ? (/\.csv$/i.test(node.path!) ? 198 : 184) : 96 };
 // Who wrote a statement of the notes, as far as the Agent's record says: the Agent of the message
 // whose kept version of the notes first holds it, or nobody it recorded.
@@ -101,7 +102,7 @@ export function WorkGraph({ initialResource, client, snapshot, files, agentNow, 
     [turns, graphFiles, snapshot.project, agentNow?.running ? now : 0]);
   // The meaning layer from the project notes, above the process layer by default; either can be
   // shown alone. The choice is remembered in this browser.
-  const meaning = useMeaning(client, snapshot, process, graphFiles, notesText);
+  const meaning = useMeaning(client, snapshot, process, graphFiles, notesText, turns);
   const hasMeaning = meaning.layer.nodes.length > 0;
   const [layer, setLayer] = useState<GraphLayer>(() => { try { const v = localStorage.getItem('rho.graph.layer.v1'); return v === 'meaning' || v === 'process' ? v : 'both'; } catch { return 'both'; } });
   function showLayer(next: GraphLayer) { fitted.current = false; setLayer(next); try { localStorage.setItem('rho.graph.layer.v1', next); } catch { /* this page only */ } }
@@ -153,7 +154,9 @@ export function WorkGraph({ initialResource, client, snapshot, files, agentNow, 
   const canvas = useRef<HTMLDivElement>(null);
   const [view, setView] = useState<View>({ x: 40, y: 40, k: 1 }), [gliding, setGliding] = useState(false);
   const viewNow = useRef(view); viewNow.current = view;
-  const fitted = useRef(false);
+  const fitted = useRef(false), touched = useRef(false);
+  // Until the person moves or selects something, a graph whose rows change opens fitted again:
+  // the meaning rows and later messages arrive after the first drawing.
   const glide = (next: View) => { setGliding(true); setView(next); setTimeout(() => setGliding(false), 380); };
   const fit = useCallback((animate = true) => {
     const box = canvas.current?.getBoundingClientRect();
@@ -164,18 +167,33 @@ export function WorkGraph({ initialResource, client, snapshot, files, agentNow, 
   }, [layout]);
   // The page opens on the whole graph when it can be read whole; otherwise on the newest
   // question at a readable size, with the map showing the rest.
+  const rowsKey = layout.rows.map(r => r.turn).join(','), lastRows = useRef(rowsKey);
+  // With a meaning row, any new layout opens on its question again; otherwise only new rows do.
+  useLayoutEffect(() => {
+    const moved = rowsKey !== lastRows.current || layout.rows.some(r => r.turn.startsWith('m:'));
+    lastRows.current = rowsKey;
+    if (!touched.current && !following && moved) fitted.current = false;
+  }, [layout]);
+  useEffect(() => { if (selected) touched.current = true; }, [selected]);
   useLayoutEffect(() => {
     if (fitted.current || !graph.nodes.length) return;
     const box = canvas.current?.getBoundingClientRect();
     if (!box) return;
     fitted.current = true;
     const whole = Math.min(1, (box.width - 96) / layout.width, (box.height - 120) / layout.height);
-    const row = layout.rows.at(-1);
+    const meaningRow = layout.rows.filter(r => r.turn.startsWith('m:')).at(-1), row = meaningRow ?? layout.rows.at(-1);
     if (whole >= readable || !row) { fit(false); return; }
-    // Too large to read whole: the newest message's row from its start, the map shows the rest.
+    // Too large to read whole: the newest meaning row from its top, else the newest message's
+    // row from its start; the map shows the rest.
     const k = readable, fitsTall = layout.height * k <= box.height - 120;
+    const asked = meaningRow && layout.placed.get('q:' + meaningRow.turn);
+    if (asked) {
+      // The question at the left, a third of the way down, clear of the map; what it led to follows.
+      setView({ k, x: 32 - asked.x * k, y: box.height * 0.35 - (asked.y + asked.height / 2) * k });
+      return;
+    }
     setView({ k, x: 32, y: fitsTall ? (box.height - layout.height * k) / 2 : Math.min(48, box.height - 40 - (row.y + row.height) * k) });
-  }, [graph.nodes.length, fit]);
+  }, [graph.nodes.length, fit, layout]);
   const center = (id: string, animate = true, zoom?: number) => {
     const p = layout.placed.get(id), box = canvas.current?.getBoundingClientRect();
     if (!p || !box) return;
@@ -195,7 +213,7 @@ export function WorkGraph({ initialResource, client, snapshot, files, agentNow, 
     const element = canvas.current;
     if (!element) return;
     function wheel(event: WheelEvent) {
-      event.preventDefault();
+      event.preventDefault(); touched.current = true;
       const v = viewNow.current;
       if (event.ctrlKey || event.metaKey) {
         const box = element!.getBoundingClientRect(), px = event.clientX - box.left, py = event.clientY - box.top;
@@ -210,7 +228,7 @@ export function WorkGraph({ initialResource, client, snapshot, files, agentNow, 
   const dragged = useRef(false);
   function pan(event: ReactPointerEvent<HTMLDivElement>) {
     if (event.button !== 0 || (event.target as HTMLElement).closest('.graph-node, .graph-zoom, .graph-overlay, .graph-legend')) return;
-    const start = { x: event.clientX, y: event.clientY, view: viewNow.current }, element = event.currentTarget;
+    const start = { x: event.clientX, y: event.clientY, view: viewNow.current }, element = event.currentTarget; touched.current = true;
     element.setPointerCapture(event.pointerId); dragged.current = false;
     const move = (e: PointerEvent) => {
       if (Math.abs(e.clientX - start.x) + Math.abs(e.clientY - start.y) > 3) { dragged.current = true; element.dataset.panning = ''; }
@@ -223,6 +241,7 @@ export function WorkGraph({ initialResource, client, snapshot, files, agentNow, 
     element.addEventListener('pointermove', move); element.addEventListener('pointerup', stop); element.addEventListener('pointercancel', stop);
   }
   const zoomBy = (factor: number) => {
+    touched.current = true;
     const box = canvas.current?.getBoundingClientRect(), v = viewNow.current;
     if (!box) return;
     const k = Math.min(zoomLimits.max, Math.max(zoomLimits.min, v.k * factor)), px = box.width / 2, py = box.height / 2;
@@ -402,14 +421,17 @@ function MeaningCard({ node, place, client, snapshot, near, agentOf, selected, d
   const m = node.meaning!, file = node.kind === 'file', trace = file ? m.description?.trace : m.trace;
   const changed = trace?.files.some(f => f.later === 'kept') ? 'newer version since' : trace?.files.some(f => f.later === 'written') ? 'written again since' : '';
   const folder = node.path?.includes('/') ? node.path.split('/').slice(0, -1).join('/') : '';
-  const by = file && !m.description ? 'No description in the notes' : writtenBy(trace, agentOf);
-  const kind = node.kind === 'question' && !m.statement ? 'Section' : kindLabel(node);
+  const d = file ? m.description : undefined;
+  const by = file && !d ? 'Nothing says what it holds yet' : d?.source === 'model' ? `Described by ${modelName(d.model)} · ${clock(d.at ?? 0)}${d.earlier ? ' · earlier version' : ''}`
+    : d?.source === 'facts' ? `Read from the file · ${clock(d.at ?? 0)}${d.writing ? ' · describing…' : ''}`
+    : m.message ? `Asked ${clock(m.message.at)} · no notes yet` : writtenBy(trace, agentOf);
+  const kind = node.kind === 'question' && !m.statement && !m.message ? 'Section' : kindLabel(node);
   return <button className={'graph-node meaning kind-' + node.kind + ' tone-' + tone(node)} data-node={node.id} style={{ left: place.x, top: place.y, width: place.width, height: place.height }}
     aria-pressed={selected} aria-label={`${kind}: ${file ? (m.description?.text ? m.description.text + ', ' : '') + node.path : node.text}. ${by}`} data-dimmed={dimmed || undefined} data-later={later || undefined} data-arrived={arrived || undefined} data-missing={file && !node.exists || undefined}
     onClick={onSelect} onDoubleClick={onOpen}>
-    <span className="graph-node-head"><span className="graph-node-icon"><Icon name={kindIcon(node)} size={15} stroke={1.8} /></span><span className="graph-node-kind">{kind}{file && folder && <span className="graph-node-folder"> · {folder}</span>}{node.kind === 'question' && <span className="graph-node-folder"> · {m.session}</span>}</span></span>
-    <strong className="graph-node-title meaning-text" title={file ? node.path : node.text}>{file ? m.description?.text || node.title : node.title}</strong>
-    {file && m.description?.text && <span className="graph-node-path">{node.title}</span>}
+    <span className="graph-node-head"><span className="graph-node-icon"><Icon name={kindIcon(node)} size={15} stroke={1.8} /></span><span className="graph-node-kind">{kind}{file && folder && <span className="graph-node-folder"> · {folder}</span>}{node.kind === 'question' && !m.message && <span className="graph-node-folder"> · {m.session}</span>}</span></span>
+    <strong className={'graph-node-title meaning-text' + (d ? ' holds-' + d.source : '')} title={file ? node.path : node.text}>{file ? d?.text || node.title : node.title}</strong>
+    {file && d?.text && <span className="graph-node-path">{node.title}</span>}
     {file && hasPreview(node) && <CardPreview client={client} snapshot={snapshot} node={node} shown={near && !later} />}
     <span className="graph-node-meta">{node.kind === 'question' && m.todos ? `${m.todos.done} of ${m.todos.total} to-dos done · ` : ''}{by}{changed && <span className="meaning-changed"> · {changed}</span>}{file && !node.exists && ' · not in the folder now'}</span>
   </button>;
@@ -514,7 +536,19 @@ function MeaningSaid({ node, graph, process, traces, client, snapshot, agentOf, 
       : node.kind === 'choice' && m.statement ? <ChoiceOptions statement={m.statement} trace={m.trace} conversationId={m.conversationId} client={client} projectId={snapshot.project.id} onPath={path => shell?.openPath?.(path)} onSent={id => onAgent(id)} />
       : <p className="meaning-statement">{node.text}</p>}
     {node.kind === 'question' && m.todos && <p className="graph-facts">{m.todos.done} of {m.todos.total} to-dos done</p>}
-    {(!file || m.description) && <div className="meaning-trace">
+    {file && m.description && m.description.source !== 'notes' && <div className="meaning-trace">
+      <h3 className="caption">Where this comes from</h3>
+      <p className="graph-facts">{m.description.source === 'model'
+        ? <>Described by {modelName(m.description.model)} at {clock(m.description.at ?? 0, true)}{m.description.earlier ? ', from an earlier version than the facts below' : ''}. A model's sentence from the facts and first lines it was given; it is not checked. The notes do not say what this file holds yet.</>
+        : <>Read from the file at {clock(m.description.at ?? 0, true)}{m.description.writing ? '; a model is writing a sentence about it' : ''}. The notes do not say what this file holds yet.</>}</p>
+      {m.description.source === 'model' && m.description.facts && <p className="graph-facts">Facts read from the file: {m.description.facts}</p>}
+    </div>}
+    {m.message && <div className="meaning-trace">
+      <h3 className="caption">Where this comes from</h3>
+      <p className="graph-facts">Asked at {clock(m.message.at, true)}. The notes have no section for this conversation yet, so its results are shown by what was read from them.</p>
+      <div className="graph-actions"><button onClick={() => onTrace(m.message!.id)}><Icon name="graph" size={15} />Show the message</button></div>
+    </div>}
+    {!m.message && (!file || m.description?.source === 'notes') && <div className="meaning-trace">
       <h3 className="caption">Where this comes from</h3>
       <p className="graph-facts">{trace?.written
         ? <>Written by {agentOf(trace.written.conversationId) ?? 'the Agent'} at {clock(trace.written.at, true)}, first in version {trace.written.version} of {trace.written.of} of the notes that the Agent's record kept.</>

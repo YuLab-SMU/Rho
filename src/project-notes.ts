@@ -25,6 +25,7 @@ export function notesInstructions(conversationId: string): string {
     '- Files: right after you write a result, table, figure or script, and before your next command, add a bullet as - [path](path) — what it holds; correct it when that changes. Do not leave this to the end.',
     '- Choices: when the analysis takes a choice that has a reasonable alternative (a test, a threshold, an exclusion, a model), go on with your choice and do not ask the person or wait. Where the alternative is cheap, compute it too. Write one bullet saying what you chose and what it gives, linking its results, with a nested bullet starting "Alternative:" that says what the other option gives, linking its results.',
     '- To do: a task list (- [ ] open, - [x] done).',
+    '- Leave a subsection empty until you have something for it; do not write placeholders such as "to be filled".',
     `- Create ${projectNotesPath} if it does not exist. Change only your own section, and keep other sections and the person's edits as they are.`,
     '- Add each finding and choice when you have it, and update the section as results, files or to-dos change.',
   ].join('\n');

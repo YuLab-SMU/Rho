@@ -593,7 +593,8 @@ names the section the statement belongs to.
   while it goes on. Two rounds of instructions moved the section to the start of the run
   but not the file entries, which came with the findings near the end. Facts read from
   each file as it appears, such as rows, columns or image size, or a separate model that
-  describes each new file, have not been built or chosen.
+  describes each new file, had not been built; the person chose both, built in the
+  [next pass](#descriptions-while-the-work-goes-on).
 - **Choices are what the Agent declares.** A choice the Agent took without writing it
   down does not appear, and an alternative is shown only as far as the Agent computed and
   linked it. Rho does not check that an alternative's table shows what its sentence says.
@@ -605,4 +606,107 @@ names the section the statement belongs to.
   each. Whether a person follows a trace there has not been observed.
 - **Free-form notes**: text under other headings, or between a section's heading and its
   first subsection, is not read as meaning and is not drawn.
+
+## Descriptions while the work goes on
+
+The meaning layer left the person following a run with a question and a plan: the Agent
+described its files only at the end. The person chose both remedies: facts read from
+each file as soon as it is written, then one sentence from a model.
+
+### Changes
+
+- **Facts from the bytes** (`src/file-describer.ts`): a table's rows and columns with
+  their names, an image's size, a PDF's pages, a JSON value's shape, a Markdown file's
+  lines and first heading, a script's lines and functions. They are bound to the digest
+  of the bytes read, the same digest Files gives a kept version.
+- **While a message runs** (`Conversations`): the project is compared with the start every
+  5 s, and each changed file that has rested 2 s is read. The facts are recorded with the
+  message as `descriptions` in `conversation.read`. The notes file and known private
+  locations are left out.
+- **The sentence** (Agent 0.4.21 `describeFile`): the person's own Claude Code with every
+  tool off, no MCP servers and no kept session, in an empty folder of Rho's state, using
+  the conversation's model. It is given the path, the facts, the first lines and the
+  person's request. A file is asked about at most once a minute while the message runs.
+  A later version with the same facts keeps its sentence. Figures and PDFs keep their
+  facts; a Codex session records facts only.
+- **Where it shows**: above each file in a conversation's Studio, on the answer board and
+  on the Graph's meaning cards. The notes' words lead, then the model's sentence followed
+  by the model's name, then the facts in a muted line. The inspector says which it is.
+  Results and figures join their conversation's meaning row as they appear, in a row of
+  their own when the notes have no section yet. The Graph opens on that row's question.
+- **The session instructions** ask the Agent to leave a subsection empty rather than
+  write a placeholder.
+
+### What the runs showed
+
+**A seventh copy.** Claude Code (DeepSeek V4.1 Flash) answered in 6.3 min with no
+permission requests. Its section appeared at 45 s with placeholder bullets under Key
+results and Choices, which the Graph drew as a finding and a choice; the instructions
+now ask for empty subsections instead. The script had its facts at 110 s and a sentence
+3 s later. Nine results appeared between 140 and 150 s. Each had facts within 6 s of
+being written and a sentence 10 s later (median), 18 s at most; the figure kept its
+size and bytes. The full section arrived at 328 s, and from then the notes' words led.
+The sentences stayed with what the columns and first lines show. One called a
+circularity column "circumference": a model's misreading, shown with the model's name.
+
+The live Graph opened on empty canvas, because it was fitted before the meaning row
+existed. It now fits again whenever its layout changes until the person moves, zooms or
+selects, and opens on the meaning row's question. The meaning layer had also drawn
+`project-notes.md` as a file card; the notes are where the layer comes from, and the card
+is gone. A model mark at 12 px read as a plus sign; the model's name follows the sentence
+instead. Paging one result table failed with "CSV headers do not match the declared
+columns": a later version with new columns had been declared with the earlier version's
+columns. A version whose header differs is now declared from its own header. The version
+kept before the fix cannot be paged; kept versions are immutable.
+
+**An eighth copy.** The message failed after 11 min at Claude Code's 64-step limit
+(`maxAgentTurns`), after it had written every result and its notes; nothing there came
+from the descriptions. Of 15 files, 13 had a sentence and the two figures kept their
+facts. Facts came within 4 s of each write. When nine files arrived at once, their
+sentences followed one after another, the last 26 s after its facts. The model was
+called 17 times, against 23 in the seventh copy. In Studio at five minutes, each table
+showed its sentence and model above its rows, and the figure its size. With the notes
+panel open, the Agent first tried to write the notes through Rho's document operations;
+four calls were refused for a missing field before it wrote the file itself. A finding
+whose bold ran across a code span kept its asterisks; bold across code is now removed.
+
+**A project without notes.** The graph acceptance's project keeps no notes, and its
+results now made a meaning row. Its question card read "Section" and "Not in the Agent's
+record". A row with no section is now headed by the person's message, "Asked 15:42 · no
+notes yet", and its inspector leads to that message. The acceptance first failed because
+it read the process cards from the default layer; it now checks the meaning row's facts,
+then chooses Process.
+
+### Verification
+
+- `test/file-describer.test.mjs` covers the facts of each kind and a message that writes
+  a table and a figure. The table gets facts and a sentence while the message runs; the
+  figure keeps facts, and the notes are left out. A rewrite with the same facts keeps the
+  sentence without asking again. A description still being written when Rho stops reads
+  back as unknown. `test/capture-columns.test.mjs` pages two versions of a table whose
+  columns changed; it fails without the fix. The meaning tests cover described files in
+  a row, the order of notes, sentence and facts, and a past moment.
+- The Agent component's `test/agent-describe.test.mjs` checks the arguments (no tools, no
+  MCP, no session), the bounded input, and a failure, an empty answer, unreadable output
+  or a timeout, each reported once. Plugins 122/122.
+- Rho 257/257, `check:contracts`, and the agent-canvas, sources, graph, agent-page,
+  agent-ui, review and ui:u2 browser acceptances passed on the final build. The graph
+  acceptance now also checks a project without notes in the meaning layer.
+- The seventh and eighth copies were followed live in a real browser, with Studio
+  screenshots every 20–25 s and the Graph and answer board read after each run.
+
+### Left open
+
+- **Figures and PDFs** are described by their facts only; no model that reads images has
+  been chosen.
+- **Sentences are not checked.** One misread a column name. The model's name and the
+  version it read are shown; nothing compares the sentence with the file.
+- **Cost.** Each sentence spends the person's model budget, up to 24 calls per message; a
+  probe call reported $0.013. The cost is kept with each sentence but not shown, and
+  there is no switch to turn descriptions off other than the limits.
+- **Many quick rewrites** of one file are described again at most once a minute; the facts
+  follow every check.
+- **Step limit and document calls**: the eighth copy ran out of Claude Code steps, part of
+  them spent on refused document calls for the notes.
+- **No independent person** has followed a run with these descriptions.
 

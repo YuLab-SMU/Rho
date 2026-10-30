@@ -1,6 +1,7 @@
 import { commandEnd, conversationBlocks, displayCommand, stepDuration, type ActivityOutcome, type ConversationTurn, type SessionObservation } from './conversation-presentation.js';
 import { askedAbout } from './asking.js';
 import type { Statement, Trace } from './notes-meaning.js';
+import type { Holds } from './file-describer.js';
 
 // What the Agent did in a project, drawn as a graph: each question a person asked, the files
 // its turn read and changed, the commands it ran, and the files that changed on disk while it
@@ -76,9 +77,11 @@ export interface GraphNode {
 export interface MeaningInfo {
   session: string; conversationId: string | null;
   statement?: Statement; trace?: Trace;
-  // A file: what the notes say it holds, and where that was written.
-  description?: { text: string; trace?: Trace };
+  // A file: what it holds, from the notes (and where that was written), a model or its facts.
+  description?: Holds & { trace?: Trace };
   todos?: { done: number; total: number };
+  // A row whose notes have no section yet: its question is the person's message, this node.
+  message?: { id: string; at: number };
 }
 // The message an edge was recorded in: a file one message made and a later one read is drawn
 // with that later message.

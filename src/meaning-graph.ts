@@ -1,12 +1,16 @@
 import type { FileKind, GraphEdge, GraphFile, GraphNode, GraphTurnSpan, WorkGraph } from './work-graph.js';
 import { fileDescriptions, type SessionMeaning, type Statement, type Trace } from './notes-meaning.js';
+import { holdsOf, type Described } from './file-describer.js';
+import { projectNotesPath } from './project-notes.js';
 
 // The meaning layer of the Graph: one row per session's section of the notes. Its question,
 // then what was found and the choices taken, then the files those rest on, then how the files
 // came about and what they read. Findings, choices and descriptions are declared in the notes;
 // how a file came about is taken from the process record with that record's basis. Each file
 // can be traced to the version the process kept, and each statement to the message it was
-// written in.
+// written in. While a message runs, the results and figures it writes join its row with the
+// facts read from them and a model's sentence, until the notes name them; a conversation whose
+// notes have no section yet gets a row of its own for them.
 
 export interface MeaningLayer {
   nodes: GraphNode[]; edges: GraphEdge[]; turns: GraphTurnSpan[];
@@ -17,13 +21,15 @@ export interface MeaningLayer {
 export interface MeaningInput {
   process: WorkGraph; meanings: SessionMeaning[]; traces: Map<Statement, Trace>;
   files: GraphFile[]; kindOf: (path: string) => FileKind;
+  // What the messages' files hold as read while they ran (file-describer.ts), newest per file.
+  described?: Map<string, Described>;
 }
 const clip = (text: string, max: number) => text.length > max ? text.slice(0, max - 1).trimEnd() + '…' : text;
 
 export function meaningLayer(input: MeaningInput): MeaningLayer {
   const { process, meanings, traces } = input;
   const files = new Map(input.files.map(f => [f.path, f]));
-  const described = fileDescriptions(meanings);
+  const notes = fileDescriptions(meanings), described = input.described ?? new Map<string, Described>();
   const nodes = new Map<string, GraphNode>(), edges = new Map<string, GraphEdge>(), links = new Map<string, GraphEdge>(), turns: GraphTurnSpan[] = [];
   const edge = (into: Map<string, GraphEdge>, from: string, to: string, label: string, basis: GraphEdge['basis'], at: number, turn: string) => {
     const id = from + '>' + to + ':' + label;
@@ -40,11 +46,11 @@ export function meaningLayer(input: MeaningInput): MeaningLayer {
     if (!node) {
       const seen = files.get(path), bound = trace?.files.find(f => f.path === path)?.kept ?? null, newest = keptOf(path).at(-1);
       const kept = bound ?? (newest ? { resource: newest.resource, at: newest.capturedAt } : null);
-      const said = described.get(path);
+      const holds = holdsOf(path, notes, described), said = notes.get(path);
       node = { id, kind: 'file', title: path.split('/').at(-1) ?? path, path, at, category: seen?.category ?? input.kindOf(path), exists: !!seen, bytes: seen?.bytes, modifiedAt: seen?.modifiedAt,
         ...(kept ? { resource: kept.resource, capturedAt: kept.at } : { gap: 'No version of this file was kept in the Agent\'s record.' }),
         events: [{ key: id, at, node: id, turn: lane, action: 'write', label: 'Named in the notes' }],
-        meaning: { session: '', conversationId: null, ...(said ? { description: { text: said.text, trace: traces.get(said.statement) } } : {}) } };
+        meaning: { session: '', conversationId: null, ...(holds ? { description: { ...holds, ...(holds.source === 'notes' && said ? { trace: traces.get(said.statement) } : {}) } } : {}) } };
       nodes.set(id, node);
     }
     return node;
@@ -96,12 +102,39 @@ export function meaningLayer(input: MeaningInput): MeaningLayer {
       const code = s.links.filter(p => (files.get(p)?.category ?? input.kindOf(p)) === 'code'), data = s.links.filter(p => (files.get(p)?.category ?? input.kindOf(p)) === 'data');
       for (const script of code) for (const path of data) edge(edges, fileNode(script, lane, at(s), traces.get(s)).id, fileNode(path, lane, at(s), traces.get(s)).id, 'reads', 'declared', at(s), lane);
     }
+    if (section.conversationId) joinWritten(lane, q, section.conversationId);
     lineage(lane, section.conversationId);
     for (const s of method) for (const path of s.links) {
       const node = fileNode(path, lane, at(s), traces.get(s));
       if (!reached().has(node.id)) edge(edges, q.id, node.id, node.category === 'data' ? 'uses data' : 'uses', 'declared', at(s), lane);
     }
   });
+
+  // A conversation whose files were read while it ran but whose notes have no section yet.
+  const rows = new Set(meanings.map(s => s.conversationId));
+  for (const conversationId of new Set([...described.values()].map(d => d.conversationId))) {
+    if (rows.has(conversationId) || !shown(conversationId).length) continue;
+    const lane = 'm:' + conversationId, span = process.turns.find(t => t.conversationId === conversationId);
+    const asked = process.nodes.find(n => n.kind === 'question' && n.conversationId === conversationId);
+    const times = shown(conversationId).map(d => Date.parse(d.observedAt)), start = span?.start ?? Math.min(...times);
+    turns.push({ id: lane, conversationId, title: span?.title ?? 'Conversation', agent: span?.agent ?? 'Agent', start, end: Math.max(start, ...times), running: false });
+    const q: GraphNode = { id: 'q:' + lane, kind: 'question', title: clip(asked?.text ?? span?.title ?? 'Conversation', 160), text: asked?.text ?? span?.title ?? '', at: start, turn: lane,
+      conversationId, agent: span?.agent, events: [], meaning: { session: span?.title ?? 'Conversation', conversationId, ...(asked ? { message: { id: asked.id, at: asked.at } } : {}) } };
+    nodes.set(q.id, q);
+    joinWritten(lane, q, conversationId);
+    lineage(lane, conversationId);
+  }
+  // The results and figures a conversation wrote that its row does not show yet.
+  function shown(conversationId: string) {
+    return [...described.values()].filter(d => d.conversationId === conversationId && ['results', 'figures'].includes(files.get(d.path)?.category ?? input.kindOf(d.path) ?? ''));
+  }
+  function joinWritten(lane: string, q: GraphNode, conversationId: string) {
+    for (const d of shown(conversationId)) {
+      if (nodes.has('m:f:' + d.path)) continue;
+      const at = Date.parse(d.observedAt), node = fileNode(d.path, lane, at);
+      edge(edges, q.id, node.id, 'made', 'observed', at, lane);
+    }
+  }
 
   // How each result came about, from the process record: the run whose working changed it and
   // the script that run ran, and the files that command names. The process edge's basis stays.
@@ -144,7 +177,9 @@ export function meaningLayer(input: MeaningInput): MeaningLayer {
     const kept = processNodeOf(node.path, node.resource?.version) ?? processNodeOf(node.path);
     if (kept) edge(links, node.id, kept.id, 'kept as', 'observed', node.capturedAt ?? node.at, node.events[0]!.turn);
   }
-  return { nodes: [...nodes.values()], edges: [...edges.values()], turns, traces: [...links.values()] };
+  // The notes are where this layer comes from, not one of the files it describes.
+  const notesNode = 'm:f:' + projectNotesPath, other = (e: GraphEdge) => e.from !== notesNode && e.to !== notesNode;
+  return { nodes: [...nodes.values()].filter(n => n.id !== notesNode), edges: [...edges.values()].filter(other), turns, traces: [...links.values()].filter(other) };
 }
 
 export type GraphLayer = 'meaning' | 'both' | 'process';

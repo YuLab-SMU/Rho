@@ -5128,6 +5128,26 @@ export interface ConversationDecideOutput {
       snapshots: number;
     };
     contexts?: string[];
+    descriptions?: {
+      path: string;
+      version: string;
+      bytes: number;
+      modifiedAt: string;
+      observedAt: string;
+      facts: string;
+      partial?: boolean;
+      sentence: {
+        text: string;
+        version: string;
+        model: string | null;
+        at: string;
+        facts?: string;
+        costUsd?: number;
+      } | null;
+      state: 'describing' | 'described' | 'facts' | 'failed' | 'unknown';
+      reason?: string;
+    }[];
+    descriptionsOmitted?: number;
     decisions?: {
       changeId: string;
       requestDigest: string;
@@ -5351,6 +5371,26 @@ export interface ConversationPermissionOutput {
       snapshots: number;
     };
     contexts?: string[];
+    descriptions?: {
+      path: string;
+      version: string;
+      bytes: number;
+      modifiedAt: string;
+      observedAt: string;
+      facts: string;
+      partial?: boolean;
+      sentence: {
+        text: string;
+        version: string;
+        model: string | null;
+        at: string;
+        facts?: string;
+        costUsd?: number;
+      } | null;
+      state: 'describing' | 'described' | 'facts' | 'failed' | 'unknown';
+      reason?: string;
+    }[];
+    descriptionsOmitted?: number;
     decisions?: {
       changeId: string;
       requestDigest: string;
@@ -5606,6 +5646,26 @@ export interface ConversationReadOutput {
       snapshots: number;
     };
     contexts?: string[];
+    descriptions?: {
+      path: string;
+      version: string;
+      bytes: number;
+      modifiedAt: string;
+      observedAt: string;
+      facts: string;
+      partial?: boolean;
+      sentence: {
+        text: string;
+        version: string;
+        model: string | null;
+        at: string;
+        facts?: string;
+        costUsd?: number;
+      } | null;
+      state: 'describing' | 'described' | 'facts' | 'failed' | 'unknown';
+      reason?: string;
+    }[];
+    descriptionsOmitted?: number;
     decisions?: {
       changeId: string;
       requestDigest: string;
@@ -5819,6 +5879,26 @@ export interface ConversationSendOutput {
       snapshots: number;
     };
     contexts?: string[];
+    descriptions?: {
+      path: string;
+      version: string;
+      bytes: number;
+      modifiedAt: string;
+      observedAt: string;
+      facts: string;
+      partial?: boolean;
+      sentence: {
+        text: string;
+        version: string;
+        model: string | null;
+        at: string;
+        facts?: string;
+        costUsd?: number;
+      } | null;
+      state: 'describing' | 'described' | 'facts' | 'failed' | 'unknown';
+      reason?: string;
+    }[];
+    descriptionsOmitted?: number;
     decisions?: {
       changeId: string;
       requestDigest: string;
@@ -6227,6 +6307,26 @@ export interface ConversationStartOutput {
       snapshots: number;
     };
     contexts?: string[];
+    descriptions?: {
+      path: string;
+      version: string;
+      bytes: number;
+      modifiedAt: string;
+      observedAt: string;
+      facts: string;
+      partial?: boolean;
+      sentence: {
+        text: string;
+        version: string;
+        model: string | null;
+        at: string;
+        facts?: string;
+        costUsd?: number;
+      } | null;
+      state: 'describing' | 'described' | 'facts' | 'failed' | 'unknown';
+      reason?: string;
+    }[];
+    descriptionsOmitted?: number;
     decisions?: {
       changeId: string;
       requestDigest: string;
@@ -6394,6 +6494,26 @@ export interface ConversationStopOutput {
       snapshots: number;
     };
     contexts?: string[];
+    descriptions?: {
+      path: string;
+      version: string;
+      bytes: number;
+      modifiedAt: string;
+      observedAt: string;
+      facts: string;
+      partial?: boolean;
+      sentence: {
+        text: string;
+        version: string;
+        model: string | null;
+        at: string;
+        facts?: string;
+        costUsd?: number;
+      } | null;
+      state: 'describing' | 'described' | 'facts' | 'failed' | 'unknown';
+      reason?: string;
+    }[];
+    descriptionsOmitted?: number;
     decisions?: {
       changeId: string;
       requestDigest: string;

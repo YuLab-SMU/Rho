@@ -33,6 +33,7 @@ import { exportRun } from './run-export.js';
 import type { nativeActivityLimits, agentDeliveryLimits, RunContext } from '@rho-workspace/plugin-agent';
 import { ownerContracts } from './contracts/owners.generated.js';
 import { Conversations, conversationLimits, type ConversationConfig } from './conversations.js';
+import { describeLimits } from './file-describer.js';
 import { projectWork } from './project-work.js';
 export interface FeedbackTransport { accept(envelope: any): Promise<any>; lookup(envelope: any): Promise<any> }
 export interface NativeAdapterRegistration {
@@ -41,7 +42,7 @@ export interface NativeAdapterRegistration {
   proof: { kind: 'claude-code-init'; sessionId: string; clientVersion: string };
 }
 export const serviceLimits = { maxRequestBytes: 1024 * 1024, maxEventBytes: 65536, eventRetention: 256, maxSubscriptions: 8, maxQueue: 32, maxContexts: 128, maxBindings: 64, maxActivities: 256, maxContextBytes: 1024 * 1024, maxRetainedMetadataBytes: 32 * 1024 * 1024 };
-export interface ServiceConfig extends Partial<typeof serviceLimits>, Partial<typeof requestLimits>, PluginConfig { root: string; stateDir: string; coreBinary?: string; rscript: string; port?: number; nativeFolders?: Partial<typeof nativeFolderLimits>; workspace?: Partial<typeof workspaceLimits>; interactions?: Partial<typeof interactionLimits>; taskMap?: Partial<typeof taskMapLimits>; browser?: Partial<typeof browserLimits>; webRoot?: string; agentNativeActivity?: Partial<typeof nativeActivityLimits>; presentationWitness?: Partial<typeof presentationWitnessLimits>; visibility?: Partial<typeof visibilityLimits>; agentDelivery?: Partial<typeof agentDeliveryLimits>; deliveryTransportTimeoutMs?: number; claude?: string; agentBackend?: ConversationConfig['backend']; claudeAcp?: ConversationConfig['claudeAcp']; codex?: string; codexAcp?: ConversationConfig['codexAcp']; conversations?: Partial<typeof conversationLimits>; evidence?: Partial<typeof evidenceExportLimits>; connect?: Partial<typeof connectLimits> }
+export interface ServiceConfig extends Partial<typeof serviceLimits>, Partial<typeof requestLimits>, PluginConfig { root: string; stateDir: string; coreBinary?: string; rscript: string; port?: number; nativeFolders?: Partial<typeof nativeFolderLimits>; workspace?: Partial<typeof workspaceLimits>; interactions?: Partial<typeof interactionLimits>; taskMap?: Partial<typeof taskMapLimits>; browser?: Partial<typeof browserLimits>; webRoot?: string; agentNativeActivity?: Partial<typeof nativeActivityLimits>; presentationWitness?: Partial<typeof presentationWitnessLimits>; visibility?: Partial<typeof visibilityLimits>; agentDelivery?: Partial<typeof agentDeliveryLimits>; deliveryTransportTimeoutMs?: number; claude?: string; agentBackend?: ConversationConfig['backend']; claudeAcp?: ConversationConfig['claudeAcp']; codex?: string; codexAcp?: ConversationConfig['codexAcp']; conversations?: Partial<typeof conversationLimits>; describe?: Partial<typeof describeLimits>; evidence?: Partial<typeof evidenceExportLimits>; connect?: Partial<typeof connectLimits> }
 const ajv = new Ajv({ allErrors: true, strict: false, allowUnionTypes: true });
 // The same timestamp check every published contract uses; an unknown format would be skipped silently.
 ajv.addFormat('date-time', { type: 'string', validate: isNativeTime });
@@ -340,7 +341,7 @@ export class RhoService {
       return facts;
   }
   constructor(public config: ServiceConfig) {
-    for (const [key, value] of Object.entries({ ...serviceLimits, ...requestLimits, ...config.documents, ...config.resources, ...config.workspace, ...config.interactions, ...config.annotations, ...config.capabilityLimits, ...config.r, ...config.browser, ...config.nativeFolders, ...config.agentNativeActivity, ...config.agentDelivery, ...config.presentationWitness, ...config.visibility, ...config.conversations, ...config })) {
+    for (const [key, value] of Object.entries({ ...serviceLimits, ...requestLimits, ...config.documents, ...config.resources, ...config.workspace, ...config.interactions, ...config.annotations, ...config.capabilityLimits, ...config.r, ...config.browser, ...config.nativeFolders, ...config.agentNativeActivity, ...config.agentDelivery, ...config.presentationWitness, ...config.visibility, ...config.conversations, ...config.describe, ...config })) {
       if (typeof value === 'number') requireThat(Number.isSafeInteger(value) && (key === 'port' ? value >= 0 && value <= 65535 : value > 0), 'invalid', 'Invalid service budget.', { field: key });
     }
     this.plugins = new Plugins(config);
@@ -367,8 +368,12 @@ export class RhoService {
           const registry = await files.list();
           const known = [...registry].reverse().find(r => (r.path === file || r.provenance.originalPath === file) && r.kind === 'table');
           const captured = await files.capture(file, { maxBytes: maximum, describe: (data, relative) => {
-            if (known && owners.tables) return { path: relative, kind: 'table', format: known.format as any };
-            if (/\.csv$/i.test(relative) && owners.tables) return this.plugins.need('tables').lexicalCsvDeclaration(data, relative);
+            // A later version keeps the table's declared columns only while its header still
+            // names them; a version with other columns is declared from its own header.
+            const lexical = /\.csv$/i.test(relative) && owners.tables ? this.plugins.need('tables').lexicalCsvDeclaration(data, relative) : null;
+            const names = (format: any) => JSON.stringify((format?.columns ?? []).map((c: any) => c.name));
+            if (known && owners.tables && (!lexical || names(known.format) === names(lexical.format))) return { path: relative, kind: 'table', format: known.format as any };
+            if (lexical) return lexical;
             const mime: Record<string,string> = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', svg: 'image/svg+xml', pdf: 'application/pdf' };
             const type = mime[relative.split('.').at(-1)!.toLowerCase()];
             return { path: relative, kind: type && owners.media ? 'media' : 'file', format: { mimeType: type ?? 'text/plain' } };
@@ -395,8 +400,17 @@ export class RhoService {
         const { writeClaudePlugin } = await import('@rho-workspace/plugin-agent/conversation');
         return [await writeClaudePlugin(path.join(this.state.directory, 'claude-plugins'), { name: 'rho', version: selectedPluginVersions.agent, description: 'Skills and hooks of the plugins selected in Rho.', ...declared })];
       },
-      changed: async (project, conversationId) => { void this.serial(project.id, () => this.emit(project, 'conversation.changed', conversationId, localBrowserId)).catch(() => {}); }
+      changed: async (project, conversationId) => { void this.serial(project.id, () => this.emit(project, 'conversation.changed', conversationId, localBrowserId)).catch(() => {}); },
+      // The person's own Claude Code when one is named, with no tools and in an empty folder of
+      // Rho's state, so it reads only what it is given and loads no project instructions.
+      ...config.claude ? { describe: async (_project: unknown, request: { path: string; facts: string; excerpt: string; request: string; model: string | null }) => {
+        const { describeFile } = await import('@rho-workspace/plugin-agent/describe');
+        const cwd = path.join(this.state.directory, 'describer');
+        await fs.mkdir(cwd, { recursive: true, mode: 0o700 });
+        return describeFile({ binary: config.claude!, cwd, ...request });
+      } } : {}
     }, config.claude, config.conversations, { backend: config.agentBackend, claudeAcp: config.claudeAcp, codex: config.codex, codexAcp: config.codexAcp, settingsFile: path.join(this.state.directory, 'agent-settings.json') });
+    this.conversations.describing = { ...describeLimits, ...config.describe };
     this.folderPicker = new NativeFolderPicker({ ...nativeFolderLimits, ...config.nativeFolders });
     this.server = http.createServer((req, res) => void this.handle(req, res));
     this.server.requestTimeout = 15000; this.server.headersTimeout = 10000;

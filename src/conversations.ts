@@ -1,11 +1,12 @@
 import { projectPath, commandFiles, buildWorkGraph } from './work-graph.js';
-import { notesInstructions } from './project-notes.js';
+import { notesInstructions, projectNotesPath } from './project-notes.js';
+import { describeLimits, describable, fileFacts, type FileDescription } from './file-describer.js';
 import { toolActivity } from './conversation-presentation.js';
 import {privateEvidencePath, type CapturePort, type TurnEvidence} from './evidence-capture.js';
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
 import type { AgentConversation, AgentPermission, ConversationStep, ConversationEvent, ClaudeAcpOptions, CodexAcpOptions, SessionObservation, ConfigOption, ClaudeAcpConversation } from '@rho-workspace/plugin-agent/conversation';
-import { randomBytes, randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { atomicJson, canonical, digest, Fault, now, readJson, requireThat } from '@rho-workspace/plugin-contracts';
 import type { Project } from './state.js';
@@ -72,6 +73,9 @@ interface Turn {
   // size. It says what changed meanwhile, not what made the change.
   files?: { changed: FileChange[]; omitted: number; partial: boolean };
   evidence?: TurnEvidence;
+  // What the files it wrote hold, read while it ran (see file-describer.ts); files past the
+  // limit are counted.
+  descriptions?: FileDescription[]; descriptionsOmitted?: number;
   contexts?: string[];
   decisions?: Decision[];
 }
@@ -81,6 +85,23 @@ interface Turn {
 interface Decision { changeId: string; requestDigest: string; decision: 'accepted' | 'needs-changes'; note: string | null; by: string; at: string; supersedes: string | null; results: Array<{ path: string; resource: { id: string; version: string } }> }
 interface FileChange { path: string; change: 'added' | 'modified' | 'removed'; modifiedAt: string | null; bytes: number | null }
 interface Disk { files: Map<string, { modified: number; bytes: number }>; partial: boolean }
+// A file's first bytes and the digest of all of it, the version they belong to.
+async function readHead(file: string, maxBytes: number, maxDigestBytes: number) {
+  const handle = await fs.open(file, 'r').catch(() => null);
+  if (!handle) return null;
+  try {
+    if ((await handle.stat()).size > maxDigestBytes) return null;
+    const hash = createHash('sha256'), chunk = Buffer.alloc(1024 * 1024), head: Buffer[] = [];
+    let bytes = 0, kept = 0;
+    for (;;) {
+      const { bytesRead } = await handle.read(chunk, 0, chunk.length, bytes);
+      if (!bytesRead) break;
+      const part = chunk.subarray(0, bytesRead); hash.update(part); bytes += bytesRead;
+      if (kept < maxBytes) { const take = part.subarray(0, maxBytes - kept); head.push(Buffer.from(take)); kept += take.length; }
+    }
+    return { data: Buffer.concat(head), bytes, version: hash.digest('hex') };
+  } finally { await handle.close(); }
+}
 // The project's files, without Rho's own state or Git's, up to a limit.
 async function disk(root: string, limit: number): Promise<Disk> {
   const files: Disk['files'] = new Map(), folders = [''];
@@ -142,7 +163,11 @@ interface Summary {
   usage?: { used: number; size: number; cost: { amount: number; currency: string } | null } | null; costUsd?: number | null; sessionId?: string | null; trashedAt?: string | null;
 }
 interface Index { format: 1; conversations: Summary[]; deleted?: Array<{ conversationId: string; changeId: string; requestDigest: string; deletedAt: string; deletedBy: string }> }
-interface Live { project: Project; conversation: Conversation; turn: Turn; controller: AbortController; stop(reason: StopReason, by: string): void; done: Promise<void>; before?: Disk | null; captures?: Promise<void>[]; attempts?: number; seen?: Map<string, string>; tried?: Set<string> }
+interface Live { project: Project; conversation: Conversation; turn: Turn; controller: AbortController; stop(reason: StopReason, by: string): void; done: Promise<void>; before?: Disk | null; captures?: Promise<void>[]; attempts?: number; seen?: Map<string, string>; tried?: Set<string>;
+  // Describing the files it writes: the check under way, when each file was last given to the
+  // model, how many times the model was asked, what a model is given of each file, and the
+  // files counted past the limit.
+  describing?: Promise<void>; asked?: Map<string, number>; calls?: number; shown?: Map<string, { version: string; excerpt: string; textual: boolean }>; uncounted?: Set<string> }
 export interface ConversationPorts {
   // The project's Agent grant for this conversation, written to a private connection file.
   grant(project: Project, conversation: { id: string; title: string; client: string }): Promise<{ file: string; principal: string }>;
@@ -152,6 +177,8 @@ export interface ConversationPorts {
   claudePlugins?(project: Project): Promise<string[]>;
   capture?: CapturePort;
   context?(project: Project, contextId: string): Promise<unknown>;
+  // One sentence on what a file holds, from the model the conversation's Agent uses.
+  describe?(project: Project, request: { path: string; facts: string; excerpt: string; request: string; model: string | null }): Promise<{ text: string; model: string | null; costUsd?: number | null }>;
 }
 const identity = /^c-[a-f0-9]{16}$/;
 function cut(text: string, maxBytes: number) {
@@ -170,6 +197,9 @@ export class Conversations {
   private drivers = new Map<string, { driver: AgentConversation; project: Project; conversation: Conversation; timer?: ReturnType<typeof setTimeout> }>();
   private permissions = new Map<string, { permission: Permission; resolve(choice: string | null): void }>();
   private checks = new Map<Backend, Promise<void>>();
+  // Descriptions being written by a model now, by project, conversation, message and file.
+  private writing = new Set<string>();
+  describing = { ...describeLimits };
   constructor(private ports: ConversationPorts, public binary = 'claude', limits: Partial<typeof conversationLimits> = {}, private config: ConversationConfig = {}) {
     this.limits = { ...conversationLimits, ...limits };
     for (const key of ['maxCaptureFiles','maxCaptureBytes','maxSnapshotBytes','maxCaptureConcurrent'] as const) requireThat(Number.isSafeInteger(this.limits[key]) && this.limits[key]>0 && this.limits[key]<=conversationLimits[key], 'invalid', 'Capture budgets must be positive integers no greater than the supported defaults.', {limit:key,maximum:conversationLimits[key]});
@@ -227,6 +257,8 @@ export class Conversations {
   // Rho last stopped. What Claude Code did after the last kept step is not known, and nothing
   // is sent again on its behalf.
   private view(project: Project, c: Conversation, turn: Turn) {
+    const lost = turn.descriptions?.some(d => d.state === 'describing' && !this.writing.has(project.id + '/' + c.id + '/' + turn.id + '/' + d.path));
+    if (lost) turn = { ...turn, descriptions: turn.descriptions!.map(d => d.state === 'describing' && !this.writing.has(project.id + '/' + c.id + '/' + turn.id + '/' + d.path) ? { ...d, state: 'unknown' as const, reason: 'Rho stopped before the description arrived.' } : d) };
     if (turn.state !== 'running' || this.liveTurn(project, c, turn)) return !this.liveTurn(project,c,turn) && turn.evidence?.records.some(r => r.state === 'pending') ? { ...turn, evidence: { ...turn.evidence, records: turn.evidence.records.map(r => r.state === 'pending' ? { ...r, state: 'interrupted' as const, reason: 'Rho stopped before the capture was confirmed.' } : r) } } : turn;
     return { ...turn, permissions: turn.permissions?.map(p => p.state === 'pending' ? { ...p, state: 'cancelled' as const } : p), evidence: turn.evidence ? { ...turn.evidence, records: turn.evidence.records.map(r => r.state === 'pending' ? { ...r, state: 'interrupted' as const, reason: 'Rho stopped before this capture was confirmed.' } : r) } : undefined, state: 'unknown' as const, problem: turn.problem ?? 'Rho stopped before this message was answered. Steps after the last one shown are not known, and the message was not sent again.' };
   }
@@ -588,6 +620,7 @@ export class Conversations {
           if (after) {
             turn.files = compare(live.before, after, this.limits.maxChangedFiles);
             for (const file of turn.files.changed) if (file.change !== 'removed') this.capture(live, file.path, 'turn-end');
+            await live.describing; await this.describe(live, true);
           }
         }
         await Promise.all(live.captures ?? []);
@@ -726,6 +759,7 @@ export class Conversations {
     try { driver = await this.driver(project, c); }
     catch (e) { turn.state = 'failed'; turn.problem = e instanceof Fault ? e.message : 'Rho could not connect this conversation to the project.'; return; }
     const wall = setTimeout(() => live.stop('wall-limit', 'rho'), this.limits.turnWallMs); wall.unref();
+    const ticking = setInterval(() => void this.describe(live), this.describing.everyMs); ticking.unref();
     try {
       const completion = await driver.run({ text: turn.text + (turn.contexts?.length ? '\n\nRead these exact frozen review contexts with context.read before responding: ' + turn.contexts.join(', ') + '. Reply with annotation.reply and explicit result resource versions.' : ''), signal: controller.signal,
         session: identity => this.serial(project.id, async () => {
@@ -748,6 +782,66 @@ export class Conversations {
         }
       });
       Object.assign(turn, completion); turn.retry = null; turn.endedAt = now();
-    } finally { clearTimeout(wall); }
+    } finally { clearTimeout(wall); clearInterval(ticking); }
+  }
+  // While a message runs, what each file it writes holds: facts as soon as the file rests, then
+  // the model's sentence. Checked again when the message ends; a sentence still being written
+  // then is kept when it arrives.
+  private describe(live: Live, final = false): Promise<void> {
+    if (!live.before) return Promise.resolve();
+    if (live.describing) return live.describing;
+    const { project } = live;
+    live.describing = (async () => {
+      const changes = final ? live.turn.files?.changed ?? [] : compare(live.before!, await disk(project.root, this.limits.maxComparedFiles), this.limits.maxChangedFiles).changed;
+      for (const change of changes) if (change.change !== 'removed' && change.modifiedAt) await this.describeFile(live, change, final).catch(() => {});
+    })().catch(() => {}).finally(() => { live.describing = undefined; });
+    return live.describing;
+  }
+  private async describeFile(live: Live, change: FileChange, final: boolean) {
+    const { project, conversation: c, turn } = live, file = change.path, limits = this.describing;
+    if (!describable(file) || file === projectNotesPath || file.startsWith('@') || privateEvidencePath(file)) return;
+    if (!final && Date.now() - Date.parse(change.modifiedAt!) < limits.settleMs) return;
+    const records = turn.descriptions ??= [], key = project.id + '/' + c.id + '/' + turn.id + '/' + file;
+    let record = records.find(d => d.path === file);
+    if (!record && records.length >= limits.maxPerMessage) {
+      if (!(live.uncounted ??= new Set()).has(file)) { live.uncounted.add(file); turn.descriptionsOmitted = (turn.descriptionsOmitted ?? 0) + 1; this.schedule(project, c); }
+      return;
+    }
+    const shown = (live.shown ??= new Map());
+    if (!record || record.bytes !== change.bytes || record.modifiedAt !== change.modifiedAt || !shown.has(file)) {
+      const read = await readHead(path.join(project.root, file), limits.maxFactBytes, limits.maxDigestBytes);
+      if (!read) return;
+      const facts = fileFacts(file, read.data, read.bytes);
+      shown.set(file, { version: read.version, excerpt: facts.excerpt, textual: facts.textual });
+      if (!record) { record = { path: file, version: read.version, bytes: read.bytes, modifiedAt: change.modifiedAt!, observedAt: now(), facts: facts.facts, sentence: null, state: 'facts' }; records.push(record); }
+      else if (record.version !== read.version) {
+        Object.assign(record, { version: read.version, bytes: read.bytes, observedAt: now(), facts: facts.facts });
+        if (!this.writing.has(key)) { record.state = record.sentence?.facts === facts.facts ? 'described' : 'facts'; delete record.reason; }
+      }
+      record.modifiedAt = change.modifiedAt!;
+      if (facts.partial) record.partial = true; else delete record.partial;
+      this.schedule(project, c);
+    }
+    if (record.sentence && (record.sentence.version === record.version || record.sentence.facts === record.facts) || this.writing.has(key)) return;
+    const given = shown.get(file)!;
+    const reason = !given.textual ? 'A figure or PDF is described by its facts; the model is given text only.'
+      : c.backend === 'codex-acp' ? 'Descriptions are written with Claude Code; this session\'s Agent is Codex.'
+      : !this.ports.describe ? 'No model is set up to describe files.' : null;
+    if (reason) { if (record.reason !== reason) { record.state = 'facts'; record.reason = reason; this.schedule(project, c); } return; }
+    const asked = (live.asked ??= new Map()).get(file);
+    if (!final && asked !== undefined && Date.now() - asked < limits.againMs) return;
+    if ((live.calls ?? 0) >= limits.maxCalls) {
+      const limit = 'This message reached its model description limit (maxCalls); the facts are kept.';
+      if (record.reason !== limit) { record.state = 'facts'; record.reason = limit; this.schedule(project, c); }
+      return;
+    }
+    live.calls = (live.calls ?? 0) + 1; live.asked.set(file, Date.now()); this.writing.add(key);
+    const version = given.version, described = record, facts = record.facts;
+    described.state = 'describing'; delete described.reason; this.schedule(project, c);
+    const model = turn.model ?? (typeof c.config?.model === 'string' ? c.config.model : null);
+    void this.serial('describe:' + project.id, () => this.ports.describe!(project, { path: file, facts: described.facts, excerpt: given.excerpt, request: turn.text, model }))
+      .then(said => { described.sentence = { text: said.text, version, model: said.model, at: now(), facts, ...(typeof said.costUsd === 'number' ? { costUsd: said.costUsd } : {}) }; described.state = 'described'; delete described.reason; },
+        error => { described.state = 'failed'; described.reason = error instanceof Error ? error.message : 'The description could not be written.'; })
+      .finally(() => { this.writing.delete(key); this.schedule(project, c); });
   }
 }

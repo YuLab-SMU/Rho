@@ -114,6 +114,13 @@ try {
   await until(() => page.locator('.graph-now').textContent(), t => t === 'Live', 'the second message running');
   await until(() => page.locator('.graph-now').textContent(), t => t === 'Now', 'the second message ending', 40000);
   await page.getByRole('button', { name: 'Agent panel', exact: true }).click();
+  // The project keeps no notes; the meaning row is made of what was read from its results.
+  await page.locator('.graph-layers button', { hasText: /^Meaning$/ }).click();
+  const meaning = await until(cards, c => c.some(card => /^Result: 5 rows × 2 columns: Month, mean_ozone, results\/monthly_ozone\.csv/.test(card.label)) && c.some(card => /^Question: .*Asked \d\d:\d\d · no notes yet$/.test(card.label)), 'the results described by what was read from them');
+  assert.ok(meaning.some(card => /^Figure: PNG image, \d+ × \d+ px/.test(card.label)), meaning.map(c => c.label).join(' | '));
+  await shot('03a-meaning');
+  // What the Agent did, as the rest of this check reads it.
+  await page.locator('.graph-layers button', { hasText: /^Process$/ }).click();
   await page.getByRole('button', { name: 'Fit the graph' }).click();
   await page.waitForTimeout(600);
   const drawn = await until(cards, c => c.filter(card => !card.id.startsWith('p')).length === 10 && c.some(card => /ozone_by_month\.png/.test(card.label)), 'both messages drawn');
@@ -131,6 +138,7 @@ try {
   await page.locator('.graph-node[data-node^="f:data/airquality.csv@"] .graph-preview.table small').filter({ hasText: '153 rows × 6 columns' }).waitFor();
   await until(() => page.locator('.graph-node[data-node^="f:results/ozone_by_month.png@"] .graph-preview img').evaluate(img => img.naturalWidth), w => w === 640, 'the figure previewed on its card');
   await shot('03-two-rows');
+  passed('without notes, the meaning row shows each result by what was read from it: a table\'s rows and columns, a figure\'s size');
   passed('each message is a row from what it read to what changed while its command ran; a later row refers to an earlier output; cards preview tables and figures');
 
   await page.locator('.graph-node[data-node^="f:results/ozone_by_month.png@"]').first().click();

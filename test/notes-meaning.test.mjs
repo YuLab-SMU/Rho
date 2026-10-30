@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { notesMeaning, fileDescriptions, traceStatement, plainText, notesPath } from '../dist/notes-meaning.js';
 import { meaningLayer, layered } from '../dist/meaning-graph.js';
 import { buildWorkGraph, foldVersions } from '../dist/work-graph.js';
+import { holdsOf, modelName } from '../dist/file-describer.js';
 
 const notes = [
   '# Project notes',
@@ -85,6 +86,7 @@ test('what a file holds comes from Files first, then a figure, then the method t
   assert.equal(said.get('data/plates.csv').text, 'one row per plate');
   assert.equal(said.get('analysis.py').text, 'reads data/plates.csv and tests each strain');
   assert.equal(plainText('**Q1:** see _this_ and `a_b.csv` in snake_case_name'), 'Q1: see this and a_b.csv in snake_case_name');
+  assert.equal(plainText('- **q5 — ratio `5:1` is closest**: `**kept**`'), 'q5 — ratio 5:1 is closest: **kept**', 'bold across a code span, and marks inside code kept');
   assert.equal(notesPath('https://example.org/x.csv'), null);
   assert.equal(notesPath('../outside.csv'), null);
   assert.equal(notesPath('results/'), null);
@@ -150,4 +152,28 @@ test('the meaning layer runs from the question to findings and choices, the file
   assert.deepEqual(both.turns.map(t => t.id), ['m:c-1', 'c-1/t1'], 'the meaning rows above the process rows');
   assert.equal(layered(process, layer, 'meaning').nodes.every(n => n.meaning), true);
   assert.equal(layered(process, layer, 'process'), process);
+});
+
+test('files read while a message ran join its row until the notes name them, and the notes\' words lead over a model\'s or the facts', () => {
+  const process = buildWorkGraph({ turns: [], files: [], project: { root }, kindOf, now: ms(90) });
+  const meanings = notesMeaning(notes).slice(0, 1);
+  const traces = new Map(meanings[0].statements.map(s => [s, traceStatement(s, [], () => [], () => null)]));
+  const read = (path, conversationId, extra = {}) => [path, { path, version: 'a'.repeat(64), bytes: 10, modifiedAt: at(16), observedAt: at(17), facts: 'facts of ' + path, sentence: null, state: 'facts', conversationId, turnId: 't1', ...extra }];
+  const described = new Map([read('results/plot2.png', 'c-1'), read('results/tests.csv', 'c-1', { sentence: { text: 'a model says', version: 'a'.repeat(64), model: 'm', at: at(18) }, state: 'described' }),
+    read('results/other.csv', 'c-9', { sentence: { text: 'other table', version: 'b'.repeat(64), model: 'provider/small[1m]', at: at(19) }, state: 'described' }), read('scratch.py', 'c-1')]);
+  const layer = meaningLayer({ process, meanings, traces, files: [], kindOf, described });
+  const edge = (from, to) => layer.edges.find(e => e.from === from && e.to === to);
+  const plot = layer.nodes.find(n => n.id === 'm:f:results/plot2.png');
+  assert.deepEqual([edge('q:m:c-1', plot.id).label, edge('q:m:c-1', plot.id).basis], ['made', 'observed']);
+  assert.deepEqual([plot.meaning.description.source, plot.meaning.description.text], ['facts', 'facts of results/plot2.png']);
+  const tests = layer.nodes.find(n => n.id === 'm:f:results/tests.csv').meaning.description;
+  assert.deepEqual([tests.source, tests.text, tests.facts], ['notes', 'one row per strain with its p-value', 'facts of results/tests.csv']);
+  assert.ok(!layer.nodes.some(n => n.path === 'scratch.py'), 'only results and figures join a row by themselves');
+  assert.deepEqual(layer.turns.map(t => t.id), ['m:c-1', 'm:c-9'], 'a conversation with no section yet gets its own row');
+  const other = layer.nodes.find(n => n.id === 'm:f:results/other.csv').meaning.description;
+  assert.deepEqual([other.source, other.text, other.earlier, other.model], ['model', 'other table', true, 'provider/small[1m]']);
+  assert.equal(edge('q:m:c-9', 'm:f:results/other.csv').label, 'made');
+  assert.equal(holdsOf('results/other.csv', new Map(), described, ms(18)).source, 'facts', 'at an earlier moment the sentence had not arrived');
+  assert.equal(holdsOf('results/other.csv', new Map(), described, ms(16)), undefined, 'nor had the file been read');
+  assert.equal(modelName('provider/small[1m]'), 'small');
 });

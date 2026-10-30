@@ -17,6 +17,7 @@ import { Icon } from './icons.js';
 import { Workspace } from './shell/workspace.js';
 import './studio.css';
 import { fileDescriptions, notesMeaning } from '../src/notes-meaning.js';
+import { describedFiles, holdsOf } from '../src/file-describer.js';
 
 type Read = RhoOutput<'conversation.read'>;
 // The protected resources are the service and this tab: one conversation's newest messages, read
@@ -247,8 +248,8 @@ export function ProcessStudio({ client, snapshot, files, conversationId, notesTe
   useEffect(() => { setChosen(null); }, [at === null, conversationId]);
   const presence = live && working && views.has(working) ? { viewId: working, label: live.title, verb: working === studioIds.console ? 'Running' : live.files.at(-1)?.verb ?? 'Working', live: live.latest?.outcome === 'requested' } : null;
 
-  const said = useMemo(() => fileDescriptions(notesMeaning(notesText)), [notesText]);
-  const process: Process = useMemo(() => ({ conversationId, graph, whole, at, files: shown, every, setAt: onAt, showPath: path => setChosen(viewId(path)), holds: path => said.get(path)?.text }), [conversationId, graph, whole, at, shown, every, said]);
+  const said = useMemo(() => fileDescriptions(notesMeaning(notesText)), [notesText]), described = useMemo(() => describedFiles(turns), [turns]);
+  const process: Process = useMemo(() => ({ conversationId, graph, whole, at, files: shown, every, setAt: onAt, showPath: path => setChosen(viewId(path)), holds: path => holdsOf(path, said, described, at) }), [described, conversationId, graph, whole, at, shown, every, said]);
   return <ProcessContext.Provider value={process}>
     <div className="process-studio">
       <div className="process-stage">

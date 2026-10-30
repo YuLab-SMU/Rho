@@ -844,6 +844,27 @@ New capture/export limits can be lowered through `--limits`; observation diagnos
 expose them. Table/text previews are bounded to 200 rows, 20 columns and 64 KiB.
 See the [episode](REVIEW-EVIDENCE-EPISODE.md) for actual trials and open user observation.
 
+### File descriptions while a message runs
+
+While a message started in Rho runs, its project is compared with the start every
+`describe.everyMs`; each changed file that has rested `settleMs` is read for facts and
+recorded in `conversation.read` as the message's `descriptions`, bound to the digest of
+the bytes read (the same digest Files gives a kept version). Text files are then
+described in one sentence by the person's own Claude Code with no tools (Agent's
+`describeFile`), using the model the conversation uses; the sentence names its model, the
+version it read and the cost Claude Code reported for the call. A later version with the
+same facts keeps its sentence. Figures and PDFs keep their facts. Codex sessions and a service
+started without a named Claude binary record facts only. A description still being
+written when Rho stops reads back as `unknown`. Facts are observations; a sentence is
+generated and checks nothing.
+
+| Protected resource | Configuration and default | Exhaustion |
+| --- | --- | --- |
+| Disk comparison while a message runs | `describe.everyMs` 5 s, `settleMs` 2 s, `conversations.maxComparedFiles` | A file still being written waits for the next check. |
+| File reads for facts | `describe.maxFactBytes` 4 MiB, `maxDigestBytes` 256 MiB | Facts say "at least"; a larger file is not described. |
+| Files described per message | `describe.maxPerMessage` 24 | Further files are counted in `descriptionsOmitted`. |
+| The person's model budget | `describe.maxCalls` 24 per message, `againMs` 60 s per file, Agent `describeLimits` | Keep the facts and say the limit was reached. |
+
 ### Decisions on an answer and the Console
 
 `conversation.decide` is local-browser-only. It records `accepted` or `needs-changes`

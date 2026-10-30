@@ -3,6 +3,7 @@ import type { BrowserClient, ViewDescription, WorkspaceSnapshot } from '../../sr
 import { studioViewId, type Process } from '../process-context.js';
 import { Snapshot } from '../snapshot.js';
 import { Icon } from '../icons.js';
+import { HoldsText } from '../holds.js';
 import { clock } from '../timeline-kinds.js';
 
 // A file's view in a conversation's Studio says which of its versions it shows and when that
@@ -16,9 +17,10 @@ export function ProcessFrame({ view, process, client, snapshot, children }: { vi
   const all = whole.versions, shown = now?.versions.length ?? 0, version = now?.versions.at(-1);
   const live = Object.values(view.bindings ?? {}).some(b => (b as { kind?: string }).kind === 'live-document');
   const step = (index: number) => process.setAt(index >= all.length ? null : all[index].at);
+  const holds = process.holds(path);
   return <div className="process-frame">
-    {/* What the notes say this file holds: a statement, not an observation. */}
-    {process.holds(path) && <p className="process-holds" data-fact="declared" title={process.holds(path)}>{process.holds(path)}</p>}
+    {/* What the file holds, marked by where that comes from: the notes, a model or the facts read. */}
+    {holds && <HoldsText className="process-holds" holds={holds} />}
     <div className="process-version" data-fact="observed">
       {all.length ? <>
         <span>{version ? `Version ${shown} of ${all.length} · kept ${clock(version.at)}` : 'Not kept yet'}</span>
