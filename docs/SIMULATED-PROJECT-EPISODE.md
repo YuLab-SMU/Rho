@@ -795,3 +795,84 @@ it to "No model is asked; each file shows the facts read from it"; turning it on
 - **PDFs** are not rendered to an image.
 - **Many quick rewrites** of one file are still described again at most once a minute.
 - **No independent person** has followed a run with these descriptions.
+
+## Quick checks, choices and the Console
+
+The person asked for the two quick checks prepared in the rho-bio-eval repository to be
+run in Rho: BixBench capsule bix-18 in Python and bix-51 in R. They then judged two
+screens from these runs hard to follow: the answer board's Choices and the Console.
+
+### The runs
+
+rho-bio-eval's `make_quickcheck.py` wrote each project into the test service's folder
+with only the data and `questions.md`; the gold stayed in that repository's ignored
+`runs/` and `check_quickcheck.py` checked `answers.json` against it. Both ran on Claude
+Code (DeepSeek V4.1 Flash) with no permission requests.
+
+- **bix-18** finished in 49 s with 4 of 5 answers in range. bix-18-q5 was answered as a
+  proportion, and its range is written as a percentage; the question does not say which.
+  A second copy, run after the change below, took 70 s, gave the same 4 of 5 and named
+  that reading among its choices. The checker was not changed.
+- **bix-51** finished in 149 s with 7 of 7 in range. It worked in R throughout, left out
+  the 41 blank spreadsheet rows, took the single-predictor model for bix-51-q5 and
+  recorded the multivariable one as its alternative.
+- **Descriptions** cost about $0.0012 (3 calls) and $0.0048 (9 calls). bix-51's figure went
+  to the model as an image, and its sentence matched the figure's labels; another
+  sentence miscounted the question ids in `answers.json`.
+
+### What the screens showed
+
+- **Choices.** bix-51 wrote each other option in the choice's own sentence ("…
+  Alternative: …") rather than in a nested bullet, so all five choices read "The notes
+  name no other option" under text that named one. `summary.glm`, a function written as
+  code, was drawn as a file. Each choice was a tinted card marked In use. Beside an
+  option, the shorter card left blank space, and the paths that ended a sentence
+  repeated the file buttons under it.
+- **Console.** The one command that changed files was lifted above the others, out of
+  the order they ran, and the rest folded as "commands with no recorded file change",
+  which is a fact about the record, not about the work. Rows were raw compound
+  command lines with the project's absolute path, every one ended in a green "Exit 0",
+  and Run again sat apart from the command it ran. Claude Code gives each command a
+  short description, but the Agent component did not keep it.
+
+### Changes
+
+- **Notes reader** (`src/notes-meaning.ts`): an option written as "Alternative:",
+  "Instead:" or "Otherwise:" after the choice's own sentence counts like a nested one.
+  Code counts as a file only when it names a folder or has a file extension of an
+  analysis.
+- **Choices** (`web/choices.tsx`): one row per choice, divided by rules. What the choice
+  is about (the words before "topic:" or "topic =") stands on the left. On the right is
+  what was taken, with its files; each other option sits in a well below it, with what
+  it gives, its files and Use this instead… beside it. Paths that end a sentence become
+  its files. A choice with no other option is its row alone.
+- **Agent 0.4.23** keeps a command's `purpose`, Claude Code's description of it.
+- **Console** (`web/console.tsx`): a message's commands read in the order they ran. Each
+  leads with its purpose over the command, with the project folder read as ".". A
+  command without one is named by what each part runs, such as "grep → python3
+  analysis.py → grep". Commands in a row that changed nothing fold into one line named by
+  their purposes. Only an ending other than a clean exit is said, in red. The whole
+  command, its output and Run again open under the row. Studio's command pane uses the
+  same rows.
+
+### Verification
+
+- `test/notes-meaning.test.mjs` reads choices as the Agents wrote them, inline and
+  nested, with function names in code. `test/conversation-presentation.test.mjs` names
+  commands from these runs and reads them inside the project. The Agent's ACP test
+  checks the purpose. Rho 260/260, Plugins 125/125, `check:contracts`, and the seven
+  browser acceptances passed on the final build.
+- Both screens were read at 1440, 760 and 390 px for the ninth copy, bix-51 and the
+  second bix-18 copy, with rows opened, a draft from Use this instead… and a choice in
+  the Graph's inspector. The design skill's inspector needs a page address, and these
+  screens are reached by navigation only, so it was not run.
+
+### Left open
+
+- **bix-18-q5** depends on how its gold range is written; the checker is unchanged.
+- **Older records** have no purpose and show the short form instead.
+- **What a choice is about** is read from the Agent's "topic:" phrasing; a choice
+  written otherwise shows its sentence across the row.
+- **Studio's columns** stay narrow while the notes and the Agent panel are open, and the
+  command pane is cramped there.
+- **No independent person** has used the new screens.

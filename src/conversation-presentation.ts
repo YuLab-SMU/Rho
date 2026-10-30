@@ -71,6 +71,49 @@ const looksLikePath = (value: string) => separator.test(value) || /\.[A-Za-z0-9]
 // prints for the model. It changes the printing, not what runs, so a command is named
 // without it; the step's details keep what actually ran.
 export const displayCommand = (command: string) => command.replace(/(^|&&|\|\||[;|(])(\s*)rtk\s+(?:proxy\s+)?(?=\S)/g, '$1$2');
+// A command as read in this project: its folder named as "." and a leading "cd ." dropped. Only
+// the display changes; the command runs again exactly as it was recorded.
+export function inProject(command: string, root: string) {
+  const roots = [root, root.replace(/^\/private(?=\/)/, ''), '/private' + root].filter((r, i, all) => r.length > 1 && all.indexOf(r) === i).sort((a, b) => b.length - a.length);
+  let out = command;
+  for (const r of roots) out = out.split(r + '/').join('').split(r).join('.');
+  return out.replace(/^cd \.\s*(&&|;)\s*/, '');
+}
+// A command without the Agent's words, named by what each part runs: the program, and the
+// script or flag that says what it does ("python3 analysis.py", "python3 -c"). Changing folder
+// and printing separators say nothing and are left out.
+export function briefOf(command: string) {
+  const parts = segments(command).map(part => {
+    const words = part.trim().replace(/^(\w+=\S*\s+)+/, '').replace(/\s*\d?>>?\s*\S+/g, '').split(/\s+/).filter(Boolean);
+    const [name, ...rest] = words;
+    if (!name || name === 'cd' || name === 'echo') return '';
+    const what = rest.find(word => !word.startsWith('-'));
+    const flag = rest[0] && /^-[cem]$/.test(rest[0]) ? rest[0] : null;
+    if (rest.some(word => word.startsWith('<<'))) return name + ' inline script';
+    return name + (flag ? ' ' + flag : what && /\.(py|r|sh|jl|js|mjs|pl|rb)$/i.test(what) ? ' ' + what.replace(/^['"]|['"]$/g, '') : '');
+  }).filter(Boolean).filter((part, i, all) => all[i - 1] !== part);
+  return parts.length ? parts.join(' → ') : command;
+}
+// A command line's parts between &&, ||, ; and |, outside quotes; a here-document's body and
+// the lines after the first are not parts.
+export function segments(command: string) {
+  const out: string[] = [];
+  let part = '', quote: string | null = null;
+  const line = command.split('\n')[0] ?? '';
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i]!;
+    if (c === '\\' && quote !== "'") { part += c + (line[i + 1] ?? ''); i++; continue; }
+    if (quote) { if (c === quote) quote = null; part += c; continue; }
+    if (c === '"' || c === "'") { quote = c; part += c; continue; }
+    const two = line.slice(i, i + 2);
+    if (two === '&&' || two === '||') { out.push(part); part = ''; i++; continue; }
+    if (c === ';' || c === '|') { out.push(part); part = ''; continue; }
+    part += c;
+  }
+  out.push(part);
+  return out.map(p => p.trim()).filter(Boolean);
+}
+export const several = (command: string) => command.includes('\n') || segments(command).length > 1;
 // How long a step took, from the Agent's last description of it to its result; null while
 // it runs or when Rho heard of it only once.
 export function stepDuration(step: ConversationStep): number | null {

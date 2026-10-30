@@ -43,13 +43,16 @@ export function notesPath(target: string): string | null {
   return value;
 }
 const linkPattern = /(!?)\[([^\]]*)\]\(\s*(<[^>]+>|[^)\s]+)(?:\s+"[^"]*")?\s*\)/g;
-// Inline code that names a file: a path with an extension, as Agents often write them.
+// Inline code that names a file: a path with an extension, as Agents often write them. Code
+// such as `summary.glm` or `np.mean` names a function, so a bare name counts only with an
+// extension files of an analysis have.
 const codePath = /`([\w@.\/-]+\.[A-Za-z0-9]{1,6})`/g;
+const fileExtension = /\.(csv|tsv|txt|json|jsonl|ya?ml|toml|md|qmd|rmd|ipynb|html?|pdf|png|jpe?g|gif|svg|webp|tiff?|py|r|jl|sh|js|mjs|ts|sql|xlsx?|parquet|feather|rds|rdata|h5|h5ad|hdf5|npy|npz|pkl|log|gz|zip|bam|sam|vcf|bed|gtf|gff3?|fasta|fa|fastq|fq|mtx|nc)$/i;
 function linksOf(source: string): string[] {
   const found: string[] = [];
   const add = (target: string) => { const path = notesPath(target); if (path && !found.includes(path)) found.push(path); };
   for (const m of source.matchAll(linkPattern)) add(m[3]!);
-  for (const m of source.replace(linkPattern, ' ').matchAll(codePath)) add(m[1]!);
+  for (const m of source.replace(linkPattern, ' ').matchAll(codePath)) if (m[1]!.includes('/') || fileExtension.test(m[1]!)) add(m[1]!);
   return found;
 }
 // The statement as a person reads it: link labels, image descriptions and code without marks.
@@ -63,9 +66,35 @@ export function plainText(source: string): string {
   return plain.replace(/\u0000(\d+)\u0000/g, (_, i) => code[Number(i)]!).replace(/\s+/g, ' ').trim();
 }
 
+export const capital = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
+// What a choice is about, when the notes lead with it ("q5 model: …", "Dunnett family = …"),
+// and what was taken.
+export function topicOf(text: string): { topic: string | null; rest: string } {
+  const m = /^(.{2,48}?)\s*(?:=|:)\s+(\S[\s\S]*)$/.exec(text);
+  if (!m || m[1]!.split(/\s+/).length > 6 || /[.!?]\s/.test(m[1]!)) return { topic: null, rest: text };
+  return { topic: m[1]!, rest: capital(m[2]!) };
+}
+// The paths a sentence ends with, as the notes write a link's label, are shown as the files
+// under it instead.
+export function withoutPaths(text: string, links: string[]) {
+  let out = text.trim(), end = '';
+  const quoted = (path: string) => path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  for (let found = true; found;) {
+    found = false;
+    for (const path of links) {
+      const hit = new RegExp('[\\s,;]*\\(?' + quoted(path) + '\\)?([.;]?)$').exec(out);
+      if (hit) { out = out.slice(0, hit.index); end ||= hit[1]!; found = true; }
+    }
+  }
+  out = out.replace(/[\s,;]+$/, '');
+  return end && !/[.!?;:]$/.test(out) ? out + end : out;
+}
+
 const bullet = /^(\s*)([-*+]|\d+[.)])\s+(.*)$/;
 const imageOnly = /^\s*!\[([^\]]*)\]\(\s*(<[^>]+>|[^)\s]+)(?:\s+"[^"]*")?\s*\)\s*$/;
 const alternativeWord = /^(alternatives?|instead|other(wise)?|或者|备选|替代)\b\s*[:：-]?\s*/i;
+// An option written in the choice's own sentence rather than under it: "… Alternative: …".
+const inlineAlternative = /(?<=[.;!?)\]—])\s+(?=(?:\*\*|__)?(?:alternatives?|instead|otherwise|备选|替代)(?:\*\*|__)?\s*[:：])/i;
 
 // Each section's statements, read subsection by subsection. A top-level bullet or paragraph is
 // one statement; lines indented under it continue it, and under a choice each nested bullet is
@@ -83,10 +112,15 @@ export function notesMeaning(text: string): SessionMeaning[] {
       const done = open;
       open = null;
       if (!done) return undefined;
+      // Agents write an option under the choice as asked, or in the same sentence; both count.
+      if (done.kind === 'choice' && !done.alternatives!.length) {
+        const [first, ...rest] = own.split(inlineAlternative);
+        if (rest.length) { own = first!; done.alternatives = rest.map(source => ({ text: '', source, links: [] })); }
+      }
       const said = done.kind === 'choice' ? own : done.source;
       done.text = plainText(said);
       done.links = linksOf(said);
-      for (const option of done.alternatives ?? []) { option.text = plainText(option.source.replace(/^\s*(?:[-*+]|\d+[.)])\s+/, '').replace(alternativeWord, '')); option.links = linksOf(option.source); }
+      for (const option of done.alternatives ?? []) { option.text = plainText(option.source.replace(/^\s*(?:[-*+]|\d+[.)])\s+/, '')).replace(alternativeWord, ''); option.links = linksOf(option.source); }
       if (!done.text && !done.links.length) return undefined;
       statements.push(done);
       return statements.length - 1;

@@ -5086,6 +5086,7 @@ export interface ConversationDecideOutput {
       toolKind?:
         'read' | 'edit' | 'delete' | 'move' | 'search' | 'execute' | 'think' | 'fetch' | 'switch_mode' | 'other';
       detail?: string;
+      purpose?: string;
       outcome?: 'requested' | 'returned' | 'rejected' | 'unknown';
       exitCode?: number;
       output?: {
@@ -5342,6 +5343,7 @@ export interface ConversationPermissionOutput {
       toolKind?:
         'read' | 'edit' | 'delete' | 'move' | 'search' | 'execute' | 'think' | 'fetch' | 'switch_mode' | 'other';
       detail?: string;
+      purpose?: string;
       outcome?: 'requested' | 'returned' | 'rejected' | 'unknown';
       exitCode?: number;
       output?: {
@@ -5630,6 +5632,7 @@ export interface ConversationReadOutput {
       toolKind?:
         'read' | 'edit' | 'delete' | 'move' | 'search' | 'execute' | 'think' | 'fetch' | 'switch_mode' | 'other';
       detail?: string;
+      purpose?: string;
       outcome?: 'requested' | 'returned' | 'rejected' | 'unknown';
       exitCode?: number;
       output?: {
@@ -5876,6 +5879,7 @@ export interface ConversationSendOutput {
       toolKind?:
         'read' | 'edit' | 'delete' | 'move' | 'search' | 'execute' | 'think' | 'fetch' | 'switch_mode' | 'other';
       detail?: string;
+      purpose?: string;
       outcome?: 'requested' | 'returned' | 'rejected' | 'unknown';
       exitCode?: number;
       output?: {
@@ -6329,6 +6333,7 @@ export interface ConversationStartOutput {
       toolKind?:
         'read' | 'edit' | 'delete' | 'move' | 'search' | 'execute' | 'think' | 'fetch' | 'switch_mode' | 'other';
       detail?: string;
+      purpose?: string;
       outcome?: 'requested' | 'returned' | 'rejected' | 'unknown';
       exitCode?: number;
       output?: {
@@ -6529,6 +6534,7 @@ export interface ConversationStopOutput {
       toolKind?:
         'read' | 'edit' | 'delete' | 'move' | 'search' | 'execute' | 'think' | 'fetch' | 'switch_mode' | 'other';
       detail?: string;
+      purpose?: string;
       outcome?: 'requested' | 'returned' | 'rejected' | 'unknown';
       exitCode?: number;
       output?: {

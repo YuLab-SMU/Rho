@@ -51,7 +51,8 @@ continues the same conversation, and later questions stay with the answer they a
 about. Use this answer or Needs changes (`conversation.decide`) is bound to the
 versions the message kept. Review is listed only while review records exist. The
 Console (Console 0.1.0) lists the Agent's and the person's commands, and runs, stops
-and reruns the person's own (local browser only). Agent 0.4.19 keeps a command's
+and reruns the person's own (local browser only). A message's commands read in the
+order they ran, each led by the Agent's own words on what it was for (Agent 0.4.23). Agent 0.4.19 keeps a command's
 whole text. Repeated reads no longer exhaust a message's capture budget before its
 results. Agent-declared choices are shown by the meaning layer pass below, without Agree/No.
 
@@ -80,8 +81,9 @@ to-dos, each with the files it links. Kept versions of the notes trace a stateme
 the message that wrote it and each file to the version kept then. The Graph shows
 Meaning + process by default, or either layer alone, with "kept as" and "written in"
 edges into the process. The answer board and Studio's file views say what each file
-holds. A choice shows the option in use beside the others with what each gives; Use
-this instead drafts a message, and nothing waits on the person. The Agent followed the
+holds. A choice shows what it is about and what was taken, with any other option the
+notes name under it, nested or in the same sentence, and what it gives; Use this
+instead drafts a message, and nothing waits on the person. The Agent followed the
 fixed subsections, linked its files and computed some alternatives, but described files
 at the end of its run, not as it wrote them, even when told to.
 
@@ -96,6 +98,11 @@ images when models.dev lists it as reading them, else as the code that made them
 call is priced by Claude Code or from models.dev's price; the session popover shows the
 conversation's spend and a person-wide switch. In the ninth copy, 13 calls cost about
 $0.0086, and the first image sentence misnamed the plot type.
+
+The [quick checks](SIMULATED-PROJECT-EPISODE.md#quick-checks-choices-and-the-console)
+from rho-bio-eval ran in Rho: bix-18 (Python) had 4 of 5 answers in range twice, the
+miss being a proportion against a range written as a percentage; bix-51 (R) had 7 of 7.
+The Choices and the Console were redrawn from what these runs showed.
 
 ## Existing application
 
@@ -134,10 +141,10 @@ The first full changed run passed Plugins 109/109 and Rho 227/228; an undeclared
 new CSS variable caused the application failure and was corrected. The second pass
 (answer board, decisions, Console, Agent 0.4.19) passed Rho 240/240. The process Studio
 pass first failed 244/245 on another undeclared CSS variable, which was corrected;
-Rho 245/245 and Plugins 117/117. The figures and cost pass records Rho 258/258 and
+Rho 245/245 and Plugins 117/117. The choices and Console pass records Rho 260/260 and
 Plugins 125/125 in the [ledger](VERIFICATION.json), with the contract check and the
 agent-canvas, graph, agent-page, agent-ui, review, ui:u2 and sources browser
-acceptances. Earlier passes: project notes Rho 249/249 and Plugins 120/120 (ui:u2 first
+acceptances. Earlier passes: figures and cost Rho 258/258; project notes Rho 249/249 and Plugins 120/120 (ui:u2 first
 failed until the notes stopped opening with every project); meaning layer Rho 253/253;
 descriptions Rho 257/257 and Plugins 122/122, each with the same seven acceptances.
 The [episode](REVIEW-EVIDENCE-EPISODE.md) records contract, browser and installed results.

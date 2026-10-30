@@ -120,7 +120,9 @@ credential. `rho --help` prints the usage; an unknown option exits 2 with it.
 Agent 0.4.11 provides persistent Claude and Codex ACP entries and retains each
 tool step's human title, ACP category and one identifying input (command, file path,
 pattern or query; bounded). Since 0.4.17 a command also keeps its exit code and the last
-20 lines it printed (at most 2 KiB), and Rho records when each step started; other tool
+20 lines it printed (at most 2 KiB), and Rho records when each step started. Since 0.4.23
+a command keeps the Agent's own few words on what it is for (`purpose`, from Claude
+Code's Bash description; one line of at most 200 characters) when it gave them. Other tool
 output is not kept, and a message that is full gives up a command's output first. The Agent panel
 selects a backend for a new conversation; existing records retain their choice.
 `--claude PATH` / `RHO_CLAUDE` selects the native CLI; its existing provider/model

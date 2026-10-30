@@ -223,11 +223,12 @@ const agentSettings = response({ version: integer, updatedAt: { anyOf: [text, { 
   // Whether a model describes the files a message writes; the facts are read either way.
   describe: response({ enabled: { type: 'boolean' } }) }, ['version', 'updatedAt', 'backend', 'serviceBackend', 'choices', 'offered', 'checking']);
 // A tool step keeps its original identity, the Agent's bounded human title, its ACP
-// category and one identifying input (command, path, pattern or query), when it was
+// category and one identifying input (command, path, pattern or query), for a command the
+// Agent's own few words on what it is for (purpose), when it was
 // first and last reported, and for a command its exit code and the last lines it printed
 // (Agent's commandOutputLimits). Other tool output and reasoning are never part of it.
 const conversationStep = response({ kind: { enum: ['text', 'tool', 'error'] }, at: text, startedAt: text, text: { type: 'string' }, cut: { type: 'boolean' }, id: text, tool: text, operation: text,
-  title: text, toolKind: { enum: ['read', 'edit', 'delete', 'move', 'search', 'execute', 'think', 'fetch', 'switch_mode', 'other'] }, detail: text,
+  title: text, toolKind: { enum: ['read', 'edit', 'delete', 'move', 'search', 'execute', 'think', 'fetch', 'switch_mode', 'other'] }, detail: text, purpose: text,
   outcome: { enum: ['requested', 'returned', 'rejected', 'unknown'] }, exitCode: integer,
   output: response({ text: { type: 'string' }, lines: integer, bytes: integer, cut: { type: 'boolean' } }, ['text', 'lines', 'bytes', 'cut']) }, ['kind', 'at']);
 const conversationTurn = response({ id: text, by: text, text: { type: 'string' }, sentAt: text, state: { enum: ['running', 'completed', 'failed', 'stopped', 'unknown'] }, startedAt: { anyOf: [text, { type: 'null' }] }, endedAt: { anyOf: [text, { type: 'null' }] }, model: { anyOf: [text, { type: 'null' }] },

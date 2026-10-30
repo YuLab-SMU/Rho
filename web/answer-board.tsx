@@ -323,7 +323,7 @@ export function AnswerBoard({ client, snapshot, files, notesText = '', onConvers
     {/* Choices the Agent took and went on with, each beside what the other options give. Nothing
         here waits on the person; another option is theirs to ask for. */}
     {choices.length > 0 && <div className="board-choices">
-      <p className="board-results-why"><strong>Choices</strong> · the Agent went on with one option; the others are shown with what they give</p>
+      <p className="board-results-why"><strong>Choices</strong> · what the Agent went with{choices.some(c => c.alternatives?.length) ? ', and the other option where the notes name one' : ''}</p>
       {choices.map(choice => <ChoiceOptions key={choice.line} statement={choice} trace={meaning.traces.get(choice)} conversationId={conversationId} client={client} projectId={snapshot.project.id} onPath={onPath} onSent={id => (onAsked ?? onConversation)(id)} />)}
     </div>}
     {followUps.length > 0 && <div className="board-follow">

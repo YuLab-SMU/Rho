@@ -1,32 +1,45 @@
-/* The Console: each message's commands as a terminal would show them, the ones that changed files first. */
+/* The Console: each message's commands in the order they ran, led by what each was for. */
 .console-page { display: flex; flex-direction: column; gap: 18px; container-type: inline-size; }
-.console-message { display: flex; flex-direction: column; gap: 8px; padding: 14px 16px; border: 1px solid var(--color-hairline); border-radius: 10px; background: var(--color-surface); scroll-margin-top: 16px; }
+.console-message { display: flex; flex-direction: column; gap: 6px; padding: 14px 16px 8px; border: 1px solid var(--color-hairline); border-radius: 10px; background: var(--color-surface); scroll-margin-top: 16px; }
 .console-message.focused { border-color: var(--color-hairline-strong); box-shadow: 0 0 0 3px var(--color-accent-soft); }
-.console-message > header { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.console-message > header { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding-bottom: 4px; }
 .console-message > header small { color: var(--color-meta); font-size: 12px; }
+.console-message.mine > header strong { font-size: 14px; }
 .console-ask { justify-content: flex-start; min-height: 0; padding: 0; font-size: 14px; font-weight: 600; color: var(--color-ink); max-width: 100%; }
 .console-ask:hover { text-decoration: underline; background: none; }
 .console-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
-.console-command { border-top: 1px solid var(--color-divider); padding: 6px 0; }
+/* One row: when, what it was for over the command as typed, and how long it took or how it ended. */
+.console-command { border-top: 1px solid var(--color-divider); }
 .console-list > .console-command:first-child { border-top: 0; }
-.console-command summary, .console-managed { display: grid; grid-template-columns: 5.4em minmax(0, 1fr) auto; gap: 10px; align-items: baseline; cursor: pointer; list-style: none; }
+.console-command summary, .console-managed { display: grid; grid-template-columns: 4.6em minmax(0, 1fr) auto; gap: 12px; align-items: baseline; padding: 8px 6px; margin: 0 -6px; border-radius: 6px; cursor: pointer; list-style: none; }
+.console-command summary:hover { background: var(--color-hover); }
 .console-command summary::-webkit-details-marker { display: none; }
-.console-managed { width: 100%; min-height: 0; padding: 0; border: 0; background: none; text-align: left; font-weight: 400; }
-.console-time { color: var(--color-meta); font-size: 11.5px; font-variant-numeric: tabular-nums; }
-.console-command code { font-family: var(--font-mono); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--color-muted); }
-.console-command.made code { color: var(--color-ink); font-weight: 500; }
-.console-command details[open] > summary code { white-space: pre-wrap; overflow-wrap: anywhere; }
-.console-end { color: var(--color-verified-text); font-size: 11.5px; white-space: nowrap; }
-.console-end.problem, .console-end.failed { color: var(--color-failed); }
+.console-managed { width: calc(100% + 12px); min-height: 0; border: 0; background: none; text-align: left; font-weight: 400; }
+.console-time { color: var(--color-meta); font-size: 12px; font-variant-numeric: tabular-nums; }
+.console-what { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.console-purpose { color: var(--color-ink); font-size: 14px; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.console-what code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--color-meta); font-family: var(--font-mono); font-size: 12px; }
+.console-what code.alone { color: var(--color-ink); font-size: 13px; }
+.console-managed code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); font-size: 13px; }
+.console-command.made .console-purpose { font-weight: 600; }
+/* Commands that changed nothing read quieter than the ones that made something. */
+.console-quiet-row .console-purpose, .console-quiet-row code.alone { color: var(--color-muted); }
+.console-quiet-row > details > .console-list { margin: 0 0 6px 4.6em; padding-left: 12px; }
+.console-end { color: var(--color-meta); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.console-end.problem, .console-end.failed { color: var(--color-failed); font-weight: 600; }
 .console-end.running, .console-end.active { color: var(--color-accent); font-weight: 600; }
-.console-ran, .console-output { margin: 6px 0 2px 5.4em; padding: 8px 10px; max-height: 22em; overflow: auto; border-radius: 6px; background: var(--color-well); font: 11.5px/1.45 var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere; }
-.console-ran { color: var(--color-meta); max-height: 8em; }
-.console-note { margin-left: 5.4em; color: var(--color-meta); font-size: 12px; }
+.console-detail { display: flex; flex-direction: column; gap: 6px; margin: 0 0 10px calc(4.6em + 12px); }
+.console-ran, .console-output { margin: 0; padding: 8px 10px; max-height: 22em; overflow: auto; border-radius: 6px; background: var(--color-well); font: 11.5px/1.45 var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+.console-ran { color: var(--color-ink); max-height: 10em; }
+.console-note { color: var(--color-meta); font-size: 12px; }
 .console-page > .console-note { margin-left: 0; }
-.console-changed { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 4px 0 0 calc(5.4em + 10px); }
-.console-changed > span { color: var(--color-meta); font-size: 11.5px; }
-.console-quiet > summary { padding: 4px 0; color: var(--color-meta); font-size: 12px; cursor: pointer; }
-.console-quiet[open] > summary { margin-bottom: 2px; }
+.console-changed { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: -2px 0 10px calc(4.6em + 12px); }
+.console-changed > span { color: var(--color-meta); font-size: 12px; }
+.console-changed .work-file { min-height: 26px; padding: 2px 8px; }
+.console-actions { display: flex; }
+.console-command > .console-actions { margin: 0 0 8px calc(4.6em + 12px); }
+.console-again { min-height: 0; padding: 2px 0; color: var(--color-accent-strong); font-size: 13px; font-weight: 600; }
+.console-again:hover { color: var(--color-accent); text-decoration: underline; }
 .console-prompt { display: flex; flex-direction: column; gap: 6px; }
 .console-prompt .console-prompt-label { display: block; color: var(--color-meta); font-size: 12px; font-weight: 400; }
 .console-prompt label strong { color: var(--color-ink); font-weight: 600; }
@@ -35,16 +48,8 @@
 .console-line > span { padding-top: 6px; color: var(--color-meta); font: 13px/1.45 var(--font-mono); }
 .console-line textarea { flex: 1; min-width: 0; min-height: 0; padding: 6px 0; border: 0; outline: 0; resize: none; background: none; box-shadow: none; font: 13px/1.45 var(--font-mono); color: var(--color-ink); }
 .console-line button { flex: none; }
-.console-after { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-left: calc(5.4em + 10px); }
-.console-actions { display: flex; justify-content: flex-end; margin: 4px 0 0 5.4em; }
-.console-after .console-changed { margin: 4px 0 0; }
-.console-again { flex: none; margin-left: auto; min-height: 0; padding: 2px 0; font-size: 12px; }
-.console-message.mine > header strong { font-size: 14px; }
 @container (max-width: 560px) {
   .console-command summary, .console-managed { grid-template-columns: minmax(0, 1fr) auto; }
   .console-time { display: none; }
-  .console-ran, .console-output, .console-note { margin-left: 0; }
-  .console-changed, .console-after, .console-actions { margin-left: 0; }
-  .console-after { flex-direction: column; align-items: stretch; }
-  .console-after .console-again { align-self: flex-end; }
+  .console-detail, .console-changed, .console-command > .console-actions, .console-quiet-row > details > .console-list { margin-left: 0; }
 }

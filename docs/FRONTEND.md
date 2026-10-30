@@ -25,8 +25,9 @@ inspect what happened. The application gives those actions direct places:
   below it. Then come the method (an outline of the script), the run that produced
   them with its command and output, the message's other commands (which open in the
   Console), the data it read and any report. A result or script the project notes
-  describe carries that description, and the session's choices follow the results,
-  each option with what it gives. Each result has Ask, and selecting a
+  describe carries that description, and the session's choices follow the results:
+  what each is about and what was taken, with any other option the notes name, under
+  the choice or in the same sentence, in a well below with what it gives. Each result has Ask, and selecting a
   passage of the answer offers Ask about this. Either one sends a question to the
   same conversation with what it is about (the exact kept version for a file).
   Questions that make no new results are listed under Asked since with their
@@ -59,10 +60,14 @@ inspect what happened. The application gives those actions direct places:
   workspace ([pass](AGENT-CANVAS-EPISODE.md#browsing-sources-from-the-sidebar)).
   `+` adds a source folder.
 - **Console** runs the person's own shell commands in the project folder. Newest
-  first, it lists each message's commands under that message, with the person's
-  commands between them and Rho's managed runs at the end. Each command shows its
-  time, ending (exit code, stopped, unknown), duration and output, which streams
-  while it runs, and the files that changed on disk while it ran. A running command
+  first, it lists each message's commands under that message in the order they ran,
+  with the person's commands between them and Rho's managed runs at the end. Each
+  command leads with the Agent's own words on what it was for, over the command with
+  the project folder read as "."; without those words, it is named by what each part
+  runs ("grep → python3 analysis.py"). Commands in a row that changed no file fold into
+  one line. A row shows its time, its duration, any ending other than a clean exit,
+  and the files that changed on disk while it ran; opening it shows the whole command
+  and its output, which streams while it runs. A running command
   has Stop. Run again runs the person's command again, and puts an Agent's command
   into the prompt to check before Run. The board's command count opens the Console
   at that message. Only the person at this machine can run or stop commands; an

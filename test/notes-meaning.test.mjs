@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { notesMeaning, fileDescriptions, traceStatement, plainText, notesPath } from '../dist/notes-meaning.js';
+import { notesMeaning, fileDescriptions, traceStatement, plainText, notesPath, topicOf, withoutPaths } from '../dist/notes-meaning.js';
 import { meaningLayer, layered } from '../dist/meaning-graph.js';
 import { buildWorkGraph, foldVersions } from '../dist/work-graph.js';
 import { holdsOf, modelName } from '../dist/file-describer.js';
@@ -176,4 +176,26 @@ test('files read while a message ran join its row until the notes name them, and
   assert.equal(holdsOf('results/other.csv', new Map(), described, ms(18)).source, 'facts', 'at an earlier moment the sentence had not arrived');
   assert.equal(holdsOf('results/other.csv', new Map(), described, ms(16)), undefined, 'nor had the file been read');
   assert.equal(modelName('provider/small[1m]'), 'small');
+});
+
+test('a choice names its other option in its own sentence, and code that names a function links no file', () => {
+  // As an Agent wrote them in a real run: the option after "Alternative:" in the same bullet.
+  const [section] = notesMeaning(['## Logistic models', '<!-- rho:session c-1 -->', '### Choices', '',
+    '- q5 model: used the BMI-only model. Alternative: BMI in the full model gives p = 0.1363 ([results/alternatives.json](results/alternatives.json)).',
+    '- p-values: Wald z from `summary.glm`, written by `analysis.R` to `results/model_summary.csv`.',
+    '- **Dunnett family = the 12 ratios only** [results/dunnett.csv](results/dunnett.csv)',
+    '  - Alternative: adding the monocultures gives the same counts.', ''].join('\n'));
+  const [q5, p, family] = section.statements;
+  assert.equal(q5.text, 'q5 model: used the BMI-only model.');
+  assert.deepEqual(q5.links, []);
+  assert.deepEqual(q5.alternatives.map(o => [o.text, o.links]), [['BMI in the full model gives p = 0.1363 (results/alternatives.json).', ['results/alternatives.json']]]);
+  assert.deepEqual(p.alternatives, []);
+  assert.deepEqual(p.links, ['analysis.R', 'results/model_summary.csv']);
+  assert.deepEqual(family.alternatives.map(o => o.text), ['adding the monocultures gives the same counts.']);
+  // What a choice is about, what was taken, and the paths a sentence ends with left to its files.
+  assert.deepEqual(topicOf(q5.text), { topic: 'q5 model', rest: 'Used the BMI-only model.' });
+  assert.deepEqual(topicOf(withoutPaths(family.text, family.links)), { topic: 'Dunnett family', rest: 'The 12 ratios only' });
+  assert.deepEqual(topicOf('The rows were kept. Then: more'), { topic: null, rest: 'The rows were kept. Then: more' });
+  assert.equal(withoutPaths(q5.alternatives[0].text, q5.alternatives[0].links), 'BMI in the full model gives p = 0.1363.');
+  assert.equal(withoutPaths('Both traits count. results/a.csv, results/b.json', ['results/a.csv', 'results/b.json']), 'Both traits count.');
 });

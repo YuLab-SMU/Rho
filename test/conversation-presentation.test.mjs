@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { activitySummary, commandEnd, conversationBlocks, currentPlanEntry, displayCommand, durationText, shortPath, stepDuration, toolActivity } from '../dist/conversation-presentation.js';
+import { activitySummary, briefOf, commandEnd, conversationBlocks, currentPlanEntry, displayCommand, durationText, inProject, several, shortPath, stepDuration, toolActivity } from '../dist/conversation-presentation.js';
 
 const step = (value) => ({ kind: 'tool', at: '2026-10-27T10:00:00.000Z', outcome: 'returned', ...value });
 const turn = (steps, extra = {}) => ({ id: 't1', by: 'person', text: 'Analyse the table', sentAt: '2026-10-27T10:00:00.000Z', state: 'completed', steps, omitted: 0, problem: null, ...extra });
@@ -99,4 +99,19 @@ test('a command is named without the output wrapper a setup adds, and says how i
   assert.equal(commandEnd(unparsed), 'Refused');
   assert.equal(stepDuration({ ...step, outcome: 'requested' }), null, 'a running step has no duration yet');
   assert.equal(stepDuration({ ...step, startedAt: undefined }), null);
+});
+
+test('a command without the Agent\'s words is named by what each part runs, and read inside its project', () => {
+  // Commands as Claude Code ran them in real runs.
+  assert.equal(briefOf('grep -n "p_full\\|p = <" analysis.py && python3 analysis.py > /tmp/run4.log 2>&1 && grep -n "p < 0.001" analysis.py | head'), 'grep → python3 analysis.py → grep → head');
+  assert.equal(briefOf("which R Rscript && Rscript -e 'cat(R.version.string, \"\\n\"); cat(\"pkgs:\\n\")' 2>&1 | head -30"), 'which → Rscript -e → head');
+  assert.equal(briefOf('python3 -c "import sys; print(sys.version)"'), 'python3 -c');
+  assert.equal(briefOf("cd data && python3 - <<'PY'\nprint(1)\nPY"), 'python3 inline script');
+  assert.equal(briefOf('cat a.csv && echo "---" && cat b.csv'), 'cat');
+  assert.equal(several('python3 analysis.py'), false);
+  assert.equal(several('ls -la data; head -5 data/a.csv'), true);
+  // The project folder reads as ".", under either name macOS gives a temporary folder.
+  assert.equal(inProject('ls -la /private/tmp/p/swarm/data && cat /tmp/p/swarm/notes.md', '/private/tmp/p/swarm'), 'ls -la data && cat notes.md');
+  assert.equal(inProject('cd /tmp/p/swarm && python3 analysis.py', '/private/tmp/p/swarm'), 'python3 analysis.py');
+  assert.equal(inProject('ls -la /tmp/p/swarm', '/tmp/p/swarm'), 'ls -la .');
 });

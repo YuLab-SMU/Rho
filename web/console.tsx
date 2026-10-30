@@ -2,7 +2,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { BrowserApiError, type BrowserClient, type WorkspaceSnapshot } from '../src/browser.js';
 import type { RhoOutput } from '../src/contract.generated.js';
 import { buildWorkGraph, type GraphNode, type WorkGraph } from '../src/work-graph.js';
-import { durationText } from '../src/conversation-presentation.js';
+import { briefOf, durationText, inProject, several } from '../src/conversation-presentation.js';
 import { executionWord, type RunFacts } from '../src/execution-facts.js';
 import { useTurns } from './work-turns.js';
 import { useRuns } from './executions.js';
@@ -15,17 +15,53 @@ import { useProcess } from './process-context.js';
 import './console.css';
 
 // Every command run in the project, in one place: what the Agent ran in each message, from its
-// own reports, the commands the person ran here, and the runs Rho managed. A command shows how
-// it ended, how long it took, the files that changed on disk while it ran (seen, not claimed)
-// and what it printed. Commands with no recorded file change fold under the ones that have one:
-// the record keeps each file's last change, so a command that wrote a file changed again later
-// has none of its own.
+// own reports, the commands the person ran here, and the runs Rho managed. A message's commands
+// read in the order they ran, each led by the Agent's own words on what it was for when it gave
+// them, with how it ended when that was not a clean exit, how long it took, the files that
+// changed on disk while it ran (seen, not claimed) and what it printed. Commands in a row that
+// changed no file fold into one line. The record keeps each file's last change, so a command
+// that wrote a file changed again later shows none of its own.
 const clock = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' });
 const clean = (node: GraphNode) => node.outcome === 'returned' && (!node.end || /^exit 0\b/i.test(node.end));
 // A command that returned without an exit code is not a problem; one that failed or exited non-zero is.
 const troubled = (node: GraphNode) => node.outcome === 'failed' || node.outcome === 'rejected' || node.outcome === 'unknown' || /^exit [1-9]/i.test(node.end ?? '');
 // Earlier records kept only a command's first line; a here-document without its body cannot run again.
 const whole = (command: string) => !/<<-?\s*['"]?\w+['"]?\s*$/.test(command.trim());
+function QuietRun({ runs, root, onPath, onRunAgain }: { runs: GraphNode[]; root: string; onPath: (path: string) => void; onRunAgain?: (command: string, from: string) => void }) {
+  const named = runs.flatMap(run => run.purpose ? [run.purpose] : briefOf(inProject(run.command!, root)).split(' → ')).filter((word, i, all) => all.indexOf(word) === i);
+  const took = runs.reduce((sum, run) => sum + (run.durationMs ?? 0), 0);
+  return <li className="console-command console-quiet-row"><details>
+    <summary>
+      <span className="console-time">{clock(runs[0]!.at)}</span>
+      <span className="console-what"><span className="console-purpose">{named.join(' · ')}</span></span>
+      <span className="console-end">{runs.length} commands{took ? ' · ' + durationText(took) : ''}</span>
+    </summary>
+    <ol className="console-list">{runs.map(run => <Command key={run.id} node={run} changed={[]} root={root} onPath={onPath} onRunAgain={onRunAgain} />)}</ol>
+  </details></li>;
+}
+type Item = { at: number; key: string; agent?: GraphNode; changed?: GraphNode[]; quiet?: GraphNode[]; mine?: Mine };
+// A message's commands in the order they ran; those in a row that changed no file and ended
+// cleanly go together.
+function commandItems(graph: WorkGraph, runs: GraphNode[]): Item[] {
+  const byId = new Map(graph.nodes.map(n => [n.id, n]));
+  const out: Item[] = [];
+  for (const run of [...runs].sort((a, b) => a.at - b.at)) {
+    const changed = graph.edges.filter(e => e.from === run.id && e.label === 'changed while it ran').map(e => byId.get(e.to)).filter((n): n is GraphNode => !!n && !!n.category);
+    if (!changed.length && run.outcome !== 'requested' && clean(run)) {
+      const last = out.at(-1);
+      if (last?.quiet) { last.quiet.push(run); continue; }
+      out.push({ at: run.at, key: 'quiet-' + run.id, quiet: [run] });
+    } else out.push({ at: run.at, key: run.id, agent: run, changed });
+  }
+  return out;
+}
+function ItemRow({ item, root, onPath, onRunAgain }: { item: Item; root: string; onPath: (path: string) => void; onRunAgain?: (command: string, from: string) => void }) {
+  if (item.quiet && item.quiet.length > 1) return <QuietRun runs={item.quiet} root={root} onPath={onPath} onRunAgain={onRunAgain} />;
+  const run = item.quiet?.[0] ?? item.agent!;
+  return <Command node={run} changed={item.changed ?? []} root={root} onPath={onPath} open={run.outcome === 'requested'} onRunAgain={onRunAgain} />;
+}
+const Changed = ({ files, onPath }: { files: Array<{ path: string; name: string }>; onPath: (path: string) => void }) => files.length > 0
+  ? <div className="console-changed"><span>Changed while it ran</span>{files.map(file => <button key={file.path} className="work-file" title={file.path} onClick={() => onPath(file.path)}><Icon name={pathIcon(file.path)} size={13} stroke={1.7} /><span>{file.name}</span></button>)}</div> : null;
 
 type Mine = RhoOutput<'console.list'>['commands'][number];
 const failure = (error: unknown) => error instanceof Error ? error.message : 'The Console could not be reached.';
@@ -33,27 +69,32 @@ const failure = (error: unknown) => error instanceof Error ? error.message : 'Th
 // reads a running command again this often.
 export const consoleViewLimits = { shownBytes: 256 * 1024, pollMs: 700, listed: 50 };
 
-function Command({ node, changed, onPath, open, onRunAgain }: { node: GraphNode; changed: GraphNode[]; onPath: (path: string) => void; open?: boolean; onRunAgain?: (command: string, from: string) => void }) {
-  const ending = node.end ?? (node.outcome === 'requested' ? 'Running' : node.outcome === 'rejected' ? 'Refused' : node.outcome === 'unknown' ? 'Outcome unknown' : 'Returned');
-  const command = node.ran ?? node.command!;
-  const again = onRunAgain && node.outcome !== 'requested' && (whole(command)
+function Command({ node, changed, root, onPath, open, onRunAgain }: { node: GraphNode; changed: GraphNode[]; root: string; onPath: (path: string) => void; open?: boolean; onRunAgain?: (command: string, from: string) => void }) {
+  const command = node.ran ?? node.command!, shown = inProject(node.command!, root);
+  const running = node.outcome === 'requested', problem = troubled(node);
+  // A clean exit is the usual ending and goes unsaid; anything else is said.
+  const ending = running ? 'Running' : node.outcome === 'rejected' ? 'Refused' : node.outcome === 'unknown' ? 'Outcome unknown' : problem ? node.end ?? 'Failed' : null;
+  const took = node.durationMs ? durationText(node.durationMs) : '';
+  const again = onRunAgain && !running && (whole(command)
     ? <button className="text-button console-again" onClick={() => onRunAgain(command, 'the Agent\'s command at ' + clock(node.at))}>Run again</button>
     : <span className="console-note">Only its first line was recorded, so it cannot run again from here.</span>);
-  return <li className={'console-command' + (changed.length ? ' made' : '')}>
+  return <li className={'console-command' + (changed.length ? ' made' : '') + (problem ? ' problem' : '')}>
     <details open={open}>
       <summary>
         <span className="console-time">{clock(node.at)}</span>
-        <code title={node.ran ?? node.command}><span aria-hidden="true">$ </span>{node.command}</code>
-        <span className={'console-end' + (node.outcome === 'requested' ? ' running' : troubled(node) ? ' problem' : '')}>{ending}{node.durationMs ? ' · ' + durationText(node.durationMs) : ''}</span>
+        <span className="console-what" title={command}>
+          {node.purpose ? <><span className="console-purpose">{node.purpose}</span><code>{shown}</code></>
+            : several(shown) ? <><code className="alone">{briefOf(shown)}</code><code>{shown}</code></> : <code className="alone">{shown}</code>}
+        </span>
+        <span className={'console-end' + (running ? ' running' : problem ? ' problem' : '')}>{[ending, took].filter(Boolean).join(' · ')}</span>
       </summary>
-      {node.ran && node.ran !== node.command && <pre className="console-ran">{node.ran}</pre>}
-      {node.output?.text ? <pre className="console-output" ref={e => { if (e) e.scrollTop = e.scrollHeight; }}>{node.output.text}{node.output.cut ? '\n…' : ''}</pre> : <p className="console-note">{node.outcome === 'requested' ? 'Running…' : 'No output was reported.'}</p>}
-      {again && !changed.length && <div className="console-actions">{again}</div>}
+      <div className="console-detail">
+        {(shown.includes('\n') || shown.length > 90 || command !== node.command) && <pre className="console-ran">{inProject(command, root)}</pre>}
+        {node.output?.text ? <pre className="console-output" ref={e => { if (e && running) e.scrollTop = e.scrollHeight; }}>{node.output.text}{node.output.cut ? '\n…' : ''}</pre> : <p className="console-note">{running ? 'Running…' : 'No output was reported.'}</p>}
+        {again && <div className="console-actions">{again}</div>}
+      </div>
     </details>
-    {changed.length > 0 && <div className="console-after">
-      <div className="console-changed"><span>Changed while it ran</span>{changed.map(file => <button key={file.id} className="work-file" title={file.path} onClick={() => onPath(file.path!)}><Icon name={pathIcon(file.path!)} size={13} stroke={1.7} /><span>{file.title}</span></button>)}</div>
-      {again}
-    </div>}
+    <Changed files={changed.map(file => ({ path: file.path!, name: file.title }))} onPath={onPath} />
   </li>;
 }
 
@@ -93,13 +134,15 @@ function Yours({ record, client, projectId, changed, onPath, onRunAgain, onStop 
   useEffect(() => { if (!running) return; const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, [running]);
   const took = (record.endedAt ? Date.parse(record.endedAt) : now) - Date.parse(record.startedAt);
   const clean = record.state === 'exited' && record.exit?.code === 0;
-  return <li className={'console-command mine' + (changed.length || running ? ' made' : '')}>
+  const ending = [clean ? '' : ended(record), took >= 1000 ? durationText(took) : ''].filter(Boolean).join(' · ');
+  return <li className={'console-command mine' + (changed.length || running ? ' made' : '') + (!clean && !running ? ' problem' : '')}>
     <details open={open} onToggle={event => setOpen(event.currentTarget.open)}>
       <summary>
         <span className="console-time">{clock(Date.parse(record.startedAt))}</span>
-        <code title={record.command}><span aria-hidden="true">$ </span>{record.command}</code>
-        <span className={'console-end' + (running ? ' running' : clean ? '' : ' problem')}>{ended(record)}{took >= 1000 ? ' · ' + durationText(took) : ''}</span>
+        <span className="console-what" title={record.command}><code className="alone">{record.command}</code></span>
+        <span className={'console-end' + (running ? ' running' : clean ? '' : ' problem')}>{ending}</span>
       </summary>
+      <div className="console-detail">
       {record.cwd && <p className="console-note">In {record.cwd}/</p>}
       {out.text ? <pre className="console-output" ref={e => { if (e && running) e.scrollTop = e.scrollHeight; }}>{out.text}</pre> : <p className="console-note">{running ? 'Waiting for output…' : out.problem ? '' : 'It printed nothing.'}</p>}
       {out.more && <p className="console-note">Showing the first {(consoleViewLimits.shownBytes / 1024).toFixed(0)} KiB of {record.kept.toLocaleString('en-US')} kept bytes.</p>}
@@ -107,11 +150,10 @@ function Yours({ record, client, projectId, changed, onPath, onRunAgain, onStop 
       {record.problem && <p className="console-note">{record.problem}</p>}
       {out.problem && <p className="inline-error" role="alert">{out.problem}</p>}
       {!running && record.state !== 'continuing' && <div className="console-actions"><button className="text-button console-again" onClick={() => onRunAgain(record)}>Run again</button></div>}
+      </div>
     </details>
-    {(changed.length > 0 || running) && <div className="console-after">
-      {changed.length > 0 && <div className="console-changed"><span>Changed while it ran</span>{changed.map(file => <button key={file.path} className="work-file" title={file.path} onClick={() => onPath(file.path)}><Icon name={pathIcon(file.path)} size={13} stroke={1.7} /><span>{file.name}</span></button>)}</div>}
-      {running && <button className="text-button console-again" disabled={!!record.stop} onClick={() => onStop(record)}>{record.stop ? 'Stopping…' : 'Stop'}</button>}
-    </div>}
+    <Changed files={changed} onPath={onPath} />
+    {running && <div className="console-actions"><button className="text-button console-again" disabled={!!record.stop} onClick={() => onStop(record)}>{record.stop ? 'Stopping…' : 'Stop'}</button></div>}
   </li>;
 }
 
@@ -141,26 +183,21 @@ function useMine(client: BrowserClient, projectId: string, cursor: number) {
   return { mine, ...state, read };
 }
 
-function Message({ graph, turn, onPath, onConversation, focused, onRunAgain }: { graph: WorkGraph; turn: WorkGraph['turns'][number]; onPath: (path: string) => void; onConversation: (id: string) => void; focused: boolean; onRunAgain?: (command: string, from: string) => void }) {
-  const byId = new Map(graph.nodes.map(n => [n.id, n]));
-  const question = byId.get('q:' + turn.id);
-  const runs = graph.nodes.filter(n => n.kind === 'run' && n.turn === turn.id).sort((a, b) => a.at - b.at);
-  const changedBy = (run: GraphNode) => graph.edges.filter(e => e.from === run.id && e.label === 'changed while it ran').map(e => byId.get(e.to)).filter((n): n is GraphNode => !!n && !!n.category);
-  const made = runs.filter(r => changedBy(r).length > 0 || r.outcome === 'requested' || !clean(r));
-  const quiet = runs.filter(r => !made.includes(r));
+function Message({ graph, turn, root, onPath, onConversation, focused, onRunAgain }: { graph: WorkGraph; turn: WorkGraph['turns'][number]; root: string; onPath: (path: string) => void; onConversation: (id: string) => void; focused: boolean; onRunAgain?: (command: string, from: string) => void }) {
+  const question = graph.nodes.find(n => n.id === 'q:' + turn.id);
+  const runs = graph.nodes.filter(n => n.kind === 'run' && n.turn === turn.id);
+  const items = commandItems(graph, runs);
+  const changed = new Set(items.flatMap(item => (item.changed ?? []).map(file => file.path)));
+  const failed = runs.filter(troubled).length;
   const section = useRef<HTMLElement>(null);
   useEffect(() => { if (focused) section.current?.scrollIntoView({ block: 'start' }); }, [focused]);
   if (!runs.length) return null;
   return <section ref={section} className={'console-message' + (focused ? ' focused' : '')} aria-label={question?.title ?? 'A message'}>
     <header>
       <button className="text-button console-ask" title={question?.text} onClick={() => onConversation(turn.conversationId)}>{question?.title ?? 'A message'}</button>
-      <small>{turn.agent} · {day(new Date(turn.start).toISOString())} · {runs.length} {runs.length === 1 ? 'command' : 'commands'}{turn.running ? ' · working' : ''}</small>
+      <small>{turn.agent} · {day(new Date(turn.start).toISOString())} · {runs.length} {runs.length === 1 ? 'command' : 'commands'}{changed.size ? ` · ${changed.size} ${changed.size === 1 ? 'file' : 'files'} changed` : ''}{failed ? ` · ${failed} did not end cleanly` : ''}{turn.running ? ' · working' : ''}</small>
     </header>
-    <ol className="console-list">{made.map(run => <Command key={run.id} node={run} changed={changedBy(run)} onPath={onPath} open={run.outcome === 'requested'} onRunAgain={onRunAgain} />)}</ol>
-    {quiet.length > 0 && <details className="console-quiet" open={!made.length}>
-      <summary>{quiet.length} {quiet.length === 1 ? 'command' : 'commands'} with no recorded file change</summary>
-      <ol className="console-list">{quiet.map(run => <Command key={run.id} node={run} changed={[]} onPath={onPath} onRunAgain={onRunAgain} />)}</ol>
-    </details>}
+    <ol className="console-list">{items.map(item => <ItemRow key={item.key} item={item} root={root} onPath={onPath} onRunAgain={onRunAgain} />)}</ol>
   </section>;
 }
 
@@ -227,9 +264,9 @@ export function ConsolePage({ client, snapshot, files, focusTurn, onPath, onConv
     {loading && <p className="muted" role="status">Reading the conversations…</p>}
     {nothing && <div className="empty-state compact"><p>No commands yet. The commands the Agent runs here, and the ones you run, appear in this list.</p></div>}
     {blocks.map(block => block.kind === 'message'
-      ? <Message key={block.turn.id} graph={graph} turn={block.turn} onPath={onPath} onConversation={onConversation} focused={focusTurn === block.turn.id} onRunAgain={off ? undefined : prepare} />
+      ? <Message key={block.turn.id} graph={graph} turn={block.turn} root={snapshot.project.root} onPath={onPath} onConversation={onConversation} focused={focusTurn === block.turn.id} onRunAgain={off ? undefined : prepare} />
       : <section key={block.records[0]!.commandId} className="console-message mine" aria-label="Your commands">
-          <header><strong>You</strong><small>{day(block.records.at(-1)!.startedAt)} · {block.records.length} {block.records.length === 1 ? 'command' : 'commands'}{block.records.some(r => r.state === 'running') ? ' · running' : ''}</small></header>
+          <header><strong>You ran</strong><small>{day(block.records.at(-1)!.startedAt)} · {block.records.length} {block.records.length === 1 ? 'command' : 'commands'}{block.records.some(r => r.state === 'running') ? ' · running' : ''}</small></header>
           <ol className="console-list">{block.records.map(record => <Yours key={record.commandId} record={record} client={client} projectId={projectId} changed={changedDuring(record)} onPath={onPath} onRunAgain={r => void start(r.command)} onStop={r => void stop(r)} />)}</ol>
         </section>)}
     {omitted > 0 && <p className="console-note">{omitted} earlier {omitted === 1 ? 'message is' : 'messages are'} not read here.</p>}
@@ -265,19 +302,9 @@ export function CommandPane({ client, snapshot }: { client: BrowserClient; snaps
   const graph = process?.graph, at = process?.at ?? null;
   const items = useMemo(() => {
     if (!graph || !process) return [];
-    const byId = new Map(graph.nodes.map(n => [n.id, n]));
     const turns = graph.turns.filter(t => t.conversationId === process.conversationId);
     const since = Math.min(...turns.map(t => t.start));
-    type Item = { at: number; key: string; agent?: GraphNode; changed?: GraphNode[]; quiet?: GraphNode[]; mine?: Mine };
-    const out: Item[] = [];
-    for (const run of graph.nodes.filter(n => n.kind === 'run' && turns.some(t => t.id === n.turn)).sort((a, b) => a.at - b.at)) {
-      const changed = graph.edges.filter(e => e.from === run.id && e.label === 'changed while it ran').map(e => byId.get(e.to)).filter((n): n is GraphNode => !!n && !!n.category);
-      if (!changed.length && run.outcome !== 'requested' && clean(run)) {
-        const last = out.at(-1);
-        if (last?.quiet) { last.quiet.push(run); continue; }
-        out.push({ at: run.at, key: 'quiet-' + run.id, quiet: [run] });
-      } else out.push({ at: run.at, key: run.id, agent: run, changed });
-    }
+    const out = commandItems(graph, graph.nodes.filter(n => n.kind === 'run' && turns.some(t => t.id === n.turn)));
     for (const record of mine ?? []) {
       const started = Date.parse(record.startedAt);
       if (started >= since && (at === null || started <= at)) out.push({ at: started, key: record.commandId, mine: record });
@@ -309,11 +336,7 @@ export function CommandPane({ client, snapshot }: { client: BrowserClient; snaps
   return <div className="command-pane">
     <ol ref={list} className="console-list command-pane-list" onScroll={event => { const e = event.currentTarget; atEnd.current = e.scrollHeight - e.scrollTop - e.clientHeight < 24; }}>
       {!items.length && <li className="console-note">No commands yet. The commands the Agent runs in this conversation appear here, and you can run your own below.</li>}
-      {items.map(item => item.quiet ? <li key={item.key} className="console-quiet-row"><details>
-          <summary>{item.quiet.length} {item.quiet.length === 1 ? 'command' : 'commands'} with no recorded file change</summary>
-          <ol className="console-list">{item.quiet.map(run => <Command key={run.id} node={run} changed={[]} onPath={showPath} onRunAgain={at === null && !off ? prepare : undefined} />)}</ol>
-        </details></li>
-        : item.agent ? <Command key={item.key} node={item.agent} changed={item.changed ?? []} onPath={showPath} open={item.agent.outcome === 'requested'} onRunAgain={at === null && !off ? prepare : undefined} />
+      {items.map(item => !item.mine ? <ItemRow key={item.key} item={item} root={snapshot.project.root} onPath={showPath} onRunAgain={at === null && !off ? prepare : undefined} />
         : <Yours key={item.key} record={item.mine!} client={client} projectId={projectId} changed={changedDuring(item.mine!)} onPath={showPath} onRunAgain={r => void start(r.command)} onStop={r => void stop(r)} />)}
     </ol>
     {at !== null ? <p className="console-note command-pane-replay">Replaying · commands run from here use the project as it is now.</p>

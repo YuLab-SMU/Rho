@@ -1,30 +1,37 @@
 import { useRef, useState } from 'react';
 import type { BrowserClient } from '../src/browser.js';
-import type { Statement, Trace } from '../src/notes-meaning.js';
+import { capital, topicOf, withoutPaths, type Statement, type Trace } from '../src/notes-meaning.js';
 import { Icon } from './icons.js';
 import './choices.css';
 
-// A choice the Agent took and kept going with, beside the options it did not take, each with what
-// it gives and the files that show it. Nothing waits on the person: the work stands as done, and
-// asking for another option is a message to the same conversation, written and sent by them.
+// A choice the Agent took and kept going with: what it is about, what was taken, and under it
+// each option the notes name with what that option gives and the files that show it. Nothing
+// waits on the person: the work stands as done, and asking for another option is a message to
+// the same conversation, written and sent by them.
 export function ChoiceOptions({ statement, trace, conversationId, client, projectId, onPath, onSent }: {
   statement: Statement; trace?: Trace; conversationId: string | null; client: BrowserClient; projectId: string;
   onPath: (path: string) => void; onSent?: (conversationId: string) => void;
 }) {
   const [asking, setAsking] = useState<number | null>(null);
   const later = (path: string) => trace?.files.find(f => f.path === path)?.later;
-  const files = (links: string[]) => links.length > 0 && <span className="choice-files">{links.map(path => <button key={path} className="work-file" title={path + (later(path) === 'kept' ? ' · a newer version was kept since this was written' : later(path) === 'written' ? ' · written again since this was written' : '')} onClick={() => onPath(path)}>
-    <Icon name={/\.(png|jpe?g|svg)$/i.test(path) ? 'image' : /\.(csv|tsv)$/i.test(path) ? 'table' : 'file'} size={13} /><span>{path.split('/').at(-1)}</span>{later(path) && <small>{later(path) === 'kept' ? 'newer version since' : 'written again since'}</small>}</button>)}</span>;
+  const files = (links: string[]) => links.map(path => <button key={path} className="work-file" title={path + (later(path) === 'kept' ? ' · a newer version was kept since this was written' : later(path) === 'written' ? ' · written again since this was written' : '')} onClick={() => onPath(path)}>
+    <Icon name={/\.(png|jpe?g|svg)$/i.test(path) ? 'image' : /\.(csv|tsv)$/i.test(path) ? 'table' : 'file'} size={13} /><span>{path.split('/').at(-1)}</span>{later(path) && <small>changed since</small>}</button>);
+  const { topic, rest } = topicOf(withoutPaths(statement.text, statement.links));
   const options = statement.alternatives ?? [];
-  return <div className="choice-options">
-    <div className="choice-option taken"><p className="choice-tag">In use</p><p>{statement.text}</p>{files(statement.links)}</div>
-    {options.map((option, i) => <div key={i} className="choice-option">
-      <p className="choice-tag">Another option</p><p>{option.text}</p>{files(option.links)}
-      {conversationId && (asking === i
-        ? <SendInstead conversationId={conversationId} client={client} projectId={projectId} taken={statement.text} option={option.text} onCancel={() => setAsking(null)} onSent={id => { setAsking(null); onSent?.(id); }} />
-        : <button className="text-button" onClick={() => setAsking(i)}>Use this instead…</button>)}
-    </div>)}
-    {!options.length && <p className="choice-none">The notes name no other option for this choice.</p>}
+  return <div className={'choice' + (topic ? '' : ' untitled')}>
+    <div className="choice-grid">
+      {topic && <p className="choice-topic">{topic}</p>}
+      <div className="choice-body">
+        <p className="choice-taken">{rest}</p>
+        {statement.links.length > 0 && <div className="choice-foot">{files(statement.links)}</div>}
+        {options.map((option, i) => <div key={i} className="choice-other">
+          <p><span className="choice-other-label">Other option</span>{capital(withoutPaths(option.text, option.links))}</p>
+          {option.links.length > 0 && <div className="choice-foot">{files(option.links)}</div>}
+          {conversationId && asking !== i && <button className="text-button choice-instead" onClick={() => setAsking(i)}>Use this instead…</button>}
+          {conversationId && asking === i && <SendInstead conversationId={conversationId} client={client} projectId={projectId} taken={statement.text} option={option.text} onCancel={() => setAsking(null)} onSent={id => { setAsking(null); onSent?.(id); }} />}
+        </div>)}
+      </div>
+    </div>
   </div>;
 }
 

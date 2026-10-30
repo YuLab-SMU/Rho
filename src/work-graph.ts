@@ -64,9 +64,10 @@ export interface GraphNode {
   // The commands one card stands for when a message's commands that touched no project file fold together.
   commands?: GraphNode[];
   path?: string; category?: FileKind; exists?: boolean; bytes?: number; modifiedAt?: string;
-  // A run: the command as named and as it actually ran, how it ended (its exit code when
-  // the Agent reported one), how long it ran and the last lines it printed.
-  command?: string; ran?: string; outcome?: ActivityOutcome; end?: string | null; durationMs?: number | null; output?: { text: string; lines: number; cut: boolean };
+  // A run: the command as named and as it actually ran, the Agent's own words on what it is
+  // for, how it ended (its exit code when the Agent reported one), how long it ran and the
+  // last lines it printed.
+  command?: string; ran?: string; purpose?: string; outcome?: ActivityOutcome; end?: string | null; durationMs?: number | null; output?: { text: string; lines: number; cut: boolean };
   // A native permission request for this step that waits for the person.
   waiting?: { conversationId: string; turn: string; permission: string; title: string; options: Array<{ id: string; name: string; kind: string }> };
   // The events that touched this node, oldest first.
@@ -154,7 +155,7 @@ export function buildWorkGraph(input: GraphInput): WorkGraph {
       if (activity.action === 'execute') {
         // A command is drawn from the start of its window, so what it made follows it in a replay.
         const command = activity.step.detail ?? activity.target ?? 'a command', from = window.from, step = activity.step;
-        const run: GraphNode = { id: 'r:' + turn.id + ':' + index, kind: 'run', title: shortCommand(displayCommand(command)), command: displayCommand(command), ran: command, at: from, turn: turn.id, outcome: activity.outcome,
+        const run: GraphNode = { id: 'r:' + turn.id + ':' + index, kind: 'run', title: shortCommand(displayCommand(command)), command: displayCommand(command), ran: command, ...(step.purpose ? { purpose: step.purpose } : {}), at: from, turn: turn.id, outcome: activity.outcome,
           end: commandEnd(step), durationMs: stepDuration(step), ...(step.output ? { output: { text: step.output.text, lines: step.output.lines, cut: step.output.cut } } : {}), events: [] };
         nodes.set(run.id, run);
         if (activity.step.id) byStep.set(activity.step.id, run.id);
