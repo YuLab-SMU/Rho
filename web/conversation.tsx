@@ -10,6 +10,8 @@ import { ComposerSettings, OpenSettings } from './settings-menu.js';
 import { BrandMark, brandOf } from './brand-marks.js';
 import { money, tokens } from './agent-manage.js';
 import { Icon, type IconName } from './icons.js';
+import { spendAmount, spendBasis, spendOf } from './holds.js';
+import type { Spend } from '../src/file-describer.js';
 import { stepFocus, useOutside } from './popover.js';
 import { turnAt } from '../src/replay.js';
 import { clock as clockAt } from './timeline-kinds.js';
@@ -184,7 +186,9 @@ function TurnView({ turn, running, observation, projectRoot, choose, choosing, a
 
 // Below the message box: the session's plan and how much of its context it has used, as the
 // Agent reported them. The whole record opens above it.
-function SessionStrip({ observation, agent }: { observation: NonNullable<Observation>; agent: string }) {
+function SessionStrip({ observation, agent, spend, describing, onDescribing }: { observation: NonNullable<Observation>; agent: string;
+  // What describing this conversation's files spent, and the person's switch for it.
+  spend: Spend | null; describing: boolean; onDescribing: (enabled: boolean) => void }) {
   const ref = useRef<HTMLDetailsElement>(null);
   useEffect(() => {
     const away = (event: MouseEvent) => { const box = ref.current; if (box?.open && !box.contains(event.target as Node)) box.open = false; };
@@ -205,6 +209,7 @@ function SessionStrip({ observation, agent }: { observation: NonNullable<Observa
         <span className="strip-tokens">{tokens(usage.used)} / {tokens(usage.size)}</span>
         {spent && <span>{spent}</span>}
       </span>}
+      {spend && spend.calls > 0 && <span className="strip-describe" title="What describing this conversation's files cost">descriptions {spendAmount(spend)}</span>}
     </summary>
     <div className="session-popover" role="group" aria-label="Session">
       {usage && <section className="session-context">
@@ -220,6 +225,18 @@ function SessionStrip({ observation, agent }: { observation: NonNullable<Observa
       </section>}
       {!usage && !entries.length && <p className="session-note">{agent} has not reported its context, cost or a plan for this session.</p>}
       {(usage || entries.length > 0) && <p className="session-source">As {agent} reported them at {clock(usage?.at ?? observation.plan?.at ?? observation.at)}. Rho does not measure these.</p>}
+      <section className="session-describe">
+        <button className="session-switch" role="switch" aria-checked={describing} onClick={() => onDescribing(!describing)}>
+          <span>Describe new files</span><span className={'menu-switch' + (describing ? ' on' : '')} aria-hidden="true" />
+        </button>
+        <p className="session-note">{describing
+          ? 'One sentence on each file the Agent writes, from this conversation\'s model through your Claude Code. Figures go as images when models.dev lists the model as reading them, else as the code that made them.'
+          : 'No model is asked; each file shows the facts read from it.'} For all conversations.</p>
+        {spend && spend.calls > 0 && <>
+          <p className="session-row"><span>Descriptions</span><strong>{spendAmount(spend)}</strong></p>
+          <p className="session-note">{spendBasis(spend)} Not in the cost above; your provider's bill may differ.</p>
+        </>}
+      </section>
     </div>
   </details>;
 }
@@ -428,7 +445,7 @@ export function AgentConversation({ snapshot, client, selectedId, onSelected, on
             : <button className="composer-send" aria-label={busy ? 'Sending…' : openId ? 'Send' : 'Start'} title={(openId ? 'Send' : 'Start') + ' (⌘ Enter)'} disabled={!canSend} onClick={send}><Icon name="arrow-up" size={16} stroke={2} /></button>}
         </div>
       </div>
-      {read?.observation && <SessionStrip observation={read.observation} agent={agentName} />}
+      {read?.observation && <SessionStrip observation={read.observation} agent={agentName} spend={spendOf(read.turns.map(t => t.descriptionSpend))} describing={settings.describing} onDescribing={enabled => void settings.describeFiles(enabled)} />}
     </div>
     {/* After the composer, so the newest lines end above it rather than behind it. */}
     <div ref={end} />

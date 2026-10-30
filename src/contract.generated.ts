@@ -5142,12 +5142,25 @@ export interface ConversationDecideOutput {
         model: string | null;
         at: string;
         facts?: string;
-        costUsd?: number;
+        strategy?: 'text' | 'image' | 'context';
+        from?: string[];
+        why?: string;
+        cost?: {
+          usd: number | null;
+          basis: 'reported' | 'estimated' | 'unknown';
+          note: string;
+        };
       } | null;
       state: 'describing' | 'described' | 'facts' | 'failed' | 'unknown';
       reason?: string;
     }[];
     descriptionsOmitted?: number;
+    descriptionSpend?: {
+      calls: number;
+      usd: number;
+      estimated: number;
+      unknown: number;
+    };
     decisions?: {
       changeId: string;
       requestDigest: string;
@@ -5385,12 +5398,25 @@ export interface ConversationPermissionOutput {
         model: string | null;
         at: string;
         facts?: string;
-        costUsd?: number;
+        strategy?: 'text' | 'image' | 'context';
+        from?: string[];
+        why?: string;
+        cost?: {
+          usd: number | null;
+          basis: 'reported' | 'estimated' | 'unknown';
+          note: string;
+        };
       } | null;
       state: 'describing' | 'described' | 'facts' | 'failed' | 'unknown';
       reason?: string;
     }[];
     descriptionsOmitted?: number;
+    descriptionSpend?: {
+      calls: number;
+      usd: number;
+      estimated: number;
+      unknown: number;
+    };
     decisions?: {
       changeId: string;
       requestDigest: string;
@@ -5660,12 +5686,25 @@ export interface ConversationReadOutput {
         model: string | null;
         at: string;
         facts?: string;
-        costUsd?: number;
+        strategy?: 'text' | 'image' | 'context';
+        from?: string[];
+        why?: string;
+        cost?: {
+          usd: number | null;
+          basis: 'reported' | 'estimated' | 'unknown';
+          note: string;
+        };
       } | null;
       state: 'describing' | 'described' | 'facts' | 'failed' | 'unknown';
       reason?: string;
     }[];
     descriptionsOmitted?: number;
+    descriptionSpend?: {
+      calls: number;
+      usd: number;
+      estimated: number;
+      unknown: number;
+    };
     decisions?: {
       changeId: string;
       requestDigest: string;
@@ -5893,12 +5932,25 @@ export interface ConversationSendOutput {
         model: string | null;
         at: string;
         facts?: string;
-        costUsd?: number;
+        strategy?: 'text' | 'image' | 'context';
+        from?: string[];
+        why?: string;
+        cost?: {
+          usd: number | null;
+          basis: 'reported' | 'estimated' | 'unknown';
+          note: string;
+        };
       } | null;
       state: 'describing' | 'described' | 'facts' | 'failed' | 'unknown';
       reason?: string;
     }[];
     descriptionsOmitted?: number;
+    descriptionSpend?: {
+      calls: number;
+      usd: number;
+      estimated: number;
+      unknown: number;
+    };
     decisions?: {
       changeId: string;
       requestDigest: string;
@@ -6030,6 +6082,9 @@ export interface ConversationSettingsCheckOutput {
     };
   };
   checking: ('claude-acp' | 'codex-acp')[];
+  describe?: {
+    enabled: boolean;
+  };
 }
 
 export interface ConversationSettingsReadInput {
@@ -6104,6 +6159,9 @@ export interface ConversationSettingsReadOutput {
     };
   };
   checking: ('claude-acp' | 'codex-acp')[];
+  describe?: {
+    enabled: boolean;
+  };
 }
 
 export interface ConversationSettingsUpdateInput {
@@ -6117,6 +6175,9 @@ export interface ConversationSettingsUpdateInput {
     'codex-acp'?: {
       [k: string]: string | boolean;
     };
+  };
+  describe?: {
+    enabled: boolean;
   };
 }
 
@@ -6188,6 +6249,9 @@ export interface ConversationSettingsUpdateOutput {
     };
   };
   checking: ('claude-acp' | 'codex-acp')[];
+  describe?: {
+    enabled: boolean;
+  };
 }
 
 export interface ConversationStartInput {
@@ -6321,12 +6385,25 @@ export interface ConversationStartOutput {
         model: string | null;
         at: string;
         facts?: string;
-        costUsd?: number;
+        strategy?: 'text' | 'image' | 'context';
+        from?: string[];
+        why?: string;
+        cost?: {
+          usd: number | null;
+          basis: 'reported' | 'estimated' | 'unknown';
+          note: string;
+        };
       } | null;
       state: 'describing' | 'described' | 'facts' | 'failed' | 'unknown';
       reason?: string;
     }[];
     descriptionsOmitted?: number;
+    descriptionSpend?: {
+      calls: number;
+      usd: number;
+      estimated: number;
+      unknown: number;
+    };
     decisions?: {
       changeId: string;
       requestDigest: string;
@@ -6508,12 +6585,25 @@ export interface ConversationStopOutput {
         model: string | null;
         at: string;
         facts?: string;
-        costUsd?: number;
+        strategy?: 'text' | 'image' | 'context';
+        from?: string[];
+        why?: string;
+        cost?: {
+          usd: number | null;
+          basis: 'reported' | 'estimated' | 'unknown';
+          note: string;
+        };
       } | null;
       state: 'describing' | 'described' | 'facts' | 'failed' | 'unknown';
       reason?: string;
     }[];
     descriptionsOmitted?: number;
+    descriptionSpend?: {
+      calls: number;
+      usd: number;
+      estimated: number;
+      unknown: number;
+    };
     decisions?: {
       changeId: string;
       requestDigest: string;

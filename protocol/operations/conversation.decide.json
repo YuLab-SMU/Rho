@@ -651,8 +651,54 @@
                         "facts": {
                           "type": "string"
                         },
-                        "costUsd": {
-                          "type": "number"
+                        "strategy": {
+                          "enum": [
+                            "text",
+                            "image",
+                            "context"
+                          ]
+                        },
+                        "from": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "why": {
+                          "type": "string"
+                        },
+                        "cost": {
+                          "type": "object",
+                          "properties": {
+                            "usd": {
+                              "anyOf": [
+                                {
+                                  "type": "number",
+                                  "minimum": 0
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "basis": {
+                              "enum": [
+                                "reported",
+                                "estimated",
+                                "unknown"
+                              ]
+                            },
+                            "note": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "usd",
+                            "basis",
+                            "note"
+                          ],
+                          "additionalProperties": true
                         }
                       },
                       "required": [
@@ -697,6 +743,34 @@
           "descriptionsOmitted": {
             "type": "integer",
             "minimum": 0
+          },
+          "descriptionSpend": {
+            "type": "object",
+            "properties": {
+              "calls": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "usd": {
+                "type": "number",
+                "minimum": 0
+              },
+              "estimated": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "unknown": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "calls",
+              "usd",
+              "estimated",
+              "unknown"
+            ],
+            "additionalProperties": true
           },
           "decisions": {
             "type": "array",

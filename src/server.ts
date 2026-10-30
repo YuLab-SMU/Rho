@@ -42,7 +42,7 @@ export interface NativeAdapterRegistration {
   proof: { kind: 'claude-code-init'; sessionId: string; clientVersion: string };
 }
 export const serviceLimits = { maxRequestBytes: 1024 * 1024, maxEventBytes: 65536, eventRetention: 256, maxSubscriptions: 8, maxQueue: 32, maxContexts: 128, maxBindings: 64, maxActivities: 256, maxContextBytes: 1024 * 1024, maxRetainedMetadataBytes: 32 * 1024 * 1024 };
-export interface ServiceConfig extends Partial<typeof serviceLimits>, Partial<typeof requestLimits>, PluginConfig { root: string; stateDir: string; coreBinary?: string; rscript: string; port?: number; nativeFolders?: Partial<typeof nativeFolderLimits>; workspace?: Partial<typeof workspaceLimits>; interactions?: Partial<typeof interactionLimits>; taskMap?: Partial<typeof taskMapLimits>; browser?: Partial<typeof browserLimits>; webRoot?: string; agentNativeActivity?: Partial<typeof nativeActivityLimits>; presentationWitness?: Partial<typeof presentationWitnessLimits>; visibility?: Partial<typeof visibilityLimits>; agentDelivery?: Partial<typeof agentDeliveryLimits>; deliveryTransportTimeoutMs?: number; claude?: string; agentBackend?: ConversationConfig['backend']; claudeAcp?: ConversationConfig['claudeAcp']; codex?: string; codexAcp?: ConversationConfig['codexAcp']; conversations?: Partial<typeof conversationLimits>; describe?: Partial<typeof describeLimits>; evidence?: Partial<typeof evidenceExportLimits>; connect?: Partial<typeof connectLimits> }
+export interface ServiceConfig extends Partial<typeof serviceLimits>, Partial<typeof requestLimits>, PluginConfig { root: string; stateDir: string; coreBinary?: string; rscript: string; port?: number; nativeFolders?: Partial<typeof nativeFolderLimits>; workspace?: Partial<typeof workspaceLimits>; interactions?: Partial<typeof interactionLimits>; taskMap?: Partial<typeof taskMapLimits>; browser?: Partial<typeof browserLimits>; webRoot?: string; agentNativeActivity?: Partial<typeof nativeActivityLimits>; presentationWitness?: Partial<typeof presentationWitnessLimits>; visibility?: Partial<typeof visibilityLimits>; agentDelivery?: Partial<typeof agentDeliveryLimits>; deliveryTransportTimeoutMs?: number; claude?: string; agentBackend?: ConversationConfig['backend']; claudeAcp?: ConversationConfig['claudeAcp']; codex?: string; codexAcp?: ConversationConfig['codexAcp']; conversations?: Partial<typeof conversationLimits>; describe?: Partial<typeof describeLimits>; modelsDev?: { url?: string; maxBytes?: number; timeoutMs?: number; refreshMs?: number; retryMs?: number }; evidence?: Partial<typeof evidenceExportLimits>; connect?: Partial<typeof connectLimits> }
 const ajv = new Ajv({ allErrors: true, strict: false, allowUnionTypes: true });
 // The same timestamp check every published contract uses; an unknown format would be skipped silently.
 ajv.addFormat('date-time', { type: 'string', validate: isNativeTime });
@@ -402,18 +402,33 @@ export class RhoService {
       },
       changed: async (project, conversationId) => { void this.serial(project.id, () => this.emit(project, 'conversation.changed', conversationId, localBrowserId)).catch(() => {}); },
       // The person's own Claude Code when one is named, with no tools and in an empty folder of
-      // Rho's state, so it reads only what it is given and loads no project instructions.
-      ...config.claude ? { describe: async (_project: unknown, request: { path: string; facts: string; excerpt: string; request: string; model: string | null }) => {
-        const { describeFile } = await import('@rho-workspace/plugin-agent/describe');
-        const cwd = path.join(this.state.directory, 'describer');
-        await fs.mkdir(cwd, { recursive: true, mode: 0o700 });
-        return describeFile({ binary: config.claude!, cwd, ...request });
-      } } : {}
+      // Rho's state, so it reads only what it is given and loads no project instructions. What
+      // a call cost comes from Claude Code when it knows the model's price, else from models.dev.
+      ...config.claude ? {
+        modelFacts: (model: string) => this.modelFacts(model),
+        describe: async (_project: unknown, request: import('./conversations.js').DescribeRequest) => {
+          const { describeFile } = await import('@rho-workspace/plugin-agent/describe'), { callCost } = await import('@rho-workspace/plugin-agent/models');
+          const cwd = path.join(this.state.directory, 'describer');
+          await fs.mkdir(cwd, { recursive: true, mode: 0o700 });
+          const said = await describeFile({ binary: config.claude!, cwd, ...request });
+          const listed = said.model ?? request.model;
+          return { text: said.text, model: said.model, cost: callCost(said, listed ? await this.modelFacts(listed).catch(() => null) : null) };
+        }
+      } : {}
     }, config.claude, config.conversations, { backend: config.agentBackend, claudeAcp: config.claudeAcp, codex: config.codex, codexAcp: config.codexAcp, settingsFile: path.join(this.state.directory, 'agent-settings.json') });
     this.conversations.describing = { ...describeLimits, ...config.describe };
     this.folderPicker = new NativeFolderPicker({ ...nativeFolderLimits, ...config.nativeFolders });
     this.server = http.createServer((req, res) => void this.handle(req, res));
     this.server.requestTimeout = 15000; this.server.headersTimeout = 10000;
+  }
+  // What models.dev lists about a model, from a catalog kept in Rho's state and read again
+  // from the file at most every ten minutes (the Agent component's modelCatalogLimits).
+  private catalog: { at: number; value: Promise<import('@rho-workspace/plugin-agent/models').ModelCatalog | null> } | null = null;
+  private async modelFacts(model: string) {
+    const { loadModelCatalog, findModel } = await import('@rho-workspace/plugin-agent/models');
+    if (!this.catalog || Date.now() - this.catalog.at > 600000) this.catalog = { at: Date.now(), value: loadModelCatalog(path.join(this.state.directory, 'models-dev.json'), { limits: this.config.modelsDev ?? {} }).then(r => r.catalog) };
+    const catalog = await this.catalog.value;
+    return catalog ? findModel(catalog, model) : null;
   }
   async start() {
     try {

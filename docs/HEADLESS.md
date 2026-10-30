@@ -849,14 +849,32 @@ See the [episode](REVIEW-EVIDENCE-EPISODE.md) for actual trials and open user ob
 While a message started in Rho runs, its project is compared with the start every
 `describe.everyMs`; each changed file that has rested `settleMs` is read for facts and
 recorded in `conversation.read` as the message's `descriptions`, bound to the digest of
-the bytes read (the same digest Files gives a kept version). Text files are then
+the bytes read (the same digest Files gives a kept version). Each file is then
 described in one sentence by the person's own Claude Code with no tools (Agent's
-`describeFile`), using the model the conversation uses; the sentence names its model, the
-version it read and the cost Claude Code reported for the call. A later version with the
-same facts keeps its sentence. Figures and PDFs keep their facts. Codex sessions and a service
-started without a named Claude binary record facts only. A description still being
-written when Rho stops reads back as `unknown`. Facts are observations; a sentence is
-generated and checks nothing.
+`describeFile`), using the model the conversation uses. A text file is described from
+its facts and first lines. A PNG, JPEG, GIF or WebP figure is sent as an image when
+[models.dev](https://models.dev) lists the model as taking images; otherwise, and for a
+PDF or another binary file, it is described from what made it: the command that wrote it, the lines of the scripts that
+command ran around where the figure is named, and the Agent's last words before it
+(`strategy` `context`, with `from` naming the scripts and `why` saying why the image
+was not sent). A model that refuses the image is given that context once, and the
+message's later figures are not sent as images. A binary file with nothing in the
+record that made it keeps its facts. A later version with the same facts keeps its
+sentence.
+
+Each sentence names its model, the version it read, its strategy and its `cost`:
+Claude Code's own figure when it knows the model's list price (`reported`), else the
+tokens it reports at the price models.dev lists (`estimated`, naming the listing used),
+else `unknown` with Claude Code's guess named. The message's `descriptionSpend` counts
+its calls, their dollars and how many were estimated or unknown; it is not part of the
+session cost the Agent reports. Rho keeps the models.dev catalog in `models-dev.json`
+in its state folder and reads it again once a day.
+
+`conversation.settings.update` with `describe: { enabled: false }` switches describing
+off for every conversation of the person: facts are still read, and no model is asked.
+Codex sessions and a service started without a named Claude binary record facts only.
+A description still being written when Rho stops reads back as `unknown`. Facts are
+observations; a sentence is generated and checks nothing.
 
 | Protected resource | Configuration and default | Exhaustion |
 | --- | --- | --- |
@@ -864,6 +882,9 @@ generated and checks nothing.
 | File reads for facts | `describe.maxFactBytes` 4 MiB, `maxDigestBytes` 256 MiB | Facts say "at least"; a larger file is not described. |
 | Files described per message | `describe.maxPerMessage` 24 | Further files are counted in `descriptionsOmitted`. |
 | The person's model budget | `describe.maxCalls` 24 per message, `againMs` 60 s per file, Agent `describeLimits` | Keep the facts and say the limit was reached. |
+| Memory for a figure sent as an image | `describe.maxImageBytes` 3.5 MiB | Describe it from what made it. |
+| Memory for what made a figure | file-describer `contextLimits`: 6 KiB of context, scripts up to 256 KiB, 25 lines before and 3 after | Cut the context; a larger script is not read. |
+| Network and disk for the model catalog | `modelsDev` in the service configuration; Agent `modelCatalogLimits`: 16 MiB, 20 s, once a day, 10 min after a failure | Keep the last catalog; without one, figures are described from what made them and costs Claude Code does not know are `unknown`. |
 
 ### Decisions on an answer and the Console
 

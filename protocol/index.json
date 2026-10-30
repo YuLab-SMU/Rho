@@ -233,8 +233,8 @@
     "conversation.decide": {
       "summary": "Person at this machine only: say to use an answer, or that it needs changes and why. The decision holds for the file versions that message kept when it was given and says nothing of later versions. A new decision supersedes the one before; none is removed. Refused while the Agent is still answering.",
       "path": "operations/conversation.decide.json",
-      "bytes": 30382,
-      "sha256": "8d7f5afd8a716c6c587036a3ec7ff70a5b4fc4ed0f6c91220bdd45e57890c146"
+      "bytes": 32818,
+      "sha256": "1b77a2a596b169a1dd4b0b449b28c0c7a565cdb4b3e6f8bc699f6d097abcc93c"
     },
     "conversation.delete": {
       "summary": "Person at this machine only: delete Rho's record of a conversation in the trash. The Agent's own session files are not touched. Repeating the request that started it is then refused.",
@@ -251,14 +251,14 @@
     "conversation.permission": {
       "summary": "Person at this machine only: record an offered choice for a pending Agent permission request. The original request identity is retained; repeated identical choices do not respond twice.",
       "path": "operations/conversation.permission.json",
-      "bytes": 30201,
-      "sha256": "be0c7018157321cbbe45cc9c3b4e2090bac0ab9367127f98e6531ab0c47b3633"
+      "bytes": 32637,
+      "sha256": "0c86b9d4cbdd328d3dab00afff65828a022e833fab7caff509a1be38ec3d6673"
     },
     "conversation.read": {
       "summary": "Read a conversation started in Rho: the person's messages, the Agent's visible text and tool steps, and how each message ended. Reading starts and resumes nothing.",
       "path": "operations/conversation.read.json",
-      "bytes": 45095,
-      "sha256": "442620143d518596ce7640d4538846cdc20c2dfef3dcb34a16e276422d2d5c28"
+      "bytes": 47679,
+      "sha256": "9de9e6ea6a36c6a38eeb7b0086cac7cc7736c119d049e0b08c2acbcadbdc663c"
     },
     "conversation.restore": {
       "summary": "Person at this machine only: return a conversation from the trash to the project's conversations, within the project's conversation limit.",
@@ -269,38 +269,38 @@
     "conversation.send": {
       "summary": "Person at this machine only: send the next message to a conversation started in Rho, which resumes the same Agent session. Refused while the previous message is being answered. A repeated changeId with the same text returns the original message.",
       "path": "operations/conversation.send.json",
-      "bytes": 30297,
-      "sha256": "779b9a9d42f61baae0bfa7c3a2d0fec91088da3a2ba6e8a8930b8a28f3307e9b"
+      "bytes": 32733,
+      "sha256": "0f24a40abd4020b5b820e1c47eee2b29ff5ff54700c505bb1a60c28dae656e27"
     },
     "conversation.settings.check": {
       "summary": "Person at this machine only: start the chosen Agent in this project to read the settings it offers, then remove that session and end the process. No message is sent; one check per Agent runs at a time.",
       "path": "operations/conversation.settings.check.json",
-      "bytes": 10161,
-      "sha256": "1c2d0784ef2ad7ee49ce6e642a6dab75094e03e5721f6f9ef0aedb0e194c3457"
+      "bytes": 10406,
+      "sha256": "74ee39f903133e83692938e2795a7a9122600d7f74c310ca2d8caff8e0fe13b6"
     },
     "conversation.settings.read": {
       "summary": "Person at this machine only: read the Agent and settings chosen for new conversations and what each Agent last offered. Reading starts nothing.",
       "path": "operations/conversation.settings.read.json",
-      "bytes": 9983,
-      "sha256": "fc71996ce82ffdba7e61b5ca11ab4b96d44dc6add7572bd70b4c812a3add7b78"
+      "bytes": 10228,
+      "sha256": "3906be056a7cba43823b1fa4aecc72400f4b6d8f8cb71a0e8e829ae6e68a9797"
     },
     "conversation.settings.update": {
-      "summary": "Person at this machine only: choose the Agent and its settings for new conversations, among the values that Agent last offered. A stale expectedVersion is refused.",
+      "summary": "Person at this machine only: choose the Agent and its settings for new conversations, among the values that Agent last offered, and whether a model describes the files a message writes. A stale expectedVersion is refused.",
       "path": "operations/conversation.settings.update.json",
-      "bytes": 11458,
-      "sha256": "f1e51764150f70ec1428791745fb798fe5a3730da61b97b6559c001f9ed6447c"
+      "bytes": 12007,
+      "sha256": "010379d16cd1a1861f826f0f5ee88493667988f6dd06927ff0be72f93308a1a8"
     },
     "conversation.start": {
       "summary": "Person at this machine only: start a conversation with the selected Claude Code or Codex Agent in this project. Rho selects the Agent plugin backend, attaches this project's MCP grant and records the message before sending it. Without backend or config, the person's saved Agent and settings are used and recorded with the conversation. A repeated changeId with the same text returns the original conversation and starts nothing.",
       "path": "operations/conversation.start.json",
-      "bytes": 30858,
-      "sha256": "abc22e29e94f06d21bf7ef5cee5b11ed78b495c4d3209dbcb695c3345bfec5ea"
+      "bytes": 33294,
+      "sha256": "e8e1d01b451f7ae634bc30f79820b59d2990906e2eaa562990180e55a9fd76c7"
     },
     "conversation.stop": {
       "summary": "Person at this machine only: ask the original Agent to stop answering one message. ACP cancellation is confirmed by the original prompt response; a lost connection keeps the outcome unknown. Legacy CLI conversations confirm process exit. Steps already taken stay done.",
       "path": "operations/conversation.stop.json",
-      "bytes": 30028,
-      "sha256": "62e78e172597bd79dfaf7a232bdba926c43a185bf847fa98019ff9c24da90a00"
+      "bytes": 32464,
+      "sha256": "2ad1e560eed55e78c1af32d96f32b5700ccc97a8a120f1f86c82c6810e11722e"
     },
     "conversation.trash": {
       "summary": "Person at this machine only: move a conversation that is not being answered to the trash. It is kept whole and not continued until restored; an idle connection to its Agent ends.",

@@ -34,7 +34,7 @@ export function useAgentSettings(client: BrowserClient, projectId: string) {
   const settings = store.value;
   const backend: Backend = settings?.backend ?? (settings?.serviceBackend === 'codex-acp' ? 'codex-acp' : 'claude-acp');
   // A change made in another tab is read first and this one applied on top, once.
-  async function update(patch: (current: AgentSettings) => { backend?: Backend; choices?: Partial<Record<Backend, Record<string, SettingValue>>> }) {
+  async function update(patch: (current: AgentSettings) => { backend?: Backend; choices?: Partial<Record<Backend, Record<string, SettingValue>>>; describe?: { enabled: boolean } }) {
     for (let attempt = 0; attempt < 2; attempt++) {
       const current = store.value ?? await client.call('conversation.settings.read', { projectId });
       try {
@@ -52,6 +52,9 @@ export function useAgentSettings(client: BrowserClient, projectId: string) {
     offered: (which: Backend) => settings?.offered[which] ?? null,
     choices: (which: Backend) => (settings?.choices[which] ?? {}) as Record<string, SettingValue>,
     chooseAgent: (which: Backend) => update(() => ({ backend: which })),
+    // Whether a model describes the files a message writes; the facts are read either way.
+    describing: settings?.describe?.enabled !== false,
+    describeFiles: (enabled: boolean) => update(() => ({ describe: { enabled } })),
     // null returns the setting to the Agent's own default.
     choose: (which: Backend, id: string, value: SettingValue | null) => update(current => {
       const next: Record<string, SettingValue> = { ...current.choices[which] };

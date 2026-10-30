@@ -97,7 +97,7 @@ export const operations: Record<string, any> = { ...base.operations,
   // The person's Agent and its settings (model, effort, mode…) among those the Agent offers.
   'conversation.configure': obj({ ...project, conversationId: changeId, configId: choiceText, value: choiceValue }),
   'conversation.settings.read': obj(project),
-  'conversation.settings.update': obj({ ...project, expectedVersion: integer, backend: { anyOf: [agentBackend, { type: 'null' }] }, choices: obj({ 'claude-acp': choices, 'codex-acp': choices }, []) }, ['projectId', 'expectedVersion']),
+  'conversation.settings.update': obj({ ...project, expectedVersion: integer, backend: { anyOf: [agentBackend, { type: 'null' }] }, choices: obj({ 'claude-acp': choices, 'codex-acp': choices }, []), describe: obj({ enabled: { type: 'boolean' } }, ['enabled']) }, ['projectId', 'expectedVersion']),
   'conversation.settings.check': obj({ ...project, backend: agentBackend }),
   // Claude Code or Codex running outside Rho, given this project and told how to start Rho's MCP server.
   'session.connect': obj({ ...project, agent: outsideAgent })
@@ -219,7 +219,9 @@ const sessionObservation = ownerSchema('agent-session', 'sessionObservationSchem
 // What one Agent offered, from a check or a conversation's first session, and the person's choices.
 const offered = response({ at: text, source: { enum: ['check', 'conversation'] }, adapter: { anyOf: [response({ name: text, version: text }, ['name']), { type: 'null' }] }, options: array(ownerSchema('agent-session', 'configOptionSchema')), omitted: integer });
 const agentSettings = response({ version: integer, updatedAt: { anyOf: [text, { type: 'null' }] }, backend: { anyOf: [agentBackend, { type: 'null' }] }, serviceBackend: { enum: ['claude-acp', 'codex-acp', 'claude-cli'] },
-  choices: response({ 'claude-acp': choices, 'codex-acp': choices }, []), offered: response({ 'claude-acp': offered, 'codex-acp': offered }, []), checking: array(agentBackend) });
+  choices: response({ 'claude-acp': choices, 'codex-acp': choices }, []), offered: response({ 'claude-acp': offered, 'codex-acp': offered }, []), checking: array(agentBackend),
+  // Whether a model describes the files a message writes; the facts are read either way.
+  describe: response({ enabled: { type: 'boolean' } }) }, ['version', 'updatedAt', 'backend', 'serviceBackend', 'choices', 'offered', 'checking']);
 // A tool step keeps its original identity, the Agent's bounded human title, its ACP
 // category and one identifying input (command, path, pattern or query), when it was
 // first and last reported, and for a command its exit code and the last lines it printed
@@ -232,11 +234,15 @@ const conversationTurn = response({ id: text, by: text, text: { type: 'string' }
   stop: { anyOf: [response({ requestedAt: text, by: text, reason: { enum: ['person', 'closing', 'wall-limit', 'output-limit', 'line-limit', 'identity'] } }), { type: 'null' }] },
   steps: array(conversationStep), omitted: integer, evidence: evidenceSchema, contexts: array(digest),
   // What the files it wrote hold: facts read from each file, then a model's sentence naming the
-  // version it read and the model (Rho's describeLimits).
+  // version it read, the model, how it was given the file (its first lines, the image, or what
+  // made it), and what the call cost and on what basis (Rho's describeLimits). The spend sums
+  // the message's model calls, those whose cost was estimated and those not known.
   descriptions: array(response({ path: text, version: digest, bytes: integer, modifiedAt: text, observedAt: text, facts: { type: 'string' }, partial: { type: 'boolean' },
-    sentence: { anyOf: [response({ text: { type: 'string' }, version: digest, model: { anyOf: [text, { type: 'null' }] }, at: text, facts: { type: 'string' }, costUsd: { type: 'number' } }, ['text', 'version', 'model', 'at']), { type: 'null' }] },
+    sentence: { anyOf: [response({ text: { type: 'string' }, version: digest, model: { anyOf: [text, { type: 'null' }] }, at: text, facts: { type: 'string' }, strategy: { enum: ['text', 'image', 'context'] }, from: array(text), why: { type: 'string' },
+      cost: response({ usd: { anyOf: [{ type: 'number', minimum: 0 }, { type: 'null' }] }, basis: { enum: ['reported', 'estimated', 'unknown'] }, note: { type: 'string' } }) }, ['text', 'version', 'model', 'at']), { type: 'null' }] },
     state: { enum: ['describing', 'described', 'facts', 'failed', 'unknown'] }, reason: { type: 'string' } }, ['path', 'version', 'bytes', 'modifiedAt', 'observedAt', 'facts', 'sentence', 'state'])),
   descriptionsOmitted: integer,
+  descriptionSpend: response({ calls: integer, usd: { type: 'number', minimum: 0 }, estimated: integer, unknown: integer }),
   decisions: array(response({ changeId: text, requestDigest: digest, decision: { enum: ['accepted', 'needs-changes'] }, note: { anyOf: [{ type: 'string' }, { type: 'null' }] }, by: text, at: text, supersedes: { anyOf: [text, { type: 'null' }] }, results: array(response({ path: text, resource: response({ id: text, version: text }) })) })),
   permissions: array(response({ id: text, title: { type: 'string' }, toolCallId: text, details: { type: 'string' }, options: array(response({ id: text, name: text, kind: text })), state: { enum: ['pending', 'selected', 'cancelled'] }, selected: text }, ['id', 'title', 'toolCallId', 'options', 'state'])),
   retry: { anyOf: [response({ attempt: { anyOf: [integer, { type: 'null' }] }, of: { anyOf: [integer, { type: 'null' }] }, status: { anyOf: [integer, { type: 'null' }] }, at: text }), { type: 'null' }] },
@@ -415,7 +421,7 @@ export const descriptions = {
   'console.stop': 'Person at this machine only: ask a running Console command and the processes it started to stop; they are killed after a short grace period.',
   'conversation.delete': 'Person at this machine only: delete Rho\'s record of a conversation in the trash. The Agent\'s own session files are not touched. Repeating the request that started it is then refused.',
   'conversation.settings.read': 'Person at this machine only: read the Agent and settings chosen for new conversations and what each Agent last offered. Reading starts nothing.',
-  'conversation.settings.update': 'Person at this machine only: choose the Agent and its settings for new conversations, among the values that Agent last offered. A stale expectedVersion is refused.',
+  'conversation.settings.update': 'Person at this machine only: choose the Agent and its settings for new conversations, among the values that Agent last offered, and whether a model describes the files a message writes. A stale expectedVersion is refused.',
   'conversation.settings.check': 'Person at this machine only: start the chosen Agent in this project to read the settings it offers, then remove that session and end the process. No message is sent; one check per Agent runs at a time.',
   'session.connect': 'Person at this machine only: give Claude Code or Codex running outside Rho access to this project, then add Rho\'s MCP server with that Agent\'s own `mcp add` (Claude Code: for this project folder; Codex: in its user configuration). A grant whose connection still reaches this service is kept, so a connected session keeps working; a new grant the Agent refuses is removed. No message is sent and no Agent session starts.',
   'conversation.read': 'Read a conversation started in Rho: the person\'s messages, the Agent\'s visible text and tool steps, and how each message ended. Reading starts and resumes nothing.',

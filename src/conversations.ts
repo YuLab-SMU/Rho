@@ -1,6 +1,6 @@
 import { projectPath, commandFiles, buildWorkGraph } from './work-graph.js';
 import { notesInstructions, projectNotesPath } from './project-notes.js';
-import { describeLimits, describable, fileFacts, type FileDescription } from './file-describer.js';
+import { addSpend, describeLimits, describable, fileFacts, figureContext, raster, type Cost, type FileDescription, type MadeStep, type Spend, type Strategy } from './file-describer.js';
 import { toolActivity } from './conversation-presentation.js';
 import {privateEvidencePath, type CapturePort, type TurnEvidence} from './evidence-capture.js';
 import * as fs from 'node:fs/promises';
@@ -75,7 +75,7 @@ interface Turn {
   evidence?: TurnEvidence;
   // What the files it wrote hold, read while it ran (see file-describer.ts); files past the
   // limit are counted.
-  descriptions?: FileDescription[]; descriptionsOmitted?: number;
+  descriptions?: FileDescription[]; descriptionsOmitted?: number; descriptionSpend?: Spend;
   contexts?: string[];
   decisions?: Decision[];
 }
@@ -150,7 +150,8 @@ type Choices = Record<string, string | boolean>;
 // (an explicit action that starts the Agent and sends nothing) or a conversation's first session.
 interface Offered { at: string; source: 'check' | 'conversation'; adapter: { name: string; version?: string } | null; options: ConfigOption[]; omitted: number }
 // The person's Agent and settings for new conversations, kept by this service for every project.
-interface AgentSettings { format: 1; version: number; updatedAt: string | null; backend: Backend | null; choices: Partial<Record<Backend, Choices>>; offered: Partial<Record<Backend, Offered>> }
+// `describe`: whether a model describes the files a message writes (on unless switched off).
+interface AgentSettings { format: 1; version: number; updatedAt: string | null; backend: Backend | null; choices: Partial<Record<Backend, Choices>>; offered: Partial<Record<Backend, Offered>>; describe?: { enabled: boolean } }
 const blankSettings = (): AgentSettings => ({ format: 1, version: 0, updatedAt: null, backend: null, choices: {}, offered: {} });
 type AcpDriver = Pick<ClaudeAcpConversation, 'configure' | 'inspect' | 'connected'>;
 const acpDriver = (driver: AgentConversation | undefined): driver is AgentConversation & AcpDriver => !!driver && 'configure' in driver;
@@ -167,7 +168,10 @@ interface Live { project: Project; conversation: Conversation; turn: Turn; contr
   // Describing the files it writes: the check under way, when each file was last given to the
   // model, how many times the model was asked, what a model is given of each file, and the
   // files counted past the limit.
-  describing?: Promise<void>; asked?: Map<string, number>; calls?: number; shown?: Map<string, { version: string; excerpt: string; textual: boolean }>; uncounted?: Set<string> }
+  describing?: Promise<void>; asked?: Map<string, number>; calls?: number; shown?: Map<string, { version: string; excerpt: string; textual: boolean }>; uncounted?: Set<string>;
+  // The model that wrote the first sentence when the conversation named none, and why its
+  // figures are no longer sent as images.
+  describer?: string; noImages?: string }
 export interface ConversationPorts {
   // The project's Agent grant for this conversation, written to a private connection file.
   grant(project: Project, conversation: { id: string; title: string; client: string }): Promise<{ file: string; principal: string }>;
@@ -177,8 +181,14 @@ export interface ConversationPorts {
   claudePlugins?(project: Project): Promise<string[]>;
   capture?: CapturePort;
   context?(project: Project, contextId: string): Promise<unknown>;
-  // One sentence on what a file holds, from the model the conversation's Agent uses.
-  describe?(project: Project, request: { path: string; facts: string; excerpt: string; request: string; model: string | null }): Promise<{ text: string; model: string | null; costUsd?: number | null }>;
+  // One sentence on what a file holds, from the model the conversation's Agent uses, and what
+  // models.dev lists about that model.
+  describe?(project: Project, request: DescribeRequest): Promise<{ text: string; model: string | null; cost: Cost }>;
+  modelFacts?(model: string): Promise<{ images: boolean; listed: string } | null>;
+}
+export interface DescribeRequest {
+  path: string; facts: string; request: string; model: string | null; strategy: Strategy;
+  excerpt?: string; context?: string; image?: { mediaType: 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp'; data: Buffer };
 }
 const identity = /^c-[a-f0-9]{16}$/;
 function cut(text: string, maxBytes: number) {
@@ -470,12 +480,12 @@ export class Conversations {
   }
   private settingsView(s: AgentSettings) {
     const service = this.config.backend ?? 'claude-acp';
-    return { version: s.version, updatedAt: s.updatedAt, backend: s.backend, serviceBackend: service, choices: s.choices, offered: s.offered, checking: [...this.checks.keys()] };
+    return { version: s.version, updatedAt: s.updatedAt, backend: s.backend, serviceBackend: service, choices: s.choices, offered: s.offered, checking: [...this.checks.keys()], describe: { enabled: s.describe?.enabled !== false } };
   }
   async settings() { return this.settingsView(await this.readSettings()); }
   // The person's Agent and settings for new conversations. Each Agent's choices are replaced as a
   // whole and must be among the values it last offered; a stale version is refused.
-  async updateSettings(input: { expectedVersion: number; backend?: Backend | null; choices?: Partial<Record<Backend, Choices>> }) {
+  async updateSettings(input: { expectedVersion: number; backend?: Backend | null; choices?: Partial<Record<Backend, Choices>>; describe?: { enabled: boolean } }) {
     requireThat(this.config.settingsFile, 'unavailable', 'This service keeps no Agent settings.');
     requireThat(input.backend == null || backends.includes(input.backend), 'invalid', 'Choose Claude Code or Codex.');
     return this.serial('settings', async () => {
@@ -490,6 +500,7 @@ export class Conversations {
         s.choices[backend] = values;
       }
       if (input.backend !== undefined) s.backend = input.backend;
+      if (input.describe) { requireThat(typeof input.describe.enabled === 'boolean', 'invalid', 'Say whether files are described.'); s.describe = { enabled: input.describe.enabled }; }
       s.version++; s.updatedAt = now();
       await atomicJson(this.config.settingsFile!, s);
       return this.settingsView(s);
@@ -792,12 +803,14 @@ export class Conversations {
     if (live.describing) return live.describing;
     const { project } = live;
     live.describing = (async () => {
+      // The person's switch, read once per check: off keeps the facts and asks no model.
+      const enabled = (await this.readSettings().catch(() => blankSettings())).describe?.enabled !== false;
       const changes = final ? live.turn.files?.changed ?? [] : compare(live.before!, await disk(project.root, this.limits.maxComparedFiles), this.limits.maxChangedFiles).changed;
-      for (const change of changes) if (change.change !== 'removed' && change.modifiedAt) await this.describeFile(live, change, final).catch(() => {});
+      for (const change of changes) if (change.change !== 'removed' && change.modifiedAt) await this.describeFile(live, change, final, enabled).catch(() => {});
     })().catch(() => {}).finally(() => { live.describing = undefined; });
     return live.describing;
   }
-  private async describeFile(live: Live, change: FileChange, final: boolean) {
+  private async describeFile(live: Live, change: FileChange, final: boolean, enabled: boolean) {
     const { project, conversation: c, turn } = live, file = change.path, limits = this.describing;
     if (!describable(file) || file === projectNotesPath || file.startsWith('@') || privateEvidencePath(file)) return;
     if (!final && Date.now() - Date.parse(change.modifiedAt!) < limits.settleMs) return;
@@ -824,24 +837,63 @@ export class Conversations {
     }
     if (record.sentence && (record.sentence.version === record.version || record.sentence.facts === record.facts) || this.writing.has(key)) return;
     const given = shown.get(file)!;
-    const reason = !given.textual ? 'A figure or PDF is described by its facts; the model is given text only.'
+    const reason = !enabled ? 'Descriptions by a model are switched off; the facts are kept.'
       : c.backend === 'codex-acp' ? 'Descriptions are written with Claude Code; this session\'s Agent is Codex.'
       : !this.ports.describe ? 'No model is set up to describe files.' : null;
-    if (reason) { if (record.reason !== reason) { record.state = 'facts'; record.reason = reason; this.schedule(project, c); } return; }
+    const keep = (why: string) => { if (record!.reason !== why) { record!.state = record!.sentence ? 'described' : 'facts'; record!.reason = why; this.schedule(project, c); } };
+    if (reason) { keep(reason); return; }
     const asked = (live.asked ??= new Map()).get(file);
     if (!final && asked !== undefined && Date.now() - asked < limits.againMs) return;
-    if ((live.calls ?? 0) >= limits.maxCalls) {
-      const limit = 'This message reached its model description limit (maxCalls); the facts are kept.';
-      if (record.reason !== limit) { record.state = 'facts'; record.reason = limit; this.schedule(project, c); }
-      return;
+    if ((live.calls ?? 0) >= limits.maxCalls) { keep('This message reached its model description limit (maxCalls); the facts are kept.'); return; }
+    const model = turn.model ?? (typeof c.config?.model === 'string' ? c.config.model : null) ?? live.describer ?? null;
+    let request: DescribeRequest = { path: file, facts: record.facts, request: turn.text, model, strategy: 'text', excerpt: given.excerpt }, version = given.version, why: string | undefined, from: string[] | undefined;
+    // A figure: the image itself to a model that takes images, else what made it.
+    const madeIt = async (because: string) => {
+      const made = await this.madeContext(live, change);
+      if (!made) return false;
+      request = { ...request, strategy: 'context', image: undefined, context: made.context }; from = made.from; why = because;
+      return true;
+    };
+    if (!given.textual) {
+      const kind = raster(file), listed = model && this.ports.modelFacts ? await this.ports.modelFacts(model).catch(() => null) : null;
+      const image = kind && listed?.images && !live.noImages ? await readHead(path.join(project.root, file), limits.maxImageBytes, limits.maxDigestBytes) : null;
+      if (image && image.bytes <= limits.maxImageBytes) { request = { ...request, strategy: 'image', image: { mediaType: kind!, data: image.data } }; version = image.version; }
+      else if (!await madeIt(!kind ? 'Only PNG, JPEG, GIF and WebP figures are sent as images.' : live.noImages ?? (!model ? 'The conversation names no model to look up.'
+        : !listed ? `models.dev does not list ${model}.` : !listed.images ? `models.dev lists ${listed.listed} as taking text only.` : 'The image is larger than maxImageBytes.'))) {
+        keep('Nothing in the record shows what made this figure, and it is not sent as an image; its facts are kept.'); return;
+      }
     }
     live.calls = (live.calls ?? 0) + 1; live.asked.set(file, Date.now()); this.writing.add(key);
-    const version = given.version, described = record, facts = record.facts;
+    const described = record, facts = record.facts;
     described.state = 'describing'; delete described.reason; this.schedule(project, c);
-    const model = turn.model ?? (typeof c.config?.model === 'string' ? c.config.model : null);
-    void this.serial('describe:' + project.id, () => this.ports.describe!(project, { path: file, facts: described.facts, excerpt: given.excerpt, request: turn.text, model }))
-      .then(said => { described.sentence = { text: said.text, version, model: said.model, at: now(), facts, ...(typeof said.costUsd === 'number' ? { costUsd: said.costUsd } : {}) }; described.state = 'described'; delete described.reason; },
-        error => { described.state = 'failed'; described.reason = error instanceof Error ? error.message : 'The description could not be written.'; })
+    const ask = () => this.serial('describe:' + project.id, () => this.ports.describe!(project, request));
+    void ask().catch(async error => {
+      // A model that did not take the image is given what made the figure, once; its other
+      // figures in this message are not sent as images again.
+      if (request.strategy !== 'image') throw error;
+      const message = error instanceof Error ? error.message : 'unknown error';
+      live.noImages = 'The model did not take an image earlier in this message: ' + message;
+      turn.descriptionSpend = addSpend(turn.descriptionSpend, null);
+      if (!await madeIt('The model did not take the image: ' + message) || (live.calls ?? 0) >= limits.maxCalls) throw error;
+      live.calls = (live.calls ?? 0) + 1; version = given.version;
+      return ask();
+    })
+      .then(said => {
+        described.sentence = { text: said.text, version, model: said.model, at: now(), facts, strategy: request.strategy, ...(from ? { from } : {}), ...(why ? { why } : {}), cost: said.cost };
+        described.state = 'described'; delete described.reason;
+        turn.descriptionSpend = addSpend(turn.descriptionSpend, said.cost);
+        if (!model && said.model) live.describer = said.model;
+      }, error => {
+        described.state = 'failed'; described.reason = error instanceof Error ? error.message : 'The description could not be written.';
+        turn.descriptionSpend = addSpend(turn.descriptionSpend, null);
+      })
       .finally(() => { this.writing.delete(key); this.schedule(project, c); });
+  }
+  // What made a figure, from this message's steps and the scripts its command ran.
+  private madeContext(live: Live, change: FileChange) {
+    return figureContext(change.path, change.modifiedAt!, live.turn.steps as MadeStep[], async (file, maxBytes) => {
+      const read = await readHead(path.join(live.project.root, file), maxBytes, maxBytes);
+      return read && read.bytes <= maxBytes ? read.data.toString('utf8') : null;
+    }, command => commandFiles(command, live.project));
   }
 }

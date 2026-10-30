@@ -698,15 +698,100 @@ then chooses Process.
 ### Left open
 
 - **Figures and PDFs** are described by their facts only; no model that reads images has
-  been chosen.
+  been chosen. Addressed in [the next pass](#figures-cost-and-a-switch).
 - **Sentences are not checked.** One misread a column name. The model's name and the
   version it read are shown; nothing compares the sentence with the file.
 - **Cost.** Each sentence spends the person's model budget, up to 24 calls per message; a
   probe call reported $0.013. The cost is kept with each sentence but not shown, and
-  there is no switch to turn descriptions off other than the limits.
+  there is no switch to turn descriptions off other than the limits. Addressed in
+  [the next pass](#figures-cost-and-a-switch).
 - **Many quick rewrites** of one file are described again at most once a minute; the facts
   follow every check.
 - **Step limit and document calls**: the eighth copy ran out of Claude Code steps, part of
   them spent on refused document calls for the notes.
 - **No independent person** has followed a run with these descriptions.
 
+## Figures, cost and a switch
+
+The descriptions pass left figures with their facts, kept each call's cost without
+showing it and had no way to turn describing off. The person asked for models.dev: a
+model that reads images is shown the figure, any other is given the context that made
+it; the cost is shown, and a switch turns describing off.
+
+### Changes
+
+- **models.dev** (Agent 0.4.22 `./models`): Rho keeps a compact copy of models.dev's
+  catalog in its state folder and reads it again once a day. A session's model is
+  matched by the provider it names, else its maker's own listing, else every listing.
+  `westlakehpc/deepseek-v4.1-flash[1m]` is listed under neither its gateway nor its
+  maker, so it matched 99 listings: most say it takes images, and their median price is
+  used.
+- **Image or context** (`Conversations`, `figureContext`): a PNG, JPEG, GIF or WebP
+  figure goes to Claude Code as an image block when the model is listed as taking
+  images. Otherwise, and for a PDF, the model is given the command that wrote the file,
+  the lines of the scripts that command ran around where the file is named, and the
+  Agent's last words before it. It is told it has not seen the figure. A model that
+  refuses an image is given that context once, and the message's later figures are not
+  sent as images.
+- **Cost**: for this model Claude Code reports its cost basis as `unknown` and guesses a
+  price, so each call is priced from its reported tokens at models.dev's price and
+  marked estimated. A model Claude Code knows keeps Claude Code's figure. Each sentence
+  keeps its cost and how it was priced; each message keeps `descriptionSpend`.
+- **Where it shows**: the strip under the Agent panel adds "descriptions ≈$0.0086" beside
+  the session's context and cost. Its popover holds the person's "Describe new files"
+  switch, which applies to every conversation, and the spend with how it was priced.
+  The Graph's inspector and a file line's hover text say how the model was given the
+  file, why an image was not sent, and the call's cost. A card described from code says
+  "from code".
+
+### What the run showed
+
+**A ninth copy.** Claude Code (DeepSeek V4.1 Flash) answered every question in 5.1 min
+with no permission requests. Thirteen description calls cost about $0.0086 in all at
+models.dev's median price, $0.0003 to $0.0012 each. The figure PNG (2885 × 2115 px,
+312 KB) was rewritten twice and sent as an image each time; its first sentence came
+19 s after its facts. That sentence called the mean ± SD panels "bubble charts". The
+next two named the panels by letter, the log-scale area axis and "mean ± SD" as
+labelled. The PDF of the same figure was described from `analysis.py` as "planned as a
+multi-panel figure", as instructed for a figure not seen. Sentences on text files
+stayed with their facts. The notes later described every file except the PDF, so the
+Graph led with the notes' words and only the PDF's card read "Described by
+deepseek-v4.1-flash from code".
+
+In the first popover, the switch sat between the context and cost and the note "As
+Claude Code reported them … Rho does not measure these", which then seemed to cover the
+descriptions too. The switch now follows that note in its own section. One call's cost
+read "≈<$0.001"; amounts under a cent now keep four decimals ("About $0.0006"). The
+PDF's reason read "A model is shown PNG, JPEG, GIF or WebP images only"; new reasons say
+"Only PNG, JPEG, GIF and WebP figures are sent as images." Turning the switch off in the
+browser wrote `describe.enabled: false` to the agent settings and changed the text below
+it to "No model is asked; each file shows the facts read from it"; turning it on wrote
+`true`. The popover fits at 1440, 760 and 390 px.
+
+### Verification
+
+- The Agent component's `test/agent-describe.test.mjs` checks the stream-json arguments
+  and image block, the context instructions, matching by provider, maker and median,
+  each cost basis, and the catalog cache with its retry delay. Plugins 125/125.
+- `test/file-describer.test.mjs` runs a message that writes a table and a figure. A model
+  listed as taking images gets the figure as an image at an estimated cost. A model
+  listed as text-only gets the command, the script's lines and the Agent's words, from
+  `plot.py`. A model that refuses the image gets the context once, and that call counts
+  as not priced. With the switch off no model is called. Each spend total is checked.
+- Rho 258/258, `check:contracts`, and the agent-canvas, sources, graph, agent-page,
+  agent-ui, review and ui:u2 browser acceptances passed on the final build.
+- The ninth copy was followed live with Studio screenshots every 20 s. The popover was
+  read at three widths and the switch turned off and on, and the Graph's inspector was
+  read for the PDF.
+
+### Left open
+
+- **Sentences are not checked.** The first image sentence misnamed the plot type.
+- **Prices are estimates.** The median of 99 listings may differ from what the gateway
+  charges. The session's own cost is Claude Code's figure and is shown as reported,
+  although for this model Claude Code may be guessing it too.
+- **Image input is what models.dev lists**, not what the gateway was seen to accept. The
+  fallback after a refused image is tested with a fake model only.
+- **PDFs** are not rendered to an image.
+- **Many quick rewrites** of one file are still described again at most once a minute.
+- **No independent person** has followed a run with these descriptions.

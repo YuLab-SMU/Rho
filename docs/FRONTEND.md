@@ -294,7 +294,11 @@ layer and the layered graph; `web/meaning.ts` reads the kept notes versions
 (`meaningLimits`) and `web/choices.tsx` draws a choice's options. `src/file-describer.ts`
 reads a file's facts (`fileFacts`, `describeLimits`) and chooses what a file holds as shown
 (`holdsOf`); `Conversations` checks the project while a message runs and asks the Agent
-component's `describeFile` for the sentence; `web/holds.tsx` draws the line with its source.
+component's `describeFile` for the sentence. A figure goes as an image when the Agent
+component's `./models` finds the model on models.dev taking images, else `figureContext`
+gathers what made it. `web/holds.tsx` draws the line with its source and the cost of its
+call. The session popover in `web/conversation.tsx` holds the person's switch for
+describing (`describeFiles` in `web/agent-settings.tsx`) and the conversation's spend.
 `src/studio-chapters.ts` names the parts of a message. The views find their file and
 moment through `web/process-context.ts`; `web/shell/process-views.tsx` frames a file's
 versions and `CommandPane` in `web/console.tsx` shows the conversation's commands. For the Graph, `foldVersions` merges a message's versions of one

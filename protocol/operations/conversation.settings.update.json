@@ -69,6 +69,18 @@
           }
         },
         "required": []
+      },
+      "describe": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled"
+        ]
       }
     },
     "required": [
@@ -414,6 +426,18 @@
             "codex-acp"
           ]
         }
+      },
+      "describe": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "additionalProperties": true
       }
     },
     "required": [
@@ -427,5 +451,5 @@
     ],
     "additionalProperties": true
   },
-  "description": "Person at this machine only: choose the Agent and its settings for new conversations, among the values that Agent last offered. A stale expectedVersion is refused."
+  "description": "Person at this machine only: choose the Agent and its settings for new conversations, among the values that Agent last offered, and whether a model describes the files a message writes. A stale expectedVersion is refused."
 }

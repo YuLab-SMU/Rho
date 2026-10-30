@@ -83,10 +83,14 @@ at the end of its run, not as it wrote them, even when told to.
 The [descriptions](SIMULATED-PROJECT-EPISODE.md#descriptions-while-the-work-goes-on) pass
 reads each file a running message writes: facts from its bytes within seconds, then one
 sentence from the conversation's model through the person's own Claude Code with no tools
-(Agent 0.4.21). Studio, the answer board and the Graph show the notes' words first, then
+(Agent 0.4.22). Studio, the answer board and the Graph show the notes' words first, then
 the sentence with its model, then the facts. In two live runs, results had facts within
-6 s of being written and sentences within half a minute (10 s median in the first);
-figures keep facts only.
+6 s of being written and sentences within half a minute (10 s median in the first).
+[Figures](SIMULATED-PROJECT-EPISODE.md#figures-cost-and-a-switch) go to the model as
+images when models.dev lists it as reading them, else as the code that made them. Each
+call is priced by Claude Code or from models.dev's price; the session popover shows the
+conversation's spend and a person-wide switch. In the ninth copy, 13 calls cost about
+$0.0086, and the first image sentence misnamed the plot type.
 
 ## Existing application
 
@@ -125,12 +129,12 @@ The first full changed run passed Plugins 109/109 and Rho 227/228; an undeclared
 new CSS variable caused the application failure and was corrected. The second pass
 (answer board, decisions, Console, Agent 0.4.19) passed Rho 240/240. The process Studio
 pass first failed 244/245 on another undeclared CSS variable, which was corrected;
-Rho 245/245 and Plugins 117/117. The project notes pass records Rho 249/249 and
-Plugins 120/120 in the [ledger](VERIFICATION.json). The agent-canvas, graph,
-agent-page, agent-ui, review, ui:u2 and sources browser acceptances passed on that
-build; ui:u2 first failed until the notes stopped opening with every project. The
-meaning layer pass passed Rho 253/253 and the same seven acceptances. The descriptions
-pass passed Rho 257/257, Plugins 122/122, the contract check and the seven acceptances.
+Rho 245/245 and Plugins 117/117. The figures and cost pass records Rho 258/258 and
+Plugins 125/125 in the [ledger](VERIFICATION.json), with the contract check and the
+agent-canvas, graph, agent-page, agent-ui, review, ui:u2 and sources browser
+acceptances. Earlier passes: project notes Rho 249/249 and Plugins 120/120 (ui:u2 first
+failed until the notes stopped opening with every project); meaning layer Rho 253/253;
+descriptions Rho 257/257 and Plugins 122/122, each with the same seven acceptances.
 The [episode](REVIEW-EVIDENCE-EPISODE.md) records contract, browser and installed results.
 The fixed 0.5.1 candidate passed 230/230; installed review/Graph/restart and both real
 clients passed. See the [preview](PREVIEW-0.5.1.md) for identities and limits.

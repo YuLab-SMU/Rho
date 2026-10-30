@@ -19,6 +19,7 @@ import { useTurns } from './work-turns.js';
 import { clock, failed, kindOfAction, span, timelineKinds, type TimelineKind } from './timeline-kinds.js';
 import { layered, type GraphLayer } from '../src/meaning-graph.js';
 import { modelName } from '../src/file-describer.js';
+import { costText, seen } from './holds.js';
 import type { Trace } from '../src/notes-meaning.js';
 import { useMeaning } from './meaning.js';
 import { ChoiceOptions } from './choices.js';
@@ -422,7 +423,7 @@ function MeaningCard({ node, place, client, snapshot, near, agentOf, selected, d
   const changed = trace?.files.some(f => f.later === 'kept') ? 'newer version since' : trace?.files.some(f => f.later === 'written') ? 'written again since' : '';
   const folder = node.path?.includes('/') ? node.path.split('/').slice(0, -1).join('/') : '';
   const d = file ? m.description : undefined;
-  const by = file && !d ? 'Nothing says what it holds yet' : d?.source === 'model' ? `Described by ${modelName(d.model)} · ${clock(d.at ?? 0)}${d.earlier ? ' · earlier version' : ''}`
+  const by = file && !d ? 'Nothing says what it holds yet' : d?.source === 'model' ? `Described by ${modelName(d.model)}${d.strategy === 'context' ? ' from code' : ''} · ${clock(d.at ?? 0)}${d.earlier ? ' · earlier version' : ''}`
     : d?.source === 'facts' ? `Read from the file · ${clock(d.at ?? 0)}${d.writing ? ' · describing…' : ''}`
     : m.message ? `Asked ${clock(m.message.at)} · no notes yet` : writtenBy(trace, agentOf);
   const kind = node.kind === 'question' && !m.statement && !m.message ? 'Section' : kindLabel(node);
@@ -539,8 +540,10 @@ function MeaningSaid({ node, graph, process, traces, client, snapshot, agentOf, 
     {file && m.description && m.description.source !== 'notes' && <div className="meaning-trace">
       <h3 className="caption">Where this comes from</h3>
       <p className="graph-facts">{m.description.source === 'model'
-        ? <>Described by {modelName(m.description.model)} at {clock(m.description.at ?? 0, true)}{m.description.earlier ? ', from an earlier version than the facts below' : ''}. A model's sentence from the facts and first lines it was given; it is not checked. The notes do not say what this file holds yet.</>
+        ? <>Described by {modelName(m.description.model)} at {clock(m.description.at ?? 0, true)} {seen(m.description)}{m.description.earlier ? ', from an earlier version than the facts below' : ''}. A model's sentence; it is not checked. The notes do not say what this file holds yet.</>
         : <>Read from the file at {clock(m.description.at ?? 0, true)}{m.description.writing ? '; a model is writing a sentence about it' : ''}. The notes do not say what this file holds yet.</>}</p>
+      {m.description.source === 'model' && m.description.why && <p className="graph-facts">{m.description.why}</p>}
+      {m.description.source === 'model' && m.description.cost && <p className="graph-facts">{costText(m.description.cost)}</p>}
       {m.description.source === 'model' && m.description.facts && <p className="graph-facts">Facts read from the file: {m.description.facts}</p>}
     </div>}
     {m.message && <div className="meaning-trace">

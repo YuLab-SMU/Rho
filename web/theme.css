@@ -744,11 +744,15 @@ ol.md-list { list-style-type: decimal; }
 .session-bar > span { display: block; height: 100%; border-radius: 3px; background: var(--color-accent); }
 .session-bar.high > span { background: var(--color-amber); }
 .session-note { color: var(--color-meta); font-size: 12px; font-variant-numeric: tabular-nums; }
+.session-switch { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; padding: 0; border: 0; background: none; color: var(--color-ink); font: inherit; font-weight: 600; text-align: left; cursor: pointer; }
+.session-switch:focus-visible { border-radius: 4px; }
+.strip-describe { margin-left: 6px; color: var(--color-meta); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .session-plan-list ol { list-style: none; margin: 2px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .session-plan-list li { display: flex; align-items: baseline; gap: 8px; line-height: 1.45; overflow-wrap: anywhere; }
 .session-plan-list li .plan-state { position: relative; top: -1px; }
 .session-plan-list li[data-status="completed"] { color: var(--color-meta); }
 .session-source { padding-top: 10px; border-top: 1px solid var(--color-divider); color: var(--color-meta); font-size: 11.5px; }
+.session-popover > * + .session-describe { padding-top: 12px; border-top: 1px solid var(--color-divider); }
 @container (max-width: 420px) { .strip-tokens, .composer-bar .summary-group { display: none; } .conversation-turns { padding-left: 16px; padding-right: 16px; } }
 .context-agent-where { font-size: 12px; }
 .context-section { padding: 20px; display: flex; flex-direction: column; gap: 14px; border-bottom: 1px solid var(--color-hairline); font-size: 13px; }
