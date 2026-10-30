@@ -9,10 +9,12 @@ The selected work is result review, retained historical evidence, macOS arm64
 [episode](REVIEW-EVIDENCE-EPISODE.md) records baseline, observations, fixes and limits.
 Native tools remain normal; Core is optional. No Core execution behavior changed.
 
-The [research positioning](PAPER.md) now starts from related work and a candidate
-question: how researchers determine which earlier judgments still apply after an
-analysis changes. Novelty and user value remain unestablished. This replaces the
-earlier paper experiment plan; it sets no product requirements or study schedule.
+The [research positioning](PAPER.md) grounds its candidate question in bioinformatics:
+how researchers connect scientific assumptions, actual computations and evidence
+when judging a biological claim as analysis changes. It examines single-cell
+inference, enrichment and cluster-to-report scenarios against related work.
+Novelty and user value remain unestablished; no product requirements or study
+schedule follow from this positioning.
 
 | Part | Current behavior | Evidence or remaining work |
 | --- | --- | --- |
