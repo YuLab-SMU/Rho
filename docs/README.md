@@ -36,7 +36,7 @@ were withdrawn on 2026-10-25; Git keeps their history.
 | [Development](DEVELOPMENT.md) | Stages, iterations, analyzing results, owner workflow and checks |
 | [macOS 0.5.1 preview](PREVIEW-0.5.1.md) | Fixed unsigned artifact, selected components, installation, acceptance and limits |
 | [Release](RELEASE.md) | Source publication and distribution |
-| [Research positioning](PAPER.md) | Readable scientific processes, researcher understanding, shared context and memory, a single-cell walkthrough, and direct related work (written in Chinese) |
+| [Research positioning](PAPER.md) | A proposed interaction linking readable analysis, scoped revision and Agent continuation; a single-cell walkthrough and direct related-work comparisons (written in Chinese) |
 
 The following records retain their historical backend or component scope. They do
 not impose layouts, colors or frontend process requirements:

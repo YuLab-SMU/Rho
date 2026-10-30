@@ -9,12 +9,13 @@ The selected work is result review, retained historical evidence, macOS arm64
 [episode](REVIEW-EVIDENCE-EPISODE.md) records baseline, observations, fixes and limits.
 Native tools remain normal; Core is optional. No Core execution behavior changed.
 
-The [research positioning](PAPER.md) connects readable process organization,
-researcher understanding and inspectable scientific explanations with shared context
-and Agent continuation. InsightLens, WaitGPT and shared-memory systems constrain
-novelty. How these representations support understanding and carry scoped judgments
-into later work remains a candidate question; improved human understanding is not yet
-an observed Rho result. No experiment plan or product requirement is added.
+The [research method proposal](PAPER.md) connects reading, scoped revision and
+Agent continuation through the same evolving analysis. Its single-cell walkthrough
+separates the version a person opens, the current analysis and the context supplied
+to an Agent, then traces how a revision and later results return to that analysis.
+Direct comparisons with InsightLens, WaitGPT, Mycelium and SEMV bound the proposed
+interaction contribution. This is not yet an implemented or validated Rho capability;
+no experiment plan, product specification or approval step is added.
 
 | Part | Current behavior | Evidence or remaining work |
 | --- | --- | --- |
