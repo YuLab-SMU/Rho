@@ -17,6 +17,10 @@ import { OwnerView } from './shell/owner.js';
 import { readPreview, type Preview } from './previews.js';
 import { useTurns } from './work-turns.js';
 import { clock, failed, kindOfAction, span, timelineKinds, type TimelineKind } from './timeline-kinds.js';
+import { layered, type GraphLayer } from '../src/meaning-graph.js';
+import type { Trace } from '../src/notes-meaning.js';
+import { useMeaning } from './meaning.js';
+import { ChoiceOptions } from './choices.js';
 import './graph.css';
 
 // The project as a graph of what the Agent did: the questions people asked, the files each
@@ -25,13 +29,20 @@ import './graph.css';
 // work, and a file is shown as it is now. The person and the Agent share one workspace; the
 // graph is a way into it, not a second one.
 
-const kindLabel = (node: GraphNode) => node.kind === 'question' ? 'Question' : node.kind === 'run' ? 'Run'
+const kindLabel = (node: GraphNode) => node.kind === 'question' ? 'Question' : node.kind === 'run' ? 'Run' : node.kind === 'finding' ? 'Finding' : node.kind === 'choice' ? 'Choice'
   : ({ data: 'Data', code: 'Script', results: 'Result', figures: 'Figure', notes: 'Note' } as Record<string, string>)[node.category ?? ''] ?? 'File';
-const kindIcon = (node: GraphNode): IconName => node.kind === 'question' ? 'question' : node.kind === 'run' ? 'run'
+const kindIcon = (node: GraphNode): IconName => node.kind === 'question' ? 'question' : node.kind === 'run' ? 'run' : node.kind === 'finding' ? 'check' : node.kind === 'choice' ? 'updown'
   : node.category === 'figures' ? 'image' : node.category === 'code' ? 'code' : node.category === 'notes' ? 'document' : node.category ? 'table' : 'file';
 const tone = (node: GraphNode) => node.kind !== 'file' ? node.kind : node.category ?? 'other';
 const hasPreview = (node: GraphNode) => node.kind === 'file' && !!node.resource && (/\.(png|jpe?g|svg)$/i.test(node.path!) || /\.csv$/i.test(node.path!));
-const sizeOf = (node: GraphNode, proxy: boolean) => proxy ? { width: 228, height: 58 } : { width: node.kind === 'question' ? 300 : node.kind === 'run' ? 236 : 256, height: node.kind === 'question' ? (node.answer ? 160 : 116) : node.kind === 'run' ? 88 : hasPreview(node) ? (/\.csv$/i.test(node.path!) ? 198 : 184) : 96 };
+const sizeOf = (node: GraphNode, proxy: boolean) => proxy ? { width: 228, height: 58 }
+  // The meaning layer's cards carry a statement or a description and where it came from.
+  : node.meaning ? { width: node.kind === 'file' ? 256 : 300, height: node.kind === 'question' ? 138 : node.kind === 'finding' || node.kind === 'choice' ? 124 : (hasPreview(node) ? (/\.csv$/i.test(node.path!) ? 226 : 212) : 112) }
+  : { width: node.kind === 'question' ? 300 : node.kind === 'run' ? 236 : 256, height: node.kind === 'question' ? (node.answer ? 160 : 116) : node.kind === 'run' ? 88 : hasPreview(node) ? (/\.csv$/i.test(node.path!) ? 198 : 184) : 96 };
+// Who wrote a statement of the notes, as far as the Agent's record says: the Agent of the message
+// whose kept version of the notes first holds it, or nobody it recorded.
+const writtenBy = (trace: Trace | undefined, agentOf: (conversationId: string) => string | undefined) => trace?.written ? (agentOf(trace.written.conversationId) ?? 'The Agent') + ' · ' + clock(trace.written.at) : 'Not in the Agent\'s record';
+const layerNames: Record<GraphLayer, string> = { both: 'Meaning + process', meaning: 'Meaning', process: 'Process' };
 type Layout = ReturnType<typeof laneLayout>;
 // The Agent's answer in a sentence or two, as plain text, for the question's card.
 const gist = (markdown?: string) => markdown ? markdown.replace(/```[\s\S]*?```/g, ' ').replace(/[#>*_`|]+/g, ' ').replace(/\[([^\]]+)\]\([^)]*\)/g, '$1').replace(/\s+/g, ' ').trim().slice(0, 220) : '';
@@ -75,17 +86,29 @@ const zoomLimits = { min: 0.2, max: 2 };
 // Below this zoom a card's text is too small to read; the graph opens no smaller than this.
 const readable = 0.78;
 
-export function WorkGraph({ initialResource, client, snapshot, files, agentNow, following, principalId, onFollow, onStopFollowing, onStudio, workspace, onAbout, onAgent }: {
+export function WorkGraph({ initialResource, client, snapshot, files, agentNow, following, principalId, notesText = '', onFollow, onStopFollowing, onStudio, workspace, onAbout, onAgent }: {
   initialResource?: {id:string;version:string}|null; client: BrowserClient; snapshot: WorkspaceSnapshot; files: ProjectFiles; agentNow: AgentNow | null; following: boolean; principalId?: string;
+  // The project notes as they stand, the source of the meaning layer.
+  notesText?: string;
   onFollow: () => void; onStopFollowing: () => void; onStudio: (compositionId: string, viewId?: string) => void; workspace: () => string;
   onAbout: (pluginId: string) => void; onAgent: (conversationId?: string) => void;
 }) {
   const { turns, problem, loading, omitted } = useTurns(client, snapshot);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => { if (!agentNow?.running) return; const timer = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer); }, [agentNow?.running]);
-  const graph = useMemo(() => foldVersions(buildWorkGraph({ turns, files: files.files.map(f => ({ path: f.path, bytes: f.bytes, modifiedAt: f.modifiedAt, category: f.category })), project: snapshot.project, kindOf, now: agentNow?.running ? now : Date.now() })),
-    [turns, files.files, snapshot.project, agentNow?.running ? now : 0]);
-  const shape = graph.nodes.map(n => n.id + (hasPreview(n) ? '+' : '') + (n.answer ? 'a' : '')).join('|') + '#' + graph.edges.map(e => e.id + '@' + e.turn).join('|');
+  const graphFiles = useMemo(() => files.files.map(f => ({ path: f.path, bytes: f.bytes, modifiedAt: f.modifiedAt, category: f.category })), [files.files]);
+  const process = useMemo(() => foldVersions(buildWorkGraph({ turns, files: graphFiles, project: snapshot.project, kindOf, now: agentNow?.running ? now : Date.now() })),
+    [turns, graphFiles, snapshot.project, agentNow?.running ? now : 0]);
+  // The meaning layer from the project notes, above the process layer by default; either can be
+  // shown alone. The choice is remembered in this browser.
+  const meaning = useMeaning(client, snapshot, process, graphFiles, notesText);
+  const hasMeaning = meaning.layer.nodes.length > 0;
+  const [layer, setLayer] = useState<GraphLayer>(() => { try { const v = localStorage.getItem('rho.graph.layer.v1'); return v === 'meaning' || v === 'process' ? v : 'both'; } catch { return 'both'; } });
+  function showLayer(next: GraphLayer) { fitted.current = false; setLayer(next); try { localStorage.setItem('rho.graph.layer.v1', next); } catch { /* this page only */ } }
+  const graph = useMemo(() => layered(process, hasMeaning ? meaning.layer : null, layer), [process, meaning.layer, hasMeaning, layer]);
+  const meaningRows = new Set(hasMeaning && layer !== 'process' ? meaning.layer.turns.map(t => t.id) : []);
+  const agentOf = (conversationId: string) => process.turns.find(t => t.conversationId === conversationId)?.agent;
+  const shape = graph.nodes.map(n => n.id + (hasPreview(n) ? '+' : '') + (n.answer ? 'a' : '') + (n.meaning?.description ? 'd' : '')).join('|') + '#' + graph.edges.map(e => e.id + '@' + e.turn).join('|');
   const layout = useMemo(() => laneLayout(graph, sizeOf, { x: 108, y: 26, lane: 64 }), [shape]);
   const byId = useMemo(() => new Map(graph.nodes.map(n => [n.id, n])), [graph]);
   const items = useMemo(() => new Map(layout.items.map(i => [i.id, i])), [layout]);
@@ -206,6 +229,11 @@ export function WorkGraph({ initialResource, client, snapshot, files, agentNow, 
     glide({ k, x: px - (px - v.x) * k / v.k, y: py - (py - v.y) * k / v.k });
   };
   function choose(id: string | null, move = false) { setSelected(id); if (id && move) center(id); }
+  // Following a statement or a file into the process layer: shown beside the meaning, then centred
+  // once the layout has it.
+  const [tracing, setTracing] = useState<string | null>(null);
+  function trace(id: string) { if (layer === 'meaning') showLayer('both'); setSelected(id); setTracing(id); }
+  useEffect(() => { if (tracing && layout.placed.has(tracing)) { center(tracing); setTracing(null); } }, [tracing, layout]);
   // Arrow keys walk the graph: along its edges left and right, within a column up and down.
   function walk(event: ReactKeyboardEvent<HTMLDivElement>) {
     const from = (document.activeElement as HTMLElement | null)?.dataset.node;
@@ -236,13 +264,15 @@ export function WorkGraph({ initialResource, client, snapshot, files, agentNow, 
   const dim = (id: string) => (focus && !focus.nodes.has(id)) || (matches && !matches.has(id));
   const selectedNode = selected ? byId.get(selected) : undefined;
   const live = cursor === null && agentNow?.running ? graph.live : null;
-  const counts = { questions: graph.nodes.filter(n => n.kind === 'question').length, files: graph.nodes.filter(n => n.kind === 'file').length, runs: graph.nodes.filter(n => n.kind === 'run').reduce((sum, n) => sum + (n.commands?.length ?? 1), 0) };
+  const counts = { questions: process.nodes.filter(n => n.kind === 'question').length, files: process.nodes.filter(n => n.kind === 'file').length, runs: process.nodes.filter(n => n.kind === 'run').reduce((sum, n) => sum + (n.commands?.length ?? 1), 0),
+    findings: meaning.layer.nodes.filter(n => n.kind === 'finding').length, choices: meaning.layer.nodes.filter(n => n.kind === 'choice').length };
 
   if (!snapshot.conversations?.length) return <section className="graph-page"><GraphHead counts={null} /><div className="studio-empty"><span className="empty-symbol"><Icon name="graph" size={26} stroke={1.5} /></span><h2>Nothing to draw yet</h2>
     <p>When you ask the Agent something here, the files it reads, the scripts it changes and runs, and what they produce are drawn as one graph.</p>
     <div className="empty-actions"><button className="primary" onClick={() => onAgent()}><Icon name="prompt" size={17} stroke={1.6} /><span>Ask Agent</span></button></div></div></section>;
   return <section className="graph-page" aria-labelledby="graph-title">
     <GraphHead counts={counts} omitted={omitted + graph.omittedTurns}>
+      {hasMeaning && <div className="graph-layers" role="group" aria-label="Layers">{(['both', 'meaning', 'process'] as GraphLayer[]).map(l => <button key={l} aria-pressed={layer === l} onClick={() => showLayer(l)}>{layerNames[l]}</button>)}</div>}
       <label className="graph-search"><Icon name="search" size={15} /><input type="search" placeholder="Find in this graph" aria-label="Find in this graph" value={query} onChange={e => setQuery(e.target.value)}
         onKeyDown={e => { if (e.key === 'Enter' && matches?.size) { const first = graph.nodes.find(n => matches.has(n.id)); if (first) choose(first.id, true); } }} />{matches && <small>{matches.size}</small>}</label>
       {live?.waiting && <button className="graph-waiting" onClick={() => choose(live.node, true)}><span className="pulse-dot" aria-hidden="true" />Needs your choice</button>}
@@ -259,8 +289,11 @@ export function WorkGraph({ initialResource, client, snapshot, files, agentNow, 
             <Edges layout={layout} focus={focus} shown={edgeShown} labels={near || !!focus} dim={dim} live={liveItem(live?.node)} />
             {[...layout.items].sort((a, b) => a.lane - b.lane || layout.placed.get(a.id)!.column - layout.placed.get(b.id)!.column || layout.placed.get(a.id)!.y - layout.placed.get(b.id)!.y).map(item => {
               const p = layout.placed.get(item.id)!, node = byId.get(item.node)!, flag = liveItem(live?.node) === item.id ? (agentNow?.agent ?? 'Agent') + ' · ' + live!.label : null;
-              if (item.proxy) return <Reference key={item.id} item={item} node={node} place={p} home={layout.rows.findIndex(r => r.lane === items.get(item.node)!.lane) + 1}
+              const homeRow = layout.rows.find(r => r.lane === items.get(item.node)!.lane);
+              if (item.proxy) return <Reference key={item.id} item={item} node={node} place={p} home={!homeRow || meaningRows.has(homeRow.turn) ? 'the notes' : 'message ' + (layout.rows.filter(r => !meaningRows.has(r.turn)).indexOf(homeRow) + 1)}
                 dimmed={!!dim(item.node)} later={!proxyShown(item)} selected={selected === item.node} live={flag} onSelect={() => choose(item.node, true)} />;
+              if (node.meaning) return <MeaningCard key={item.id} node={node} place={p} client={client} snapshot={snapshot} near={near} agentOf={agentOf}
+                selected={selected === node.id} dimmed={!!dim(node.id)} later={!shown(node.id)} arrived={arrived.has(node.id)} onSelect={() => choose(selected === node.id ? null : node.id)} onOpen={() => choose(node.id, true)} />;
               return <Card key={item.id} node={node} place={p} client={client} snapshot={snapshot} near={near}
                 selected={selected === node.id} dimmed={!!dim(node.id)} later={!shown(node.id) || cursor !== null && (node.capturedAt ?? 0) > cursor} current={current?.node === node.id} arrived={arrived.has(node.id)}
                 live={flag} onSelect={() => choose(selected === node.id ? null : node.id)} onOpen={() => choose(node.id, true)} />;
@@ -279,11 +312,12 @@ export function WorkGraph({ initialResource, client, snapshot, files, agentNow, 
             <span><i className="line reported" />The Agent reported it</span>
             <span><i className="line named" />Named in a command</span>
             <span><i className="line observed" />Seen changing on disk</span>
+            {hasMeaning && layer !== 'process' && <span><i className="line declared" />Written in the notes</span>}
           </div>
         </>}
       </div>
       {selectedNode && <Inspector key={selectedNode.id} node={cursor !== null && (selectedNode.capturedAt ?? 0) > cursor ? { ...selectedNode, resource: undefined, gap: 'This snapshot was captured after the selected replay time.' } : selectedNode} graph={graph} byId={byId} client={client} snapshot={snapshot} principalId={principalId} workspace={workspace}
-        onStudio={onStudio} onAbout={onAbout} onAgent={onAgent} onSelect={id => choose(id, true)} onClose={() => setSelected(null)} />}
+        onStudio={onStudio} onAbout={onAbout} onAgent={onAgent} onSelect={id => choose(id, true)} onTrace={trace} agentOf={agentOf} process={process} traces={meaning.layer.traces} onClose={() => setSelected(null)} />}
     </div>
     {graph.events.length > 0 && <Timeline graph={graph} cursor={cursor} playing={playing} running={!!agentNow?.running} speed={speed} onSpeed={setSpeed}
       onCursor={at => { setPlaying(false); setCursor(at); }} onPlay={() => { if (playing) setPlaying(false); else { if (cursor !== null && cursor >= times.at(-1)!) setCursor(null); setPlaying(true); } }} />}
@@ -317,10 +351,11 @@ function MiniMap({ byId, layout, view, canvas, dim, live, onMove }: { byId: Map<
   </div>;
 }
 
-function GraphHead({ counts, omitted = 0, children }: { counts: { questions: number; files: number; runs: number } | null; omitted?: number; children?: ReactNode }) {
+function GraphHead({ counts, omitted = 0, children }: { counts: { questions: number; files: number; runs: number; findings?: number; choices?: number } | null; omitted?: number; children?: ReactNode }) {
   const words = counts ? [counts.questions + (counts.questions === 1 ? ' question' : ' questions'), counts.files + (counts.files === 1 ? ' file' : ' files'), counts.runs + (counts.runs === 1 ? ' run' : ' runs')].join(' · ') : '';
+  const said = counts && (counts.findings || counts.choices) ? [counts.findings ? counts.findings + (counts.findings === 1 ? ' finding' : ' findings') : '', counts.choices ? counts.choices + (counts.choices === 1 ? ' choice' : ' choices') : ''].filter(Boolean).join(' and ') : '';
   return <header className="graph-head">
-    <div className="graph-heading"><h1 id="graph-title">Graph</h1><p>{counts ? `What the Agent did: ${words}.` : 'What the Agent did, drawn as one graph.'}{omitted > 0 && ` ${omitted} earlier ${omitted === 1 ? 'message is' : 'messages are'} not drawn.`}</p></div>
+    <div className="graph-heading"><h1 id="graph-title">Graph</h1><p>{counts ? `What the Agent did: ${words}.` : 'What the Agent did, drawn as one graph.'}{said && ` The notes record ${said}.`}{omitted > 0 && ` ${omitted} earlier ${omitted === 1 ? 'message is' : 'messages are'} not drawn.`}</p></div>
     {children && <div className="graph-tools">{children}</div>}
   </header>;
 }
@@ -357,6 +392,29 @@ function Card({ node, place, client, snapshot, near, selected, dimmed, later, cu
   </button>;
 }
 
+// A card of the meaning layer: the question with its to-dos, a finding, a choice, or a file by what
+// the notes say it holds. Each says who wrote it as far as the Agent's record shows, and when a
+// file it names has changed since.
+function MeaningCard({ node, place, client, snapshot, near, agentOf, selected, dimmed, later, arrived, onSelect, onOpen }: {
+  node: GraphNode; place: { x: number; y: number; width: number; height: number }; client: BrowserClient; snapshot: WorkspaceSnapshot; near: boolean;
+  agentOf: (conversationId: string) => string | undefined; selected: boolean; dimmed: boolean; later: boolean; arrived: boolean; onSelect: () => void; onOpen: () => void;
+}) {
+  const m = node.meaning!, file = node.kind === 'file', trace = file ? m.description?.trace : m.trace;
+  const changed = trace?.files.some(f => f.later === 'kept') ? 'newer version since' : trace?.files.some(f => f.later === 'written') ? 'written again since' : '';
+  const folder = node.path?.includes('/') ? node.path.split('/').slice(0, -1).join('/') : '';
+  const by = file && !m.description ? 'No description in the notes' : writtenBy(trace, agentOf);
+  const kind = node.kind === 'question' && !m.statement ? 'Section' : kindLabel(node);
+  return <button className={'graph-node meaning kind-' + node.kind + ' tone-' + tone(node)} data-node={node.id} style={{ left: place.x, top: place.y, width: place.width, height: place.height }}
+    aria-pressed={selected} aria-label={`${kind}: ${file ? (m.description?.text ? m.description.text + ', ' : '') + node.path : node.text}. ${by}`} data-dimmed={dimmed || undefined} data-later={later || undefined} data-arrived={arrived || undefined} data-missing={file && !node.exists || undefined}
+    onClick={onSelect} onDoubleClick={onOpen}>
+    <span className="graph-node-head"><span className="graph-node-icon"><Icon name={kindIcon(node)} size={15} stroke={1.8} /></span><span className="graph-node-kind">{kind}{file && folder && <span className="graph-node-folder"> · {folder}</span>}{node.kind === 'question' && <span className="graph-node-folder"> · {m.session}</span>}</span></span>
+    <strong className="graph-node-title meaning-text" title={file ? node.path : node.text}>{file ? m.description?.text || node.title : node.title}</strong>
+    {file && m.description?.text && <span className="graph-node-path">{node.title}</span>}
+    {file && hasPreview(node) && <CardPreview client={client} snapshot={snapshot} node={node} shown={near && !later} />}
+    <span className="graph-node-meta">{node.kind === 'question' && m.todos ? `${m.todos.done} of ${m.todos.total} to-dos done · ` : ''}{by}{changed && <span className="meaning-changed"> · {changed}</span>}{file && !node.exists && ' · not in the folder now'}</span>
+  </button>;
+}
+
 function Edges({ layout, focus, shown, labels, dim, live }: { layout: Layout; focus: ReturnType<typeof lineage> | null; shown: (e: GraphEdge) => boolean; labels: boolean; dim: (id: string) => boolean | null; live: string | null }) {
   return <svg className="graph-edges" width={layout.width} height={layout.height} aria-hidden="true" style={{ overflow: 'visible' }}>
     <defs>
@@ -381,20 +439,21 @@ function Edges({ layout, focus, shown, labels, dim, live }: { layout: Layout; fo
 }
 
 // A file an earlier message touched, as this message's row refers to it. Choosing it goes there.
-function Reference({ item, node, place, home, dimmed, later, selected, live, onSelect }: { item: LaneItem; node: GraphNode; place: { x: number; y: number; width: number; height: number }; home: number; dimmed: boolean; later: boolean; selected: boolean; live: string | null; onSelect: () => void }) {
+function Reference({ item, node, place, home, dimmed, later, selected, live, onSelect }: { item: LaneItem; node: GraphNode; place: { x: number; y: number; width: number; height: number }; home: string; dimmed: boolean; later: boolean; selected: boolean; live: string | null; onSelect: () => void }) {
   return <button className={'graph-node graph-ref tone-' + tone(node)} data-node={item.id} style={{ left: place.x, top: place.y, width: place.width, height: place.height }}
-    aria-label={`${node.kind === 'file' ? node.path : node.title}, from message ${home}. Go there`} aria-pressed={selected} data-dimmed={dimmed || undefined} data-later={later || undefined} data-live={live ? '' : undefined} onClick={onSelect}>
+    aria-label={`${node.kind === 'file' ? node.path : node.title}, from ${home}. Go there`} aria-pressed={selected} data-dimmed={dimmed || undefined} data-later={later || undefined} data-live={live ? '' : undefined} onClick={onSelect}>
     {live && <span className={'graph-flag' + (node.waiting ? ' waiting' : '')}><span className="pulse-dot" aria-hidden="true" />{live}</span>}
-    <span className="graph-node-head"><span className="graph-node-icon"><Icon name={kindIcon(node)} size={13} stroke={1.8} /></span><span className="graph-node-kind">{kindLabel(node)} · from message {home}</span><Icon name="back" size={12} /></span>
+    <span className="graph-node-head"><span className="graph-node-icon"><Icon name={kindIcon(node)} size={13} stroke={1.8} /></span><span className="graph-node-kind">{kindLabel(node)} · from {home}</span><Icon name="back" size={12} /></span>
     <strong className="graph-node-title">{node.title}</strong>
   </button>;
 }
 
 // The person's own place to read one node: what happened to it and when, where it came from and
 // what it fed, and for a file the file itself in the view its kind has.
-function Inspector({ node, graph, byId, client, snapshot, principalId, workspace, onStudio, onAbout, onAgent, onSelect, onClose }: {
-  node: GraphNode; graph: Graph; byId: Map<string, GraphNode>; client: BrowserClient; snapshot: WorkspaceSnapshot; principalId?: string; workspace: () => string;
-  onStudio: (compositionId: string, viewId?: string) => void; onAbout: (pluginId: string) => void; onAgent: (conversationId?: string) => void; onSelect: (id: string) => void; onClose: () => void;
+function Inspector({ node, graph, process, traces, byId, client, snapshot, principalId, workspace, onStudio, onAbout, onAgent, onSelect, onTrace, agentOf, onClose }: {
+  node: GraphNode; graph: Graph; process: Graph; traces: GraphEdge[]; byId: Map<string, GraphNode>; client: BrowserClient; snapshot: WorkspaceSnapshot; principalId?: string; workspace: () => string;
+  onStudio: (compositionId: string, viewId?: string) => void; onAbout: (pluginId: string) => void; onAgent: (conversationId?: string) => void; onSelect: (id: string) => void;
+  onTrace: (id: string) => void; agentOf: (conversationId: string) => string | undefined; onClose: () => void;
 }) {
   const shell = useContext(ShellContext);
   const related = snapshot.annotations.filter((t: any) => node.resource && (t.anchor?.resource?.id === node.resource.id && t.anchor?.resource?.version === node.resource.version || t.messages?.some((m: any) => m.resources?.some((r: any) => r.id === node.resource!.id && r.version === node.resource!.version))));
@@ -412,11 +471,12 @@ function Inspector({ node, graph, byId, client, snapshot, principalId, workspace
   return <aside className="graph-inspector" aria-label={kindLabel(node) + ' ' + node.title}>
     <header className="graph-inspector-head">
       <span className={'graph-node-icon tone-' + tone(node)}><Icon name={kindIcon(node)} size={16} stroke={1.8} /></span>
-      <div><small>{kindLabel(node)}</small><h2 title={node.path ?? node.text}>{node.kind === 'file' ? node.title : node.kind === 'run' ? (node.commands ? node.title : 'Ran a command') : 'You asked'}</h2>{node.kind === 'file' && <p>{node.path}{node.bytes !== undefined && node.exists ? ' · ' + size(node.bytes) : ''}</p>}</div>
+      <div><small>{node.meaning && node.kind !== 'file' ? kindLabel(node) + ' · in the notes' : kindLabel(node)}</small><h2 title={node.path ?? node.text}>{node.kind === 'file' ? node.title : node.kind === 'run' ? (node.commands ? node.title : 'Ran a command') : node.meaning ? node.meaning.session : 'You asked'}</h2>{node.kind === 'file' && <p>{node.path}{node.bytes !== undefined && node.exists ? ' · ' + size(node.bytes) : ''}</p>}</div>
       <button className="icon-button" aria-label="Close" onClick={onClose}><Icon name="close" size={17} /></button>
     </header>
     <div className="graph-inspector-body">
-      {node.kind === 'question' && <section className="graph-said"><p className="graph-question">{node.text}</p>
+      {node.meaning && <MeaningSaid node={node} graph={graph} process={process} traces={traces} client={client} snapshot={snapshot} agentOf={agentOf} onAgent={onAgent} onTrace={onTrace} onSelect={onSelect} />}
+      {node.kind === 'question' && !node.meaning && <section className="graph-said"><p className="graph-question">{node.text}</p>
         <p className="graph-facts">{[node.agent, ended[node.state ?? ''] ?? node.state, took && 'took ' + took, node.model].filter(Boolean).join(' · ')}</p>
         {node.answer && <div className="graph-answer"><AgentMarkdown text={node.answer} streaming={node.state === 'running'} /></div>}
         <button onClick={() => onAgent(node.conversationId)}><Icon name="prompt" size={15} />Show the conversation</button></section>}
@@ -433,9 +493,44 @@ function Inspector({ node, graph, byId, client, snapshot, principalId, workspace
       {node.kind === 'file' && !node.exists && <p className="muted">This file was not in the project folders when they were last read. It may have been moved or removed.</p>}
       {from.length > 0 && <section><h3 className="caption">Comes from</h3><ul className="graph-relations">{relation(from, 'from')}</ul></section>}
       {to.length > 0 && <section><h3 className="caption">Leads to</h3><ul className="graph-relations">{relation(to, 'to')}</ul></section>}
-      {node.kind === 'file' && <section><h3 className="caption">What happened</h3><ol className="graph-history">{node.events.map(e => <li key={e.key}><time>{clock(e.at)}</time><span>{e.label}{e.outcome && e.outcome !== 'returned' ? ' · ' + (outcomes[e.outcome] ?? e.outcome).toLowerCase() : ''}</span><button className="graph-link" onClick={() => onSelect('q:' + e.turn)}>{turnTitle(e.turn)}</button></li>)}</ol></section>}
+      {node.kind === 'file' && !node.meaning && <section><h3 className="caption">What happened</h3><ol className="graph-history">{node.events.map(e => <li key={e.key}><time>{clock(e.at)}</time><span>{e.label}{e.outcome && e.outcome !== 'returned' ? ' · ' + (outcomes[e.outcome] ?? e.outcome).toLowerCase() : ''}</span><button className="graph-link" onClick={() => onSelect('q:' + e.turn)}>{turnTitle(e.turn)}</button></li>)}</ol></section>}
     </div>
   </aside>;
+}
+
+// What the notes say in a meaning card, where it came from, and the way into the process layer:
+// the message whose kept version of the notes first holds it, and each file it names as the
+// version kept then.
+function MeaningSaid({ node, graph, process, traces, client, snapshot, agentOf, onAgent, onTrace, onSelect }: { node: GraphNode; graph: Graph; process: Graph; traces: GraphEdge[]; client: BrowserClient; snapshot: WorkspaceSnapshot;
+  agentOf: (conversationId: string) => string | undefined; onAgent: (conversationId?: string) => void; onTrace: (id: string) => void; onSelect: (id: string) => void }) {
+  const m = node.meaning!, file = node.kind === 'file', trace = file ? m.description?.trace : m.trace;
+  const shell = useContext(ShellContext);
+  // The way into the process layer is the same whichever layer is shown.
+  const kept = traces.find(e => e.from === node.id && e.label === 'kept as')?.to;
+  const writtenIn = trace?.written ? 'q:' + trace.written.turn : null;
+  const message = writtenIn ? process.nodes.find(n => n.id === writtenIn) : undefined;
+  return <section className="graph-said meaning-said">
+    {file ? (m.description ? <p className="meaning-statement">{m.description.text}</p> : <p className="muted">The notes do not say what this file holds.</p>)
+      : node.kind === 'choice' && m.statement ? <ChoiceOptions statement={m.statement} trace={m.trace} conversationId={m.conversationId} client={client} projectId={snapshot.project.id} onPath={path => shell?.openPath?.(path)} onSent={id => onAgent(id)} />
+      : <p className="meaning-statement">{node.text}</p>}
+    {node.kind === 'question' && m.todos && <p className="graph-facts">{m.todos.done} of {m.todos.total} to-dos done</p>}
+    {(!file || m.description) && <div className="meaning-trace">
+      <h3 className="caption">Where this comes from</h3>
+      <p className="graph-facts">{trace?.written
+        ? <>Written by {agentOf(trace.written.conversationId) ?? 'the Agent'} at {clock(trace.written.at, true)}, first in version {trace.written.version} of {trace.written.of} of the notes that the Agent's record kept.</>
+        : <>No version of the notes that the Agent's record kept holds this. You or another program wrote it, or the record kept no version since.</>}</p>
+      {trace?.files.length ? <ul className="meaning-files">{trace.files.map(f => {
+        const target = graph.nodes.find(n => n.id === 'm:f:' + f.path);
+        return <li key={f.path}><button className="graph-link" onClick={() => target && onSelect(target.id)}><Icon name="file" size={13} /><span>{f.path}</span></button>
+          <small>{f.kept ? 'version kept ' + clock(f.kept.at) : 'no version kept'}{f.later === 'kept' ? ' · a newer version was kept since' : f.later === 'written' ? ' · written again since' : ''}</small></li>;
+      })}</ul> : null}
+      <div className="graph-actions">
+        {message && <button onClick={() => onTrace(message.id)}><Icon name="graph" size={15} />Show the message it was written in</button>}
+        {kept && <button onClick={() => onTrace(kept)}><Icon name="graph" size={15} />Show this version in the process</button>}
+        {!message && !kept && m.conversationId && <button onClick={() => onAgent(m.conversationId!)}><Icon name="prompt" size={15} />Show the conversation</button>}
+      </div>
+    </div>}
+  </section>;
 }
 
 // A native permission the Agent waits on, answered where the step it asks about is drawn. The

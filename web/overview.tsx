@@ -74,6 +74,8 @@ function shownPath(at: string, project: ProjectSummary) {
 }
 interface Props {
   project: ProjectSummary; snapshot: WorkspaceSnapshot; client: BrowserClient; section: Section;
+  // The project notes as they stand: what the board says each file holds and the choices taken.
+  notesText?: string;
   // The workspace the person shares with the Agent, where an opened file goes.
   workspace: () => string;
   onSection: (section: Section) => void; onAgent: (conversationId?: string) => void;
@@ -84,7 +86,7 @@ interface Props {
   // The Console, at one message's commands.
   onConsole?: (turn?: string) => void;
 }
-export function ProjectOverview({ project, snapshot, client, section, workspace, onSection, onAgent, onLayout, onProjectChanged, onOpened, category, files, sources, onFile, linked = false, onPath, onNewConversation, onConsole }: Props) {
+export function ProjectOverview({ project, snapshot, client, section, notesText = '', workspace, onSection, onAgent, onLayout, onProjectChanged, onOpened, category, files, sources, onFile, linked = false, onPath, onNewConversation, onConsole }: Props) {
   // A linked tab's Agent sessions with access are read only while their section is open.
   const [outsideOpen, setOutsideOpen] = useState(false);
   const { runs, problem: runsProblem, readAgain } = useRuns(client, project.id, snapshot.cursor);
@@ -206,7 +208,7 @@ export function ProjectOverview({ project, snapshot, client, section, workspace,
     </div>}
     {section === 'overview' && !emptyProject && settled && <>
       {snapshot.taskMap?.question && <div className="project-question"><Icon name="prompt" size={18} /><h2>{snapshot.taskMap.question}</h2></div>}
-      {files && !!snapshot.conversations?.length && <AnswerBoard client={client} snapshot={snapshot} files={files} onConversation={id => onAgent(id)} onPath={path => onPath?.(path)} onConsole={turn => onConsole ? onConsole(turn) : onSection('console')} onGraph={() => onSection('graph')} />}
+      {files && !!snapshot.conversations?.length && <AnswerBoard client={client} snapshot={snapshot} files={files} notesText={notesText} onConversation={id => onAgent(id)} onPath={path => onPath?.(path)} onConsole={turn => onConsole ? onConsole(turn) : onSection('console')} onGraph={() => onSection('graph')} />}
       <div className={'project-columns' + (side ? '' : ' single')}>
         <div className="project-primary">
           {files && boarded && <Suspense fallback={null}><WorkStrip client={client} snapshot={snapshot} files={files} onOpen={() => onSection('graph')} onConversations={() => onSection('agent')} /></Suspense>}

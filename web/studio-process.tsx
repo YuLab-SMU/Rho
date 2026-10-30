@@ -16,6 +16,7 @@ import { processComposition } from './canvas.js';
 import { Icon } from './icons.js';
 import { Workspace } from './shell/workspace.js';
 import './studio.css';
+import { fileDescriptions, notesMeaning } from '../src/notes-meaning.js';
 
 type Read = RhoOutput<'conversation.read'>;
 // The protected resources are the service and this tab: one conversation's newest messages, read
@@ -156,8 +157,8 @@ type WorkspaceProps = Omit<ComponentProps<typeof Workspace>, 'composition' | 'sn
 // parts of the work in a chip above, and its time down the side beside the conversation. What it
 // shows is derived from the conversation's record at the moment chosen; once the person moves
 // something, the arrangement is theirs and is saved.
-export function ProcessStudio({ client, snapshot, files, conversationId, at, playing, speed, onAt, onPlaying, onSpeed, stepsTarget, agentNow, following, workspace }: {
-  client: BrowserClient; snapshot: WorkspaceSnapshot; files: ProjectFiles; conversationId: string;
+export function ProcessStudio({ client, snapshot, files, conversationId, notesText = '', at, playing, speed, onAt, onPlaying, onSpeed, stepsTarget, agentNow, following, workspace }: {
+  client: BrowserClient; snapshot: WorkspaceSnapshot; files: ProjectFiles; conversationId: string; notesText?: string;
   at: number | null; playing: boolean; speed: number; onAt: (at: number | null) => void; onPlaying: (playing: boolean) => void; onSpeed: (speed: number) => void;
   stepsTarget: HTMLElement | null; agentNow: AgentNow | null; following: boolean; workspace: WorkspaceProps;
 }) {
@@ -246,7 +247,8 @@ export function ProcessStudio({ client, snapshot, files, conversationId, at, pla
   useEffect(() => { setChosen(null); }, [at === null, conversationId]);
   const presence = live && working && views.has(working) ? { viewId: working, label: live.title, verb: working === studioIds.console ? 'Running' : live.files.at(-1)?.verb ?? 'Working', live: live.latest?.outcome === 'requested' } : null;
 
-  const process: Process = useMemo(() => ({ conversationId, graph, whole, at, files: shown, every, setAt: onAt, showPath: path => setChosen(viewId(path)) }), [conversationId, graph, whole, at, shown, every]);
+  const said = useMemo(() => fileDescriptions(notesMeaning(notesText)), [notesText]);
+  const process: Process = useMemo(() => ({ conversationId, graph, whole, at, files: shown, every, setAt: onAt, showPath: path => setChosen(viewId(path)), holds: path => said.get(path)?.text }), [conversationId, graph, whole, at, shown, every, said]);
   return <ProcessContext.Provider value={process}>
     <div className="process-studio">
       <div className="process-stage">

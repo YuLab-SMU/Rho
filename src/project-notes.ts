@@ -15,11 +15,18 @@ export const sessionMarker = (conversationId: string) => `<!-- rho:session ${con
 export function notesInstructions(conversationId: string): string {
   return [
     `This session was started in Rho as session ${conversationId}. The person reads your replies in Rho next to the project's files and its shared notes.`,
-    `The project keeps one set of shared notes in ${projectNotesPath} at the project root, one section per session; the person and other sessions read and edit it too. Keep this session's section current as the work goes, in the language the person writes in:`,
+    `The project keeps one set of shared notes in ${projectNotesPath} at the project root, one section per session; the person and other sessions read and edit it too. The person follows your work through this section while you work, so keep it current as the work goes, in the language the person writes in:`,
+    '- Write the section first, before you analyse anything: the heading, the Question and the Data & method you plan to use.',
     `- Start it with a level-2 heading that names the scientific task in a few words, and put ${sessionMarker(conversationId)} on the line right below it. Rho titles this session from that heading.`,
-    '- Under it keep short subsections: Question, Data & method, Key results (embed a key figure as ![what it shows](path/to/figure.png)), and To do as a task list (- [ ] open, - [x] done).',
+    '- Under it keep level-3 subsections with exactly these headings, in this order, written in English even when the content is not: Question, Data & method, Key results, Choices, Files, To do.',
+    '- Link every project file you mention with its path from the project root, as [analysis.py](analysis.py). Rho reads these links to connect what you say to the files and their versions.',
+    '- Data & method: one bullet for the data and one for each script, each linked, saying what it is and how it is used.',
+    '- Key results: one bullet per finding, each linking the result files it rests on; embed a key figure on its own line as ![what it shows](path/to/figure.png).',
+    '- Files: right after you write a result, table, figure or script, and before your next command, add a bullet as - [path](path) — what it holds; correct it when that changes. Do not leave this to the end.',
+    '- Choices: when the analysis takes a choice that has a reasonable alternative (a test, a threshold, an exclusion, a model), go on with your choice and do not ask the person or wait. Where the alternative is cheap, compute it too. Write one bullet saying what you chose and what it gives, linking its results, with a nested bullet starting "Alternative:" that says what the other option gives, linking its results.',
+    '- To do: a task list (- [ ] open, - [x] done).',
     `- Create ${projectNotesPath} if it does not exist. Change only your own section, and keep other sections and the person's edits as they are.`,
-    '- Update the section when a result or a to-do changes, not after every step.',
+    '- Add each finding and choice when you have it, and update the section as results, files or to-dos change.',
   ].join('\n');
 }
 

@@ -24,7 +24,9 @@ inspect what happened. The application gives those actions direct places:
   role. The figure or table the answer names leads, with the other results beside and
   below it. Then come the method (an outline of the script), the run that produced
   them with its command and output, the message's other commands (which open in the
-  Console), the data it read and any report. Each result has Ask, and selecting a
+  Console), the data it read and any report. A result or script the project notes
+  describe carries that description, and the session's choices follow the results,
+  each option with what it gives. Each result has Ask, and selecting a
   passage of the answer offers Ask about this. Either one sends a question to the
   same conversation with what it is about (the exact kept version for a file).
   Questions that make no new results are listed under Asked since with their
@@ -152,6 +154,18 @@ inspect what happened. The application gives those actions direct places:
   replays at 1×, 2× or 4×. While the Agent works the Graph stays and follows it; a
   step waiting for the person's choice turns amber and is answered there. Card labels
   and previews are drawn from 62% zoom up ([episode](GRAPH-EPISODE.md)).
+  Above the process rows, a **meaning layer** draws what the project notes say: one row
+  per session's section, from its question to its findings and choices, the files they
+  rest on (each titled by what the notes say it holds), and how those files came about
+  (made by a script, reading data, taken from the process record with its basis).
+  Meaning + process, Meaning or Process shows both layers or one (remembered in this
+  browser). Each statement is traced to the first kept version of the notes that holds
+  it: who wrote it and when, or that no kept version holds it. The files it names are the
+  versions kept then, and a newer kept version or a later write on disk is named. A
+  file's "kept as" and a statement's "written in" lead into the process rows. A choice
+  shows the option in use beside the others with what each gives; Use this instead
+  drafts a message to the same conversation that the person edits and sends. Nothing
+  there waits on the person ([meaning layer](SIMULATED-PROJECT-EPISODE.md#meaning-layer)).
 - **Workspaces** hold real owner views in tabs and splits. Arrange views exposes
   split, move, close and undo operations; the command palette offers the same actions.
   A tab drags onto another group's tabs (a line marks the place), onto the middle of a
@@ -266,7 +280,11 @@ and lays the files out (`studioTree`, `studioMerge` over a saved arrangement).
 `src/project-notes.ts` reads the notes' sections and session markers (`notesSections`,
 `sessionTitles`, bounded by `notesLimits`) and writes the instructions a session is
 given; `web/project-notes.tsx` keeps the notes' one buffer open for the project, saves the
-person's edits and draws the panel.
+person's edits and draws the panel. `src/notes-meaning.ts` reads each section into
+statements with the files they link (`notesMeaning`, `fileDescriptions`) and traces each
+to the kept notes versions (`traceStatement`); `src/meaning-graph.ts` builds the meaning
+layer and the layered graph; `web/meaning.ts` reads the kept notes versions
+(`meaningLimits`) and `web/choices.tsx` draws a choice's options.
 `src/studio-chapters.ts` names the parts of a message. The views find their file and
 moment through `web/process-context.ts`; `web/shell/process-views.tsx` frames a file's
 versions and `CommandPane` in `web/console.tsx` shows the conversation's commands. For the Graph, `foldVersions` merges a message's versions of one

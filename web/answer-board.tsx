@@ -11,6 +11,8 @@ import { readPreview, readTable, readText, type Preview, type TablePage } from '
 import { Answer, day, took, pathIcon } from './agent-work.js';
 import { Icon } from './icons.js';
 import './board.css';
+import { useMeaning } from './meaning.js';
+import { ChoiceOptions } from './choices.js';
 
 // The answer to one message, laid out by what each file is to it: the result that answers it
 // largest, the results beside it, then the script and the command that made them and the data
@@ -127,7 +129,9 @@ function Said({ text }: { text: string }) {
   return <>{text.split('`').map((part, i) => i % 2 ? <code key={i}>{part}</code> : part)}</>;
 }
 
-function Item({ client, snapshot, item, onPath, said, span, ask }: { client: BrowserClient; snapshot: WorkspaceSnapshot; item: BoardItem; onPath: (path: string) => void; said?: string; span?: number; ask?: { open: boolean; toggle: () => void; box: React.ReactNode } }) {
+function Item({ client, snapshot, item, onPath, said, span, ask, holds }: { client: BrowserClient; snapshot: WorkspaceSnapshot; item: BoardItem; onPath: (path: string) => void; said?: string; span?: number; ask?: { open: boolean; toggle: () => void; box: React.ReactNode };
+  // What the project notes say this file holds.
+  holds?: string }) {
   const { node, role } = item;
   const figure = node.category === 'figures', table = /\.(csv|tsv)$/i.test(node.path ?? '');
   const body = role === 'run' ? null : figure ? <Figure client={client} snapshot={snapshot} node={node} />
@@ -138,6 +142,7 @@ function Item({ client, snapshot, item, onPath, said, span, ask }: { client: Bro
   return <article className={'board-item role-' + role + (span ? ' span-' + span : '') + (ask?.open ? ' asking' : '')}>
     <header><div className="board-item-title"><button className="board-name" title={'Show ' + node.path} onClick={() => onPath(node.path!)}><Icon name={pathIcon(node.path!)} size={15} stroke={1.7} /><strong>{node.title}</strong></button>
       {ask && <button className="text-button board-ask-button" aria-expanded={ask.open} onClick={ask.toggle}>Ask</button>}</div>
+      {holds && <p className="board-holds" title={holds}>{holds}</p>}
       {item.why !== said && <small className="board-why"><Said text={item.why} /></small>}</header>
     {ask?.open && ask.box}
     {body}
@@ -194,14 +199,17 @@ function FollowUp({ id, node, running, at, onOpen }: { id: string; node?: GraphN
   </li>;
 }
 
-export function AnswerBoard({ client, snapshot, files, onConversation, onPath, onConsole, onGraph, onAsked }: {
-  client: BrowserClient; snapshot: WorkspaceSnapshot; files: ProjectFiles;
+export function AnswerBoard({ client, snapshot, files, notesText = '', onConversation, onPath, onConsole, onGraph, onAsked }: {
+  client: BrowserClient; snapshot: WorkspaceSnapshot; files: ProjectFiles; notesText?: string;
   onConversation: (conversationId: string) => void; onPath: (path: string) => void; onConsole: (turn?: string) => void; onGraph: () => void;
   // After a question is sent: show the conversation where the Agent answers it.
   onAsked?: (conversationId: string) => void;
 }) {
   const { turns, loading } = useTurns(client, snapshot);
-  const graph = useMemo(() => foldVersions(buildWorkGraph({ turns, files: files.files.map(f => ({ path: f.path, bytes: f.bytes, modifiedAt: f.modifiedAt, category: f.category })), project: snapshot.project, kindOf, now: Date.now() })), [turns, files.files, snapshot.project]);
+  const graphFiles = useMemo(() => files.files.map(f => ({ path: f.path, bytes: f.bytes, modifiedAt: f.modifiedAt, category: f.category })), [files.files]);
+  const graph = useMemo(() => foldVersions(buildWorkGraph({ turns, files: graphFiles, project: snapshot.project, kindOf, now: Date.now() })), [turns, graphFiles, snapshot.project]);
+  // What the notes say each file holds, and the choices this conversation's section records.
+  const meaning = useMeaning(client, snapshot, graph, graphFiles, notesText);
   const threads = useMemo(() => boardThreads(graph), [graph]);
   // The newest answer is shown, and a new one takes its place, unless the person chose another.
   const [chosen, setChosen] = useState<string | null>(null);
@@ -264,6 +272,9 @@ export function AnswerBoard({ client, snapshot, files, onConversation, onPath, o
   // A question asked since that the Agent is answering now, named where the eye starts.
   const running = followUps.find(t => t.running), askingNow = running ? { id: running.id, title: clip(askedAbout(graph.nodes.find(n => n.id === 'q:' + running.id)?.text ?? '').question.split('\n')[0]!, 60) } : null;
   const results = [primary, ...supporting].filter(Boolean) as BoardItem[];
+  const holds = (item: BoardItem) => meaning.descriptions.get(item.node.path ?? '')?.text;
+  const section = meaning.meanings.find(m => m.conversationId === conversationId);
+  const choices = section?.statements.filter(s => s.kind === 'choice') ?? [];
   const said = results.length > 1 && results.every(i => i.why === results[0].why) ? results[0].why : undefined;
   // Results past the two beside the leading one go three to a row; a last row of one or two is shared out.
   const below = primary ? Math.max(0, supporting.length - 2) : supporting.length, tail = below % 3;
@@ -293,19 +304,25 @@ export function AnswerBoard({ client, snapshot, files, onConversation, onPath, o
       {/* How the results came about, said once when it is the same for all of them. */}
       <p className="board-results-why"><strong>Results</strong>{said && <> · <Said text={said} /></>}</p>
       <div className={'board-results beside-' + Math.min(supporting.length, 2)}>
-        {primary && <Item client={client} snapshot={snapshot} item={primary} onPath={onPath} said={said} ask={shown.running ? undefined : askFor(primary)} />}
-        {supporting.map((item, i) => <Item key={item.node.id} client={client} snapshot={snapshot} item={item} onPath={onPath} said={said} span={i >= supporting.length - tail ? 6 / tail : undefined} ask={shown.running ? undefined : askFor(item)} />)}
+        {primary && <Item client={client} snapshot={snapshot} item={primary} onPath={onPath} said={said} holds={holds(primary)} ask={shown.running ? undefined : askFor(primary)} />}
+        {supporting.map((item, i) => <Item key={item.node.id} client={client} snapshot={snapshot} item={item} onPath={onPath} said={said} holds={holds(item)} span={i >= supporting.length - tail ? 6 / tail : undefined} ask={shown.running ? undefined : askFor(item)} />)}
       </div>
       {more('supporting')}
     </div>}
     {(method.length > 0 || runs.length > 0 || inputs.length > 0 || reports.length > 0 || board.otherCommands > 0) && <div className="board-how">
-      {method.length > 0 && <div className="board-row"><span className="board-label">Method</span><div className="board-cells">{method.map(item => <Item key={item.node.id} client={client} snapshot={snapshot} item={item} onPath={onPath} ask={shown.running ? undefined : askFor(item)} />)}</div></div>}
+      {method.length > 0 && <div className="board-row"><span className="board-label">Method</span><div className="board-cells">{method.map(item => <Item key={item.node.id} client={client} snapshot={snapshot} item={item} onPath={onPath} holds={holds(item)} ask={shown.running ? undefined : askFor(item)} />)}</div></div>}
       {(runs.length > 0 || board.otherCommands > 0) && <div className="board-row"><span className="board-label">Ran</span><div className="board-cells">
         {runs.map(item => <Item key={item.node.id} client={client} snapshot={snapshot} item={item} onPath={onPath} />)}
         {board.otherCommands > 0 && <button className="text-button board-console" onClick={() => onConsole(shown.id)}>{runs.length ? board.otherCommands + ' other ' + (board.otherCommands === 1 ? 'command' : 'commands') : board.otherCommands + (board.otherCommands === 1 ? ' command' : ' commands')} in the Console <Icon name="chevron" size={12} /></button>}
       </div></div>}
       {inputs.length > 0 && <div className="board-row"><span className="board-label">From</span><div className="board-chips">{inputs.map(item => <button key={item.node.id} className="work-file" title={item.why.replaceAll('`', '') + ' · ' + item.node.path} onClick={() => onPath(item.node.path!)}><Icon name={pathIcon(item.node.path!)} size={14} stroke={1.7} /><span>{item.node.title}</span></button>)}{more('input')}</div></div>}
       {reports.length > 0 && <div className="board-row"><span className="board-label">Report</span><div className="board-chips">{reports.map(item => <button key={item.node.id} className="work-file" title={item.why.replaceAll('`', '') + ' · ' + item.node.path} onClick={() => onPath(item.node.path!)}><Icon name="document" size={14} stroke={1.7} /><span>{item.node.title}</span></button>)}</div></div>}
+    </div>}
+    {/* Choices the Agent took and went on with, each beside what the other options give. Nothing
+        here waits on the person; another option is theirs to ask for. */}
+    {choices.length > 0 && <div className="board-choices">
+      <p className="board-results-why"><strong>Choices</strong> · the Agent went on with one option; the others are shown with what they give</p>
+      {choices.map(choice => <ChoiceOptions key={choice.line} statement={choice} trace={meaning.traces.get(choice)} conversationId={conversationId} client={client} projectId={snapshot.project.id} onPath={onPath} onSent={id => (onAsked ?? onConversation)(id)} />)}
     </div>}
     {followUps.length > 0 && <div className="board-follow">
       <p className="board-results-why"><strong>Asked since</strong></p>

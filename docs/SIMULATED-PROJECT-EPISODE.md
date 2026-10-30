@@ -487,3 +487,122 @@ window's choice; at phone width they open only when asked.
 - Sessions cannot be renamed from Rho; the title follows the heading in the file.
 - The sketch's dark terminal, labelled figure versions, compare button and file cards
   in the Agent panel were not built.
+
+## Meaning layer
+
+The person then asked for the semantics of the work: artifacts had almost no natural
+language description, and the Graph had only actions. They chose the project notes as
+the source, with provenance; a Graph that shows the meaning by default, can be followed
+into the process and can show either layer alone; descriptions written by the model while
+the work goes on; and the Agent's choices folded into choice nodes. A choice must not make
+the person choose: the results are prepared so the person sees what each option gives.
+
+### Changes
+
+- **The notes as statements** (`src/notes-meaning.ts`): each session's section is read
+  by subsection into its question, data and method, findings, figures, choices with the
+  options not taken, file descriptions and to-dos, each with the project files it links
+  (Markdown links, or a path in inline code). A file is described by its Files entry,
+  else a figure's description, else the data and method statement that names it first.
+- **Provenance**: the kept versions of `project-notes.md` in the Agent's record are read
+  oldest first (`meaningLimits`); a statement was written by the message whose version
+  first holds its lines, and each file it names is the version kept then. A newer kept
+  version, or a later write on disk, is named as such; a statement in no kept version
+  is said to be outside the record.
+- **Layers** (`src/meaning-graph.ts`, `web/graph.tsx`): one row per section, from the
+  question to findings and choices, the files they rest on, and how those came about
+  (made by, reads), taken from the process record with its basis. Meaning + process
+  draws the meaning rows above the message rows with "kept as" and "written in" edges
+  between them; Meaning or Process shows one. A card says who wrote it and when.
+  Following a statement or file into the process selects and centres the kept version
+  or the message.
+- **Descriptions where files are shown**: the answer board's results and method, and
+  each file view in a conversation's Studio, carry what the notes say the file holds.
+- **Choices without a decision asked for** (`web/choices.tsx`): the option in use beside
+  the others, each with what it gives and the files that show it, on the answer board
+  and in the Graph. Use this instead drafts a message to the same conversation for the
+  person to edit and send. No badge, waiting state or decision record is added.
+- **The session instructions** now ask for fixed English subsection headings, links on
+  every file mentioned, a finding per bullet linking its results, a Files entry when a
+  file is first written, and each choice with a reasonable alternative recorded with
+  what both options give, computing the alternative when cheap, without asking the
+  person or waiting.
+
+### What the runs showed
+
+**The fourth copy's notes, read as meaning.** Its section predates the new instructions:
+its findings named no files, and its figure followed them after a blank line. The layer
+drew the question, four findings, the figure by its description and the script, the
+last taken from the process record. The first reading attached the figure to the last
+finding; a figure now shows a finding only on the line right after it. A paragraph naming
+the data and the script had described both; a statement now describes only the first file
+it names. In Meaning only, the inspector offered no way into the process, because it
+looked for the message among the nodes on screen; it now looks in the process record.
+Following the figure into the process selected the kept version and its lineage.
+
+**A fifth copy under the new instructions.** Claude Code (DeepSeek V4.1 Flash) answered in
+5.7 min, with no permission requests and no page errors. Its section linked every file it
+mentioned, gave each finding its result file, listed eight files with what each holds and
+recorded four choices. For one it computed the alternative and linked that table. The
+person sees both options on the answer board, and Use this instead drafts a message they
+can send. The notes were written twice,
+at 258 s and 290 s, after every result existed: the format was followed, the timing was
+not. Two readings were corrected. Options and descriptions that wrap onto a second line
+had lost that line, with an option's link to its table; wrapped lines now belong to the
+bullet they continue. Every finding was marked as written before its file changed. The
+Agent had edited the script and run it again 22 s after writing the findings, and the
+record kept no version of that run's outputs. The mark is kept and now distinguishes a
+newer kept version from a later write on disk; a capture of the same bytes is the same
+version.
+
+**A sixth copy, told to write the section first.** The instructions now ask for the
+heading, question and method before any analysis, and for each file's entry before the
+next command. The Agent answered in 10.0 min, with no permission requests and no page
+errors. Its section appeared at 79 s, before any result, with the question, the data and
+the script; that much followed. Everything else arrived together at 512 s, when seven
+result files already existed: nine file entries, five findings each linking its table,
+a figure, and three choices, each with an alternative and the table showing it. Two of
+those alternatives were computed for the purpose. During the run the person saw a
+question and a plan, not what each new file holds. Instructions alone did not make this
+Agent describe its files as it wrote them.
+
+Its notes linked the results folder itself, which had become a file card named
+`results`; a link ending in `/` now names no file. Choice cards cut their fourth line in
+half and now stop at three lines with an ellipsis, the full text staying in the inspector.
+The inspector's file rows had shrunk a path to five letters beside its version note; the
+note now sits below the path. The inspector headed a statement Found or Chose; it now
+names the section the statement belongs to.
+
+### Verification
+
+- `test/notes-meaning.test.mjs` covers the parsing of each subsection, wrapped lines,
+  file descriptions, links to folders and outside the project, the trace to kept
+  versions with a newer kept version, a later write and a capture of the same bytes,
+  and the meaning layer and its three graphs on a small process record.
+- Rho 253/253 and the agent-canvas, sources, graph, agent-page, agent-ui, review and
+  ui:u2 browser acceptances passed on the final build; no Plugins source changed, so
+  Plugins 120/120 stands from the project notes pass.
+- The fourth, fifth and sixth copies were read in a real browser in each layer, with a
+  statement and a file followed into the process, and on the answer board with the
+  descriptions, the choices and a drafted Use this instead message, which was not sent.
+  No page errors.
+
+### Left open
+
+- **Descriptions during the run.** The person asked for the model to describe the work
+  while it goes on. Two rounds of instructions moved the section to the start of the run
+  but not the file entries, which came with the findings near the end. Facts read from
+  each file as it appears, such as rows, columns or image size, or a separate model that
+  describes each new file, have not been built or chosen.
+- **Choices are what the Agent declares.** A choice the Agent took without writing it
+  down does not appear, and an alternative is shown only as far as the Agent computed and
+  linked it. Rho does not check that an alternative's table shows what its sentence says.
+- **No independent person** has used the layers or the choices; every reading here is mine.
+- **Meaning only has no timeline**: the timeline replays process events, and a statement
+  has no events of its own beyond when its version of the notes was kept.
+- **Meaning + process is busy**: the meaning rows and the message rows share one canvas,
+  with trace edges between them; on the sixth copy the default view showed a slice of
+  each. Whether a person follows a trace there has not been observed.
+- **Free-form notes**: text under other headings, or between a section's heading and its
+  first subsection, is not read as meaning and is not drawn.
+

@@ -1,0 +1,16 @@
+/* A choice: the option in use beside the others, each with what it gives. */
+.choice-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; }
+.choice-option { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 10px 12px; border: 1px solid var(--color-hairline); border-radius: 9px; background: var(--color-surface); }
+.choice-option.taken { border-color: var(--color-hue-clay-ink); background: var(--color-hue-clay); }
+.choice-option p { margin: 0; font-size: 13px; line-height: 1.45; }
+.choice-option .choice-tag { color: var(--color-meta); font-size: 11px; font-weight: 600; letter-spacing: .02em; text-transform: uppercase; }
+.choice-option.taken .choice-tag { color: var(--color-hue-clay-ink); }
+.choice-files { display: flex; flex-wrap: wrap; gap: 4px; }
+.choice-files .work-file small { color: var(--color-amber-text); font-size: 11px; font-weight: 400; }
+.choice-option > .text-button { align-self: flex-start; margin-top: auto; }
+.choice-none { grid-column: 1 / -1; margin: 0; color: var(--color-meta); font-size: 12.5px; }
+/* A choice with no other option recorded is one note across. */
+.choice-options:has(> .choice-none) { grid-template-columns: minmax(0, 1fr); }
+.choice-send { display: flex; flex-direction: column; gap: 6px; }
+.choice-send textarea { width: 100%; font-size: 13px; resize: vertical; }
+.choice-send-actions { display: flex; justify-content: flex-end; gap: 6px; }

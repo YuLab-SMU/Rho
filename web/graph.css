@@ -250,3 +250,31 @@
   .tl-body { gap: 0; }
   .graph-inspector { width: 100%; }
 }
+
+/* The meaning layer: what the notes say, above or instead of what the Agent did. A statement
+   reads as a sentence; a file reads by what it holds, its name below; the meta line says who
+   wrote it. Declared edges are drawn in the notes' clay. */
+.graph-layers { display: inline-flex; border: 1px solid var(--color-control-border); border-radius: 8px; overflow: hidden; }
+.graph-layers button { min-height: 30px; padding: 4px 11px; border: 0; border-radius: 0; background: var(--color-surface); color: var(--color-muted); font-size: 12.5px; font-weight: 500; }
+.graph-layers button + button { border-left: 1px solid var(--color-control-border); }
+.graph-layers button[aria-pressed=true] { background: var(--color-selected); color: var(--color-ink); font-weight: 600; }
+.graph-node.meaning .meaning-text { -webkit-line-clamp: 3; font-weight: 550; }
+.graph-node.meaning.kind-finding .meaning-text, .graph-node.meaning.kind-choice .meaning-text { -webkit-line-clamp: 3; font-size: 13.5px; font-weight: 500; line-height: 1.4; }
+.graph-node.meaning.kind-file .meaning-text { -webkit-line-clamp: 2; font-size: 13.5px; }
+.graph-node-path { overflow: hidden; color: var(--color-muted); font-family: var(--font-mono); font-size: 11.5px; text-overflow: ellipsis; white-space: nowrap; }
+.meaning-changed { color: var(--color-amber-text); }
+.tone-finding .graph-node-icon, .graph-node-icon.tone-finding { background: var(--color-hue-moss); color: var(--color-hue-moss-ink); }
+.tone-choice .graph-node-icon, .graph-node-icon.tone-choice { background: var(--color-hue-clay); color: var(--color-hue-clay-ink); }
+.graph-node.meaning.kind-finding, .graph-node.meaning.kind-choice { border-left: 3px solid var(--color-hue-clay); }
+.graph-map rect.tone-finding { fill: #9cc19f; }
+.graph-map rect.tone-choice { fill: #d8b994; }
+.graph-edge.declared path { stroke: #c79a6a; }
+.graph-legend .line.declared { border-top: 1.6px solid #c79a6a; }
+.meaning-said { display: flex; flex-direction: column; gap: 10px; }
+.meaning-statement { margin: 0; font-size: 14px; line-height: 1.55; color: var(--color-ink); }
+.meaning-trace { display: flex; flex-direction: column; gap: 6px; padding-top: 8px; border-top: 1px solid var(--color-divider); }
+.meaning-files { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.meaning-files li { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; }
+.meaning-files li .graph-link { max-width: 100%; }
+.meaning-files li .graph-link span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); font-size: 12px; }
+.meaning-files small { flex: none; color: var(--color-meta); font-size: 11.5px; }

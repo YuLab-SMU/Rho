@@ -74,7 +74,7 @@ export function readText(client: BrowserClient, snapshot: WorkspaceSnapshot, fil
   return reads.get(key) as Promise<{ text: string; cut: boolean } | null>;
 }
 // A resource's bytes, read page by page and stopped once past maxBytes.
-async function readBytes(client: BrowserClient, projectId: string, resource: { id: string; version: string }, maxBytes: number) {
+export async function readBytes(client: BrowserClient, projectId: string, resource: { id: string; version: string }, maxBytes: number) {
   let offset = 0, data = '';
   for (;;) {
     const page = await client.call('resource.read', { projectId, resource, offset }) as { data: string; more: boolean; nextOffset: number };

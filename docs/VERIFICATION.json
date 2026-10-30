@@ -3,10 +3,10 @@
   "checks": {
     "rho-tests": {
       "command": "RHO_CORE_BINARY=<selected unchanged binary> node --test --test-concurrency=1 test/*.test.mjs",
-      "checkedAt": "2026-10-30T12:17:08+00:00",
+      "checkedAt": "2026-10-30T13:32:26+00:00",
       "exitCode": 0,
-      "tests": 249,
-      "passing": 249,
+      "tests": 253,
+      "passing": 253,
       "passed": true
     },
     "plugin-tests": {

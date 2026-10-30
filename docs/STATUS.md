@@ -48,7 +48,7 @@ versions the message kept. Review is listed only while review records exist. The
 Console (Console 0.1.0) lists the Agent's and the person's commands, and runs, stops
 and reruns the person's own (local browser only). Agent 0.4.19 keeps a command's
 whole text. Repeated reads no longer exhaust a message's capture budget before its
-results. Agent-declared choices with Agree/No were agreed but not built (see the record).
+results. Agent-declared choices are shown by the meaning layer pass below, without Agree/No.
 
 The [process Studio](SIMULATED-PROJECT-EPISODE.md#process-studio) pass made Studio show
 how a conversation's work was done. Each conversation started in Rho has its own
@@ -68,6 +68,17 @@ To do. That heading titles the session. In a live run Claude Code (DeepSeek V4.1
 wrote its section unprompted by the message, and the title followed within seconds.
 The panel reads the notes formatted, ticks to-dos in place and edits them with a
 toolbar (Markdown 0.2.0, Documents 0.4.8); the person's edits save after a pause.
+
+The [meaning layer](SIMULATED-PROJECT-EPISODE.md#meaning-layer) pass reads each section
+of the notes as a question, method, findings, figures, choices, file descriptions and
+to-dos, each with the files it links. Kept versions of the notes trace a statement to
+the message that wrote it and each file to the version kept then. The Graph shows
+Meaning + process by default, or either layer alone, with "kept as" and "written in"
+edges into the process. The answer board and Studio's file views say what each file
+holds. A choice shows the option in use beside the others with what each gives; Use
+this instead drafts a message, and nothing waits on the person. The Agent followed the
+fixed subsections, linked its files and computed some alternatives, but described files
+at the end of its run, not as it wrote them, even when told to.
 
 ## Existing application
 
@@ -109,7 +120,8 @@ pass first failed 244/245 on another undeclared CSS variable, which was correcte
 Rho 245/245 and Plugins 117/117. The project notes pass records Rho 249/249 and
 Plugins 120/120 in the [ledger](VERIFICATION.json). The agent-canvas, graph,
 agent-page, agent-ui, review, ui:u2 and sources browser acceptances passed on that
-build; ui:u2 first failed until the notes stopped opening with every project.
+build; ui:u2 first failed until the notes stopped opening with every project. The
+meaning layer pass passed Rho 253/253 and the same seven acceptances.
 The [episode](REVIEW-EVIDENCE-EPISODE.md) records contract, browser and installed results.
 The fixed 0.5.1 candidate passed 230/230; installed review/Graph/restart and both real
 clients passed. See the [preview](PREVIEW-0.5.1.md) for identities and limits.

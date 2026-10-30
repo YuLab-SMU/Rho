@@ -15,6 +15,8 @@ export interface Process {
   setAt(at: number | null): void;
   // Brings the view of a project file forward, when Studio shows one.
   showPath(path: string): void;
+  // What the project notes say a file holds, if they say.
+  holds(path: string): string | undefined;
 }
 export const ProcessContext = createContext<Process | null>(null);
 // A file has one view in a conversation's Studio, named from its path: a view's properties hold

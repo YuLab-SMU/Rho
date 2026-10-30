@@ -17,6 +17,8 @@ export function ProcessFrame({ view, process, client, snapshot, children }: { vi
   const live = Object.values(view.bindings ?? {}).some(b => (b as { kind?: string }).kind === 'live-document');
   const step = (index: number) => process.setAt(index >= all.length ? null : all[index].at);
   return <div className="process-frame">
+    {/* What the notes say this file holds: a statement, not an observation. */}
+    {process.holds(path) && <p className="process-holds" data-fact="declared" title={process.holds(path)}>{process.holds(path)}</p>}
     <div className="process-version" data-fact="observed">
       {all.length ? <>
         <span>{version ? `Version ${shown} of ${all.length} · kept ${clock(version.at)}` : 'Not kept yet'}</span>

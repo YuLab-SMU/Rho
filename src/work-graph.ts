@@ -1,5 +1,6 @@
 import { commandEnd, conversationBlocks, displayCommand, stepDuration, type ActivityOutcome, type ConversationTurn, type SessionObservation } from './conversation-presentation.js';
 import { askedAbout } from './asking.js';
+import type { Statement, Trace } from './notes-meaning.js';
 
 // What the Agent did in a project, drawn as a graph: each question a person asked, the files
 // its turn read and changed, the commands it ran, and the files that changed on disk while it
@@ -47,9 +48,11 @@ export interface GraphInput {
   kindOf: (path: string) => FileKind;
   now: number;
 }
-export type NodeKind = 'question' | 'file' | 'run';
+// The meaning layer adds what the notes say: findings and choices (see meaning-graph.ts).
+export type NodeKind = 'question' | 'file' | 'run' | 'finding' | 'choice';
 export type EventAction = 'ask' | 'read' | 'edit' | 'write' | 'run' | 'changed' | 'capture' | 'answer';
-export type Basis = 'reported' | 'named' | 'observed';
+// Declared: written in the project notes, by the Agent or the person; not checked.
+export type Basis = 'reported' | 'named' | 'observed' | 'declared';
 export interface GraphEvent { key: string; at: number; node: string; turn: string; action: EventAction; label: string; outcome?: ActivityOutcome }
 export interface GraphNode {
   id: string; kind: NodeKind; title: string; at: number;
@@ -67,6 +70,15 @@ export interface GraphNode {
   waiting?: { conversationId: string; turn: string; permission: string; title: string; options: Array<{ id: string; name: string; kind: string }> };
   // The events that touched this node, oldest first.
   events: GraphEvent[];
+  // A node of the meaning layer: what the notes say and where that came from.
+  meaning?: MeaningInfo;
+}
+export interface MeaningInfo {
+  session: string; conversationId: string | null;
+  statement?: Statement; trace?: Trace;
+  // A file: what the notes say it holds, and where that was written.
+  description?: { text: string; trace?: Trace };
+  todos?: { done: number; total: number };
 }
 // The message an edge was recorded in: a file one message made and a later one read is drawn
 // with that later message.
