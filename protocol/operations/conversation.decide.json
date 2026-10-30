@@ -1,0 +1,998 @@
+{
+  "method": "conversation.decide",
+  "inputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "projectId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "conversationId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "turnId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "changeId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "decision": {
+        "enum": [
+          "accepted",
+          "needs-changes"
+        ]
+      },
+      "note": {
+        "type": "string",
+        "maxLength": 4096
+      }
+    },
+    "required": [
+      "projectId",
+      "conversationId",
+      "turnId",
+      "changeId",
+      "decision"
+    ]
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "conversation": {
+        "type": "object",
+        "properties": {
+          "conversationId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "client": {
+            "type": "string",
+            "minLength": 1
+          },
+          "principal": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "updatedAt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "turns": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "state": {
+            "enum": [
+              "idle",
+              "running",
+              "completed",
+              "failed",
+              "stopped",
+              "unknown"
+            ]
+          },
+          "lastAt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "backend": {
+            "type": "string",
+            "minLength": 1
+          },
+          "agentTitle": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "adapter": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "version": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "name"
+                ],
+                "additionalProperties": true
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "config": {
+            "type": "object",
+            "maxProperties": 12,
+            "propertyNames": {
+              "maxLength": 512
+            },
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 512
+                },
+                {
+                  "type": "boolean"
+                }
+              ]
+            }
+          },
+          "usage": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "used": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "size": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "cost": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "amount": {
+                            "type": "number"
+                          },
+                          "currency": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "required": [
+                          "amount",
+                          "currency"
+                        ],
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "used",
+                  "size",
+                  "cost"
+                ],
+                "additionalProperties": true
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "costUsd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sessionId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "trashedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "conversationId",
+          "title",
+          "client",
+          "principal",
+          "createdAt",
+          "updatedAt",
+          "version",
+          "turns",
+          "state",
+          "lastAt"
+        ],
+        "additionalProperties": true
+      },
+      "turn": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "by": {
+            "type": "string",
+            "minLength": 1
+          },
+          "text": {
+            "type": "string"
+          },
+          "sentAt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "state": {
+            "enum": [
+              "running",
+              "completed",
+              "failed",
+              "stopped",
+              "unknown"
+            ]
+          },
+          "startedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "endedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "stop": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "requestedAt": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "by": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "reason": {
+                    "enum": [
+                      "person",
+                      "closing",
+                      "wall-limit",
+                      "output-limit",
+                      "line-limit",
+                      "identity"
+                    ]
+                  }
+                },
+                "required": [
+                  "requestedAt",
+                  "by",
+                  "reason"
+                ],
+                "additionalProperties": true
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "enum": [
+                    "text",
+                    "tool",
+                    "error"
+                  ]
+                },
+                "at": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "startedAt": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "text": {
+                  "type": "string"
+                },
+                "cut": {
+                  "type": "boolean"
+                },
+                "id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "tool": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "operation": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "title": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "toolKind": {
+                  "enum": [
+                    "read",
+                    "edit",
+                    "delete",
+                    "move",
+                    "search",
+                    "execute",
+                    "think",
+                    "fetch",
+                    "switch_mode",
+                    "other"
+                  ]
+                },
+                "detail": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "outcome": {
+                  "enum": [
+                    "requested",
+                    "returned",
+                    "rejected",
+                    "unknown"
+                  ]
+                },
+                "exitCode": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "output": {
+                  "type": "object",
+                  "properties": {
+                    "text": {
+                      "type": "string"
+                    },
+                    "lines": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "bytes": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "cut": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "text",
+                    "lines",
+                    "bytes",
+                    "cut"
+                  ],
+                  "additionalProperties": true
+                }
+              },
+              "required": [
+                "kind",
+                "at"
+              ],
+              "additionalProperties": true
+            }
+          },
+          "omitted": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "evidence": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "records",
+              "omitted",
+              "bytes",
+              "snapshots"
+            ],
+            "properties": {
+              "records": {
+                "type": "array",
+                "maxItems": 64,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "key",
+                    "path",
+                    "phase",
+                    "requestedAt",
+                    "state",
+                    "snapshots"
+                  ],
+                  "properties": {
+                    "key": {
+                      "type": "string"
+                    },
+                    "path": {
+                      "type": "string"
+                    },
+                    "phase": {
+                      "type": "string"
+                    },
+                    "requestedAt": {
+                      "type": "string"
+                    },
+                    "state": {
+                      "enum": [
+                        "pending",
+                        "captured",
+                        "unavailable",
+                        "interrupted"
+                      ]
+                    },
+                    "reason": {
+                      "type": "string"
+                    },
+                    "snapshots": {
+                      "type": "array",
+                      "maxItems": 2,
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "resource",
+                          "kind",
+                          "bytes",
+                          "observedAt",
+                          "source"
+                        ],
+                        "properties": {
+                          "resource": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "version": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "version"
+                            ]
+                          },
+                          "kind": {
+                            "type": "string"
+                          },
+                          "bytes": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "observedAt": {
+                            "type": "string"
+                          },
+                          "source": {
+                            "type": "object",
+                            "additionalProperties": true
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "omitted": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "bytes": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "snapshots": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          },
+          "contexts": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          },
+          "decisions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "changeId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "requestDigest": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$"
+                },
+                "decision": {
+                  "enum": [
+                    "accepted",
+                    "needs-changes"
+                  ]
+                },
+                "note": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "by": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "at": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "supersedes": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "results": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "path": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "resource": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "version": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "version"
+                        ],
+                        "additionalProperties": true
+                      }
+                    },
+                    "required": [
+                      "path",
+                      "resource"
+                    ],
+                    "additionalProperties": true
+                  }
+                }
+              },
+              "required": [
+                "changeId",
+                "requestDigest",
+                "decision",
+                "note",
+                "by",
+                "at",
+                "supersedes",
+                "results"
+              ],
+              "additionalProperties": true
+            }
+          },
+          "permissions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "title": {
+                  "type": "string"
+                },
+                "toolCallId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "details": {
+                  "type": "string"
+                },
+                "options": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "name": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "kind": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "name",
+                      "kind"
+                    ],
+                    "additionalProperties": true
+                  }
+                },
+                "state": {
+                  "enum": [
+                    "pending",
+                    "selected",
+                    "cancelled"
+                  ]
+                },
+                "selected": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "id",
+                "title",
+                "toolCallId",
+                "options",
+                "state"
+              ],
+              "additionalProperties": true
+            }
+          },
+          "retry": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "attempt": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "of": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "status": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "at": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "attempt",
+                  "of",
+                  "status",
+                  "at"
+                ],
+                "additionalProperties": true
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "result": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "isError": {
+                    "type": "boolean"
+                  },
+                  "kind": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "reason": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "steps": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "durationMs": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "costUsd": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "message": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "isError",
+                  "kind",
+                  "reason",
+                  "steps",
+                  "durationMs",
+                  "costUsd",
+                  "message"
+                ],
+                "additionalProperties": true
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "problem": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "files": {
+            "type": "object",
+            "properties": {
+              "changed": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "change": {
+                      "enum": [
+                        "added",
+                        "modified",
+                        "removed"
+                      ]
+                    },
+                    "modifiedAt": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "bytes": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "change",
+                    "modifiedAt",
+                    "bytes"
+                  ],
+                  "additionalProperties": true
+                }
+              },
+              "omitted": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "partial": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "changed",
+              "omitted",
+              "partial"
+            ],
+            "additionalProperties": true
+          }
+        },
+        "required": [
+          "id",
+          "by",
+          "text",
+          "sentAt",
+          "state",
+          "steps",
+          "omitted",
+          "problem"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "required": [
+      "conversation",
+      "turn"
+    ],
+    "additionalProperties": true
+  },
+  "description": "Person at this machine only: say to use an answer, or that it needs changes and why. The decision holds for the file versions that message kept when it was given and says nothing of later versions. A new decision supersedes the one before; none is removed. Refused while the Agent is still answering."
+}

@@ -1,10 +1,9 @@
 // Shared workspace acceptance: a controlled ACP peer reads, edits and runs project files through
 // the real service and Chrome, and writes an output no step names. No model credentials are
-// used. It checks that the sidebar counts the project's contents, that a message sent from the
-// Agent panel follows in the workspace the person has open, that each file the Agent works on
-// opens there beside the person's own with the Agent's place on its tab, that an edit shows the
-// text now on disk, that an output appearing during the turn is shown, and that choosing another
-// view stops following until asked again.
+// used. It checks that the sidebar counts the project's contents, that a message sent from
+// Studio leaves the person's workspace as they arranged it, that an edit shows the text now on
+// disk in the open editor, and that Follow shows the answer board, led by the output the turn
+// made, with the next question following it.
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -99,7 +98,7 @@ try {
   await shot('01-sidebar-data');
   passed('the sidebar names the project places and counts its data, code, results and notes');
 
-  // The person opens the script in Studio first; the Agent works in that same workspace.
+  // The person opens the script in Studio first and asks the Agent from there.
   await nav.getByRole('button', { name: 'Code', exact: true }).click();
   await nav.locator('.nav-file').filter({ hasText: 'analysis.R' }).click();
   await page.getByRole('button', { name: 'Open in Studio' }).click();
@@ -107,39 +106,25 @@ try {
   await page.getByRole('button', { name: 'Agent panel', exact: true }).click();
   await page.getByRole('textbox', { name: 'Start a conversation' }).fill('Fit ozone on temperature and draw it.');
   await page.getByRole('button', { name: 'Start', exact: true }).click();
-  await page.locator('.follow-toggle[aria-pressed=true]').waitFor();
-  assert.equal(await page.locator('.location-name').textContent(), 'Workspace', 'the person stays in their own workspace');
   await page.locator('.agent-chip').waitFor();
   await nav.locator('.nav-badge.working').waitFor();
-  passed('sending from the Agent panel follows in the workspace the person has open, with the Agent working in the topbar and sidebar');
+  await page.locator('.follow-toggle[aria-pressed=false]').waitFor();
+  assert.equal(await page.locator('.location-name').textContent(), 'Workspace', 'the person stays in their own workspace');
+  passed('sending from the Agent panel keeps the person in their Studio workspace, with the Agent working in the topbar and sidebar');
 
-  const reading = await until(tabs, t => t.some(tab => tab.name === 'airquality.csv' && tab.selected && tab.presence === 'Reading'), 'the read file shown with the Agent reading it');
-  await page.locator('.ag-row[row-index="0"]').first().waitFor();
-  await shot('02-reading-table');
-  passed('a file the Agent reads opens in the shared workspace in its table view, marked as being read');
-
-  await until(tabs, t => t.some(tab => tab.name === 'analysis.R' && tab.selected), 'the edited script brought forward');
   await until(() => page.locator('[data-owner-view] .cm-content').first().innerText(), text => /fit <- lm/.test(text), 'the edited script showing the text on disk');
   await page.locator('.rho-doc-agent-line').first().waitFor();
   await shot('03-edited-script');
-  passed('an edit made outside Rho shows the new text in the editor, with the changed lines highlighted');
+  passed('an edit made outside Rho shows the new text in the open editor, with the changed lines highlighted');
 
-  await until(tabs, t => t.some(tab => tab.name === 'ozone.svg'), 'the output that appeared during the turn', 40000);
-  await page.locator('[data-owner-view] img').first().waitFor();
-  await shot('04-output');
-  passed('an output that appears on disk during the turn is shown, without a step naming it');
-
-  await until(() => page.locator('.agent-chip').count(), n => n === 0, 'the turn ending', 30000);
+  await until(() => page.locator('.agent-chip').count(), n => n === 0, 'the turn ending', 40000);
   const shared = await admin.call('observation.snapshot', { projectId: opened.id });
   assert.deepEqual(shared.compositions.map(c => c.compositionId), ['workspace'], 'one workspace, the person\'s');
   const canvas = await admin.call('composition.read', { projectId: opened.id, compositionId: 'workspace' });
-  const titles = canvas.views.map(v => v.props.title).sort();
-  assert.deepEqual(titles, ['airquality.csv', 'analysis.R', 'ozone.svg']);
-  const split = canvas.nodes.find(n => n.id === canvas.rootId);
-  assert.equal(split.presentation?.mode, 'split');
-  assert.deepEqual(split.children, ['root', 'canvas-data'], 'the person\'s group keeps the script; data and figures join a group on its right');
+  assert.deepEqual(canvas.views.map(v => v.props.title), ['analysis.R'], 'nothing opened beside the person\'s own view');
+  assert.deepEqual((await tabs()).map(tab => tab.name), ['analysis.R']);
   await until(counts, c => c['Results & figures'] === '1', 'the new output counted');
-  passed('the person and the Agent share one saved layout: the script in the person\'s group, data and figures beside it, each file once');
+  passed('Studio stays the person\'s own arrangement: the Agent\'s reads and outputs open nothing there; the new output is counted');
 
   // The Agent page keeps what the turn did; the top bar holds the one way to the Agent panel.
   assert.equal(await page.locator('.topbar').getByRole('button', { name: 'Agent panel', exact: true }).count(), 1, 'the Agent panel opens from the top bar');
@@ -159,44 +144,25 @@ try {
   assert.equal(await page.locator('#preview-title').textContent(), 'airquality.csv');
   passed('the Agent page keeps what the turn changed, read, ran and answered; a file it names shows in place');
 
-  // The person chooses another view: following stops, and the Agent's next file waits.
+  // From Studio again, the next question; Follow shows the answer board, where it follows the
+  // answer whose results it asks about.
+  await page.keyboard.press('Escape');
+  await nav.getByRole('button', { name: 'Studio', exact: true }).click();
+  await page.locator('.location-name').filter({ hasText: 'Workspace' }).waitFor();
+  if (!await page.getByRole('textbox', { name: /Message|Reply/ }).count()) await page.getByRole('button', { name: 'Agent panel', exact: true }).click();
   await page.getByRole('textbox', { name: /Message|Reply/ }).fill('Now read the notes.');
   await page.getByRole('button', { name: 'Send', exact: true }).click();
-  await page.locator('.follow-toggle[aria-pressed=true]').waitFor();
-  // Whichever data view is not in front: choosing it is the person's move.
-  const chosen = (await tabs()).find(tab => ['airquality.csv', 'ozone.svg'].includes(tab.name) && !tab.selected).name;
-  await page.getByRole('tab', { name: chosen }).click();
-  await page.locator('.follow-toggle[aria-pressed=false]').waitFor();
-  await page.waitForTimeout(5500);
-  let now = await tabs();
-  assert.ok(now.find(tab => tab.name === chosen)?.selected, 'the person keeps the view they chose');
-  assert.ok(!now.some(tab => tab.name === 'notes.md'), 'nothing is opened while not following');
-  await shot('05-person-chose');
   await page.locator('.follow-toggle[aria-pressed=false]').click();
-  now = await until(tabs, t => t.some(tab => tab.name === 'notes.md' && tab.selected), 'following again brings the Agent\'s file forward');
-  await shot('06-follow-again');
-  passed('choosing another view stops following; Follow brings the Agent\'s newest file forward');
+  const board = page.locator('.answer-board');
+  await board.locator('h2').filter({ hasText: 'Fit ozone on temperature and draw it.' }).waitFor();
+  await board.locator('.board-item.role-primary').filter({ hasText: 'ozone.svg' }).waitFor();
+  await board.locator('.board-follow-up').filter({ hasText: 'Now read the notes.' }).waitFor();
+  await until(() => board.locator('.board-follow-up .work-answer').innerText(), text => /ozone by month/.test(text), 'the follow-up answered on the board', 30000);
+  await shot('06-board');
+  passed('Follow shows the answer board: the figure the first message made leads it, and the next question follows it with its answer');
 
-  // The person arranges the canvas by dragging: notes.md gets a pane below the code, and
-  // following stops. The Agent's next data file still joins the data side; the pane stays.
-  const pane = page.locator('.shell-group').filter({ has: page.getByRole('tab', { name: 'notes.md' }) }).locator('.shell-body');
-  const from = await page.getByRole('tab', { name: 'notes.md' }).boundingBox(), below = await pane.boundingBox();
-  await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2); await page.mouse.down();
-  await page.mouse.move(from.x + from.width / 2 + 8, from.y + from.height / 2 + 8, { steps: 3 });
-  await page.mouse.move(below.x + below.width / 2, below.y + below.height * 0.93, { steps: 10 }); await page.mouse.up();
-  await page.locator('.follow-toggle[aria-pressed=false]').waitFor();
-  const read = () => admin.call('composition.read', { projectId: opened.id, compositionId: 'workspace' });
-  const holder = (c, title) => { const id = c.views.find(v => v.props.title === title)?.id; return c.nodes.find(n => n.children?.includes(id)); };
-  await until(read, c => holder(c, 'notes.md')?.children.length === 1, 'notes.md in a pane of its own');
-  await page.getByRole('textbox', { name: /Message|Reply/ }).fill('Now read the stations.');
-  await page.getByRole('button', { name: 'Send', exact: true }).click();
-  const arranged = await until(read, c => c.views.some(v => v.props.title === 'stations.csv'), 'the Agent\'s new data file in the workspace');
-  assert.equal(holder(arranged, 'stations.csv').id, 'canvas-data');
-  assert.equal(holder(arranged, 'notes.md').children.length, 1, 'the person\'s pane stays');
-  await page.getByRole('tab', { name: 'stations.csv' }).waitFor();
-  await shot('06b-arranged');
-  passed('a pane the person drags out stays; the Agent\'s next data file still joins the data side');
-
+  await nav.getByRole('button', { name: 'Studio', exact: true }).click();
+  await page.locator('.location-name').filter({ hasText: 'Workspace' }).waitFor();
   for (const width of [1024, 390]) {
     await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
     await page.waitForTimeout(400);

@@ -1,6 +1,6 @@
 # Browser application
 
-Updated 2026-10-29. The frontend was reset at the user's request. Previous frontend
+Updated 2026-10-30. The frontend was reset at the user's request. Previous frontend
 plans, visual specifications, Paper references and appearance rulers have been
 removed from the working repository. Git retains their history; they do not govern
 this implementation. This document describes the current application, not another
@@ -19,18 +19,31 @@ inspect what happened. The application gives those actions direct places:
   in, opens folders and creates a named project from selected source folders. It
   opens as one list with one primary action, and with no projects it shows what can
   be started instead of an empty page.
-- **Overview** opens with the latest answer: the newest finished conversation's question
-  and last answer, its time, duration and model, and Open conversation. Then comes what
-  the Agent did in small: a count for each kind of step
-  (asked, read, edited, ran, changed on disk, answered), which is also the legend and
-  filter of the Graph's timeline below it, one lane per conversation. The results follow
-  as pictures, newest first: the newest at twice the size, then two or five more, with
-  the rest in Files; a kept version is named by the project file it was taken from. A side column draws each workspace as its panes, opens the shared
-  notes, and lists the files the Agent's tools named, most used first, each with a bar
-  for its tool calls. Its Work progress shows a conversation while
-  it answers or waits for a choice; finished ones are listed on the Agent page. A project with nothing recorded yet shows its two next steps —
-  work with the Agent or browse its files — rather than empty sections, leading with
-  whichever one the project's listing says has something behind it.
+- **Overview** opens with the answer board: the newest message that produced results,
+  derived from the Graph. It shows the question and the answer, then the results by
+  role. The figure or table the answer names leads, with the other results beside and
+  below it. Then come the method (an outline of the script), the run that produced
+  them with its command and output, the message's other commands (which open in the
+  Console), the data it read and any report. Each result has Ask, and selecting a
+  passage of the answer offers Ask about this. Either one sends a question to the
+  same conversation with what it is about (the exact kept version for a file).
+  Questions that make no new results are listed under Asked since with their
+  answers, and the board stays on the answer they ask about; a header link names a
+  question being answered now. Use this answer or Needs changes (with a note, also
+  sent to the Agent) records the person's word for the file versions that message
+  kept, and the board names results it does not cover and files changed since.
+  Earlier answers are chosen from a menu. Below the board come a count for each kind
+  of step (asked, read, edited, ran, changed on disk, answered), which is also the
+  legend and filter of the Graph's timeline below it, one lane per conversation.
+  Without conversations, the results show as pictures, newest first: the newest at
+  twice the size, then two or five more, with the rest in Files. A side column draws
+  each workspace as its panes, opens the shared notes, and lists the files the
+  Agent's tools named, most used first, each with a bar for its tool calls. Its Work
+  progress shows Agent sessions started outside Rho and any choice waiting in a
+  session; conversations started in Rho answer on the board.
+  A project with nothing recorded yet shows its two next steps — work with the Agent
+  or browse its files — rather than empty sections, leading with whichever one the
+  project's listing says has something behind it.
 - **Sources** counts the project's Data, Code, Results & figures and Notes from one
   bounded walk of its folders, by file name. Each kind unfolds in the sidebar into
   its files across the project and its source folders: the top level first, then by
@@ -42,6 +55,15 @@ inspect what happened. The application gives those actions direct places:
   the kind, ↑ and ↓ move in the sidebar, and Open in Studio places the file in the
   workspace ([pass](AGENT-CANVAS-EPISODE.md#browsing-sources-from-the-sidebar)).
   `+` adds a source folder.
+- **Console** runs the person's own shell commands in the project folder. Newest
+  first, it lists each message's commands under that message, with the person's
+  commands between them and Rho's managed runs at the end. Each command shows its
+  time, ending (exit code, stopped, unknown), duration and output, which streams
+  while it runs, and the files that changed on disk while it ran. A running command
+  has Stop. Run again runs the person's command again, and puts an Agent's command
+  into the prompt to check before Run. The board's command count opens the Console
+  at that message. Only the person at this machine can run or stop commands; an
+  Agent may read them ([episode](SIMULATED-PROJECT-EPISODE.md#second-pass)).
 - **Files** opens documents, browses the project's folder and the source folders it
   works in, and filters the current folder. A source folder is named as the person
   named it and opens one level at a time, the same way any other folder does.
@@ -63,20 +85,19 @@ inspect what happened. The application gives those actions direct places:
 - **Project settings** manages source folders and explicitly checks available tools.
 - **Studio** shows the workspaces as tabs, each with its view count; the sidebar lists
   them under Studio. The person and the Agent share one workspace: the one on screen,
-  else the one last open in the tab, else the first, else a new `workspace`. Sending a
-  message from the Agent panel follows the turn there. Each project file the Agent's
-  steps name opens once (a read when reported, an edit or write once it returned,
-  files a finished command names), as do outputs that appear on disk during the turn,
-  beside the person's own views: code joins code and data and figures join data,
-  wherever those groups now are, or get a group at their edge. The tab of the file the
-  Agent last named says Reading, Edited, Ran…; the topbar names the Agent's newest
-  action on every project page. Choosing another view, typing, dragging a tab or
-  leaving stops following until the person follows again
-  ([canvas episode](AGENT-CANVAS-EPISODE.md), [one workspace](GRAPH-EPISODE.md)).
+  else the one last open in the tab, else the first, else a new `workspace`. Studio is
+  the person's own arrangement: nothing opens there by itself. Sending a message from
+  another page follows the turn on the Overview's board; sent from Studio, it leaves
+  the person where they are, and Follow takes them to the board. The tab of an open
+  file the Agent last named says Reading, Edited, Ran…, and the topbar names the
+  Agent's newest action on every project page. Files open from the board, the Graph
+  and Sources ([canvas episode](AGENT-CANVAS-EPISODE.md),
+  [second pass](SIMULATED-PROJECT-EPISODE.md#second-pass)).
   Eight views render at once: those on screen, then the most recently shown, then the
   rest in layout order. A hidden view past that unmounts and mounts again from its
   owner when shown, keeping its buffer and undo but not its scroll or selection.
-- **Review** brings a frozen question, explicit Agent replies, exact result versions, keyed
+- **Review** is listed while a project has review records, since asking and deciding
+  now happen on the answer board. It brings a frozen question, explicit Agent replies, exact result versions, keyed
   table differences, captured code changes and append-only human decisions together. Table
   row and document selection controls open the same record; whole-resource questions cover
   figures. The page offers the person's questions and the kept results as choices, the
@@ -99,10 +120,9 @@ inspect what happened. The application gives those actions direct places:
   read, edited, ran, changed on disk, answered), lanes with the same title carrying
   their start time; the legend counts and filters them,
   refused or unknown steps are marked, pauses fold to a short gap, and the work
-  replays at 1×, 2× or 4×. While the Agent works the Graph stays and follows it, and its
-  files still open in the shared workspace; a step waiting for the person's choice
-  turns amber and is answered there. A file opened from it is held in the workspace
-  while following goes on ([episode](GRAPH-EPISODE.md)).
+  replays at 1×, 2× or 4×. While the Agent works the Graph stays and follows it; a
+  step waiting for the person's choice turns amber and is answered there. Card labels
+  and previews are drawn from 62% zoom up ([episode](GRAPH-EPISODE.md)).
 - **Workspaces** hold real owner views in tabs and splits. Arrange views exposes
   split, move, close and undo operations; the command palette offers the same actions.
   A tab drags onto another group's tabs (a line marks the place), onto the middle of a
@@ -203,15 +223,21 @@ command's name; the row's details keep what ran.
 `src/work-graph.ts` builds the Graph from `conversation.read` records (a finished
 message keeps the project files that changed on disk while it ran) and the folder walk
 (`project.entries` gives each file's `modifiedAt`), and lays each message out as a row; `web/graph.tsx` draws it, the inspector, the timeline and the
-Overview's `WorkStrip`. For the Graph, `foldVersions` merges a message's versions of one
+Overview's `WorkStrip`. `src/answer-board.ts` derives the Overview's answer board from
+the same graph: `answerBoard` gives each file and command of a message a role,
+`boardThreads` keeps a later question that made no results with the answer it asks
+about, and `src/asking.ts` writes and reads back what a question was asked about.
+`web/answer-board.tsx` draws the board and records decisions (`conversation.decide`);
+`web/console.tsx` draws the Console from the same graph and `console.list`. For the Graph, `foldVersions` merges a message's versions of one
 file and folds its unrelated commands (`foldLimits`); the `WorkStrip` keeps every step. `web/previews.ts` reads the card and Overview previews from a captured
 snapshot, or a registered result at its exact version: at most 16 files, two at a time, figures
 up to 2 MiB and tables to 3 rows by 4 columns.
 `web/work-progress.tsx` reads `project.work.read` for the local person's project
 Overview: Agent-reported plans/usage, retained native source identities and current
-referenced files. It shows a conversation started in Rho only while it answers or
-waits for a choice, and links to the Agent page for the finished ones; references the
-observation left out are counted under the file list.
+referenced files. Under the answer board it shows a conversation started in Rho only
+while it waits for a choice (without the board, also while it answers), and links to
+the Agent page for the finished ones; references the observation left out are counted
+under the file list.
 `web/agent-manage.tsx` draws the Agent page's tabs from the conversation summaries in
 the snapshot and `conversation.list` for the trash; an opened row reads its latest
 four messages through `web/agent-work.tsx`, the same step model as the panel.
@@ -278,12 +304,11 @@ control names. The report and images go to `work/frontend-reset/browser/` by def
 
 `npm run acceptance:agent-canvas` drives a controlled ACP peer that reads, edits and
 runs project files and writes an output no step names. It checks the sidebar counts,
-that Start follows in the workspace the person has open, the table, editor and media
-views the Agent's files open in beside the person's script with the Agent's place on
-their tabs, the edited text on disk, the one saved layout, the Agent page's record of
-the turn and a file it names shown in place, that choosing another view stops
-following until Follow, that a pane the person drags out stays while the Agent's next
-data file joins the data group, and overflow at 1024/390. Evidence goes to
+that a message sent from Studio leaves the person's workspace as they arranged it,
+the edited text on disk in the open editor, that nothing else opened there, the Agent
+page's record of the turn and a file it names shown in place, that Follow shows the
+answer board led by the figure the turn made, with the next question and its answer
+under it, and overflow at 1024/390. Evidence goes to
 `work/agent-canvas-acceptance/` by default.
 
 `npm run acceptance:agent-page` drives controlled peers for Claude Code and Codex
@@ -300,8 +325,9 @@ at 1024/390. Evidence goes to `work/agent-page-acceptance/` by default.
 messages. It checks the empty Graph, the Agent's flag on the card it reads while the
 Graph stays and follows, the two rows with their lines and the reference between them,
 table and figure previews, a figure's path and its own view, arrow keys along the
-path, a reference going to its output, Play's narration, the files in the one shared
-workspace, and overflow at 1024/390. Set `RHO_RSCRIPT` if `Rscript` is not on the
+path, a reference going to its output, Play's narration, that following opens no
+files in the workspace while a node the person opens goes there, and overflow at
+1024/390. Set `RHO_RSCRIPT` if `Rscript` is not on the
 path. Evidence goes to `work/graph-acceptance/` by default.
 
 `npm run acceptance:sources` browses a project of data, scripts in two folders and

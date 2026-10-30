@@ -79,7 +79,7 @@ if (values.acp) {
     process.stderr.write(usage); process.exit(2);
   }
   const limits = values.limits ? JSON.parse(await fs.readFile(values.limits, 'utf8')) : {};
-  const allowed = new Set(['maxRequestBytes', 'maxEventBytes', 'eventRetention', 'maxSubscriptions', 'maxQueue', 'maxContexts', 'maxBindings', 'maxActivities', 'maxContextBytes', 'maxRetainedMetadataBytes', 'maxConcurrentActions', 'maxOperations', 'maxLogPageBytes', 'maxCodeBytes', 'maxReconciled', 'documents', 'resources', 'workspace', 'r', 'annotations', 'interactions', 'capabilityLimits', 'browser', 'nativeFolders', 'conversations', 'evidence']);
+  const allowed = new Set(['maxRequestBytes', 'maxEventBytes', 'eventRetention', 'maxSubscriptions', 'maxQueue', 'maxContexts', 'maxBindings', 'maxActivities', 'maxContextBytes', 'maxRetainedMetadataBytes', 'maxConcurrentActions', 'maxOperations', 'maxLogPageBytes', 'maxCodeBytes', 'maxReconciled', 'documents', 'resources', 'workspace', 'r', 'annotations', 'interactions', 'capabilityLimits', 'browser', 'nativeFolders', 'conversations', 'evidence', 'console']);
   if (Object.keys(limits).some(k => !allowed.has(k))) throw new Error('Unknown service budget in --limits file.');
   const { RhoService } = await import('./server.js'), { runtime } = await import('./runtime.js');
   const agentBackend = values['agent-backend'] ?? process.env.RHO_AGENT_BACKEND ?? 'claude-acp';

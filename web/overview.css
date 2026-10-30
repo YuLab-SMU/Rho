@@ -133,8 +133,3 @@
   .workspace-grid { grid-template-columns: minmax(0, 1fr); }
 }
 
-/* The newest answer leads the page: the question in one line, then the Agent's own words with
-   room for its numbers and the method it names before the fold. */
-.latest-answer { gap: 10px; }
-.latest-ask { overflow: hidden; color: var(--color-meta); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
-.latest-answer .work-answer.clamped .turn-text { max-height: 18em; }

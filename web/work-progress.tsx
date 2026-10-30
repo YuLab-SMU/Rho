@@ -36,9 +36,11 @@ export function useProjectWork(client: BrowserClient, snapshot: WorkspaceSnapsho
 
 // Work in progress: a conversation started in Rho shows here while it answers or waits for a
 // choice. Finished ones are listed once, on the Agent page.
-export function WorkSessions({ state, openConversation, openActivity }: { state: ProjectWork; openConversation: (id: string) => void; openActivity: () => void }) {
+// boarded: the answer board above shows the conversations started in Rho as they answer, so only
+// a choice waiting in one of them is repeated here.
+export function WorkSessions({ state, openConversation, openActivity, boarded = false }: { state: ProjectWork; openConversation: (id: string) => void; openActivity: () => void; boarded?: boolean }) {
   const { work, problem, reading, refresh } = state;
-  const shown = work?.sessions.filter(session => !session.conversationId || session.state === 'running' || (session.pendingPermissions ?? 0) > 0) ?? [];
+  const shown = work?.sessions.filter(session => !session.conversationId || (session.pendingPermissions ?? 0) > 0 || (!boarded && session.state === 'running')) ?? [];
   if (!shown.length && !problem) return null;
   return <section className="project-section project-work" aria-label="Project work">
     <div className="section-heading"><h2>Work progress</h2><button className="text-button" disabled={reading} onClick={refresh}>{reading ? 'Reading…' : 'Refresh'}</button></div>

@@ -5,7 +5,7 @@
 // value an accepted response carries. The service, the Node client and the browser
 // client are all written against these types; runtime validation stays with Ajv.
 //
-// Contract identity: apiVersion 2.0, schemaVersion 2, 109 operations.
+// Contract identity: apiVersion 2.0, schemaVersion 2, 114 operations.
 export interface RhoOperationError {
   kind:
     | 'invalid'
@@ -4568,6 +4568,119 @@ export interface CompositionUndoOutput {
   currentVersion?: number;
 }
 
+export interface ConsoleListInput {
+  projectId: string;
+  limit?: number;
+}
+
+export interface ConsoleListOutput {
+  commands: {
+    by: string;
+    bytes: number;
+    changeId: string;
+    command: string;
+    commandId: string;
+    cut: boolean;
+    cwd: string;
+    endedAt: string | null;
+    exit: {
+      code: number | null;
+      signal: string | null;
+    } | null;
+    kept: number;
+    pid: number | null;
+    problem: string | null;
+    startedAt: string;
+    state: 'running' | 'exited' | 'stopped' | 'not-started' | 'continuing' | 'unknown';
+    stop: {
+      by: string;
+      requestedAt: string;
+    } | null;
+  }[];
+  omitted: number;
+}
+
+export interface ConsoleOutputInput {
+  projectId: string;
+  commandId: string;
+  maxBytes?: number;
+  offset?: number;
+}
+
+export interface ConsoleOutputOutput {
+  kept: number;
+  more: boolean;
+  nextOffset: number;
+  offset: number;
+  running: boolean;
+  text: string;
+}
+
+export interface ConsoleRunInput {
+  projectId: string;
+  changeId: string;
+  command: string;
+  cwd?: string;
+}
+
+export interface ConsoleRunOutput {
+  command: {
+    by: string;
+    bytes: number;
+    changeId: string;
+    command: string;
+    commandId: string;
+    cut: boolean;
+    cwd: string;
+    endedAt: string | null;
+    exit: {
+      code: number | null;
+      signal: string | null;
+    } | null;
+    kept: number;
+    pid: number | null;
+    problem: string | null;
+    startedAt: string;
+    state: 'running' | 'exited' | 'stopped' | 'not-started' | 'continuing' | 'unknown';
+    stop: {
+      by: string;
+      requestedAt: string;
+    } | null;
+  };
+}
+
+export interface ConsoleStopInput {
+  projectId: string;
+  changeId: string;
+  commandId: string;
+}
+
+export interface ConsoleStopOutput {
+  command: {
+    by: string;
+    bytes: number;
+    changeId: string;
+    command: string;
+    commandId: string;
+    cut: boolean;
+    cwd: string;
+    endedAt: string | null;
+    exit: {
+      code: number | null;
+      signal: string | null;
+    } | null;
+    kept: number;
+    pid: number | null;
+    problem: string | null;
+    startedAt: string;
+    state: 'running' | 'exited' | 'stopped' | 'not-started' | 'continuing' | 'unknown';
+    stop: {
+      by: string;
+      requestedAt: string;
+    } | null;
+  };
+}
+
 export interface ContextCreateInput {
   projectId: string;
   /**
@@ -4903,6 +5016,176 @@ export interface ConversationConfigureOutput {
   };
 }
 
+export interface ConversationDecideInput {
+  projectId: string;
+  conversationId: string;
+  turnId: string;
+  changeId: string;
+  decision: 'accepted' | 'needs-changes';
+  note?: string;
+}
+
+export interface ConversationDecideOutput {
+  conversation: {
+    conversationId: string;
+    title: string;
+    client: string;
+    principal: string | null;
+    createdAt: string;
+    updatedAt: string;
+    version: number;
+    turns: number;
+    state: 'idle' | 'running' | 'completed' | 'failed' | 'stopped' | 'unknown';
+    lastAt: string;
+    backend?: string;
+    agentTitle?: string | null;
+    adapter?: {
+      name: string;
+      version?: string;
+    } | null;
+    model?: string | null;
+    config?: {
+      [k: string]: string | boolean;
+    };
+    usage?: {
+      used: number;
+      size: number;
+      cost: {
+        amount: number;
+        currency: string;
+      } | null;
+    } | null;
+    costUsd?: number | null;
+    sessionId?: string | null;
+    trashedAt?: string | null;
+  };
+  turn: {
+    id: string;
+    by: string;
+    text: string;
+    sentAt: string;
+    state: 'running' | 'completed' | 'failed' | 'stopped' | 'unknown';
+    startedAt?: string | null;
+    endedAt?: string | null;
+    model?: string | null;
+    stop?: {
+      requestedAt: string;
+      by: string;
+      reason: 'person' | 'closing' | 'wall-limit' | 'output-limit' | 'line-limit' | 'identity';
+    } | null;
+    steps: {
+      kind: 'text' | 'tool' | 'error';
+      at: string;
+      startedAt?: string;
+      text?: string;
+      cut?: boolean;
+      id?: string;
+      tool?: string;
+      operation?: string;
+      title?: string;
+      toolKind?:
+        'read' | 'edit' | 'delete' | 'move' | 'search' | 'execute' | 'think' | 'fetch' | 'switch_mode' | 'other';
+      detail?: string;
+      outcome?: 'requested' | 'returned' | 'rejected' | 'unknown';
+      exitCode?: number;
+      output?: {
+        text: string;
+        lines: number;
+        bytes: number;
+        cut: boolean;
+      };
+    }[];
+    omitted: number;
+    evidence?: {
+      /**
+       * @maxItems 64
+       */
+      records: {
+        key: string;
+        path: string;
+        phase: string;
+        requestedAt: string;
+        state: 'pending' | 'captured' | 'unavailable' | 'interrupted';
+        reason?: string;
+        /**
+         * @maxItems 2
+         */
+        snapshots: {
+          resource: {
+            id: string;
+            version: string;
+          };
+          kind: string;
+          bytes: number;
+          observedAt: string;
+          source: {
+            [k: string]: unknown;
+          };
+        }[];
+      }[];
+      omitted: number;
+      bytes: number;
+      snapshots: number;
+    };
+    contexts?: string[];
+    decisions?: {
+      changeId: string;
+      requestDigest: string;
+      decision: 'accepted' | 'needs-changes';
+      note: string | null;
+      by: string;
+      at: string;
+      supersedes: string | null;
+      results: {
+        path: string;
+        resource: {
+          id: string;
+          version: string;
+        };
+      }[];
+    }[];
+    permissions?: {
+      id: string;
+      title: string;
+      toolCallId: string;
+      details?: string;
+      options: {
+        id: string;
+        name: string;
+        kind: string;
+      }[];
+      state: 'pending' | 'selected' | 'cancelled';
+      selected?: string;
+    }[];
+    retry?: {
+      attempt: number | null;
+      of: number | null;
+      status: number | null;
+      at: string;
+    } | null;
+    result?: {
+      isError: boolean;
+      kind: string | null;
+      reason: string | null;
+      steps: number | null;
+      durationMs: number | null;
+      costUsd: number | null;
+      message: string | null;
+    } | null;
+    problem: string | null;
+    files?: {
+      changed: {
+        path: string;
+        change: 'added' | 'modified' | 'removed';
+        modifiedAt: string | null;
+        bytes: number | null;
+      }[];
+      omitted: number;
+      partial: boolean;
+    };
+  };
+}
+
 export interface ConversationDeleteInput {
   projectId: string;
   conversationId: string;
@@ -5068,6 +5351,22 @@ export interface ConversationPermissionOutput {
       snapshots: number;
     };
     contexts?: string[];
+    decisions?: {
+      changeId: string;
+      requestDigest: string;
+      decision: 'accepted' | 'needs-changes';
+      note: string | null;
+      by: string;
+      at: string;
+      supersedes: string | null;
+      results: {
+        path: string;
+        resource: {
+          id: string;
+          version: string;
+        };
+      }[];
+    }[];
     permissions?: {
       id: string;
       title: string;
@@ -5307,6 +5606,22 @@ export interface ConversationReadOutput {
       snapshots: number;
     };
     contexts?: string[];
+    decisions?: {
+      changeId: string;
+      requestDigest: string;
+      decision: 'accepted' | 'needs-changes';
+      note: string | null;
+      by: string;
+      at: string;
+      supersedes: string | null;
+      results: {
+        path: string;
+        resource: {
+          id: string;
+          version: string;
+        };
+      }[];
+    }[];
     permissions?: {
       id: string;
       title: string;
@@ -5504,6 +5819,22 @@ export interface ConversationSendOutput {
       snapshots: number;
     };
     contexts?: string[];
+    decisions?: {
+      changeId: string;
+      requestDigest: string;
+      decision: 'accepted' | 'needs-changes';
+      note: string | null;
+      by: string;
+      at: string;
+      supersedes: string | null;
+      results: {
+        path: string;
+        resource: {
+          id: string;
+          version: string;
+        };
+      }[];
+    }[];
     permissions?: {
       id: string;
       title: string;
@@ -5896,6 +6227,22 @@ export interface ConversationStartOutput {
       snapshots: number;
     };
     contexts?: string[];
+    decisions?: {
+      changeId: string;
+      requestDigest: string;
+      decision: 'accepted' | 'needs-changes';
+      note: string | null;
+      by: string;
+      at: string;
+      supersedes: string | null;
+      results: {
+        path: string;
+        resource: {
+          id: string;
+          version: string;
+        };
+      }[];
+    }[];
     permissions?: {
       id: string;
       title: string;
@@ -6047,6 +6394,22 @@ export interface ConversationStopOutput {
       snapshots: number;
     };
     contexts?: string[];
+    decisions?: {
+      changeId: string;
+      requestDigest: string;
+      decision: 'accepted' | 'needs-changes';
+      note: string | null;
+      by: string;
+      at: string;
+      supersedes: string | null;
+      results: {
+        path: string;
+        resource: {
+          id: string;
+          version: string;
+        };
+      }[];
+    }[];
     permissions?: {
       id: string;
       title: string;
@@ -10156,6 +10519,10 @@ export interface SessionGrantInput {
     | 'composition.put'
     | 'composition.read'
     | 'composition.undo'
+    | 'console.list'
+    | 'console.output'
+    | 'console.run'
+    | 'console.stop'
     | 'context.create'
     | 'context.read'
     | 'data.compare'
@@ -11951,9 +12318,14 @@ export interface RhoOperations {
   "composition.put": { input: CompositionPutInput; output: CompositionPutOutput };
   "composition.read": { input: CompositionReadInput; output: CompositionReadOutput };
   "composition.undo": { input: CompositionUndoInput; output: CompositionUndoOutput };
+  "console.list": { input: ConsoleListInput; output: ConsoleListOutput };
+  "console.output": { input: ConsoleOutputInput; output: ConsoleOutputOutput };
+  "console.run": { input: ConsoleRunInput; output: ConsoleRunOutput };
+  "console.stop": { input: ConsoleStopInput; output: ConsoleStopOutput };
   "context.create": { input: ContextCreateInput; output: ContextCreateOutput };
   "context.read": { input: ContextReadInput; output: ContextReadOutput };
   "conversation.configure": { input: ConversationConfigureInput; output: ConversationConfigureOutput };
+  "conversation.decide": { input: ConversationDecideInput; output: ConversationDecideOutput };
   "conversation.delete": { input: ConversationDeleteInput; output: ConversationDeleteOutput };
   "conversation.list": { input: ConversationListInput; output: ConversationListOutput };
   "conversation.permission": { input: ConversationPermissionInput; output: ConversationPermissionOutput };
@@ -12037,5 +12409,5 @@ export type RhoInput<M extends RhoMethod> = RhoOperations[M]['input'];
 export type RhoOutput<M extends RhoMethod> = RhoOperations[M]['output'];
 
 /** The names a caller may pass to protocol.describe / protocol.validate. */
-export const rhoMethods = ["action.cancel","action.export","action.list","action.lookup","action.observe","action.output","action.retry","action.submit","agent.activity.capture","agent.activity.outputs","agent.activity.read","annotation.create","annotation.decide","annotation.list","annotation.read","annotation.reply","artifact.check","binding.activity","binding.activity.append","binding.close","binding.list","binding.open","capability.configure","capability.index","capability.list","capability.resolve","composition.apply","composition.put","composition.read","composition.undo","context.create","context.read","conversation.configure","conversation.delete","conversation.list","conversation.permission","conversation.read","conversation.restore","conversation.send","conversation.settings.check","conversation.settings.read","conversation.settings.update","conversation.start","conversation.stop","conversation.trash","data.compare","data.page","data.plot","document.abandonSave","document.change.read","document.edit","document.history","document.open","document.read","document.revert","document.save","document.undo","document.undoOwn","evidence.export","evidence.preview","feedback.read","feedback.status","feedback.submit","interaction.selection.read","interaction.selection.set","media.describe","object.read","observation.snapshot","project.create","project.createWorkspace","project.doctor","project.entries","project.list","project.open","project.openFile","project.pick","project.runs","project.source.add","project.source.pick","project.work.read","protocol.describe","protocol.validate","requirements.check","requirements.prepare","resource.capture","resource.list","resource.read","resource.register","selection.set","session.browser.pair","session.browser.revoke","session.connect","session.grant","skill.list","skill.read","task.map.declare","task.map.present","task.map.read","task.map.respond","task.routing.put","view.close","view.observations.read","view.observe","view.protection.set","workspace.enhance","workspace.export","workspace.observe","workspace.restore","workspace.save"] as const satisfies readonly RhoMethod[];
+export const rhoMethods = ["action.cancel","action.export","action.list","action.lookup","action.observe","action.output","action.retry","action.submit","agent.activity.capture","agent.activity.outputs","agent.activity.read","annotation.create","annotation.decide","annotation.list","annotation.read","annotation.reply","artifact.check","binding.activity","binding.activity.append","binding.close","binding.list","binding.open","capability.configure","capability.index","capability.list","capability.resolve","composition.apply","composition.put","composition.read","composition.undo","console.list","console.output","console.run","console.stop","context.create","context.read","conversation.configure","conversation.decide","conversation.delete","conversation.list","conversation.permission","conversation.read","conversation.restore","conversation.send","conversation.settings.check","conversation.settings.read","conversation.settings.update","conversation.start","conversation.stop","conversation.trash","data.compare","data.page","data.plot","document.abandonSave","document.change.read","document.edit","document.history","document.open","document.read","document.revert","document.save","document.undo","document.undoOwn","evidence.export","evidence.preview","feedback.read","feedback.status","feedback.submit","interaction.selection.read","interaction.selection.set","media.describe","object.read","observation.snapshot","project.create","project.createWorkspace","project.doctor","project.entries","project.list","project.open","project.openFile","project.pick","project.runs","project.source.add","project.source.pick","project.work.read","protocol.describe","protocol.validate","requirements.check","requirements.prepare","resource.capture","resource.list","resource.read","resource.register","selection.set","session.browser.pair","session.browser.revoke","session.connect","session.grant","skill.list","skill.read","task.map.declare","task.map.present","task.map.read","task.map.respond","task.routing.put","view.close","view.observations.read","view.observe","view.protection.set","workspace.enhance","workspace.export","workspace.observe","workspace.restore","workspace.save"] as const satisfies readonly RhoMethod[];
 export type RhoInputFor<M extends RhoMethod> = RhoOperations[M]['input'];

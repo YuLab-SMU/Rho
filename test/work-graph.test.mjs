@@ -183,4 +183,7 @@ test('one message draws one card per file with every captured version, and folds
   assert.ok(graph.events.every(e => ids.has(e.node)));
   assert.equal(graph.events.length, raw.events.length, 'the timeline keeps every step');
   assert.ok(!graph.edges.some(e => e.label === 'captured observation' && graph.edges.some(o => o !== e && o.from === e.from && o.to === e.to)));
+  // A file the message read, wrote or ran is reached by that line; its kept version needs no second one.
+  for (const e of graph.edges.filter(e => e.label === 'captured observation'))
+    assert.ok(!graph.edges.some(o => o.label !== 'captured observation' && o.turn === e.turn && (o.from === e.to || o.to === e.to)), 'a capture line repeats ' + e.to);
 });

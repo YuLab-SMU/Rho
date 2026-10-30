@@ -12,7 +12,7 @@ export type Block =
   | { type: 'paragraph'; children: Inline[] }
   | { type: 'heading'; level: number; children: Inline[] }
   | { type: 'code'; text: string; language: string | null }
-  | { type: 'list'; ordered: boolean; items: Inline[][] }
+  | { type: 'list'; ordered: boolean; start?: number; items: Inline[][] }
   | { type: 'quote'; children: Inline[] }
   | { type: 'table'; align: Array<'left' | 'center' | 'right' | null>; head: Inline[][]; rows: Inline[][][] }
   | { type: 'rule' };
@@ -141,15 +141,26 @@ export function markdownBlocks(source: string): Block[] {
     const item = /^ {0,3}([-*+]|\d+[.)])\s+(.*)$/.exec(line);
     if (item) {
       const ordered = /^\d/.test(item[1]), items: Inline[][] = [];
+      const marker = (text: string | undefined) => text === undefined ? null : /^ {0,3}([-*+]|\d+[.)])\s+(.*)$/.exec(text);
+      const indented = (text: string | undefined) => text !== undefined && /^\s{2,}\S/.test(text) && !/^\s*([-*+]|\d+[.)])\s+/.test(text);
       while (i < lines.length) {
-        const next = /^ {0,3}([-*+]|\d+[.)])\s+(.*)$/.exec(lines[i]);
+        const next = marker(lines[i]);
         if (!next || /^\d/.test(next[1]) !== ordered) break;
         const parts = [next[2]];
         i++;
-        while (i < lines.length && /^\s{2,}\S/.test(lines[i]) && !/^\s*([-*+]|\d+[.)])\s+/.test(lines[i])) { parts.push(lines[i].trim()); i++; }
+        for (;;) {
+          if (indented(lines[i])) { parts.push(lines[i].trim()); i++; continue; }
+          // Blank lines inside a list: the item goes on when an indented line follows, and the
+          // list goes on when another item of its kind follows, as Markdown reads a loose list.
+          let blank = i; while (blank < lines.length && !lines[blank].trim()) blank++;
+          if (blank > i && indented(lines[blank])) { parts.push(''); i = blank; continue; }
+          const after = marker(lines[blank]);
+          if (blank > i && after && /^\d/.test(after[1]) === ordered) i = blank;
+          break;
+        }
         items.push(inlineMarkdown(parts.join('\n')));
       }
-      blocks.push({ type: 'list', ordered, items });
+      blocks.push({ type: 'list', ordered, ...(ordered && parseInt(item[1], 10) !== 1 ? { start: parseInt(item[1], 10) } : {}), items });
       continue;
     }
     const body = [line.trim()];

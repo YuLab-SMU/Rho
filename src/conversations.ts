@@ -20,6 +20,8 @@ export const conversationLimits = {
   maxDeleted: 256,
   // Messages kept per conversation; sending another is refused.
   maxTurns: 200,
+  // A person's decisions kept on one answer, each superseding the one before; past this one more is refused.
+  maxDecisions: 32,
   // One message from the person, in UTF-8 bytes.
   maxMessageBytes: 16384,
   // One conversation record on disk; past it, new messages are refused.
@@ -70,7 +72,12 @@ interface Turn {
   files?: { changed: FileChange[]; omitted: number; partial: boolean };
   evidence?: TurnEvidence;
   contexts?: string[];
+  decisions?: Decision[];
 }
+// The person's word on an answer: use it, or it needs changes and why. It holds for the file
+// versions this message kept when it was given, and says nothing of later versions. Each new
+// decision supersedes the one before; none is removed.
+interface Decision { changeId: string; requestDigest: string; decision: 'accepted' | 'needs-changes'; note: string | null; by: string; at: string; supersedes: string | null; results: Array<{ path: string; resource: { id: string; version: string } }> }
 interface FileChange { path: string; change: 'added' | 'modified' | 'removed'; modifiedAt: string | null; bytes: number | null }
 interface Disk { files: Map<string, { modified: number; bytes: number }>; partial: boolean }
 // The project's files, without Rho's own state or Git's, up to a limit.
@@ -134,7 +141,7 @@ interface Summary {
   usage?: { used: number; size: number; cost: { amount: number; currency: string } | null } | null; costUsd?: number | null; sessionId?: string | null; trashedAt?: string | null;
 }
 interface Index { format: 1; conversations: Summary[]; deleted?: Array<{ conversationId: string; changeId: string; requestDigest: string; deletedAt: string; deletedBy: string }> }
-interface Live { project: Project; conversation: Conversation; turn: Turn; controller: AbortController; stop(reason: StopReason, by: string): void; done: Promise<void>; before?: Disk | null; captures?: Promise<void>[] }
+interface Live { project: Project; conversation: Conversation; turn: Turn; controller: AbortController; stop(reason: StopReason, by: string): void; done: Promise<void>; before?: Disk | null; captures?: Promise<void>[]; attempts?: number; seen?: Map<string, string>; tried?: Set<string> }
 export interface ConversationPorts {
   // The project's Agent grant for this conversation, written to a private connection file.
   grant(project: Project, conversation: { id: string; title: string; client: string }): Promise<{ file: string; principal: string }>;
@@ -499,6 +506,25 @@ export class Conversations {
       return this.reply(project, c, turn);
     });
   }
+  async decide(project: Project, by: string, input: { conversationId: string; turnId: string; changeId: string; decision: Decision['decision']; note?: string }) {
+    const note = input.note?.trim() || null, requestDigest = digest(canonical({ turnId: input.turnId, decision: input.decision, note }));
+    return this.serial(project.id, async () => {
+      const c = await this.load(project, input.conversationId), turn = c.turns.find(t => t.id === input.turnId);
+      requireThat(turn, 'not_found', 'No message has that identity in this conversation.');
+      const known = turn.decisions?.find(d => d.changeId === input.changeId);
+      if (known) { requireThat(known.requestDigest === requestDigest, 'conflict', 'That request identity already recorded a different decision.'); return this.reply(project, c, turn); }
+      requireThat(turn.state !== 'running', 'condition', 'The Agent is still answering this message. Decide when it has finished.');
+      requireThat(input.decision !== 'needs-changes' || note, 'invalid', 'Say what needs to change.');
+      requireThat((turn.decisions?.length ?? 0) < this.limits.maxDecisions, 'limit', `An answer keeps at most ${this.limits.maxDecisions} decisions.`, { limit: 'maxDecisions', maximum: this.limits.maxDecisions });
+      // The newest version this message kept of each file it captured.
+      const kept = new Map<string, { id: string; version: string }>();
+      for (const record of turn.evidence?.records ?? []) if (record.state === 'captured' && record.snapshots.length) kept.set(record.path, record.snapshots.at(-1)!.resource);
+      const previous = turn.decisions?.at(-1);
+      turn.decisions = [...turn.decisions ?? [], { changeId: input.changeId, requestDigest, decision: input.decision, note, by, at: now(), supersedes: previous?.changeId ?? null, results: [...kept].map(([path, resource]) => ({ path, resource })) }];
+      await this.write(project, c);
+      return this.reply(project, c, turn);
+    });
+  }
   async permission(project: Project, by: string, input: { conversationId: string; turnId: string; permissionId: string; optionId: string }) {
     return this.serial(project.id, async () => {
       const c = await this.load(project, input.conversationId), turn = c.turns.find(t => t.id === input.turnId);
@@ -610,12 +636,25 @@ export class Conversations {
       this.drivers.set(key, { driver, project, conversation: c }); return driver;
     });
   }
+  // A message keeps the versions of its files it saw. Seeing the same bytes again adds nothing:
+  // a step that finds a file exactly as an earlier capture of this message kept it leaves no
+  // record and spends no budget, and a write's file that does not exist yet is not looked for.
+  // A quarter of the record, snapshot and byte budget waits for the files the message changed,
+  // captured when it ends, so a script rewritten many times cannot crowd out its results.
+  // Looking is bounded too: at most four times the record budget of attempts per message.
   private capture(live: Live, reported: string, phase: string) {
     const file = projectPath(reported, live.project), evidence = live.turn.evidence;
     if (!file || !evidence || !this.ports.capture || !/\.(?:R|r|Rmd|qmd|py|md|txt|json|csv|tsv|png|jpe?g|svg|pdf|sql|sh|js|mjs|cjs|ts|tsx|jsx|css|html|yaml|yml|toml)$/.test(file)) return;
-    const key = phase + ':' + file;
-    if (evidence.records.some(r => r.key === key)) return;
-    if (evidence.records.length >= Math.min(this.limits.maxCaptureFiles, 64)) { evidence.omitted++; return; }
+    const key = phase + ':' + file, tried = live.tried ??= new Set<string>();
+    // A step is reported again with each update; once looked at, it is not looked at again.
+    if (tried.has(key) || evidence.records.some(r => r.key === key)) return;
+    tried.add(key);
+    const final = phase === 'turn-end', files = Math.min(this.limits.maxCaptureFiles, 64);
+    // A capture of this file still waiting its turn will read it no earlier than now.
+    if (!final && evidence.records.some(r => r.path === file && r.state === 'pending')) return;
+    const reserve = final ? 0 : Math.floor(files / 4), reserveBytes = final ? 0 : Math.floor(this.limits.maxCaptureBytes / 4);
+    if (!final) live.attempts = (live.attempts ?? 0) + 1;
+    if (evidence.records.length >= files - reserve || (!final && live.attempts! > files * 4)) { evidence.omitted++; return; }
     const record: TurnEvidence['records'][number] = { key, path: file, phase, requestedAt: now(), state: 'pending', snapshots: [] };
     evidence.records.push(record);
     if(privateEvidencePath(file)){record.state='unavailable';record.reason='Known connection or credential location excluded from automatic evidence.';this.schedule(live.project,live.conversation);return;}
@@ -623,12 +662,24 @@ export class Conversations {
     const lanes = live.captures ??= [], lane = 0;
     lanes[lane] = (lanes[lane] ?? Promise.resolve()).then(async () => {
       await this.serial(live.project.id, () => this.write(live.project, live.conversation));
-      if (evidence.bytes >= this.limits.maxCaptureBytes || evidence.snapshots >= this.limits.maxCaptureFiles) { record.state = 'unavailable'; record.reason = 'The turn snapshot budget was reached.'; return; }
+      const drop = () => { evidence.records.splice(evidence.records.indexOf(record), 1); };
+      // The file as the last capture of this message saw it, by size and modification time.
+      const seen = live.seen ??= new Map<string, string>();
+      const stat = file.startsWith('@') ? null : await fs.stat(path.join(live.project.root, file)).catch(() => undefined);
+      if (stat === undefined && phase.endsWith(':requested')) { drop(); this.schedule(live.project, live.conversation); return; }
+      const shape = stat ? stat.size + ':' + stat.mtimeMs : '';
+      if (shape && seen.get(file) === shape) { drop(); this.schedule(live.project, live.conversation); return; }
+      if (evidence.bytes >= this.limits.maxCaptureBytes - reserveBytes || evidence.snapshots >= this.limits.maxCaptureFiles - reserve) { record.state = 'unavailable'; record.reason = 'The turn snapshot budget was reached.'; return; }
       try {
-        const captured = await this.ports.capture!(live.project, file, Math.min(this.limits.maxSnapshotBytes, this.limits.maxCaptureBytes - evidence.bytes), this.limits.maxCaptureFiles - evidence.snapshots);
+        const captured = await this.ports.capture!(live.project, file, Math.min(this.limits.maxSnapshotBytes, this.limits.maxCaptureBytes - reserveBytes - evidence.bytes), this.limits.maxCaptureFiles - reserve - evidence.snapshots);
+        const kept = new Set(evidence.records.filter(r => r !== record).flatMap(r => r.snapshots.map(s => s.resource.id + '@' + s.resource.version)));
+        const fresh = captured.snapshots.filter(s => !kept.has(s.resource.id + '@' + s.resource.version));
+        // Only a file with no unsaved buffer beside it is known by its size and time alone.
+        if (shape && captured.snapshots.length && captured.snapshots.every(s => s.source.kind === 'disk')) seen.set(file, shape);
+        if (captured.snapshots.length && !fresh.length) { drop(); this.schedule(live.project, live.conversation); return; }
         record.snapshots = captured.snapshots; record.reason = captured.reason;
         record.state = captured.snapshots.length ? 'captured' : 'unavailable';
-        evidence.bytes += captured.snapshots.reduce((n, r) => n + r.bytes, 0); evidence.snapshots += captured.snapshots.length;
+        evidence.bytes += fresh.reduce((n, r) => n + r.bytes, 0); evidence.snapshots += fresh.length;
       } catch (error) { record.state = 'unavailable'; record.reason = error instanceof Fault ? error.message : 'The file could not be captured; earlier snapshots are kept.'; }
       this.schedule(live.project, live.conversation);
     }).catch(() => { record.state = 'interrupted'; record.reason = 'The capture could not be confirmed.'; });

@@ -843,3 +843,29 @@ format does not restore a workspace or run an analysis.
 New capture/export limits can be lowered through `--limits`; observation diagnostics
 expose them. Table/text previews are bounded to 200 rows, 20 columns and 64 KiB.
 See the [episode](REVIEW-EVIDENCE-EPISODE.md) for actual trials and open user observation.
+
+### Decisions on an answer and the Console
+
+`conversation.decide` is local-browser-only. It records `accepted` or `needs-changes`
+(a note is required) on one finished message of a conversation started in Rho. The
+decision holds the exact resource versions that message kept (`results`); a file
+changed later is not covered by it. A request is retried under its `changeId`.
+A different intent under the same identity is a conflict. A later decision names the
+one it `supersedes`, and every earlier decision is retained. Agent grants exclude it.
+
+Console 0.1.0 runs a person's shell commands in the project folder. `console.run`
+and `console.stop` accept only the local browser principal. An operator credential
+or Agent grant cannot use them, while `console.list` and `console.output` can be
+granted to read the record. Each command keeps its text, folder, `changeId`, who ran
+it, pid, start/end, exit code or signal and bounded output in
+`.rho/plugins/console/` in the project. Stop signals the command's process group,
+then kills it after a grace period. After a restart, a command still alive reads
+`continuing` and a vanished one `unknown`. Neither is run again.
+
+| Protected resource | `console` in `--limits`, default | Exhaustion |
+| --- | --- | --- |
+| Command records | `maxRecords` 200 | The oldest finished record and its output make room; running ones stay. |
+| Running commands | `maxRunning` 4 | Refuse to start another (`limit`, named). |
+| Kept output | `maxOutputBytes` 1 MiB, then `tailBytes` 64 KiB | Keep head and tail, count the bytes between. |
+| Output reads | `maxReadBytes` 64 KiB per page | Refuse a larger page. |
+| Stop | `stopGraceMs` 3000 | SIGKILL the process group. |

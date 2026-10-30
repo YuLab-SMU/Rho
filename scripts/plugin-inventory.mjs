@@ -2,7 +2,7 @@ import * as fs from 'node:fs/promises';
 // A finite, descriptive build inventory. Reduced installations keep this copy
 // without importing absent owners. It contributes no operations, Skills or grants.
 const plugins = [];
-for (const id of ['documents', 'files', 'r', 'requirements', 'tables', 'media', 'charts', 'agent', 'annotations']) {
+for (const id of ['documents', 'files', 'r', 'requirements', 'tables', 'media', 'charts', 'agent', 'annotations', 'console']) {
   const { plugin } = await import('@rho-workspace/plugin-' + id);
   plugins.push({ id, package: plugin.package, version: plugin.version, requires: plugin.requires, presentation: plugin.presentation,
     listing: {

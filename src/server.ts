@@ -186,6 +186,7 @@ export class RhoService {
   private feedbackTransports = new Map<string, FeedbackTransport>();
   // Conversations the local person starts here; Rho holds their input and runs Claude Code.
   conversations: Conversations;
+  private consoles = new Map<string, import('@rho-workspace/plugin-console').ConsoleRunner>();
   private feedback(project: Project, owners = this.plugins.project(project.root, project.id)) {
     const agent = owners.need('agent');
     return new (this.plugins.need('agent').FeedbackDelivery)(project.root, project.id, { agent, annotations: owners.annotations, binding: async (id: string) => (await readJson<any[]>(path.join(await this.dataDir(project), 'bindings.json'), [])).find(b => b.id === id) }, this.config.agentDelivery);
@@ -433,11 +434,11 @@ export class RhoService {
     const capabilities = new Capabilities(this.plugins, project);
     const state = await capabilities.state();
     // The shared project listing remains available alongside an Agent's native tools.
-    const available = Object.keys(operations).filter(m => !m.startsWith('agent.activity.') && !m.startsWith('session.') && !m.startsWith('conversation.') && (!m.startsWith('project.') || m === 'project.entries') && !m.startsWith('requirements.prepare') && !m.startsWith('workspace.restore') && !['task.routing.put', 'binding.activity.append', 'feedback.submit', 'view.observe', 'view.observations.read', 'task.map.respond', 'annotation.decide', 'evidence.export', 'evidence.preview'].includes(m));
+    const available = Object.keys(operations).filter(m => !m.startsWith('agent.activity.') && !m.startsWith('session.') && !m.startsWith('conversation.') && (!m.startsWith('project.') || m === 'project.entries') && !m.startsWith('requirements.prepare') && !m.startsWith('workspace.restore') && !['task.routing.put', 'binding.activity.append', 'feedback.submit', 'view.observe', 'view.observations.read', 'task.map.respond', 'annotation.decide', 'evidence.export', 'evidence.preview', 'console.run', 'console.stop'].includes(m));
     const profileMethods = profile === 'layered-presentation' ? ['binding.open', 'capability.index', 'capability.resolve', 'workspace.observe', 'workspace.enhance'] : available.filter(m => !['workspace.observe', 'workspace.enhance', ...(profile ? ['skill.list','skill.read','protocol.describe'] : [])].includes(m));
     const selected = methods ?? (profile === 'layered-presentation' ? profileMethods : (await Promise.all(profileMethods.map(async method => [method, await capabilities.isAvailable(method, state)] as const))).filter(([, enabled]) => enabled).map(([method]) => method));
     requireThat(profile !== 'layered-presentation' || selected.every(m => profileMethods.includes(m)), 'scope', 'The selected role cannot receive broader methods.');
-    requireThat(selected.every(m => !!operations[m] && !m.startsWith('session.') && !m.startsWith('conversation.') && (!m.startsWith('project.') || m === 'project.entries') && m !== 'task.routing.put'), 'invalid', 'Unknown or operator-only Agent capability.');
+    requireThat(selected.every(m => !!operations[m] && !m.startsWith('session.') && !m.startsWith('conversation.') && (!m.startsWith('project.') || m === 'project.entries') && !['task.routing.put', 'console.run', 'console.stop'].includes(m)), 'invalid', 'Unknown or operator-only Agent capability.');
     requireThat(await Promise.all(selected.map(method => capabilities.isAvailable(method, state))).then(values => values.every(Boolean)), 'unavailable', 'A requested Agent operation has no selected provider.');
     requireThat(!profile || new Set(['capability.index', 'capability.resolve', ...selected]).size <= 64, 'limit', 'Layered connection methods exceed the selected 64-method profile; choose an explicit narrower grant.');
     const token = randomBytes(32).toString('hex');
@@ -602,6 +603,22 @@ export class RhoService {
     });
   }
   private async dataDir(p: Project) { return stateDirectory(p.root, '.rho/rho'); }
+  // One Console per project for the life of this service: it holds the commands it started.
+  // Changes reach open pages at most four times a second.
+  private consoleFor(p: Project) {
+    let runner = this.consoles.get(p.id);
+    if (!runner) {
+      const { ConsoleRunner } = this.plugins.need('console');
+      let pending: NodeJS.Timeout | undefined;
+      const changed = () => {
+        if (pending || this.closing) return;
+        pending = setTimeout(() => { pending = undefined; void this.serial(p.id, () => this.emit(p, 'console.changed', p.id, localBrowserId)).catch(() => {}); }, 250);
+      };
+      runner = new ConsoleRunner(p.root, { limits: this.config.console, onChange: changed });
+      this.consoles.set(p.id, runner);
+    }
+    return runner;
+  }
   // The discriminated union is what gives every branch below a typed body: after the
   // `method` comparison TypeScript narrows `request`, so `b` is that operation's own
   // input type. `RhoOutput<RhoMethod>` is the published response union; the concrete
@@ -869,6 +886,7 @@ export class RhoService {
       if (method === 'conversation.read') return this.conversations.read(p, b);
       if (method === 'conversation.permission') return this.conversations.permission(p, principal.id, b);
       if (method === 'conversation.stop') return this.conversations.stop(p, principal.id, b);
+      if (method === 'conversation.decide') return this.conversations.decide(p, principal.id, b);
       if (method === 'conversation.list') return { conversations: await this.conversations.list(p, b) };
       if (method === 'conversation.trash') return this.conversations.trash(p, principal.id, b);
       if (method === 'conversation.restore') return this.conversations.restore(p, b);
@@ -882,6 +900,17 @@ export class RhoService {
       if (method === 'conversation.settings.check') return this.conversations.check(p, b);
     }
     const capabilities = new Capabilities(this.plugins, p);
+    // The person runs and stops Console commands with their own shell; anyone holding the read
+    // grant may read what ran.
+    if (method.startsWith('console.')) {
+      if (method === 'console.run' || method === 'console.stop') requireThat(principal.id === localBrowserId, 'unauthorized', 'Console commands run with the shell of the person at this machine. Open Rho in a browser on this machine.');
+      await capabilities.assertAvailable(method, principal);
+      const runner = this.consoleFor(p);
+      if (method === 'console.run') return { command: await runner.run({ command: b.command, cwd: b.cwd, changeId: b.changeId, by: principal.id }) };
+      if (method === 'console.list') return runner.list(b.limit);
+      if (method === 'console.output') return runner.output(b.commandId, b.offset, b.maxBytes);
+      if (method === 'console.stop') return { command: await runner.stop(b.commandId, principal.id) };
+    }
     if (method === 'capability.index' || method === 'capability.resolve' || contractRef) {
       const route = await routing.read(), bindings = await readJson<any[]>(path.join(await this.dataDir(p), 'bindings.json'), []);
       const reader = new Discovery(this.plugins, p, principal, route, bindings);
@@ -1191,6 +1220,8 @@ export class RhoService {
     // A message being answered is stopped and recorded as stopped; the conversation continues
     // after the next start, and nothing is sent again on its behalf.
     await this.conversations.close();
+    // Commands the person started keep running; the next start records how each is found.
+    for (const runner of this.consoles.values()) await runner.close();
     const shutdown = await this.bridge.close(); await this.state.close(); return shutdown;
   }
 }

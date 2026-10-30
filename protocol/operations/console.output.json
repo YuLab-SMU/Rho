@@ -1,0 +1,66 @@
+{
+  "method": "console.output",
+  "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "projectId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "commandId": {
+        "pattern": "^c-[a-f0-9]{16}$",
+        "type": "string"
+      },
+      "maxBytes": {
+        "maximum": 65536,
+        "minimum": 1,
+        "type": "integer"
+      },
+      "offset": {
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "projectId",
+      "commandId"
+    ],
+    "type": "object"
+  },
+  "outputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "kept": {
+        "minimum": 0,
+        "type": "integer"
+      },
+      "more": {
+        "type": "boolean"
+      },
+      "nextOffset": {
+        "minimum": 0,
+        "type": "integer"
+      },
+      "offset": {
+        "minimum": 0,
+        "type": "integer"
+      },
+      "running": {
+        "type": "boolean"
+      },
+      "text": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "text",
+      "offset",
+      "nextOffset",
+      "more",
+      "kept",
+      "running"
+    ],
+    "type": "object"
+  },
+  "description": "One bounded page of what a Console command printed. Output past the kept size is counted in a note, not silently dropped."
+}

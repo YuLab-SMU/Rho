@@ -84,12 +84,17 @@ export function durationText(ms: number) {
   const minutes = Math.floor(ms / 60_000), seconds = Math.round((ms % 60_000) / 1000);
   return minutes + ' min' + (seconds ? ' ' + seconds + ' s' : '');
 }
+// Claude Code answers a call it would not start (input it could not parse, a refused permission)
+// with a tool_use_error and no exit code: the step was refused, nothing ran.
+function refusedBeforeRunning(step: ConversationStep) {
+  return step.outcome === 'rejected' && step.exitCode === undefined && /^\s*<tool_use_error>/.test(step.output?.text ?? '');
+}
 // How a command ended, in the words a person uses: its exit code when the Agent reported one.
 export function commandEnd(step: ConversationStep): string | null {
   const outcome = step.outcome ?? 'requested';
   if (outcome === 'requested') return null;
   if (step.exitCode !== undefined) return step.exitCode === 0 ? 'Exit 0' : 'Exit ' + step.exitCode;
-  return outcome === 'returned' ? 'Finished' : outcome === 'rejected' ? (step.output ? 'Failed' : 'Refused') : 'Outcome unknown';
+  return outcome === 'returned' ? 'Finished' : outcome === 'rejected' ? (step.output && !refusedBeforeRunning(step) ? 'Failed' : 'Refused') : 'Outcome unknown';
 }
 function rhoTool(tool: string, step: ConversationStep): Pick<Activity, 'action' | 'verb' | 'target' | 'targetKind'> | null {
   if ((tool === 'mcp__rho__rho_call' || tool === 'mcp.rho.rho_call')) return { action: 'project', verb: 'Called', target: clean(step.operation) ?? 'a project operation', targetKind: step.operation ? 'operation' : 'text' };
@@ -104,7 +109,7 @@ export function toolActivity(step: ConversationStep, location: string | null, ro
   const detail = clean(step.detail), rawTitle = clean(step.title);
   // Some Agents repeat the command as the title; do not show it twice.
   const title = rawTitle && rawTitle !== detail ? rawTitle : null;
-  const ran = step.exitCode !== undefined || step.output !== undefined;
+  const ran = step.exitCode !== undefined || step.output !== undefined && !refusedBeforeRunning(step);
   const outcome: ActivityOutcome = step.exitCode !== undefined && step.exitCode !== 0 || step.outcome === 'rejected' && ran ? 'failed' : step.outcome ?? 'requested';
   const special = rhoTool(tool, step);
   if (special) return { key: key ?? step.id ?? tool, step, title, location, outcome, ...special };

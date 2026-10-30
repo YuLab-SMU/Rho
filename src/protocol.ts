@@ -50,7 +50,7 @@ function scoped(input: JsonSchema): JsonSchema {
 }
 
 const ownerOperations: Record<string, OwnerOperationContract> = {};
-for (const owner of ['documents', 'files', 'r', 'requirements', 'tables', 'media', 'charts', 'agent']) {
+for (const owner of ['documents', 'files', 'r', 'requirements', 'tables', 'media', 'charts', 'agent', 'console']) {
   for (const [method, contract] of Object.entries(ownerSchemaRecord(owner, 'operationContracts') as unknown as Record<string, OwnerOperationContract>)) {
     ownerOperations[method] = contract;
   }
@@ -88,6 +88,7 @@ export const operations: Record<string, any> = { ...base.operations,
   'conversation.send': obj({ ...project, conversationId: changeId, changeId, text: { type: 'string', minLength: 1, maxLength: 16384 }, contexts: { ...array(digest), maxItems: 8 } }, ['projectId','conversationId','changeId','text']),
   'conversation.permission': obj({ ...project, conversationId: changeId, turnId: changeId, permissionId: changeId, optionId: { type: 'string', minLength: 1, maxLength: 256 } }),
   'conversation.stop': obj({ ...project, conversationId: changeId, turnId: changeId }),
+  'conversation.decide': obj({ ...project, conversationId: changeId, turnId: changeId, changeId, decision: { enum: ['accepted', 'needs-changes'] }, note: { type: 'string', maxLength: 4096 } }, ['projectId', 'conversationId', 'turnId', 'changeId', 'decision']),
   'conversation.read': obj({ ...project, conversationId: changeId, before: integer, limit: { type: 'integer', minimum: 1, maximum: 200 } }, ['projectId', 'conversationId']),
   'conversation.list': obj({ ...project, trashed: { type: 'boolean' } }, ['projectId']),
   'conversation.trash': obj({ ...project, conversationId: changeId }),
@@ -230,6 +231,7 @@ const conversationStep = response({ kind: { enum: ['text', 'tool', 'error'] }, a
 const conversationTurn = response({ id: text, by: text, text: { type: 'string' }, sentAt: text, state: { enum: ['running', 'completed', 'failed', 'stopped', 'unknown'] }, startedAt: { anyOf: [text, { type: 'null' }] }, endedAt: { anyOf: [text, { type: 'null' }] }, model: { anyOf: [text, { type: 'null' }] },
   stop: { anyOf: [response({ requestedAt: text, by: text, reason: { enum: ['person', 'closing', 'wall-limit', 'output-limit', 'line-limit', 'identity'] } }), { type: 'null' }] },
   steps: array(conversationStep), omitted: integer, evidence: evidenceSchema, contexts: array(digest),
+  decisions: array(response({ changeId: text, requestDigest: digest, decision: { enum: ['accepted', 'needs-changes'] }, note: { anyOf: [{ type: 'string' }, { type: 'null' }] }, by: text, at: text, supersedes: { anyOf: [text, { type: 'null' }] }, results: array(response({ path: text, resource: response({ id: text, version: text }) })) })),
   permissions: array(response({ id: text, title: { type: 'string' }, toolCallId: text, details: { type: 'string' }, options: array(response({ id: text, name: text, kind: text })), state: { enum: ['pending', 'selected', 'cancelled'] }, selected: text }, ['id', 'title', 'toolCallId', 'options', 'state'])),
   retry: { anyOf: [response({ attempt: { anyOf: [integer, { type: 'null' }] }, of: { anyOf: [integer, { type: 'null' }] }, status: { anyOf: [integer, { type: 'null' }] }, at: text }), { type: 'null' }] },
   result: { anyOf: [response({ isError: { type: 'boolean' }, kind: { anyOf: [text, { type: 'null' }] }, reason: { anyOf: [text, { type: 'null' }] }, steps: { anyOf: [integer, { type: 'null' }] }, durationMs: { anyOf: [{ type: 'number' }, { type: 'null' }] }, costUsd: { anyOf: [{ type: 'number' }, { type: 'null' }] }, message: { anyOf: [{ type: 'string' }, { type: 'null' }] } }), { type: 'null' }] },
@@ -320,6 +322,7 @@ export const responses: Record<string, any> = { ...base.responses, ...ownerRespo
   'conversation.send': response({ conversation: conversationSummary, turn: conversationTurn }),
   'conversation.permission': response({ conversation: conversationSummary, turn: conversationTurn }),
   'conversation.stop': response({ conversation: conversationSummary, turn: conversationTurn }),
+  'conversation.decide': response({ conversation: conversationSummary, turn: conversationTurn }),
   'conversation.read': response({ conversation: conversationSummary, observation: { anyOf: [sessionObservation, { type: 'null' }] }, config: choices, first: integer, turns: array(conversationTurn) }, ['conversation', 'first', 'turns']),
   'conversation.list': response({ conversations: { type: 'array', maxItems: 64, items: conversationSummary } }),
   'conversation.trash': response({ conversation: conversationSummary }),
@@ -393,12 +396,17 @@ export const descriptions = {
   'task.routing.put': 'Control plane only: conditionally assign one task and business binding to this project without starting a native session.',
   'conversation.start': 'Person at this machine only: start a conversation with the selected Claude Code or Codex Agent in this project. Rho selects the Agent plugin backend, attaches this project\'s MCP grant and records the message before sending it. Without backend or config, the person\'s saved Agent and settings are used and recorded with the conversation. A repeated changeId with the same text returns the original conversation and starts nothing.',
   'conversation.send': 'Person at this machine only: send the next message to a conversation started in Rho, which resumes the same Agent session. Refused while the previous message is being answered. A repeated changeId with the same text returns the original message.',
+  'conversation.decide': 'Person at this machine only: say to use an answer, or that it needs changes and why. The decision holds for the file versions that message kept when it was given and says nothing of later versions. A new decision supersedes the one before; none is removed. Refused while the Agent is still answering.',
   'conversation.stop': 'Person at this machine only: ask the original Agent to stop answering one message. ACP cancellation is confirmed by the original prompt response; a lost connection keeps the outcome unknown. Legacy CLI conversations confirm process exit. Steps already taken stay done.',
   'conversation.permission': 'Person at this machine only: record an offered choice for a pending Agent permission request. The original request identity is retained; repeated identical choices do not respond twice.',
   'conversation.configure': 'Person at this machine only: change one setting the Agent offers (model, effort, mode…) for the next messages of a conversation started in Rho. An open session changes now; otherwise the choice is applied when the session next opens. Refused while a message is being answered.',
   'conversation.list': 'Person at this machine only: list the conversations started in Rho in this project, or those in its trash, with each one\'s Agent, last model, choices and reported usage. Reading starts nothing.',
   'conversation.trash': 'Person at this machine only: move a conversation that is not being answered to the trash. It is kept whole and not continued until restored; an idle connection to its Agent ends.',
   'conversation.restore': 'Person at this machine only: return a conversation from the trash to the project\'s conversations, within the project\'s conversation limit.',
+  'console.run': 'Person at this machine only: run a typed command with their shell in the project folder (or a folder inside it). The same changeId returns the same record and never runs the command twice. Returns once it has started; read its output with console.output.',
+  'console.list': 'The commands run from the Console, newest first, with how each ended as Rho observed it: an exit code or signal, a requested stop, still continuing outside Rho, or unknown.',
+  'console.output': 'One bounded page of what a Console command printed. Output past the kept size is counted in a note, not silently dropped.',
+  'console.stop': 'Person at this machine only: ask a running Console command and the processes it started to stop; they are killed after a short grace period.',
   'conversation.delete': 'Person at this machine only: delete Rho\'s record of a conversation in the trash. The Agent\'s own session files are not touched. Repeating the request that started it is then refused.',
   'conversation.settings.read': 'Person at this machine only: read the Agent and settings chosen for new conversations and what each Agent last offered. Reading starts nothing.',
   'conversation.settings.update': 'Person at this machine only: choose the Agent and its settings for new conversations, among the values that Agent last offered. A stale expectedVersion is refused.',
@@ -428,4 +436,4 @@ export const errorKinds = base.errorKinds;
 export const errorSchema = base.definitions.error;
 export const errorEnvelope = obj({ apiVersion: { const: '2.0' }, ok: { const: false }, error: errorSchema });
 export const responseEnvelope = (method: string) => obj({ apiVersion: { const: '2.0' }, ok: { const: true }, value: responses[method] });
-export const protocol = { ...base, apiVersion: '2.0', schemaVersion: 2, transport: 'HTTP JSON POST /api/v2/{operation}; GET /api/v2/events', eventTypes: [...new Set([...base.eventTypes, 'project.sources.changed', 'capability.changed', 'view.closed', 'interaction.selection.changed', 'annotation.changed', 'context.changed', 'workspace.restored', 'task.routing.changed', 'binding.native.changed', 'feedback.changed', 'task.map.changed', 'feedback.changed', 'activity.changed', 'resource.changed', 'conversation.changed'])], operations, responses, descriptions: orderedDescriptions, definitions, errorEnvelope, status: 'One versioned contract. Retained operations stay observable through the current API; requests this contract does not accept receive a typed refusal rather than a second dialect.' };
+export const protocol = { ...base, apiVersion: '2.0', schemaVersion: 2, transport: 'HTTP JSON POST /api/v2/{operation}; GET /api/v2/events', eventTypes: [...new Set([...base.eventTypes, 'project.sources.changed', 'capability.changed', 'view.closed', 'interaction.selection.changed', 'annotation.changed', 'context.changed', 'workspace.restored', 'task.routing.changed', 'binding.native.changed', 'feedback.changed', 'task.map.changed', 'feedback.changed', 'activity.changed', 'resource.changed', 'conversation.changed', 'console.changed'])], operations, responses, descriptions: orderedDescriptions, definitions, errorEnvelope, status: 'One versioned contract. Retained operations stay observable through the current API; requests this contract does not accept receive a typed refusal rather than a second dialect.' };

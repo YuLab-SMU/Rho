@@ -15,6 +15,7 @@ import { size } from './project.js';
 import { AgentMarkdown } from './markdown.js';
 import { OwnerView } from './shell/owner.js';
 import { readPreview, type Preview } from './previews.js';
+import { useTurns } from './work-turns.js';
 import './graph.css';
 
 // The project as a graph of what the Agent did: the questions people asked, the files each
@@ -22,9 +23,6 @@ import './graph.css';
 // It is drawn from the conversation records and one walk of the folders; nothing here starts
 // work, and a file is shown as it is now. The person and the Agent share one workspace; the
 // graph is a way into it, not a second one.
-type Read = RhoOutput<'conversation.read'>;
-type Summary = NonNullable<WorkspaceSnapshot['conversations']>[number];
-const limits = { conversations: 6, turns: 8 };
 
 const clock = (ms: number, seconds = false) => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', ...(seconds ? { second: '2-digit' } : {}), hourCycle: 'h23' });
 const span = (ms: number) => ms < 60000 ? Math.max(1, Math.round(ms / 1000)) + ' s' : ms < 3600000 ? Math.round(ms / 60000) + ' min' : (ms / 3600000).toFixed(1).replace(/\.0$/, '') + ' h';
@@ -49,29 +47,6 @@ const ended: Record<string, string> = { completed: 'Answered', failed: 'Failed',
 // A command's output opens at its end, where its result or error is.
 const atEnd = (element: HTMLElement | null) => { if (element) element.scrollTop = element.scrollHeight; };
 const outcomes: Record<string, string> = { returned: 'Returned', requested: 'Running', failed: 'Failed', rejected: 'Refused', unknown: 'Outcome unknown' };
-
-// The conversations the graph draws, read again when their recorded version changes.
-function useTurns(client: BrowserClient, snapshot: WorkspaceSnapshot) {
-  const list = useMemo(() => [...(snapshot.conversations ?? [])].sort((a, b) => b.lastAt.localeCompare(a.lastAt)).slice(0, limits.conversations), [snapshot.conversations]);
-  const [reads, setReads] = useState<Record<string, { version: number; read: Read }>>({});
-  const [problem, setProblem] = useState('');
-  const key = list.map(c => c.conversationId + '@' + c.version).join(',');
-  useEffect(() => {
-    let live = true;
-    const due = list.filter(c => reads[c.conversationId]?.version !== c.version);
-    if (!due.length) return;
-    const running = due.some(c => c.state === 'running');
-    const timer = setTimeout(() => {
-      Promise.all(due.map(c => client.call('conversation.read', { projectId: snapshot.project.id, conversationId: c.conversationId, limit: limits.turns }).then(read => [c, read] as const)))
-        .then(pairs => { if (!live) return; setProblem(''); setReads(old => { const next = { ...old }; for (const [c, read] of pairs) next[c.conversationId] = { version: c.version, read }; return next; }); },
-          error => { if (live) setProblem(error instanceof Error ? error.message : 'A conversation could not be read.'); });
-    }, running && Object.keys(reads).length ? 700 : 0);
-    return () => { live = false; clearTimeout(timer); };
-  }, [client, snapshot.project.id, key]);
-  const turns: GraphTurn[] = useMemo(() => list.flatMap((c: Summary) => (reads[c.conversationId]?.read.turns ?? []).map(turn => ({ conversationId: c.conversationId, conversationTitle: c.agentTitle || c.title, agent: agentName(c.client), turn, observation: reads[c.conversationId]?.read.observation }))), [list, reads]);
-  const omitted = list.reduce((n, c) => n + (reads[c.conversationId]?.read.first ?? 0), 0) + Math.max(0, (snapshot.conversations?.length ?? 0) - list.length);
-  return { turns, problem, loading: list.length > 0 && !list.some(c => reads[c.conversationId]), omitted };
-}
 
 function CardPreview({ client, snapshot, node, shown }: { client: BrowserClient; snapshot: WorkspaceSnapshot; node: GraphNode; shown: boolean }) {
   // A file that changes again is previewed again; until then the card keeps what it read.
@@ -272,7 +247,7 @@ export function WorkGraph({ initialResource, client, snapshot, files, agentNow, 
       <label className="graph-search"><Icon name="search" size={15} /><input type="search" placeholder="Find in this graph" aria-label="Find in this graph" value={query} onChange={e => setQuery(e.target.value)}
         onKeyDown={e => { if (e.key === 'Enter' && matches?.size) { const first = graph.nodes.find(n => matches.has(n.id)); if (first) choose(first.id, true); } }} />{matches && <small>{matches.size}</small>}</label>
       {live?.waiting && <button className="graph-waiting" onClick={() => choose(live.node, true)}><span className="pulse-dot" aria-hidden="true" />Needs your choice</button>}
-      {agentNow?.running && <button className={'follow-toggle' + (following ? ' on' : '')} aria-pressed={following} title={following ? 'The graph keeps the Agent in view, and its files open in your workspace.' : 'Keep the Agent in view as it works.'} onClick={following ? onStopFollowing : onFollow}>
+      {agentNow?.running && <button className={'follow-toggle' + (following ? ' on' : '')} aria-pressed={following} title={following ? 'The graph keeps the Agent in view as it works.' : 'Keep the Agent in view as it works.'} onClick={following ? onStopFollowing : onFollow}>
         {following ? <><span className="pulse-dot" aria-hidden="true" />Following {agentNow.agent}</> : <><Icon name="follow" size={15} />Follow {agentNow.agent}</>}</button>}
     </GraphHead>
     {initialResource && !loading && !graph.nodes.some(n=>n.resource?.id===initialResource.id&&n.resource.version===initialResource.version) && <p className="canvas-note">The selected result version is outside this retained Graph window. Its review still holds the exact reference.</p>}
@@ -398,7 +373,7 @@ function Edges({ layout, focus, shown, labels, dim, live }: { layout: Layout; fo
       const d = forward ? `M${x1} ${y1} C${x1 + bend} ${y1} ${x2 - bend} ${y2} ${x2 - 2} ${y2}` : `M${x1} ${y1} C${x1} ${y1 + 80} ${x2} ${y2 - 80} ${x2} ${y2 - 2}`;
       const on = !!focus?.edges.has(e.id), off = (focus && !on) || dim(e.from) || dim(e.to);
       const mx = (x1 + x2) / 2, my = forward ? (y1 + y2) / 2 : (y1 + y2) / 2 + 40;
-      return <g key={l.id + l.from} className={'graph-edge ' + e.basis + (on ? ' on' : '') + (off ? ' off' : '') + (live && l.to === live ? ' live' : '')}>
+      return <g key={l.id + l.from} data-label={e.label} className={'graph-edge ' + e.basis + (on ? ' on' : '') + (off ? ' off' : '') + (live && l.to === live ? ' live' : '')}>
         <path d={d} markerEnd={on ? 'url(#graph-arrow-on)' : 'url(#graph-arrow)'} />
         {labels && !off && <text x={mx} y={my - (e.label.length > 12 ? 18 : 6)} textAnchor="middle">{e.label.length > 12 ? e.label.split(/ (?=while|meanwhile)/).map((line, i, all) => <tspan key={i} x={mx} dy={i ? 13 : 0}>{line + (i < all.length - 1 ? ' ' : '')}</tspan>) : e.label}</text>}
       </g>;

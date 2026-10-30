@@ -1,0 +1,201 @@
+{
+  "method": "console.run",
+  "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "projectId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "changeId": {
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+        "type": "string"
+      },
+      "command": {
+        "maxLength": 4096,
+        "minLength": 1,
+        "type": "string"
+      },
+      "cwd": {
+        "maxLength": 1024,
+        "type": "string"
+      }
+    },
+    "required": [
+      "projectId",
+      "command",
+      "changeId"
+    ],
+    "type": "object"
+  },
+  "outputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "command": {
+        "additionalProperties": false,
+        "properties": {
+          "by": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "bytes": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "changeId": {
+            "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+            "type": "string"
+          },
+          "command": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "commandId": {
+            "pattern": "^c-[a-f0-9]{16}$",
+            "type": "string"
+          },
+          "cut": {
+            "type": "boolean"
+          },
+          "cwd": {
+            "type": "string"
+          },
+          "endedAt": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "exit": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "code": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "signal": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "code",
+                  "signal"
+                ],
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "kept": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "pid": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "problem": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "startedAt": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "running",
+              "exited",
+              "stopped",
+              "not-started",
+              "continuing",
+              "unknown"
+            ]
+          },
+          "stop": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "by": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "requestedAt": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "requestedAt",
+                  "by"
+                ],
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "commandId",
+          "changeId",
+          "command",
+          "cwd",
+          "by",
+          "startedAt",
+          "endedAt",
+          "state",
+          "exit",
+          "pid",
+          "bytes",
+          "kept",
+          "cut",
+          "stop",
+          "problem"
+        ],
+        "type": "object"
+      }
+    },
+    "required": [
+      "command"
+    ],
+    "type": "object"
+  },
+  "description": "Person at this machine only: run a typed command with their shell in the project folder (or a folder inside it). The same changeId returns the same record and never runs the command twice. Returns once it has started; read its output with console.output."
+}

@@ -1,6 +1,6 @@
 # Rho status
 
-Updated: 2026-10-29.
+Updated: 2026-10-30.
 
 ## Current focus
 
@@ -39,6 +39,18 @@ restarts, and a tab on this machine names its principal again, so the person's o
 edits read "You". Row questions on an ordinary CSV still need an identity choice (a declared
 key column or a row position within one exact version); pages have no addresses yet.
 
+Its [second pass](SIMULATED-PROJECT-EPISODE.md#second-pass) moved review onto the
+answer. The Overview leads with an answer board derived from the Graph: results by
+role, then method, run, inputs and report. Ask on a result or a selected passage
+continues the same conversation, and later questions stay with the answer they ask
+about. Use this answer or Needs changes (`conversation.decide`) is bound to the
+versions the message kept. Review is listed only while review records exist. The
+Console (Console 0.1.0) lists the Agent's and the person's commands, and runs, stops
+and reruns the person's own (local browser only). Agent 0.4.19 keeps a command's
+whole text. Repeated reads no longer exhaust a message's capture budget before its
+results. Studio no longer opens the Agent's files by itself.
+Agent-declared choices with Agree/No were agreed but not built (see the record).
+
 ## Existing application
 
 - Projects opens selected folders and manages finite source folders. Sources counts
@@ -73,7 +85,10 @@ original scope; they do not establish usability of later changes.
 
 Baseline: Plugins 104/104 and Rho 223/223 with an explicit unchanged Core binary.
 The first full changed run passed Plugins 109/109 and Rho 227/228; an undeclared
-new CSS variable caused the application failure and was corrected. Current checks: Rho 232/232, Plugins 110/110 in the [ledger](VERIFICATION.json).
+new CSS variable caused the application failure and was corrected. After the second pass
+(answer board, decisions, Console, Agent 0.4.19), the [ledger](VERIFICATION.json) records Rho 240/240 and Plugins 117/117.
+The agent-canvas, graph, agent-page, agent-ui, review, ui:u2 and sources browser
+acceptances passed on that build.
 The [episode](REVIEW-EVIDENCE-EPISODE.md) records contract, browser and installed results.
 The fixed 0.5.1 candidate passed 230/230; installed review/Graph/restart and both real
 clients passed. See the [preview](PREVIEW-0.5.1.md) for identities and limits.

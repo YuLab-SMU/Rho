@@ -1,4 +1,5 @@
 import { commandEnd, conversationBlocks, displayCommand, stepDuration, type ActivityOutcome, type ConversationTurn, type SessionObservation } from './conversation-presentation.js';
+import { askedAbout } from './asking.js';
 
 // What the Agent did in a project, drawn as a graph: each question a person asked, the files
 // its turn read and changed, the commands it ran, and the files that changed on disk while it
@@ -117,7 +118,7 @@ export function buildWorkGraph(input: GraphInput): WorkGraph {
     const end = time(turn.endedAt) ?? (running ? input.now : start);
     // A change on disk belongs to this message until the next one is sent.
     const next = position + 1 < ordered.length ? time(ordered[position + 1].turn.sentAt) ?? Infinity : Infinity;
-    const q: GraphNode = { id: 'q:' + turn.id, kind: 'question', title: firstLine(turn.text) || 'A message', text: turn.text, at: sent, turn: turn.id, conversationId, agent, state: turn.state, model: turn.model ?? null, events: [] };
+    const q: GraphNode = { id: 'q:' + turn.id, kind: 'question', title: firstLine(askedAbout(turn.text).question) || 'A message', text: turn.text, at: sent, turn: turn.id, conversationId, agent, state: turn.state, model: turn.model ?? null, events: [] };
     nodes.set(q.id, q);
     note(q, { key: turn.id + ':ask', at: sent, turn: turn.id, action: 'ask', label: 'Asked' });
     spans.push({ id: turn.id, conversationId, title: conversationTitle, agent, start: sent, end: Math.max(end, sent), running });
@@ -232,7 +233,11 @@ export function buildWorkGraph(input: GraphInput): WorkGraph {
     const keep = new Set(ordered.slice(0,graphLimits.nodes).map(n=>n.id));
     for (const id of nodes.keys()) if (!keep.has(id)) nodes.delete(id);
   }
-  const kept = [...edges.values()].filter(e => nodes.has(e.from) && nodes.has(e.to));
+  // A kept version is on its file's card. Its own line from the question is drawn only when
+  // nothing else in that message touches the file (a read, an edit, a command naming it);
+  // otherwise it repeats the path beside it.
+  const reached = new Set([...edges.values()].filter(e => e.label !== 'captured observation').flatMap(e => [e.turn + '>' + e.to, e.turn + '>' + e.from]));
+  const kept = [...edges.values()].filter(e => nodes.has(e.from) && nodes.has(e.to) && !(e.label === 'captured observation' && reached.has(e.turn + '>' + e.to)));
   for (const node of nodes.values()) node.events.sort((a, b) => a.at - b.at);
   return {
     nodes: [...nodes.values()].sort((a, b) => a.at - b.at), edges: kept,
@@ -287,7 +292,9 @@ export function foldVersions(graph: WorkGraph): WorkGraph {
     const id = from + '>' + target + ':' + e.label;
     if (!edges.has(id)) edges.set(id, { ...e, id, from, to: target });
   }
-  for (const e of [...edges.values()]) if (e.label === 'captured observation' && [...edges.values()].some(o => o !== e && o.from === e.from && o.to === e.to)) edges.delete(e.id);
+  // As above: once versions fold into one card, a kept version's own line goes when the message reaches that card another way.
+  const reached = new Set([...edges.values()].filter(e => e.label !== 'captured observation').flatMap(e => [e.turn + '>' + e.to, e.turn + '>' + e.from]));
+  for (const e of [...edges.values()]) if (e.label === 'captured observation' && reached.has(e.turn + '>' + e.to)) edges.delete(e.id);
   return { ...graph, nodes, edges: [...edges.values()], events: graph.events.map(e => into.has(e.node) ? { ...e, node: to(e.node) } : e), live: graph.live && { ...graph.live, node: to(graph.live.node) } };
 }
 

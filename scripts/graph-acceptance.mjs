@@ -73,7 +73,8 @@ async function until(read, accept, label, timeout = 30000) {
 }
 const shot = async name => { const file = path.join(evidence, name + '.png'); await page.screenshot({ path: file }); report.screenshots.push(path.basename(file)); };
 const cards = () => page.evaluate(() => [...document.querySelectorAll('.graph-node')].map(n => ({ id: n.dataset.node, label: n.getAttribute('aria-label'), later: n.hasAttribute('data-later'), dimmed: n.hasAttribute('data-dimmed'), flag: n.querySelector('.graph-flag')?.textContent ?? null })));
-const lines = () => page.evaluate(() => [...document.querySelectorAll('.graph-edge')].map(g => g.getAttribute('class').replace('graph-edge ', '') + ' · ' + (g.querySelector('text')?.textContent ?? '')));
+// What each drawn link says, whether or not the zoom is near enough to print it on the line.
+const lines = () => page.evaluate(() => [...document.querySelectorAll('.graph-edge')].map(g => g.getAttribute('class').replace('graph-edge ', '') + ' · ' + (g.getAttribute('data-label') ?? '')));
 try {
   await fs.writeFile(path.join(root, 'peer.mjs'), peer);
   const project = path.join(root, 'ozone');
@@ -116,28 +117,32 @@ try {
   await page.getByRole('button', { name: 'Fit the graph' }).click();
   await page.waitForTimeout(600);
   const drawn = await until(cards, c => c.filter(card => !card.id.startsWith('p')).length === 10 && c.some(card => /ozone_by_month\.png/.test(card.label)), 'both messages drawn');
-  const ids = drawn.map(c => c.id).sort();
+  // Each file card is the version the message kept, named by its digest.
+  assert.ok(drawn.filter(c => /^(?:p\d+:)?f:/.test(c.id)).every(c => /@[0-9a-f]{64}$/.test(c.id)), 'every file card names a kept version');
+  const ids = drawn.map(c => c.id.replace(/@[0-9a-f]{64}$/, '')).sort();
   assert.deepEqual(ids, ['f:analysis.R', 'f:data/airquality.csv', 'f:notes.md', 'f:plot.R', 'f:results/monthly_ozone.csv', 'f:results/ozone_by_month.png', 'p1:f:results/monthly_ozone.csv', ...ids.filter(id => /^q:|^r:/.test(id))].sort());
   assert.equal(ids.filter(id => id.startsWith('q:')).length, 2);
   assert.equal(ids.filter(id => id.startsWith('r:')).length, 2);
   const drawnLines = await lines();
-  assert.equal(drawnLines.filter(l => l === 'observed · changed while it ran').length, 2, 'both outputs changed while their command ran');
+  assert.equal(drawnLines.filter(l => l === 'observed · changed while it ran').length, 2, 'both outputs changed while their command ran: ' + drawnLines.join(', '));
   assert.ok(drawnLines.includes('named · runs') && drawnLines.includes('reported · read') && drawnLines.includes('reported · edited'), drawnLines.join(', '));
-  await page.locator('.graph-node[data-node="f:data/airquality.csv"] .graph-preview.table small').filter({ hasText: '153 rows × 6 columns' }).waitFor();
-  await until(() => page.locator('.graph-node[data-node="f:results/ozone_by_month.png"] .graph-preview img').evaluate(img => img.naturalWidth), w => w === 640, 'the figure previewed on its card');
+  // Previews are drawn when the graph is near enough to read them; zoom in as a person would.
+  for (let i = 0; i < 4 && parseInt(await page.locator('.graph-zoom-value').textContent()) < 62; i++) { await page.getByRole('button', { name: 'Zoom in' }).click(); await page.waitForTimeout(300); }
+  await page.locator('.graph-node[data-node^="f:data/airquality.csv@"] .graph-preview.table small').filter({ hasText: '153 rows × 6 columns' }).waitFor();
+  await until(() => page.locator('.graph-node[data-node^="f:results/ozone_by_month.png@"] .graph-preview img').evaluate(img => img.naturalWidth), w => w === 640, 'the figure previewed on its card');
   await shot('03-two-rows');
   passed('each message is a row from what it read to what changed while its command ran; a later row refers to an earlier output; cards preview tables and figures');
 
-  await page.locator('.graph-node[data-node="f:results/ozone_by_month.png"]').click();
+  await page.locator('.graph-node[data-node^="f:results/ozone_by_month.png@"]').first().click();
   await page.locator('.graph-overlay').filter({ hasText: 'the path to and from ozone_by_month.png' }).waitFor();
   const focused = await cards();
-  assert.deepEqual(focused.filter(c => c.dimmed).map(c => c.id), ['f:notes.md'], 'only what is off the figure\'s path steps back');
+  assert.deepEqual(focused.filter(c => c.dimmed).map(c => c.id.replace(/@[0-9a-f]{64}$/, '')), ['f:notes.md'], 'only what is off the figure\'s path steps back');
   const inspector = page.getByRole('complementary', { name: /Figure ozone_by_month\.png/ });
   await until(() => inspector.locator('[data-owner-view] img, img').first().evaluate(img => img.naturalWidth).catch(() => 0), w => w === 640, 'the figure in its own view');
   assert.match(await inspector.locator('.graph-relations li').first().textContent(), /Rscript plot\.R.*changed while it ran/);
   await shot('04-figure-path');
   // The keyboard walks the path: left from the figure is the command that ran while it changed.
-  await page.locator('.graph-node[data-node="f:results/ozone_by_month.png"]').focus();
+  await page.locator('.graph-node[data-node^="f:results/ozone_by_month.png@"]').first().focus();
   await page.keyboard.press('ArrowLeft');
   assert.match(await page.evaluate(() => document.activeElement?.dataset.node ?? ''), /^r:/);
   passed('choosing a figure shows its path back to the data and the question, and the figure itself; arrows walk the path');
@@ -149,7 +154,8 @@ try {
   await page.waitForTimeout(500);
   await page.locator('.graph-ref').click();
   await page.getByRole('complementary', { name: /Result monthly_ozone\.csv/ }).waitFor();
-  await page.locator('.graph-inspector .ag-row[row-index="0"]').first().waitFor();
+  // The version the first row kept, read only, or the file as it is now when none was kept.
+  await page.locator('.graph-inspector .snapshot-view tbody tr, .graph-inspector .ag-row[row-index="0"]').first().waitFor();
   passed('a reference goes to the output in the row that made it, shown in its table');
   await page.getByRole('button', { name: 'Close', exact: true }).click();
 
@@ -160,16 +166,18 @@ try {
   await until(() => page.locator('.graph-now').getAttribute('aria-pressed'), v => v === 'true', 'the replay returning to now', 30000);
   passed('Play narrates the work in order and returns to now: ' + caption.replace(/^\d\d:\d\d:\d\d/, '').trim());
 
-  await page.locator('.graph-node[data-node="f:results/monthly_ozone.csv"]').click();
-  await page.getByRole('button', { name: 'Open in workspace' }).click();
+  await page.locator('.graph-node[data-node^="f:results/monthly_ozone.csv@"]').first().click();
+  await page.getByRole('button', { name: /^Open (current file )?in workspace$/ }).click();
   await page.locator('.location-name').filter({ hasText: 'Workspace' }).waitFor();
   await page.getByRole('tab', { name: /monthly_ozone\.csv/, selected: true }).waitFor();
   const snapshot = await admin.call('observation.snapshot', { projectId: opened.id });
   assert.deepEqual(snapshot.compositions.map(c => c.compositionId), ['workspace']);
   const titles = (await admin.call('composition.read', { projectId: opened.id, compositionId: 'workspace' })).views.map(v => v.props.title).sort();
-  assert.deepEqual(titles, ['airquality.csv', 'analysis.R', 'monthly_ozone.csv', 'notes.md', 'ozone_by_month.png', 'plot.R']);
+  // Following shows the Agent's work on the Graph and the answer board; it does not fill the
+  // person's workspace. Only the node they opened is there.
+  assert.deepEqual(titles, ['monthly_ozone.csv']);
   await shot('06-workspace');
-  passed('while the Graph followed, the Agent\'s files opened in the one shared workspace; a node opens there');
+  passed('following does not open files behind the person; a node they open goes to the one shared workspace');
 
   await nav.getByRole('button', { name: 'Graph', exact: true }).click();
   for (const width of [1024, 390]) {

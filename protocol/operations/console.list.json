@@ -1,0 +1,199 @@
+{
+  "method": "console.list",
+  "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "projectId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "limit": {
+        "maximum": 200,
+        "minimum": 1,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "projectId"
+    ],
+    "type": "object"
+  },
+  "outputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "commands": {
+        "items": {
+          "additionalProperties": false,
+          "properties": {
+            "by": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "bytes": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "changeId": {
+              "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+              "type": "string"
+            },
+            "command": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "commandId": {
+              "pattern": "^c-[a-f0-9]{16}$",
+              "type": "string"
+            },
+            "cut": {
+              "type": "boolean"
+            },
+            "cwd": {
+              "type": "string"
+            },
+            "endedAt": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "exit": {
+              "anyOf": [
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "code": {
+                      "anyOf": [
+                        {
+                          "type": "integer"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "signal": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "signal"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "kept": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "pid": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "problem": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "startedAt": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "state": {
+              "enum": [
+                "running",
+                "exited",
+                "stopped",
+                "not-started",
+                "continuing",
+                "unknown"
+              ]
+            },
+            "stop": {
+              "anyOf": [
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "by": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "requestedAt": {
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "requestedAt",
+                    "by"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "commandId",
+            "changeId",
+            "command",
+            "cwd",
+            "by",
+            "startedAt",
+            "endedAt",
+            "state",
+            "exit",
+            "pid",
+            "bytes",
+            "kept",
+            "cut",
+            "stop",
+            "problem"
+          ],
+          "type": "object"
+        },
+        "type": "array"
+      },
+      "omitted": {
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "commands",
+      "omitted"
+    ],
+    "type": "object"
+  },
+  "description": "The commands run from the Console, newest first, with how each ended as Rho observed it: an exit code or signal, a requested stop, still continuing outside Rho, or unknown."
+}

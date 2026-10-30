@@ -18518,6 +18518,651 @@ export const ownerContracts: OwnerContractSnapshot = {
         }
       }
     },
+    "console": {
+      "operationContracts": {
+        "console.list": {
+          "effect": "read",
+          "inputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "limit": {
+                "maximum": 200,
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "required": [],
+            "type": "object"
+          },
+          "outputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "commands": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "by": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "bytes": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "changeId": {
+                      "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+                      "type": "string"
+                    },
+                    "command": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "commandId": {
+                      "pattern": "^c-[a-f0-9]{16}$",
+                      "type": "string"
+                    },
+                    "cut": {
+                      "type": "boolean"
+                    },
+                    "cwd": {
+                      "type": "string"
+                    },
+                    "endedAt": {
+                      "anyOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "exit": {
+                      "anyOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "code": {
+                              "anyOf": [
+                                {
+                                  "type": "integer"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "signal": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "signal"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "kept": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "pid": {
+                      "anyOf": [
+                        {
+                          "type": "integer"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "problem": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "startedAt": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "state": {
+                      "enum": [
+                        "running",
+                        "exited",
+                        "stopped",
+                        "not-started",
+                        "continuing",
+                        "unknown"
+                      ]
+                    },
+                    "stop": {
+                      "anyOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "by": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "requestedAt": {
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "requestedAt",
+                            "by"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "commandId",
+                    "changeId",
+                    "command",
+                    "cwd",
+                    "by",
+                    "startedAt",
+                    "endedAt",
+                    "state",
+                    "exit",
+                    "pid",
+                    "bytes",
+                    "kept",
+                    "cut",
+                    "stop",
+                    "problem"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "omitted": {
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "commands",
+              "omitted"
+            ],
+            "type": "object"
+          },
+          "requires": []
+        },
+        "console.output": {
+          "effect": "read",
+          "inputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "commandId": {
+                "pattern": "^c-[a-f0-9]{16}$",
+                "type": "string"
+              },
+              "maxBytes": {
+                "maximum": 65536,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "offset": {
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "commandId"
+            ],
+            "type": "object"
+          },
+          "outputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "kept": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "more": {
+                "type": "boolean"
+              },
+              "nextOffset": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "offset": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "running": {
+                "type": "boolean"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "text",
+              "offset",
+              "nextOffset",
+              "more",
+              "kept",
+              "running"
+            ],
+            "type": "object"
+          },
+          "requires": []
+        },
+        "console.run": {
+          "effect": "native",
+          "inputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "changeId": {
+                "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+                "type": "string"
+              },
+              "command": {
+                "maxLength": 4096,
+                "minLength": 1,
+                "type": "string"
+              },
+              "cwd": {
+                "maxLength": 1024,
+                "type": "string"
+              }
+            },
+            "required": [
+              "command",
+              "changeId"
+            ],
+            "type": "object"
+          },
+          "outputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "command": {
+                "additionalProperties": false,
+                "properties": {
+                  "by": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "bytes": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "changeId": {
+                    "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+                    "type": "string"
+                  },
+                  "command": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "commandId": {
+                    "pattern": "^c-[a-f0-9]{16}$",
+                    "type": "string"
+                  },
+                  "cut": {
+                    "type": "boolean"
+                  },
+                  "cwd": {
+                    "type": "string"
+                  },
+                  "endedAt": {
+                    "anyOf": [
+                      {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "exit": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "code": {
+                            "anyOf": [
+                              {
+                                "type": "integer"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "signal": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "code",
+                          "signal"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "kept": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "pid": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "problem": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "startedAt": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "state": {
+                    "enum": [
+                      "running",
+                      "exited",
+                      "stopped",
+                      "not-started",
+                      "continuing",
+                      "unknown"
+                    ]
+                  },
+                  "stop": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "by": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "requestedAt": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "requestedAt",
+                          "by"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "commandId",
+                  "changeId",
+                  "command",
+                  "cwd",
+                  "by",
+                  "startedAt",
+                  "endedAt",
+                  "state",
+                  "exit",
+                  "pid",
+                  "bytes",
+                  "kept",
+                  "cut",
+                  "stop",
+                  "problem"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "command"
+            ],
+            "type": "object"
+          },
+          "requires": []
+        },
+        "console.stop": {
+          "effect": "native",
+          "inputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "changeId": {
+                "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+                "type": "string"
+              },
+              "commandId": {
+                "pattern": "^c-[a-f0-9]{16}$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "commandId",
+              "changeId"
+            ],
+            "type": "object"
+          },
+          "outputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "command": {
+                "additionalProperties": false,
+                "properties": {
+                  "by": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "bytes": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "changeId": {
+                    "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+                    "type": "string"
+                  },
+                  "command": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "commandId": {
+                    "pattern": "^c-[a-f0-9]{16}$",
+                    "type": "string"
+                  },
+                  "cut": {
+                    "type": "boolean"
+                  },
+                  "cwd": {
+                    "type": "string"
+                  },
+                  "endedAt": {
+                    "anyOf": [
+                      {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "exit": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "code": {
+                            "anyOf": [
+                              {
+                                "type": "integer"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "signal": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "code",
+                          "signal"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "kept": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "pid": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "problem": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "startedAt": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "state": {
+                    "enum": [
+                      "running",
+                      "exited",
+                      "stopped",
+                      "not-started",
+                      "continuing",
+                      "unknown"
+                    ]
+                  },
+                  "stop": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "by": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "requestedAt": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "requestedAt",
+                          "by"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "commandId",
+                  "changeId",
+                  "command",
+                  "cwd",
+                  "by",
+                  "startedAt",
+                  "endedAt",
+                  "state",
+                  "exit",
+                  "pid",
+                  "bytes",
+                  "kept",
+                  "cut",
+                  "stop",
+                  "problem"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "command"
+            ],
+            "type": "object"
+          },
+          "requires": []
+        }
+      }
+    },
     "entry-files": {
       "declarationSchema": {
         "additionalProperties": false,
@@ -19393,7 +20038,7 @@ export const ownerContracts: OwnerContractSnapshot = {
     },
     "agent": {
       "package": "@rho-workspace/plugin-agent",
-      "packageVersion": "0.4.18",
+      "packageVersion": "0.4.19",
       "entry": "./operations",
       "entryPath": "@rho-workspace/plugin-agent/dist/operations.js",
       "entrySha256": "08bb1c852cb89a17a2e307831ed2df5d6d16cbccaaf2971ec251bb9a1a34261f",
@@ -19403,7 +20048,7 @@ export const ownerContracts: OwnerContractSnapshot = {
     },
     "agent-feedback": {
       "package": "@rho-workspace/plugin-agent",
-      "packageVersion": "0.4.18",
+      "packageVersion": "0.4.19",
       "entry": "./feedback-contract",
       "entryPath": "@rho-workspace/plugin-agent/dist/feedback-contract.js",
       "entrySha256": "ecb1561d92b5953d2b786d29cfb57f6f8085d214dc1dec76f6e7bd7a5257cb75",
@@ -19413,7 +20058,7 @@ export const ownerContracts: OwnerContractSnapshot = {
     },
     "agent-native": {
       "package": "@rho-workspace/plugin-agent",
-      "packageVersion": "0.4.18",
+      "packageVersion": "0.4.19",
       "entry": "./contract",
       "entryPath": "@rho-workspace/plugin-agent/dist/contract.js",
       "entrySha256": "9e926081cb755a98d2b00d2a8488d8f4c6d25b3d5f1ec526d334ade633fe8a65",
@@ -19423,7 +20068,7 @@ export const ownerContracts: OwnerContractSnapshot = {
     },
     "agent-session": {
       "package": "@rho-workspace/plugin-agent",
-      "packageVersion": "0.4.18",
+      "packageVersion": "0.4.19",
       "entry": "./session-contract",
       "entryPath": "@rho-workspace/plugin-agent/dist/session-contract.js",
       "entrySha256": "bb5b118f965e208617781af3e8ad6b6739869bcc19f0092eab14468824693123",
@@ -19441,6 +20086,16 @@ export const ownerContracts: OwnerContractSnapshot = {
       "exports": {
         "inputs": "7997381ba0df87b4f3493a3850a9aef38811794b1b6d7c50dcd1de66c2157720",
         "outputs": "651e8db49e69a8a726d5c0fee99ceb2918b69de0d3ad20495ec2d5e7fbeca1f0"
+      }
+    },
+    "console": {
+      "package": "@rho-workspace/plugin-console",
+      "packageVersion": "0.1.0",
+      "entry": "./operations",
+      "entryPath": "@rho-workspace/plugin-console/dist/operations.js",
+      "entrySha256": "98d45ada88d73afa451a7367f2752054dc4817f2a17a977ae3e7cf243a2fd5cf",
+      "exports": {
+        "operationContracts": "3e4024720d41605e740d7fd6e0b39df2e6c69c8303acd39a3821b91b6ed5a967"
       }
     },
     "entry-files": {

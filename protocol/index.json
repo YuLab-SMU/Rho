@@ -4,8 +4,8 @@
   "schemaVersion": 2,
   "shared": {
     "path": "operations/shared.json",
-    "bytes": 75274,
-    "sha256": "7a3fba45e0ef21b76ebdfa969b4934393f74fdfca81a10df2ff23cf359196f40"
+    "bytes": 75297,
+    "sha256": "8b1778a15f7fedce512babf2f1b805dc67aca0143428a2da41c828cc70e7afc2"
   },
   "operations": {
     "action.cancel": {
@@ -188,6 +188,30 @@
       "bytes": 25368,
       "sha256": "fadd401c6a5a98ea5c66755603bccd36353566875acf8a29fd7d75ec8cc2bc64"
     },
+    "console.list": {
+      "summary": "The commands run from the Console, newest first, with how each ended as Rho observed it: an exit code or signal, a requested stop, still continuing outside Rho, or unknown.",
+      "path": "operations/console.list.json",
+      "bytes": 4910,
+      "sha256": "b91a6f00f59bb03f88ae0ef4a56e7934d3466ae64e366d4f66993ade3455b794"
+    },
+    "console.output": {
+      "summary": "One bounded page of what a Console command printed. Output past the kept size is counted in a note, not silently dropped.",
+      "path": "operations/console.output.json",
+      "bytes": 1326,
+      "sha256": "3118419c96dcdf0713ede0a0743bdf1910066af8b4ef617a4acee23579fe0d9f"
+    },
+    "console.run": {
+      "summary": "Person at this machine only: run a typed command with their shell in the project folder (or a folder inside it). The same changeId returns the same record and never runs the command twice. Returns once it has started; read its output with console.output.",
+      "path": "operations/console.run.json",
+      "bytes": 4745,
+      "sha256": "9eb538bb3504d9a866cdbce08615368756dd3bcc63e6148451bfa5865600c557"
+    },
+    "console.stop": {
+      "summary": "Person at this machine only: ask a running Console command and the processes it started to stop; they are killed after a short grace period.",
+      "path": "operations/console.stop.json",
+      "bytes": 4548,
+      "sha256": "e6b356ab63b53b58c76f1c18b6cb5278dbf1f27a4b08b629ded484fb55715c06"
+    },
     "context.create": {
       "summary": "context.create",
       "path": "operations/context.create.json",
@@ -206,6 +230,12 @@
       "bytes": 19966,
       "sha256": "15c9b62b29402307275384ce70251bd84659155b6358c5081b7ba04af5fc70e4"
     },
+    "conversation.decide": {
+      "summary": "Person at this machine only: say to use an answer, or that it needs changes and why. The decision holds for the file versions that message kept when it was given and says nothing of later versions. A new decision supersedes the one before; none is removed. Refused while the Agent is still answering.",
+      "path": "operations/conversation.decide.json",
+      "bytes": 27122,
+      "sha256": "7add030545fac7c183d30999f176451c9b0164059155929621e91e3293ceb713"
+    },
     "conversation.delete": {
       "summary": "Person at this machine only: delete Rho's record of a conversation in the trash. The Agent's own session files are not touched. Repeating the request that started it is then refused.",
       "path": "operations/conversation.delete.json",
@@ -221,14 +251,14 @@
     "conversation.permission": {
       "summary": "Person at this machine only: record an offered choice for a pending Agent permission request. The original request identity is retained; repeated identical choices do not respond twice.",
       "path": "operations/conversation.permission.json",
-      "bytes": 24054,
-      "sha256": "3376fb5ad2d674fa559e9ad7b331e68d33af0633ab5dc0e6b5a7e2efff2bb1f3"
+      "bytes": 26941,
+      "sha256": "8fcd67df151d19533a751a53b51037c6fa1b3c2ce41fe3249478e3fecf020e8d"
     },
     "conversation.read": {
       "summary": "Read a conversation started in Rho: the person's messages, the Agent's visible text and tool steps, and how each message ended. Reading starts and resumes nothing.",
       "path": "operations/conversation.read.json",
-      "bytes": 38538,
-      "sha256": "57305f14e14b0471320902c0d3396599f213432dc7e8909f00d81b6d45100026"
+      "bytes": 41619,
+      "sha256": "dde0f3360e8107791e9fb1ed35542881c25c897b7617575db605b2aa63ba0ea9"
     },
     "conversation.restore": {
       "summary": "Person at this machine only: return a conversation from the trash to the project's conversations, within the project's conversation limit.",
@@ -239,8 +269,8 @@
     "conversation.send": {
       "summary": "Person at this machine only: send the next message to a conversation started in Rho, which resumes the same Agent session. Refused while the previous message is being answered. A repeated changeId with the same text returns the original message.",
       "path": "operations/conversation.send.json",
-      "bytes": 24150,
-      "sha256": "5d1f5aec541eb71efe6e4cfdcc1ee419f925ddcccf62e978adaa2f208b09498c"
+      "bytes": 27037,
+      "sha256": "cc542d2c50892218dbaa5eadfec99b3d026b0a1c8926d2e3c73c2aefdaa194e8"
     },
     "conversation.settings.check": {
       "summary": "Person at this machine only: start the chosen Agent in this project to read the settings it offers, then remove that session and end the process. No message is sent; one check per Agent runs at a time.",
@@ -263,14 +293,14 @@
     "conversation.start": {
       "summary": "Person at this machine only: start a conversation with the selected Claude Code or Codex Agent in this project. Rho selects the Agent plugin backend, attaches this project's MCP grant and records the message before sending it. Without backend or config, the person's saved Agent and settings are used and recorded with the conversation. A repeated changeId with the same text returns the original conversation and starts nothing.",
       "path": "operations/conversation.start.json",
-      "bytes": 24711,
-      "sha256": "87301c43b393fb1758253603b765464ff616c454eceb693d86abdb07d0919c8c"
+      "bytes": 27598,
+      "sha256": "8657411051c572f682f190a0aa2dbc607a04108103a5e8249199622f4084ac7b"
     },
     "conversation.stop": {
       "summary": "Person at this machine only: ask the original Agent to stop answering one message. ACP cancellation is confirmed by the original prompt response; a lost connection keeps the outcome unknown. Legacy CLI conversations confirm process exit. Steps already taken stay done.",
       "path": "operations/conversation.stop.json",
-      "bytes": 23881,
-      "sha256": "16b3d7df4ef1ed96b386f44717431f31adae38f0a3de3e772086ba25b2def5cb"
+      "bytes": 26768,
+      "sha256": "e30331cef50f86086eeadcb03fa4ce43c1b42a0a264c8fe36c58412501227fcd"
     },
     "conversation.trash": {
       "summary": "Person at this machine only: move a conversation that is not being answered to the trash. It is kept whole and not continued until restored; an idle connection to its Agent ends.",
@@ -563,8 +593,8 @@
     "session.grant": {
       "summary": "session.grant",
       "path": "operations/session.grant.json",
-      "bytes": 4090,
-      "sha256": "4b4ed60de3d9e4d6db64430965bbd64aa3114ea7f25f9dc883a85c2cd71bc5a8"
+      "bytes": 4203,
+      "sha256": "cea5e9395dd143b3cd0b63f358dae1ebfff2b6b05f50b28a80be5fdc3dbdf362"
     },
     "skill.list": {
       "summary": "List the application and enabled provider Skills shipped in the selected package. Skills guide discovery but do not grant authorization.",

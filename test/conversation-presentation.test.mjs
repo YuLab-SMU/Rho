@@ -93,6 +93,10 @@ test('a command is named without the output wrapper a setup adds, and says how i
   assert.equal(commandEnd({ ...step, outcome: 'returned', exitCode: 0 }), 'Exit 0');
   assert.equal(commandEnd({ ...step, exitCode: undefined, output: undefined }), 'Refused');
   assert.equal(commandEnd({ ...step, exitCode: undefined }), 'Failed');
+  // A call Claude Code would not start (its input could not be parsed) did not run: refused, not failed.
+  const unparsed = { ...step, detail: undefined, title: 'Terminal', exitCode: undefined, output: { text: '<tool_use_error>InputValidationError: Bash was called with input that could not be parsed as JSON.</tool_use_error>', lines: 1, bytes: 99, cut: false } };
+  assert.equal(toolActivity(unparsed, null, '/p').outcome, 'rejected');
+  assert.equal(commandEnd(unparsed), 'Refused');
   assert.equal(stepDuration({ ...step, outcome: 'requested' }), null, 'a running step has no duration yet');
   assert.equal(stepDuration({ ...step, startedAt: undefined }), null);
 });

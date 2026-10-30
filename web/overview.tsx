@@ -13,7 +13,7 @@ import { AgentActivity } from './agent-activity.js';
 import { AgentPage } from './agent-manage.js';
 import { AgentAccess } from './agents.js';
 import { SharedNotes, TouchedFiles, useProjectWork, WorkSessions } from './work-progress.js';
-import { LatestAnswer } from './agent-work.js';
+import { AnswerBoard } from './answer-board.js';
 import { readPreview, type Preview } from './previews.js';
 import './overview.css';
 
@@ -81,8 +81,10 @@ interface Props {
   category?: SourceRow; files?: ProjectFiles; sources?: Record<SourceRow, SourceItem[]> | null; onFile?: (row: SourceRow, item: SourceItem) => void;
   // The Agent page: a tab opened from a narrower link has no conversations here, only its handoff.
   linked?: boolean; onPath?: (path: string) => void; onNewConversation?: () => void;
+  // The Console, at one message's commands.
+  onConsole?: (turn?: string) => void;
 }
-export function ProjectOverview({ project, snapshot, client, section, workspace, onSection, onAgent, onLayout, onProjectChanged, onOpened, category, files, sources, onFile, linked = false, onPath, onNewConversation }: Props) {
+export function ProjectOverview({ project, snapshot, client, section, workspace, onSection, onAgent, onLayout, onProjectChanged, onOpened, category, files, sources, onFile, linked = false, onPath, onNewConversation, onConsole }: Props) {
   // A linked tab's Agent sessions with access are read only while their section is open.
   const [outsideOpen, setOutsideOpen] = useState(false);
   const { runs, problem: runsProblem, readAgain } = useRuns(client, project.id, snapshot.cursor);
@@ -123,6 +125,7 @@ export function ProjectOverview({ project, snapshot, client, section, workspace,
   const touched = !!work.work && (work.work.files.length > 0 || work.work.omitted.fileReferences > 0);
   const side = recent || touched || workAllowed || snapshot.compositions.length > 0;
   const shownFigures = figureCount(figures.length);
+  const boarded = !!files && !!snapshot.conversations?.length;
   // An empty project leads with the step that has something behind it, and never with a claim
   // that could not be read: a failed listing keeps the Agent first.
   const browseLeads = (rootEntries ?? 0) > 0;
@@ -194,7 +197,7 @@ export function ProjectOverview({ project, snapshot, client, section, workspace,
       {section === 'sources' && files && <button onClick={files.refresh} disabled={files.reading}><Icon name="refresh" size={15} />Refresh</button>}
     </header>
     {section === 'sources' && files && onFile && <SourceList category={category ?? 'data'} files={files} items={sources?.[category ?? 'data'] ?? null} artifacts={artifacts} onFile={onFile} />}
-    {section === 'overview' && workAllowed && <WorkSessions state={work} openConversation={onAgent} openActivity={() => onSection('agent')} />}
+    {section === 'overview' && workAllowed && <WorkSessions state={work} boarded={!!files && !!snapshot.conversations?.length} openConversation={onAgent} openActivity={() => onSection('agent')} />}
     {section === 'overview' && fileError && <p role="alert">{fileError}</p>}
     {emptyProject && <div className="empty-project">
       <span className="empty-symbol"><Icon name="grid" size={26} stroke={1.5} /></span>
@@ -203,11 +206,12 @@ export function ProjectOverview({ project, snapshot, client, section, workspace,
     </div>}
     {section === 'overview' && !emptyProject && settled && <>
       {snapshot.taskMap?.question && <div className="project-question"><Icon name="prompt" size={18} /><h2>{snapshot.taskMap.question}</h2></div>}
-      {files && !!snapshot.conversations?.length && <Suspense fallback={null}><WorkStrip client={client} snapshot={snapshot} files={files} onOpen={() => onSection('graph')} onConversations={() => onSection('agent')} /></Suspense>}
+      {files && !!snapshot.conversations?.length && <AnswerBoard client={client} snapshot={snapshot} files={files} onConversation={id => onAgent(id)} onPath={path => onPath?.(path)} onConsole={turn => onConsole ? onConsole(turn) : onSection('console')} onGraph={() => onSection('graph')} />}
       <div className={'project-columns' + (side ? '' : ' single')}>
         <div className="project-primary">
-          {!!snapshot.conversations?.length && <LatestAnswer client={client} snapshot={snapshot} onOpen={id => onAgent(id)} />}
-          <section className="project-section figures-section"><div className="section-heading"><h2>Results &amp; figures{figures.length > 0 && <span className="section-count">{figures.length}</span>}</h2><button className="text-button" onClick={() => onSection('files')}>All files <Icon name="chevron" size={12} /></button></div>
+          {files && boarded && <Suspense fallback={null}><WorkStrip client={client} snapshot={snapshot} files={files} onOpen={() => onSection('graph')} onConversations={() => onSection('agent')} /></Suspense>}
+          {/* With conversations, the board above shows each answer's results; Files keeps them all. */}
+          {(!boarded || (!figures.length && artifacts.length > 0)) && <section className="project-section figures-section"><div className="section-heading"><h2>Results &amp; figures{figures.length > 0 && <span className="section-count">{figures.length}</span>}</h2><button className="text-button" onClick={() => onSection('files')}>All files <Icon name="chevron" size={12} /></button></div>
             {figures.length ? <ul className={'figure-grid count-' + shownFigures + (shownFigures >= 3 ? ' featured' : '')}>{figures.slice(0, shownFigures).map(item => <li key={item.key}>
               <button className="figure-card" onClick={() => onFile?.('results', item)} title={item.path}>
                 <Thumb client={client} snapshot={snapshot} item={item} modifiedAt={modified.get(item.path)} />
@@ -215,7 +219,7 @@ export function ProjectOverview({ project, snapshot, client, section, workspace,
               </button></li>)}</ul>
               : artifacts.length ? resultList : <p className="quiet-empty">No results or figures yet.</p>}
             {figures.length > shownFigures && <button className="text-button figures-more" onClick={() => onSection('files')}>{figures.length - shownFigures} more in Files <Icon name="chevron" size={12} /></button>}
-          </section>
+          </section>}
           {snapshot.taskMap?.items.length ? <section className="project-section"><div className="section-heading"><h2>From your Agent</h2></div><ul className="agent-notes">{snapshot.taskMap.items.map(item => <li key={item.id} data-fact="agent"><strong>{item.title}</strong>{item.summary && <p>{item.summary}</p>}<small>{snapshot.taskMap!.vocabulary.states[item.state]?.label ?? item.state}</small></li>)}</ul></section> : null}
         </div>
         {side && <aside className="project-side">

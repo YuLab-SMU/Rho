@@ -1001,6 +1001,103 @@
                 "pattern": "^[a-f0-9]{64}$"
               }
             },
+            "decisions": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "changeId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "requestDigest": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "decision": {
+                    "enum": [
+                      "accepted",
+                      "needs-changes"
+                    ]
+                  },
+                  "note": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "by": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "at": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "supersedes": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "results": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "path": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "resource": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "version": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "version"
+                          ],
+                          "additionalProperties": true
+                        }
+                      },
+                      "required": [
+                        "path",
+                        "resource"
+                      ],
+                      "additionalProperties": true
+                    }
+                  }
+                },
+                "required": [
+                  "changeId",
+                  "requestDigest",
+                  "decision",
+                  "note",
+                  "by",
+                  "at",
+                  "supersedes",
+                  "results"
+                ],
+                "additionalProperties": true
+              }
+            },
             "permissions": {
               "type": "array",
               "items": {

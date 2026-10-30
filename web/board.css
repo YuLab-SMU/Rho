@@ -1,0 +1,109 @@
+/* The answer board: the answer, then its results by role, then how they were made. */
+.answer-board { container-type: inline-size; gap: 14px; }
+.board-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.board-ask { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.board-ask h2 { font-size: 17px; line-height: 1.35; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.board-meta { color: var(--color-meta); font-size: 12px; }
+.board-live { color: var(--color-accent); font-weight: 600; overflow-wrap: anywhere; }
+.board-live.waiting { color: var(--color-amber-text); }
+button.board-live { min-height: 0; padding: 0; font-size: inherit; }
+.board-follow-up { scroll-margin-top: 80px; }
+.board-actions { display: flex; align-items: center; gap: 10px; flex: none; }
+.board-actions select { max-width: 260px; padding: 5px 8px; font-size: 12px; }
+.board-note { color: var(--color-meta); font-size: 12px; }
+.answer-board .work-answer.clamped .turn-text { max-height: 14em; }
+
+.board-results-block { display: flex; flex-direction: column; gap: 8px; }
+.board-results-why { color: var(--color-meta); font-size: 12px; }
+.board-results-why strong { color: var(--color-ink); font-size: 13px; }
+/* The leading result takes two thirds and the height of the results beside it; the rest
+   follow three to a row. */
+.board-results { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); grid-auto-flow: row dense; gap: 12px; align-items: start; }
+.board-results > .board-item { grid-column: span 2; }
+.board-results > .board-item.role-primary { grid-column: span 4; }
+.board-results.beside-0 > .board-item.role-primary { grid-column: 1 / -1; }
+.board-results.beside-2 > .board-item.role-primary { grid-row: span 2; }
+.board-results > .board-item.span-3 { grid-column: span 3; }
+.board-results > .board-item.span-6 { grid-column: 1 / -1; }
+.board-item { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 12px; border: 1px solid var(--color-hairline); border-radius: 10px; background: var(--color-surface); }
+.board-item.role-primary { padding: 14px; }
+.board-item > header { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.board-item-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }
+.board-ask-button { flex: none; min-height: 0; padding: 2px 6px; font-size: 12px; color: var(--color-muted); }
+.board-item:hover .board-ask-button, .board-ask-button[aria-expanded="true"] { color: var(--color-accent); }
+.board-item.asking { border-color: var(--color-hairline-strong); }
+.board-answer { position: relative; }
+.board-select-ask { position: absolute; z-index: 5; min-height: 0; padding: 4px 10px; font-size: 12px; border-radius: 999px; background: var(--color-surface); border-color: var(--color-hairline-strong); box-shadow: 0 2px 8px rgb(0 0 0 / 0.12); }
+.board-ask-box { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border: 1px solid var(--color-hairline-strong); border-radius: 10px; background: var(--color-surface); }
+.board-item .board-ask-box { padding: 8px 10px; background: var(--color-well); border-color: var(--color-hairline); }
+.board-ask-box blockquote { margin: 0; padding: 2px 0 2px 10px; border-left: 3px solid var(--color-accent-soft); color: var(--color-muted); font-size: 12.5px; max-height: 7.5em; overflow: auto; white-space: pre-wrap; }
+.board-ask-about { color: var(--color-meta); font-size: 12px; }
+.board-ask-about strong { color: var(--color-ink); font-weight: 600; }
+.board-ask-box textarea { width: 100%; min-height: 3.2em; resize: vertical; font: inherit; font-size: 13px; }
+.board-ask-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.board-name { justify-content: flex-start; min-height: 0; padding: 0; border: 0; background: none; gap: 6px; max-width: 100%; color: var(--color-ink); }
+.board-name:hover { background: none; text-decoration: underline; }
+.board-name strong { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.board-why { color: var(--color-meta); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.board-why code, .board-results-why code { font-family: var(--font-mono); font-size: 11px; color: var(--color-muted); }
+.board-figure { display: block; width: 100%; height: auto; max-height: 520px; object-fit: contain; border-radius: 6px; background: var(--color-well); }
+.board-figure.loading, .board-table.loading, .board-outline.loading, .board-text.loading { display: block; height: 160px; border-radius: 6px; background: var(--color-well); }
+.board-figure.none { display: flex; align-items: center; justify-content: center; height: 120px; color: var(--color-meta); font-size: 12px; }
+.board-table-wrap { display: flex; flex-direction: column; gap: 6px; min-width: 0; overflow-x: auto; }
+.board-table { border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; width: max-content; min-width: 100%; }
+.board-table th { position: sticky; top: 0; padding: 4px 10px 4px 0; text-align: left; font-weight: 600; color: var(--color-muted); border-bottom: 1px solid var(--color-hairline); white-space: nowrap; max-width: 16ch; overflow: hidden; text-overflow: ellipsis; }
+.board-table td { padding: 3px 10px 3px 0; border-bottom: 1px solid var(--color-divider); white-space: nowrap; }
+.board-table-wrap small, .board-outline small, .board-text small, .board-more { color: var(--color-meta); font-size: 11.5px; }
+
+.board-how { display: flex; flex-direction: column; gap: 10px; padding-top: 4px; }
+.board-row { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 12px; align-items: start; }
+.board-label { padding-top: 8px; color: var(--color-meta); font-size: 12px; font-weight: 600; }
+.board-cells { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 10px; min-width: 0; }
+.board-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding-top: 3px; }
+.board-outline ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; max-height: 15em; overflow: auto; }
+.board-outline li { display: grid; grid-template-columns: 3.2em minmax(0, 1fr); gap: 6px; font-size: 12px; }
+.board-outline li span { color: var(--color-meta); text-align: right; font-variant-numeric: tabular-nums; }
+.board-outline code { font-family: var(--font-mono); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.board-text { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.board-text pre { margin: 0; padding: 8px 10px; border-radius: 6px; background: var(--color-well); font-family: var(--font-mono); font-size: 11.5px; line-height: 1.45; overflow: auto; white-space: pre; max-height: 18em; }
+.board-item.role-run { gap: 4px; padding: 10px 12px; }
+.board-run summary { display: flex; align-items: baseline; gap: 10px; min-width: 0; cursor: pointer; list-style: none; }
+.board-run summary::-webkit-details-marker { display: none; }
+.board-run code { flex: 1; min-width: 0; font-family: var(--font-mono); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.board-run-end { flex: none; color: var(--color-verified-text); font-size: 11.5px; }
+.board-run-end.problem { color: var(--color-failed); }
+.board-run pre { margin: 8px 0 0; max-height: 16em; overflow: auto; padding: 8px 10px; border-radius: 6px; background: var(--color-well); font: 11.5px/1.45 var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+.board-run pre.board-run-full { color: var(--color-meta); max-height: 6em; }
+.board-console { align-self: center; justify-self: start; font-size: 12px; }
+.board-follow { display: flex; flex-direction: column; gap: 8px; }
+.board-follow ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.board-follow-up { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-left: 3px solid var(--color-accent-soft); background: var(--color-surface); border-radius: 0 8px 8px 0; }
+/* What the question was about sits above it on its own line, so the question keeps the width. */
+.board-follow-ask { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 4px 10px; min-width: 0; }
+.board-follow-ask p { min-width: 0; font-weight: 600; font-size: 13.5px; }
+.board-follow-ask .text-button { min-height: 0; padding: 0; font-size: 12px; color: var(--color-meta); }
+.board-follow-about { grid-column: 1 / -1; justify-self: start; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 1px 8px; border-radius: 999px; background: var(--color-well); color: var(--color-muted); font-size: 11.5px; }
+.board-foot { display: flex; justify-content: flex-end; }
+.board-foot .text-button { font-size: 12px; }
+
+.board-verdict { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border: 1px solid var(--color-hairline); border-radius: 10px; background: var(--color-surface); }
+.board-verdict > p { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; font-size: 13px; }
+.board-verdict.accepted { border-color: var(--color-verified-text); }
+.board-verdict.accepted > p:first-child { color: var(--color-verified-text); }
+.board-verdict.needs-changes { border-color: var(--color-failed); }
+.board-verdict.needs-changes > p:first-child { color: var(--color-failed); }
+.board-verdict blockquote { margin: 0; padding: 2px 0 2px 10px; border-left: 3px solid var(--color-hairline-strong); color: var(--color-muted); font-size: 12.5px; white-space: pre-wrap; }
+.board-verdict-since { color: var(--color-failed); font-size: 12px; }
+.board-verdict > .text-button { align-self: flex-start; min-height: 0; padding: 0; font-size: 12px; }
+.board-verdict-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.board-verdict:has(.board-ask-box) { padding: 0; border: 0; }
+
+@container (max-width: 720px) {
+  .board-results { grid-template-columns: minmax(0, 1fr); }
+  .answer-board .board-results > .board-item, .answer-board .board-results > .board-item.role-primary { grid-column: 1 / -1; grid-row: auto; }
+  .board-row { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .board-label { padding-top: 0; }
+  .board-head { flex-direction: column; gap: 8px; }
+  .board-actions { flex-wrap: wrap; }
+  .board-cells { grid-template-columns: minmax(0, 1fr); }
+}

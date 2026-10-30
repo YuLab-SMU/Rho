@@ -34,7 +34,7 @@ async function source(directory, paths, committedFiles = []) {
   }
   return { commit, tree, buildInputsSha256: sha(JSON.stringify(inventory)), localOverride: changed ? 'explicit-dirty-build-inputs' : null };
 }
-const pluginIds = ['documents', 'files', 'r', 'requirements', 'tables', 'media', 'charts', 'agent', 'annotations'];
+const pluginIds = ['documents', 'files', 'r', 'requirements', 'tables', 'media', 'charts', 'agent', 'annotations', 'console'];
 const selected = values['select-plugins'] === undefined ? pluginIds : values['select-plugins'].split(',').filter(Boolean);
 if (new Set(selected).size !== selected.length || selected.some(id => !pluginIds.includes(id))) throw new Error('Select unique known plugin IDs.');
 process.env.RHO_UI_PLUGINS = selected.join(',');

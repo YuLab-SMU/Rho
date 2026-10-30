@@ -39,7 +39,7 @@ function blockNode(block: Block, key: string, caret: boolean): ReactNode {
     </div>;
     case 'list': {
       const items = block.items.map((item, i) => <li key={i}>{inlineNodes(item, caret && i === block.items.length - 1)}</li>);
-      return block.ordered ? <ol key={key} className="md-list">{items}</ol> : <ul key={key} className="md-list">{items}</ul>;
+      return block.ordered ? <ol key={key} className="md-list" start={block.start}>{items}</ol> : <ul key={key} className="md-list">{items}</ul>;
     }
     case 'quote': return <blockquote key={key}>{inlineNodes(block.children, caret)}</blockquote>;
     case 'table': return <div key={key} className="md-table"><table>

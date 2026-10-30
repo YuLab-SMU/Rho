@@ -43,6 +43,36 @@ export function readPreview(client: BrowserClient, snapshot: WorkspaceSnapshot, 
   previews.set(key, made);
   return made;
 }
+// The answer board reads more of a table than a card does, and a script's text for its outline.
+// Same protected resources as previews: at most this many rows, columns and bytes per item,
+// each read once per exact version.
+export const boardReadLimits = { rows: 12, columns: 8, textBytes: 256 * 1024 };
+export type TablePage = { columns: string[]; rows: Array<Record<string, unknown>>; total: number; width: number };
+const reads = new Map<string, Promise<unknown>>();
+async function exactRef(client: BrowserClient, snapshot: WorkspaceSnapshot, file: PreviewFile) {
+  return file.resource ?? await client.call('agent.activity.capture', { projectId: snapshot.project.id, path: file.path });
+}
+const readKey = (snapshot: WorkspaceSnapshot, file: PreviewFile, what: string) => what + ':' + snapshot.project.id + ':' + file.path + ':' + (file.resource ? file.resource.id + '@' + file.resource.version : file.bytes + ':' + file.modifiedAt);
+export function readTable(client: BrowserClient, snapshot: WorkspaceSnapshot, file: PreviewFile, rows = boardReadLimits.rows): Promise<TablePage | null> {
+  const key = readKey(snapshot, file, 'table' + rows);
+  if (!reads.has(key)) reads.set(key, slot(async () => {
+    const resource = await exactRef(client, snapshot, file);
+    if (resource.kind !== 'table') return null;
+    const page = await client.call('data.page', { projectId: snapshot.project.id, resource: { id: resource.id, version: resource.version }, offset: 0, limit: Math.min(rows, boardReadLimits.rows) } as never) as { columns: Array<{ name: string }>; rows: Array<Record<string, unknown>>; total: number };
+    return { columns: page.columns.slice(0, boardReadLimits.columns).map(c => c.name), rows: page.rows, total: page.total, width: page.columns.length };
+  }).catch(() => null));
+  return reads.get(key) as Promise<TablePage | null>;
+}
+export function readText(client: BrowserClient, snapshot: WorkspaceSnapshot, file: PreviewFile): Promise<{ text: string; cut: boolean } | null> {
+  const key = readKey(snapshot, file, 'text');
+  if (!reads.has(key)) reads.set(key, slot(async () => {
+    const resource = await exactRef(client, snapshot, file);
+    const bytes = await readBytes(client, snapshot.project.id, { id: resource.id, version: resource.version }, boardReadLimits.textBytes);
+    const cut = bytes.length > boardReadLimits.textBytes;
+    return { text: new TextDecoder().decode(cut ? bytes.slice(0, boardReadLimits.textBytes) : bytes), cut };
+  }).catch(() => null));
+  return reads.get(key) as Promise<{ text: string; cut: boolean } | null>;
+}
 // A resource's bytes, read page by page and stopped once past maxBytes.
 async function readBytes(client: BrowserClient, projectId: string, resource: { id: string; version: string }, maxBytes: number) {
   let offset = 0, data = '';

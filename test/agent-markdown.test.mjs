@@ -35,6 +35,15 @@ test('blocks keep paragraphs, headings, lists, quotes and fenced code', () => {
   assert.equal(blocks[5].language, 'r'); assert.equal(blocks[5].text, 'x <- 1');
 });
 
+test('numbered items with blank lines between them stay one list, and a list keeps its first number', () => {
+  const blocks = markdownBlocks('Answers:\n\n1. **q1** six\n\n2. **q3** 0.43\n   from the means\n\n   per strain\n\n3. **q4** four\n\nThe figure shows it.\n\n4. later');
+  assert.deepEqual(blocks.map(b => b.type), ['paragraph', 'list', 'paragraph', 'list']);
+  assert.equal(blocks[1].items.length, 3);
+  assert.equal(blocks[1].start, undefined);
+  assert.deepEqual(blocks[1].items[1].filter(n => n.type === 'text').map(n => n.text.trim()), ['0.43', 'from the means', 'per strain']);
+  assert.equal(blocks[3].start, 4);
+});
+
 test('an unclosed fence renders as code while it streams, never as raw backticks', () => {
   const blocks = markdownBlocks('Reading the data.\n\n```python\nprint("你好")');
   assert.equal(blocks.length, 2); assert.equal(blocks[1].type, 'code');
