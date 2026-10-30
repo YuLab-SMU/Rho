@@ -36,6 +36,7 @@ were withdrawn on 2026-10-25; Git keeps their history.
 | [Development](DEVELOPMENT.md) | Stages, iterations, analyzing results, owner workflow and checks |
 | [macOS 0.5.1 preview](PREVIEW-0.5.1.md) | Fixed unsigned artifact, selected components, installation, acceptance and limits |
 | [Release](RELEASE.md) | Source publication and distribution |
+| [Research positioning](PAPER.md) | Related work, a candidate question about revisiting judgments after analysis changes, and the limits of possible contributions (written in Chinese) |
 
 The following records retain their historical backend or component scope. They do
 not impose layouts, colors or frontend process requirements:
