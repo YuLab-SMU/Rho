@@ -1,0 +1,107 @@
+/* One conversation's Studio: the views fill the stage, time runs down its right edge, beside the
+   Agent panel when it is open. */
+.process-studio { flex: 1; min-height: 0; display: flex; }
+.process-stage { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+
+/* A file's view says which version it shows. */
+.process-frame { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.process-frame > :last-child { flex: 1; min-height: 0; }
+.process-version { flex: none; display: flex; align-items: center; gap: 8px; min-height: 28px; padding: 2px 6px 2px 10px; border-bottom: 1px solid var(--color-divider); color: var(--color-meta); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.process-version > span:first-child { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.process-version-steps { display: flex; gap: 2px; }
+.process-version-steps .icon-button { width: 24px; height: 24px; min-height: 0; padding: 0; }
+.process-version-steps .flip { display: inline-flex; transform: scaleX(-1); }
+.process-replay-file { overflow: auto; padding: 10px 12px; background: var(--color-surface); }
+.process-replay-file pre { margin: 0; font-size: 12px; line-height: 1.5; white-space: pre; }
+.process-note { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 14px; color: var(--color-meta); font-size: 13px; }
+
+/* The commands of the conversation, read as a terminal: newest at the bottom, the line to run last. */
+.command-pane { display: flex; flex-direction: column; height: 100%; min-height: 0; background: var(--color-surface); container-type: inline-size; }
+.command-pane-list { flex: 1; min-height: 0; overflow: auto; padding: 8px 10px; margin: 0; }
+.command-pane .console-prompt { flex: none; padding: 8px 10px; border-top: 1px solid var(--color-divider); }
+.command-pane .console-prompt-label { font-size: 11.5px; }
+.command-pane-replay { flex: none; padding: 8px 12px; border-top: 1px solid var(--color-divider); }
+.console-quiet-row { list-style: none; }
+.console-quiet-row > details > summary { cursor: pointer; padding: 4px 0; color: var(--color-meta); font-size: 12px; }
+
+/* Which part of the work this is: a line in the Studio bar, the parts on demand. */
+.steps-slot { flex: 0 1 auto; min-width: 0; display: flex; }
+.steps-chip { position: relative; min-width: 0; max-width: 520px; }
+.steps-chip > summary { display: flex; align-items: center; gap: 8px; min-height: 32px; padding: 4px 12px; border: 1px solid var(--color-control-border); border-radius: 999px; background: var(--color-surface); cursor: pointer; list-style: none; font-size: 12.5px; }
+.steps-chip > summary::-webkit-details-marker { display: none; }
+.steps-chip[open] > summary { border-color: var(--color-accent); }
+.steps-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--color-meta); }
+.steps-dot.live { background: var(--color-accent); box-shadow: 0 0 0 3px var(--color-accent-soft); }
+.steps-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.steps-round, .steps-count { flex: none; color: var(--color-meta); font-variant-numeric: tabular-nums; }
+.steps-pop { position: absolute; z-index: 30; top: calc(100% + 6px); right: 0; width: min(440px, 86vw); max-height: min(70vh, 560px); overflow: auto; padding: 8px; border: 1px solid var(--color-hairline); border-radius: 10px; background: var(--color-surface); box-shadow: 0 12px 32px rgb(20 30 26 / 14%); }
+.steps-pop section + section { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--color-divider); }
+.steps-asked { margin: 2px 6px 6px; color: var(--color-meta); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.steps-part { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 0 8px; width: 100%; min-height: 0; padding: 6px; border: 0; border-radius: 6px; background: transparent; text-align: left; font-weight: 400; }
+.steps-part:hover { background: var(--color-hover); }
+.steps-part.current { background: var(--color-selected); }
+.steps-part.later { opacity: .55; }
+.steps-time { grid-row: span 2; color: var(--color-meta); font-size: 11.5px; font-variant-numeric: tabular-nums; padding-top: 1px; }
+.steps-name { font-size: 13px; color: var(--color-ink); overflow-wrap: anywhere; }
+.steps-name small { color: var(--color-meta); }
+.steps-meta { color: var(--color-meta); font-size: 11.5px; }
+
+/* Time down the side. */
+.side-timeline { flex: none; width: 60px; display: flex; flex-direction: column; align-items: stretch; border-left: 1px solid var(--color-hairline); background: var(--color-surface); }
+.side-tl-controls { flex: none; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 0 6px; border-bottom: 1px solid var(--color-divider); }
+.side-tl-speed { min-height: 0; padding: 1px 7px; border-radius: 999px; font-size: 11px; color: var(--color-muted); }
+.side-tl-track { position: relative; flex: 1; min-height: 80px; cursor: ns-resize; touch-action: none; outline-offset: -2px; }
+.side-tl-stretch { position: absolute; left: 50%; width: 2px; margin-left: -1px; background: var(--color-divider); pointer-events: none; }
+.side-tl-stretch small { position: absolute; top: -2px; right: 8px; color: var(--color-meta); font-size: 9.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.side-tl-fold { position: absolute; left: 6px; right: 6px; border-top: 1px dashed var(--color-hairline-strong); border-bottom: 1px dashed var(--color-hairline-strong); pointer-events: none; display: flex; align-items: center; justify-content: center; }
+.side-tl-fold small { color: var(--color-meta); font-size: 9.5px; background: var(--color-surface); padding: 0 2px; }
+.side-tl-mark { position: absolute; left: 50%; width: 16px; height: 4px; margin: -2px 0 0 -8px; border-radius: 2px; background: var(--side-tl-color); pointer-events: none; transition: opacity .15s; }
+.side-tl-mark.ask { --side-tl-color: var(--color-hue-rose-ink); width: 8px; height: 8px; margin: -4px 0 0 -4px; transform: rotate(45deg); border-radius: 1px; }
+.side-tl-mark.read { --side-tl-color: var(--color-hue-sky-ink); }
+.side-tl-mark.edit { --side-tl-color: var(--color-accent); }
+.side-tl-mark.run { --side-tl-color: var(--color-hue-iris-ink); }
+.side-tl-mark.changed { --side-tl-color: var(--color-amber); background: transparent; box-shadow: inset 0 0 0 1.5px var(--side-tl-color); }
+.side-tl-mark.capture { --side-tl-color: var(--color-hairline-strong); width: 8px; height: 3px; margin-left: -4px; }
+.side-tl-mark.answer { --side-tl-color: var(--color-hue-moss-ink); width: 9px; height: 9px; margin: -4.5px 0 0 -4.5px; border-radius: 50%; background: var(--color-surface); box-shadow: inset 0 0 0 2.5px var(--side-tl-color); }
+.side-tl-mark.failed { background: var(--color-failed); }
+.side-tl-mark.later { opacity: .22; }
+.side-tl-head { position: absolute; left: 3px; right: 3px; height: 2px; margin-top: -1px; background: var(--color-ink); pointer-events: none; }
+.side-tl-head small { position: absolute; top: 4px; left: 50%; transform: translateX(-50%); padding: 0 3px; border-radius: 3px; background: var(--color-ink); color: var(--color-surface); font-size: 9.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.side-tl-hover { position: absolute; right: calc(100% - 4px); z-index: 20; transform: translateY(-50%); max-width: 280px; padding: 3px 8px; border-radius: 6px; background: var(--color-ink); color: var(--color-surface); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
+.side-tl-step { display: none; }
+.side-tl-step .flip { display: inline-flex; transform: scaleX(-1); }
+.side-tl-at { min-width: 5.2em; text-align: center; color: var(--color-ink); font-size: 12px; font-variant-numeric: tabular-nums; }
+.side-tl-now { flex: none; margin: 6px; min-height: 0; padding: 4px 0; border-radius: 999px; font-size: 11.5px; gap: 5px; justify-content: center; }
+.side-tl-now.on { border-color: transparent; background: transparent; color: var(--color-accent); }
+
+/* The conversation replayed beside it. */
+.conversation-replay { position: sticky; top: 45px; z-index: 4; display: flex; align-items: center; gap: 8px; margin: 0 0 8px; padding: 6px 10px; border-radius: 8px; background: var(--color-amber-soft); color: var(--color-amber-text); font-size: 12.5px; }
+.conversation-replay strong { font-variant-numeric: tabular-nums; }
+.conversation-replay button { margin-left: auto; min-height: 0; padding: 2px 10px; font-size: 12px; }
+
+@media (max-width: 767px) {
+  .process-studio { flex-direction: column; }
+  .side-timeline { width: auto; flex-direction: row; height: 44px; border-left: 0; border-top: 1px solid var(--color-hairline); }
+  .side-tl-controls { flex-direction: row; border-bottom: 0; padding: 0 8px; }
+  .side-tl-track { display: none; }
+  .side-tl-controls { flex: 1; }
+  .side-tl-step { display: flex; align-items: center; gap: 2px; margin-left: auto; }
+  .side-tl-now { margin: 6px 8px 6px 0; padding: 4px 12px; }
+  .steps-chip { max-width: 60vw; }
+  .steps-round, .steps-count { display: none; }
+}
+
+/* Studio's tabs: each conversation's Studio first, then the person's own workspaces. */
+.conversation-tab { max-width: 260px; }
+.conversation-tab > span:not(.pulse-dot) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.conversation-tab > svg { color: var(--color-meta); }
+.studio-tabs-sep { flex: none; align-self: center; width: 1px; height: 20px; margin: 0 4px; background: var(--color-hairline); }
+
+/* In the narrow Commands view a command's files read as one line of links, and a replayed file
+   is named by the frame above it. */
+.command-pane .console-changed { gap: 2px 10px; }
+.command-pane .console-changed .work-file { min-height: 0; padding: 1px 0; border: 0; background: none; color: var(--color-accent); font-size: 12px; }
+.command-pane .console-changed .work-file:hover { background: none; text-decoration: underline; }
+.command-pane .console-changed .work-file > svg { display: none; }
+.command-pane .console-after { gap: 2px; }
+.process-replay-file .snapshot-view > p:first-child { display: none; }

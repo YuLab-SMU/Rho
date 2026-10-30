@@ -31,7 +31,7 @@ export function commandGist(command: string) {
 const quote = (text: string, max = 48) => { const t = commandGist(text); return '`' + (t.length > max ? t.slice(0, max - 1).trimEnd() + '…' : t) + '`'; };
 const isResult = (node: GraphNode) => node.category === 'figures' || node.category === 'results' || node.category === 'data';
 
-export function answerBoard(graph: WorkGraph, turn: string): AnswerBoard | null {
+export function answerBoard(graph: WorkGraph, turn: string, limits: typeof boardLimits = boardLimits): AnswerBoard | null {
   const question = graph.nodes.find(n => n.id === 'q:' + turn);
   if (!question) return null;
   const byId = new Map(graph.nodes.map(n => [n.id, n]));
@@ -53,7 +53,7 @@ export function answerBoard(graph: WorkGraph, turn: string): AnswerBoard | null 
   }
   const items: BoardItem[] = [], omitted: AnswerBoard['omitted'] = {};
   const add = (role: BoardRole, list: Array<{ node: GraphNode; why: string }>) => {
-    const limit = role === 'primary' ? 1 : boardLimits[role];
+    const limit = role === 'primary' ? 1 : limits[role];
     for (const { node, why } of list.slice(0, limit)) items.push({ node, role, why, mentioned: mentioned(node) });
     if (list.length > limit && role !== 'primary') omitted[role] = list.length - limit;
   };

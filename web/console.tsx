@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { BrowserApiError, type BrowserClient, type WorkspaceSnapshot } from '../src/browser.js';
 import type { RhoOutput } from '../src/contract.generated.js';
 import { buildWorkGraph, type GraphNode, type WorkGraph } from '../src/work-graph.js';
@@ -11,14 +11,19 @@ import { day, pathIcon } from './agent-work.js';
 import { projectName } from './home.js';
 import { Icon } from './icons.js';
 import { RunView } from './shell/facts.js';
+import { useProcess } from './process-context.js';
 import './console.css';
 
 // Every command run in the project, in one place: what the Agent ran in each message, from its
 // own reports, the commands the person ran here, and the runs Rho managed. A command shows how
 // it ended, how long it took, the files that changed on disk while it ran (seen, not claimed)
-// and what it printed. Commands that changed no project file fold under the ones that did.
+// and what it printed. Commands with no recorded file change fold under the ones that have one:
+// the record keeps each file's last change, so a command that wrote a file changed again later
+// has none of its own.
 const clock = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' });
 const clean = (node: GraphNode) => node.outcome === 'returned' && (!node.end || /^exit 0\b/i.test(node.end));
+// A command that returned without an exit code is not a problem; one that failed or exited non-zero is.
+const troubled = (node: GraphNode) => node.outcome === 'failed' || node.outcome === 'rejected' || node.outcome === 'unknown' || /^exit [1-9]/i.test(node.end ?? '');
 // Earlier records kept only a command's first line; a here-document without its body cannot run again.
 const whole = (command: string) => !/<<-?\s*['"]?\w+['"]?\s*$/.test(command.trim());
 
@@ -39,7 +44,7 @@ function Command({ node, changed, onPath, open, onRunAgain }: { node: GraphNode;
       <summary>
         <span className="console-time">{clock(node.at)}</span>
         <code title={node.ran ?? node.command}><span aria-hidden="true">$ </span>{node.command}</code>
-        <span className={'console-end' + (node.outcome === 'requested' ? ' running' : clean(node) ? '' : ' problem')}>{ending}{node.durationMs ? ' · ' + durationText(node.durationMs) : ''}</span>
+        <span className={'console-end' + (node.outcome === 'requested' ? ' running' : troubled(node) ? ' problem' : '')}>{ending}{node.durationMs ? ' · ' + durationText(node.durationMs) : ''}</span>
       </summary>
       {node.ran && node.ran !== node.command && <pre className="console-ran">{node.ran}</pre>}
       {node.output?.text ? <pre className="console-output" ref={e => { if (e) e.scrollTop = e.scrollHeight; }}>{node.output.text}{node.output.cut ? '\n…' : ''}</pre> : <p className="console-note">{node.outcome === 'requested' ? 'Running…' : 'No output was reported.'}</p>}
@@ -80,7 +85,7 @@ function useOutput(client: BrowserClient, projectId: string, record: Mine, open:
 
 const ended = (r: Mine) => r.state === 'running' ? 'Running' : r.state === 'stopped' ? 'Stopped' : r.state === 'continuing' ? 'Still running outside Rho' : r.state === 'unknown' ? 'Outcome unknown' : r.state === 'not-started' ? 'Did not start'
   : r.exit?.signal ? 'Ended by ' + r.exit.signal : 'Exit ' + (r.exit?.code ?? '?');
-function Yours({ record, client, projectId, changed, onPath, onRunAgain, onStop }: { record: Mine; client: BrowserClient; projectId: string; changed: ProjectFiles['files']; onPath: (path: string) => void; onRunAgain: (record: Mine) => void; onStop: (record: Mine) => void }) {
+function Yours({ record, client, projectId, changed, onPath, onRunAgain, onStop }: { record: Mine; client: BrowserClient; projectId: string; changed: Array<{ path: string; name: string }>; onPath: (path: string) => void; onRunAgain: (record: Mine) => void; onStop: (record: Mine) => void }) {
   const [open, setOpen] = useState(record.state === 'running');
   const [now, setNow] = useState(Date.now());
   const out = useOutput(client, projectId, record, open);
@@ -113,12 +118,12 @@ function Yours({ record, client, projectId, changed, onPath, onRunAgain, onStop 
 // The person's own line: a command runs in the project folder with their shell. A failed
 // request keeps its identity, so pressing Run again for the same words never runs it twice.
 function Prompt({ folder, draft, setDraft, note, busy, problem, onRun, input }: { folder: string; draft: string; setDraft: (text: string) => void; note: string; busy: boolean; problem: string; onRun: () => void; input: React.RefObject<HTMLTextAreaElement | null> }) {
-  const lines = Math.min(8, draft.split('\n').length);
+  const lines = Math.min(8, draft.split('\n').length), id = useId();
   return <form className="console-prompt" onSubmit={event => { event.preventDefault(); onRun(); }}>
-    <label htmlFor="console-command" className="console-prompt-label">Run a command in <strong>{folder}</strong></label>
+    <label htmlFor={id} className="console-prompt-label">Run a command in <strong>{folder}</strong></label>
     <div className="console-line">
       <span aria-hidden="true">$</span>
-      <textarea id="console-command" ref={input} rows={lines} value={draft} spellCheck={false} autoComplete="off" autoCapitalize="off" placeholder="python3 analysis.py"
+      <textarea id={id} ref={input} rows={lines} value={draft} spellCheck={false} autoComplete="off" autoCapitalize="off" placeholder="python3 analysis.py"
         onChange={event => setDraft(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); onRun(); } }} />
       <button type="submit" className="primary" disabled={busy || !draft.trim()}>{busy ? 'Starting…' : 'Run'}</button>
     </div>
@@ -153,7 +158,7 @@ function Message({ graph, turn, onPath, onConversation, focused, onRunAgain }: {
     </header>
     <ol className="console-list">{made.map(run => <Command key={run.id} node={run} changed={changedBy(run)} onPath={onPath} open={run.outcome === 'requested'} onRunAgain={onRunAgain} />)}</ol>
     {quiet.length > 0 && <details className="console-quiet" open={!made.length}>
-      <summary>{quiet.length} {quiet.length === 1 ? 'command' : 'commands'} that changed no project file</summary>
+      <summary>{quiet.length} {quiet.length === 1 ? 'command' : 'commands'} with no recorded file change</summary>
       <ol className="console-list">{quiet.map(run => <Command key={run.id} node={run} changed={[]} onPath={onPath} onRunAgain={onRunAgain} />)}</ol>
     </details>}
   </section>;
@@ -243,5 +248,76 @@ export function ConsolePage({ client, snapshot, files, focusTurn, onPath, onConv
       <button className="icon-button run-dialog-close" aria-label="Close" onClick={() => dialog.current?.close()}><Icon name="close" size={18} /></button>
       <RunView key={inspecting} snapshot={snapshot} client={client} operationId={inspecting} runs={runs} readRuns={readAgain} onOpenRun={setInspecting} opener={() => null} />
     </dialog>}
+  </div>;
+}
+
+// One conversation's commands in its Studio, read as a terminal reads: oldest first, the newest
+// at the bottom and open while it runs, the person's own commands where they ran, and a line to
+// run one. Commands with no recorded file change fold where they happened. During a replay it
+// shows what had run by then, and the line to run waits for now.
+export function CommandPane({ client, snapshot }: { client: BrowserClient; snapshot: WorkspaceSnapshot }) {
+  const process = useProcess();
+  const projectId = snapshot.project.id;
+  const { mine, off, problem, read } = useMine(client, projectId, snapshot.cursor);
+  const [draft, setDraft] = useState(''), [note, setNote] = useState(''), [busy, setBusy] = useState(false), [runProblem, setRunProblem] = useState('');
+  const pending = useRef<{ command: string; changeId: string } | null>(null);
+  const input = useRef<HTMLTextAreaElement>(null), list = useRef<HTMLOListElement>(null), atEnd = useRef(true);
+  const graph = process?.graph, at = process?.at ?? null;
+  const items = useMemo(() => {
+    if (!graph || !process) return [];
+    const byId = new Map(graph.nodes.map(n => [n.id, n]));
+    const turns = graph.turns.filter(t => t.conversationId === process.conversationId);
+    const since = Math.min(...turns.map(t => t.start));
+    type Item = { at: number; key: string; agent?: GraphNode; changed?: GraphNode[]; quiet?: GraphNode[]; mine?: Mine };
+    const out: Item[] = [];
+    for (const run of graph.nodes.filter(n => n.kind === 'run' && turns.some(t => t.id === n.turn)).sort((a, b) => a.at - b.at)) {
+      const changed = graph.edges.filter(e => e.from === run.id && e.label === 'changed while it ran').map(e => byId.get(e.to)).filter((n): n is GraphNode => !!n && !!n.category);
+      if (!changed.length && run.outcome !== 'requested' && clean(run)) {
+        const last = out.at(-1);
+        if (last?.quiet) { last.quiet.push(run); continue; }
+        out.push({ at: run.at, key: 'quiet-' + run.id, quiet: [run] });
+      } else out.push({ at: run.at, key: run.id, agent: run, changed });
+    }
+    for (const record of mine ?? []) {
+      const started = Date.parse(record.startedAt);
+      if (started >= since && (at === null || started <= at)) out.push({ at: started, key: record.commandId, mine: record });
+    }
+    return out.sort((a, b) => a.at - b.at);
+  }, [graph, mine, at, process?.conversationId]);
+  useEffect(() => { const element = list.current; if (element && atEnd.current) element.scrollTop = element.scrollHeight; }, [items]);
+  const finished = (mine ?? []).filter(r => r.state !== 'running').length;
+  useEffect(() => { if (mine) void read(); }, [finished]);
+  async function start(command: string) {
+    if (!command.trim() || busy) return;
+    if (pending.current?.command !== command) pending.current = { command, changeId: 'console-' + crypto.randomUUID() };
+    setBusy(true); setRunProblem('');
+    try { await client.call('console.run', { projectId, command, changeId: pending.current.changeId }); pending.current = null; setDraft(''); setNote(''); atEnd.current = true; void read(); }
+    catch (error) { setRunProblem(failure(error)); }
+    finally { setBusy(false); }
+  }
+  async function stop(record: Mine) {
+    try { await client.call('console.stop', { projectId, commandId: record.commandId, changeId: 'stop-' + record.commandId }); void read(); }
+    catch (error) { setRunProblem(failure(error)); }
+  }
+  const prepare = (command: string, from: string) => { setDraft(command); setNote('From ' + from + '. Check it, then press Run.'); input.current?.focus(); };
+  const showPath = (path: string) => process?.showPath(path);
+  const changedDuring = (r: Mine) => {
+    const from = Date.parse(r.startedAt), to = r.endedAt ? Date.parse(r.endedAt) + 1000 : Date.now();
+    return (process?.files ?? []).filter(f => f.versions.some(v => v.at >= from - 1000 && v.at <= to)).map(f => ({ path: f.path, name: f.title }));
+  };
+  if (!process) return <p className="console-note">Commands show in a conversation's Studio.</p>;
+  return <div className="command-pane">
+    <ol ref={list} className="console-list command-pane-list" onScroll={event => { const e = event.currentTarget; atEnd.current = e.scrollHeight - e.scrollTop - e.clientHeight < 24; }}>
+      {!items.length && <li className="console-note">No commands yet. The commands the Agent runs in this conversation appear here, and you can run your own below.</li>}
+      {items.map(item => item.quiet ? <li key={item.key} className="console-quiet-row"><details>
+          <summary>{item.quiet.length} {item.quiet.length === 1 ? 'command' : 'commands'} with no recorded file change</summary>
+          <ol className="console-list">{item.quiet.map(run => <Command key={run.id} node={run} changed={[]} onPath={showPath} onRunAgain={at === null && !off ? prepare : undefined} />)}</ol>
+        </details></li>
+        : item.agent ? <Command key={item.key} node={item.agent} changed={item.changed ?? []} onPath={showPath} open={item.agent.outcome === 'requested'} onRunAgain={at === null && !off ? prepare : undefined} />
+        : <Yours key={item.key} record={item.mine!} client={client} projectId={projectId} changed={changedDuring(item.mine!)} onPath={showPath} onRunAgain={r => void start(r.command)} onStop={r => void stop(r)} />)}
+    </ol>
+    {at !== null ? <p className="console-note command-pane-replay">Replaying · commands run from here use the project as it is now.</p>
+      : off ? <p className="console-note">Running commands here needs the Console plugin, which is off for this project.</p>
+      : <Prompt folder={projectName(snapshot.project)} draft={draft} setDraft={text => { setDraft(text); if (!text) setNote(''); }} note={note} busy={busy} problem={runProblem || problem} onRun={() => void start(draft)} input={input} />}
   </div>;
 }

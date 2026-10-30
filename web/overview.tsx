@@ -6,7 +6,7 @@ import { useRuns } from './executions.js';
 import { projectName, place, SourceFolders, when } from './home.js';
 import { Icon, type IconName } from './icons.js';
 import { availability, fileIcon, resourceIcon, size, sourceLabels, type Entry, type Section, type SourceRow } from './project.js';
-import { compositionName } from './canvas.js';
+import { compositionName, processConversation } from './canvas.js';
 import { walkLimits, type ProjectFiles, type SourceItem } from './sources.js';
 import { RunView } from './shell/facts.js';
 import { AgentActivity } from './agent-activity.js';
@@ -224,7 +224,7 @@ export function ProjectOverview({ project, snapshot, client, section, workspace,
         </div>
         {side && <aside className="project-side">
           {(snapshot.compositions.length > 0 || workAllowed) && <section className="project-section"><div className="section-heading"><h2>Continue working</h2></div>
-            <div className="workspace-grid">{snapshot.compositions.map(c => <button key={c.compositionId} className="workspace-card" onClick={() => onLayout(c.compositionId)}>
+            <div className="workspace-grid">{snapshot.compositions.filter(c => !processConversation(c.compositionId)).map(c => <button key={c.compositionId} className="workspace-card" onClick={() => onLayout(c.compositionId)}>
               <span className="workspace-card-head"><strong>{compositionName(c.compositionId)}</strong><small>{c.views.length} {c.views.length === 1 ? 'view' : 'views'}</small><Icon name="chevron" size={14} /></span>
               <MiniLayout composition={c} />
             </button>)}

@@ -9,6 +9,10 @@ import { capturable } from './sources.js';
 export const defaultWorkspace = 'workspace';
 const names: Record<string, string> = { workspace: 'Workspace', 'agent-canvas': 'Agent canvas', 'observed-outputs': 'Observed outputs' };
 export function compositionName(id: string) { return names[id] ?? id; }
+// Each conversation started in Rho has its own Studio layout, derived from its work until the
+// person arranges it; it is saved under this name only then.
+export const processComposition = (conversationId: string) => 'conversation-' + conversationId;
+export const processConversation = (compositionId: string) => compositionId.startsWith('conversation-') ? compositionId.slice('conversation-'.length) : null;
 
 type Side = 'code' | 'data';
 // A short, stable name for a file path, so a newer snapshot of the same file is recognised.

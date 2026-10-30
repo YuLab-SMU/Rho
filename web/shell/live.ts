@@ -6,8 +6,9 @@ import { useRuns } from '../executions.js';
 
 // The live layout and Screen for this tab. The expression rules decide everything; this
 // hook only feeds them owner snapshots and the person's intents, and keeps the tab's
-// return checkpoint within its 1 MiB budget.
-export function useLive(snapshot: WorkspaceSnapshot, composition: CompositionSummary, client: BrowserClient, principal?: string) {
+// return checkpoint within its 1 MiB budget. A derived layout (a conversation's Studio) is
+// its owner's description of the work at the moment shown, so it is taken as given each time.
+export function useLive(snapshot: WorkspaceSnapshot, composition: CompositionSummary, client: BrowserClient, principal?: string, derived = false) {
   const { runs, problem, readAgain: readRuns } = useRuns(client, snapshot.project.id, snapshot.cursor);
   // The Agent's declared items, read with the same cursor as everything else it observes.
   const mapAllowed = snapshot.catalog.operations.some(o => o.method === 'task.map.read' && o.authorized && o.state === 'available');
@@ -41,6 +42,7 @@ export function useLive(snapshot: WorkspaceSnapshot, composition: CompositionSum
       if (touched.current) holdView(state.current, chosen.current && state.current.layout.views.some(v => v.id === chosen.current) ? chosen.current : state.current.active);
       if (document.hidden) actLive(state.current, { kind: 'leave' });
     } else { const before = state.current.active; advanceLive(state.current, snapshot, runs, composition, Date.now(), map); if (state.current.active !== before) movedBy.current = 'owners'; }
+    if (derived) { state.current.layout = structuredClone(composition); state.current.held = {}; }
     save(); render(n => n + 1);
   }, [snapshot, composition, runs, map]);
   useEffect(() => {

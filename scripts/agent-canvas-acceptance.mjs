@@ -2,8 +2,9 @@
 // the real service and Chrome, and writes an output no step names. No model credentials are
 // used. It checks that the sidebar counts the project's contents, that a message sent from
 // Studio leaves the person's workspace as they arranged it, that an edit shows the text now on
-// disk in the open editor, and that Follow shows the answer board, led by the output the turn
-// made, with the next question following it.
+// disk in the open editor, that Follow opens the conversation's own Studio (its files by role,
+// its commands, its parts and its time beside the conversation, replayed together), and that
+// the answer board is led by the output the turn made, with the next question following it.
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -144,8 +145,7 @@ try {
   assert.equal(await page.locator('#preview-title').textContent(), 'airquality.csv');
   passed('the Agent page keeps what the turn changed, read, ran and answered; a file it names shows in place');
 
-  // From Studio again, the next question; Follow shows the answer board, where it follows the
-  // answer whose results it asks about.
+  // From Studio again, the next question; Follow opens the conversation's own Studio.
   await page.keyboard.press('Escape');
   await nav.getByRole('button', { name: 'Studio', exact: true }).click();
   await page.locator('.location-name').filter({ hasText: 'Workspace' }).waitFor();
@@ -153,21 +153,44 @@ try {
   await page.getByRole('textbox', { name: /Message|Reply/ }).fill('Now read the notes.');
   await page.getByRole('button', { name: 'Send', exact: true }).click();
   await page.locator('.follow-toggle[aria-pressed=false]').click();
+  await page.locator('.location-name').filter({ hasText: /^Studio · / }).waitFor();
+  await page.locator('.conversation-tab[aria-current=page]').waitFor();
+  await until(tabs, list => ['airquality.csv', 'analysis.R', 'Commands', 'ozone.svg'].every(name => list.some(tab => tab.name === name)), 'the conversation\'s files and commands in its Studio');
+  await page.locator('.side-timeline .side-tl-mark').first().waitFor();
+  await page.locator('.steps-chip').waitFor();
+  await until(tabs, list => list.some(tab => tab.name === 'notes.md'), 'the notes the follow-up read joining its Studio', 30000);
+  await shot('06-conversation-studio');
+  passed('Follow opens the conversation\'s own Studio: its data, script, commands and output by role, its parts above and its time beside the conversation');
+
+  // Pressing the top of the timeline shows that moment in the views and the conversation together.
+  await until(() => page.locator('.agent-chip').count(), n => n === 0, 'the follow-up ending', 40000);
+  const track = await page.locator('.side-tl-track').boundingBox();
+  await page.mouse.click(track.x + track.width / 2, track.y + 10);
+  await page.locator('.conversation-replay').waitFor();
+  await until(tabs, list => !list.some(tab => tab.name === 'ozone.svg' || tab.name === 'notes.md'), 'later files absent at the replayed moment');
+  assert.equal(await page.locator('.conversation-turns > li').filter({ hasText: 'Now read the notes.' }).count(), 0, 'the later message is absent from the conversation then');
+  await shot('07-replay');
+  await page.getByRole('button', { name: 'Back to now' }).click();
+  await until(tabs, list => list.some(tab => tab.name === 'notes.md'), 'back to now');
+  passed('a moment chosen on the timeline shows the views and the conversation as they were then; Back to now returns');
+
+  // The Overview's answer board follows the answer whose results the next question asks about.
+  await nav.getByRole('button', { name: 'Overview', exact: true }).click();
   const board = page.locator('.answer-board');
   await board.locator('h2').filter({ hasText: 'Fit ozone on temperature and draw it.' }).waitFor();
   await board.locator('.board-item.role-primary').filter({ hasText: 'ozone.svg' }).waitFor();
   await board.locator('.board-follow-up').filter({ hasText: 'Now read the notes.' }).waitFor();
   await until(() => board.locator('.board-follow-up .work-answer').innerText(), text => /ozone by month/.test(text), 'the follow-up answered on the board', 30000);
-  await shot('06-board');
-  passed('Follow shows the answer board: the figure the first message made leads it, and the next question follows it with its answer');
+  await shot('08-board');
+  passed('the answer board is led by the figure the first message made, and the next question follows it with its answer');
 
   await nav.getByRole('button', { name: 'Studio', exact: true }).click();
-  await page.locator('.location-name').filter({ hasText: 'Workspace' }).waitFor();
+  await page.locator('.location-name').filter({ hasText: /^Studio · / }).waitFor();
   for (const width of [1024, 390]) {
     await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
     await page.waitForTimeout(400);
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'no horizontal overflow at ' + width);
-    await shot('07-workspace-' + width);
+    await shot('09-studio-' + width);
   }
   assert.deepEqual(report.browserErrors, []);
   passed('no horizontal overflow at 1024 and 390, and no page errors');

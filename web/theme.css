@@ -338,8 +338,8 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .app-content { display: flex; flex-direction: column; flex: 1; min-width: 0; }
 .topbar { flex: 0 0 57px; display: flex; align-items: center; gap: 10px; padding: 0 18px; border-bottom: 1px solid var(--color-hairline); background: var(--color-surface); }
 .location { min-width: 0; overflow: hidden; display: flex; align-items: center; gap: 7px; }
-.location-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
-.crumb { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-height: 26px; padding: 2px 4px; border: 0; border-radius: 6px; background: transparent; color: var(--color-meta); font-weight: 400; }
+.location-name { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.crumb { display: block; flex: 0 4 auto; min-width: 2.5em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-height: 26px; padding: 2px 4px; border: 0; border-radius: 6px; background: transparent; color: var(--color-meta); font-weight: 400; }
 .crumb:hover { background: var(--color-hover); color: var(--color-ink); }
 .crumb-sep { flex: none; color: var(--color-control-border); }
 .topbar-actions { margin-left: auto; display: flex; align-items: center; gap: 10px; }

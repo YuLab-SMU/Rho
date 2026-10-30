@@ -277,3 +277,111 @@ Suites and acceptances are recorded in Status and the [ledger](VERIFICATION.json
 - An Agent's interim text (such as a provider error mid-response) shows as the answer
   while the message runs.
 - No independent researcher has used these screens.
+
+## Process Studio
+
+After the second pass the person said Studio should not be cut back to the person's
+own arrangement. Studio is where a person sees, in one space, how the Agent got the
+work done; the Overview and the Console stay as focused views. The actions, outputs
+and commands need their own components and a layout that holds that much. The steps
+of the work belong in a small aid generated as the Agent works. Time belongs down the
+side, beside the conversation, so that a replay plays the two together. They framed
+it as a layout grammar and content question as much as a visual one, and chose one
+Studio per conversation started in Rho.
+
+### Changes
+
+- **One Studio per conversation** (`web/studio-process.tsx`): a tab for each of the
+  newest conversations, ahead of the person's own workspaces. The layout is derived
+  from the conversation's record until the person arranges it. It is then saved as
+  `conversation-<id>`: later files join their role's place and files the person closed
+  stay closed (`studioMerge`, by the time the layout was last saved).
+- **Layout by role** (`src/studio-layout.ts`): each file takes the role the answer
+  board gives it, from the whole record. Inputs, the code and a Commands view stack on
+  one side; figures sit above the tables and reports on the other. Each role has one
+  place and a limit (`studioLimits`); further files stay in Files. A role first
+  appears when the work first had such a file.
+- **Versions in place** (`web/shell/process-views.tsx`): a file's view names the kept
+  version it shows, with earlier and later. A view's properties hold only its
+  declared title, so the file is found again from the view's id.
+- **Commands** (`CommandPane` in `web/console.tsx`): the conversation's commands
+  oldest first, as a terminal reads, with the files each changed and the person's own
+  commands and prompt below.
+- **Parts of the work** (`src/studio-chapters.ts`): a chip in the Studio bar names the
+  part in progress, in the Agent's own words between steps or by what the steps did,
+  with rounds of editing and running. Provider error notices open no part.
+- **Time beside the conversation:** a timeline down the stage's right edge, long
+  pauses folded. Choosing a moment there, a part or another version cuts the record
+  at that second (`src/replay.ts`). The views, commands, part and the conversation in
+  the Agent panel all show it; a text file shows the version kept then, read only.
+  At phone width the timeline is a row with play, the moment and steps.
+- **Following:** Follow and the topbar chip open the running conversation's Studio,
+  which brings forward the file the Agent is on, or Commands while it runs one.
+  Sending from the person's own workspace leaves them there.
+
+### What the runs showed
+
+**The recorded bix-41 run, replayed.** The second pass's fresh project (two messages,
+10 kept versions of the script, 4 of the figure) was opened in its Studio. The first
+screen had no script and no question file: text views arrive after the editor's
+document opens, and the live layout took a new arrangement only when its saved
+version changed. A derived layout is now taken as given each time. Stepping to the
+moment the script was written showed "no version kept" beside "Wrote analysis.py":
+the write and its kept version fell 76 ms apart in the same displayed second, so a
+moment now holds its whole second. In that second the Agent also announced its next
+command, which won the step and kept the script behind Commands; a file written in
+the same second now comes forward. In the canvas acceptance's controlled run, the
+steps chip named a part by what it went on to do ("Edited analysis.R") while the
+conversation beside it had only read the data; it now names the part from the steps
+taken by then.
+
+**Saying only what the record holds.** During replay every command read "changed no
+project file". The record keeps each file's last change, so a run whose output was
+rewritten later has no change of its own. The fold now says "with no recorded file
+change", in the Console too. A command with no reported exit code had shown as a red
+"Finished"; only a failure or a non-zero exit is marked now.
+
+**Arranging.** Closing a view failed: the catalog accepts only a `title` property, and
+the views carried their path and role. The file is now found from the view's id;
+closing a view saved `conversation-<id>`, and after a reload the closed view stayed
+closed and the rest kept their places.
+
+**A live run, watched from its Studio.** A fresh copy of the bix-41 inputs was
+answered by Claude Code (DeepSeek V4.1 Flash) in 13 min, with no permission
+requests. The message was started from Studio and Follow opened its Studio. The data
+and question file appeared as inputs, then the script, then the results beside them,
+and the Agent's marker moved between Read, Wrote, Edited and Running. The script was
+kept 26 times and the figure twice. The chip named 16 parts in the Agent's own words,
+and a failed run showed as a red mark on the timeline. No page errors were logged.
+Between two updates the results tabs swapped places while nothing about those files
+had changed: a role's files had followed the board's order of the moment. They now
+keep the order the work first had them, after the result an answer led with. The
+long command in the topbar chip clipped the breadcrumb on both sides; crumbs now
+shorten at their end before the page name. Replayed afterwards at 04:43:42, the
+conversation showed the Agent 1:50 in, running a SciPy check, and Commands showed
+that command still running. The Agent named one analysis choice in its answer rather
+than declaring it, as in the second pass.
+
+### Verification
+
+- `test/studio-process.test.mjs`: the cut at a moment, the parts, roles and order from
+  the whole record, the layout, and a saved arrangement merged with later files.
+- `acceptance:agent-canvas` now checks that Follow opens the conversation's Studio with
+  its data, script, commands, output, parts and timeline. It also checks that a moment
+  chosen on the timeline shows the views and the conversation as they were then. The
+  sources, graph, agent-page, agent-ui, review and ui:u2 acceptances passed unchanged.
+- At 390 px the conversation's Studio shows one view at a time, with play, the moment
+  and its steps in a row; nothing scrolled sideways.
+
+### Left open
+
+- No independent person has watched a run or a replay in Studio.
+- A command is credited only with files whose last change fell while it ran.
+- Studio reads a conversation's newest 8 messages (`processLimits.turns`); earlier
+  ones are not in its layout or timeline.
+- A replayed text file is shown as plain read-only text, without the editor's
+  highlighting. At 900 px the inputs' place leaves a table few rows.
+- A saved conversation Studio counts toward the project's 32 layouts and cannot yet be
+  removed.
+- Agent-declared choices, row identity on an ordinary CSV and page addresses remain
+  as recorded in the second pass.

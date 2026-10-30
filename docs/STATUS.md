@@ -48,8 +48,16 @@ versions the message kept. Review is listed only while review records exist. The
 Console (Console 0.1.0) lists the Agent's and the person's commands, and runs, stops
 and reruns the person's own (local browser only). Agent 0.4.19 keeps a command's
 whole text. Repeated reads no longer exhaust a message's capture budget before its
-results. Studio no longer opens the Agent's files by itself.
-Agent-declared choices with Agree/No were agreed but not built (see the record).
+results. Agent-declared choices with Agree/No were agreed but not built (see the record).
+
+The [process Studio](SIMULATED-PROJECT-EPISODE.md#process-studio) pass made Studio show
+how a conversation's work was done. Each conversation started in Rho has its own
+Studio tab, laid out from its record by role: data, script and a Commands view down one
+side, figures above tables and reports on the other, each file's view naming the kept
+version it shows. A chip names the part of the work in progress, and a timeline runs
+beside the Agent panel. A moment chosen there replays the views, commands, part and
+conversation together. Arranging saves the layout as `conversation-<id>`. The person's
+own workspace still opens nothing by itself.
 
 ## Existing application
 
@@ -85,8 +93,10 @@ original scope; they do not establish usability of later changes.
 
 Baseline: Plugins 104/104 and Rho 223/223 with an explicit unchanged Core binary.
 The first full changed run passed Plugins 109/109 and Rho 227/228; an undeclared
-new CSS variable caused the application failure and was corrected. After the second pass
-(answer board, decisions, Console, Agent 0.4.19), the [ledger](VERIFICATION.json) records Rho 240/240 and Plugins 117/117.
+new CSS variable caused the application failure and was corrected. The second pass
+(answer board, decisions, Console, Agent 0.4.19) passed Rho 240/240. The process Studio
+pass first failed 244/245 on another undeclared CSS variable, which was corrected;
+the [ledger](VERIFICATION.json) records Rho 245/245 and Plugins 117/117.
 The agent-canvas, graph, agent-page, agent-ui, review, ui:u2 and sources browser
 acceptances passed on that build.
 The [episode](REVIEW-EVIDENCE-EPISODE.md) records contract, browser and installed results.

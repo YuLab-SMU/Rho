@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import type { ProjectSummary, ResourceSummary, WorkspaceSnapshot, CompositionSummary } from '../src/browser.js';
-import { compositionName } from './canvas.js';
+import { compositionName, processConversation } from './canvas.js';
 import { Icon, type IconName } from './icons.js';
 
 export type Section = 'overview' | 'documents' | 'files' | 'agent' | 'settings' | 'sources' | 'file' | 'graph' | 'review' | 'console';
@@ -41,7 +41,8 @@ export function ProjectNavigation({ project, snapshot, current, sources, partial
     setUnfolded(next);
     try { sessionStorage.setItem(openKey, JSON.stringify(next)); } catch { /* the choice lasts for this page only */ }
   }
-  const layouts = snapshot?.compositions ?? [];
+  // A conversation's own Studio is reached from Studio's tabs; these are the person's workspaces.
+  const layouts = (snapshot?.compositions ?? []).filter(c => !processConversation(c.compositionId));
   // A row is named by its place; the count beside it is a glance, repeated in its tooltip.
   const count = (value: number | null | undefined, noun: string) => value === null || value === undefined ? undefined
     : { title: `${value}${partial && noun !== 'run' ? ' or more' : ''} ${noun}${value === 1 ? '' : 's'}`, node: <span className="nav-row-count" aria-hidden="true">{value}{partial && noun !== 'run' ? '+' : ''}</span> };

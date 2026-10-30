@@ -10,6 +10,9 @@ import { OwnerView, availableEntry, title, viewIcon } from './owner.js';
 import { AgentColumn, Bar, Digest, Evidence, Interruption, waiting } from './layer.js';
 import { openRun, runFirstLine, RunView, SourceLine } from './facts.js';
 import { ActionForm } from './action-form.js';
+import { CommandPane } from '../console.js';
+import { useProcess } from '../process-context.js';
+import { ProcessFrame } from './process-views.js';
 import { boundResource } from '../executions.js';
 import { Slot, Split, TabGroup, place, unplace, useTabOverflow, type DropTarget, type TabDrag, type TabRender } from './regions.js';
 import './shell.css';
@@ -18,8 +21,10 @@ type Tabs = Extract<Region, { kind: 'tabs' }>;
 // The workspace shell: the owner's composition tree drawn as
 // splits and tab groups, owner views mounted within the rendering budget, and a slot for
 // what Rho adds above the work. It decides nothing about attention; useLive does.
-export function Workspace({ composition: recorded, snapshot, client, onAbout, contextTarget, principalId, onShowContext, feedbackContextActive, openView, onCommands, agentTarget, onShowAgent, presence, onPersonMoved, bar = true, attention = true, following = false }: { following?: boolean; bar?: boolean; attention?: boolean; presence?: { viewId: string; label: string; verb: string; live: boolean } | null; onPersonMoved?: () => void; onCommands?: (group: CommandGroup | null) => void; composition: CompositionSummary; snapshot: WorkspaceSnapshot; client: BrowserClient; onAbout: (pluginId: string) => void; contextTarget: HTMLElement | null; principalId?: string; onShowContext: () => void; feedbackContextActive: boolean; mapChipTarget?: HTMLElement | null; openView?: string; agentTarget?: HTMLElement | null; onShowAgent?: () => void }) {
-  const live = useLive(snapshot, recorded, client, principalId), layout = live.layout;
+export function Workspace({ composition: recorded, snapshot, client, onAbout, contextTarget, principalId, onShowContext, feedbackContextActive, openView, onCommands, agentTarget, onShowAgent, presence, onPersonMoved, bar = true, attention = true, following = false, arrange = true }: { following?: boolean; arrange?: boolean; bar?: boolean; attention?: boolean; presence?: { viewId: string; label: string; verb: string; live: boolean } | null; onPersonMoved?: () => void; onCommands?: (group: CommandGroup | null) => void; composition: CompositionSummary; snapshot: WorkspaceSnapshot; client: BrowserClient; onAbout: (pluginId: string) => void; contextTarget: HTMLElement | null; principalId?: string; onShowContext: () => void; feedbackContextActive: boolean; mapChipTarget?: HTMLElement | null; openView?: string; agentTarget?: HTMLElement | null; onShowAgent?: () => void }) {
+  // A conversation's Studio: its files' views show their versions, and a replay arranges nothing.
+  const process = useProcess();
+  const live = useLive(snapshot, recorded, client, principalId, !!process), layout = live.layout;
   // A question sent from another browser session has no context in this one. Preparing it under
   // the question's own changeId (as the table's send does) keeps one context per question version.
   async function prepareQuestion(annotationId: string) {
@@ -45,8 +50,9 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
   // What Rho adds above the work: one interruption at a time, hidden until it changes.
   const [evidence, setEvidence] = useState(false), [hidden, setHidden] = useState<string[]>([]);
   const items = waiting(live), unhidden = items.filter(i => !hidden.includes(i.key + ':' + i.text));
+  // In a conversation's Studio the step at the moment shown decides, through openView.
   useEffect(() => {
-    if (!live.active || !byId.has(live.active)) return;
+    if (process || !live.active || !byId.has(live.active)) return;
     // Keyboard focus inside a view is the person's place: a move the owners' records make
     // that would hide it holds it instead, so the move waits as it does while the person works.
     const here = document.activeElement?.closest<HTMLElement>('[data-owner-view]')?.dataset.ownerView;
@@ -67,7 +73,7 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
   // replacement of the owner's tree, or the owner's own undo. The person's change is adopted
   // at once; a refusal (a protected view, a newer layout) is said, and nothing is retried.
   const [layoutProblem, setLayoutProblem] = useState('');
-  const allowed = (method: string) => snapshot.catalog.operations.some(o => o.method === method && o.state === 'available' && o.authorized);
+  const allowed = (method: string) => (arrange || !method.startsWith('composition.')) && snapshot.catalog.operations.some(o => o.method === method && o.state === 'available' && o.authorized);
   const tree: LayoutTree | null = recorded.rootId && recorded.nodes?.length ? { rootId: recorded.rootId, nodes: recorded.nodes as unknown as LayoutNode[] } : null;
   // A command runs against the newest layout this tab knows: the last read, or the owner's
   // reply to this tab's own last change when that is newer than the read.
@@ -178,6 +184,7 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
   const body = (id: string): ReactNode => {
     const view = byId.get(id)!, isVisible = visible.includes(id);
     if (view.component === 'rho.action') return <ActionForm view={view} snapshot={snapshot} client={client} live={live} />;
+    if (view.component === 'rho.console') return <CommandPane client={client} snapshot={snapshot} />;
     if (view.component === 'rho.execution') {
       const operationId = String(view.props.operationId ?? id);
       return <RunView snapshot={snapshot} client={client} operationId={operationId} runs={live.runs} readRuns={live.readRuns} firstLine={runFirstLine(live, operationId)} opener={ref => () => openRef(ref)} onOpenRun={other => openRun(live, other)} chain />;
@@ -192,6 +199,7 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
       renderAllowed: rights.current.has(id), onAbout, onRequestFeedback: requestFeedback,
       onOpenBeside: tree && allowed('composition.apply') && tree.nodes.some(n => n.id === id) ? beside => void openBeside(id, beside) : undefined,
     }} />;
+    if (process) return <ProcessFrame view={view} process={process} client={client} snapshot={snapshot}>{owner}</ProcessFrame>;
     if (!resource) return owner;
     return <><SourceLine live={live} snapshot={snapshot} resource={resource} viewId={id} onOpenRef={openRef}>
       {Question && <Question key={resource.id + resource.version + id} projectId={snapshot.project.id} viewId={id} resource={resource} snapshot={snapshot} client={client} principalId={principalId} headerTarget={ownHeader(id)} selectionScope={selectionScope(view)} onOpenResource={openRef} requestFeedback={requestFeedback ? () => requestFeedback(id) : undefined} />}

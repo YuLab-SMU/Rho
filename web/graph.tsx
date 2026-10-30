@@ -16,6 +16,7 @@ import { AgentMarkdown } from './markdown.js';
 import { OwnerView } from './shell/owner.js';
 import { readPreview, type Preview } from './previews.js';
 import { useTurns } from './work-turns.js';
+import { clock, failed, kindOfAction, span, timelineKinds, type TimelineKind } from './timeline-kinds.js';
 import './graph.css';
 
 // The project as a graph of what the Agent did: the questions people asked, the files each
@@ -24,8 +25,6 @@ import './graph.css';
 // work, and a file is shown as it is now. The person and the Agent share one workspace; the
 // graph is a way into it, not a second one.
 
-const clock = (ms: number, seconds = false) => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', ...(seconds ? { second: '2-digit' } : {}), hourCycle: 'h23' });
-const span = (ms: number) => ms < 60000 ? Math.max(1, Math.round(ms / 1000)) + ' s' : ms < 3600000 ? Math.round(ms / 60000) + ' min' : (ms / 3600000).toFixed(1).replace(/\.0$/, '') + ' h';
 const kindLabel = (node: GraphNode) => node.kind === 'question' ? 'Question' : node.kind === 'run' ? 'Run'
   : ({ data: 'Data', code: 'Script', results: 'Result', figures: 'Figure', notes: 'Note' } as Record<string, string>)[node.category ?? ''] ?? 'File';
 const kindIcon = (node: GraphNode): IconName => node.kind === 'question' ? 'question' : node.kind === 'run' ? 'run'
@@ -458,15 +457,6 @@ function Choice({ waiting, client, projectId }: { waiting: NonNullable<GraphNode
 
 // The work over time: each message a band, each action a tick. Dragging or the arrow keys
 // show the graph as it stood then; Play runs through it. Long pauses between messages are cut.
-// The kinds of action the timeline draws, each its own colour; edits and writes are one kind.
-const timelineKinds = [
-  { key: 'ask', label: 'Asked', actions: ['ask'] }, { key: 'read', label: 'Read', actions: ['read'] },
-  { key: 'edit', label: 'Edited', actions: ['edit', 'write'] }, { key: 'run', label: 'Ran', actions: ['run'] },
-  { key: 'changed', label: 'Changed on disk', actions: ['changed'] }, { key: 'capture', label: 'Versions kept', actions: ['capture'] }, { key: 'answer', label: 'Answered', actions: ['answer'] },
-] as const;
-type TimelineKind = typeof timelineKinds[number]['key'];
-const kindOfAction = (action: string): TimelineKind => timelineKinds.find(k => (k.actions as readonly string[]).includes(action))?.key ?? 'read';
-const failed = (e: GraphEvent) => e.outcome === 'failed' || e.outcome === 'rejected' || e.outcome === 'unknown';
 // Ticks a reader can tell apart: the shortest step that leaves this much room between labels.
 const tickSteps = [10e3, 30e3, 60e3, 120e3, 300e3, 600e3, 900e3, 1800e3, 3600e3, 7200e3, 21600e3];
 

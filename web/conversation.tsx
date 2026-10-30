@@ -11,6 +11,8 @@ import { BrandMark, brandOf } from './brand-marks.js';
 import { money, tokens } from './agent-manage.js';
 import { Icon, type IconName } from './icons.js';
 import { stepFocus, useOutside } from './popover.js';
+import { turnAt } from '../src/replay.js';
+import { clock as clockAt } from './timeline-kinds.js';
 
 // A conversation the person starts here. Rho holds its input, so this panel is where it
 // continues: the person's messages, the Agent's words as they arrive, the actions it takes
@@ -56,16 +58,17 @@ function ending(turn: Turn) {
   }
   return turn.problem ?? 'Outcome unknown.';
 }
-function useElapsed(active: boolean, since: string | null | undefined) {
+// During a replay the clock stands at the replayed moment.
+function useElapsed(active: boolean, since: string | null | undefined, at?: number | null) {
   const [, tick] = useState(0);
   useEffect(() => {
-    if (!active) return;
+    if (!active || at != null) return;
     const timer = setInterval(() => tick(value => value + 1), 1000);
     return () => clearInterval(timer);
-  }, [active, since]);
+  }, [active, since, at]);
   if (!active) return null;
   const started = Date.parse(since ?? '');
-  return Number.isFinite(started) ? Math.max(0, Math.floor((Date.now() - started) / 1000)) : null;
+  return Number.isFinite(started) ? Math.max(0, Math.floor(((at ?? Date.now()) - started) / 1000)) : null;
 }
 // The panel follows new activity only while the person is at its end. Scrolling up to read
 // keeps that position; new lines wait behind an explicit way back to the latest.
@@ -130,12 +133,12 @@ function BlockView({ block }: { block: Block }) {
     : <ActivityRun activities={block.activities} running={block.running} summary={block.summary} />;
 }
 
-function TurnView({ turn, running, observation, projectRoot, choose, choosing, askAgain }: {
-  turn: Turn; running: boolean; observation?: Observation; projectRoot?: string;
+function TurnView({ turn, running, observation, projectRoot, choose, choosing, askAgain, at }: {
+  turn: Turn; running: boolean; observation?: Observation; projectRoot?: string; at?: number | null;
   choose(turnId: string, permissionId: string, optionId: string): void; choosing: string | null; askAgain(text: string): void;
 }) {
   const blocks = conversationBlocks(turn, observation, projectRoot);
-  const elapsed = useElapsed(running, turn.startedAt ?? turn.sentAt);
+  const elapsed = useElapsed(running, turn.startedAt ?? turn.sentAt, at);
   // The Agent's last words stay in the open. What it did before them, with the words it said
   // along the way and the choices made for it, folds into one line once the message ends;
   // while it works, that part stays open so the person can follow it.
@@ -164,7 +167,7 @@ function TurnView({ turn, running, observation, projectRoot, choose, choosing, a
     </details>}
     {answer.map(block => <BlockView key={block.key} block={block} />)}
     {turn.omitted > 0 && <p className="turn-note">{turn.omitted} later {turn.omitted === 1 ? 'step was' : 'steps were'} not kept.</p>}
-    {running && turn.permissions?.filter(p => p.state === 'pending').map(permission => <div key={permission.id} className="turn-permission" role="group" aria-label="Agent permission">
+    {running && at == null && turn.permissions?.filter(p => p.state === 'pending').map(permission => <div key={permission.id} className="turn-permission" role="group" aria-label="Agent permission">
       <p className="permission-caption"><span aria-hidden="true" />Needs your choice</p>
       <p className="permission-title">{permission.title}</p>
       {permission.details && <pre>{permission.details}</pre>}
@@ -268,8 +271,11 @@ function ConversationSwitcher({ list, openId, title, brand, onOpen, onAll }: {
   </div>;
 }
 
-export function AgentConversation({ snapshot, client, selectedId, onSelected, onSent, onClose, onAll }: {
-  snapshot: WorkspaceSnapshot; client: BrowserClient; selectedId?: string | null; onSelected?: () => void; onSent?: () => void; onClose?: () => void; onAll?: () => void;
+// replayAt shows the open conversation as it stood at that moment, in step with its Studio;
+// onStarted names the conversation a message went to once the service has it.
+export function AgentConversation({ snapshot, client, selectedId, onSelected, onSent, onStarted, onClose, onAll, replayOf, replayAt: replaying = null, onNow }: {
+  snapshot: WorkspaceSnapshot; client: BrowserClient; selectedId?: string | null; onSelected?: () => void; onSent?: () => void; onStarted?: (conversationId: string) => void; onClose?: () => void; onAll?: () => void;
+  replayOf?: string | null; replayAt?: number | null; onNow?: () => void;
 }) {
   const projectId = snapshot.project.id, openKey = 'rho.conversation.open.v1:' + projectId;
   const [openId, setOpenId] = useState<string | null>(() => stored(openKey));
@@ -280,6 +286,7 @@ export function AgentConversation({ snapshot, client, selectedId, onSelected, on
   const settings = useAgentSettings(client, projectId), [configuring, setConfiguring] = useState(false);
   const [choosing, setChoosing] = useState<string | null>(null);
   const [following, setFollowing] = useState(true), [unseen, setUnseen] = useState(false);
+  const replayAt = replaying !== null && openId === replayOf ? replaying : null;
   const list = snapshot.conversations ?? [];
   const summary = list.find(c => c.conversationId === openId);
   const openClient = summary?.client ?? read?.conversation.client;
@@ -317,11 +324,12 @@ export function AgentConversation({ snapshot, client, selectedId, onSelected, on
   useLayoutEffect(() => {
     const version = String(read?.conversation.version ?? '');
     const parent = scrollParent(end.current);
-    if (following) {
+    // A replay keeps its moment in view.
+    if (following || replayAt !== null) {
       if (parent) parent.scrollTop = parent.scrollHeight; else end.current?.scrollIntoView({ block: 'end' });
       seen.current = version; setUnseen(false);
     } else if (seen.current !== version) setUnseen(true);
-  }, [read?.conversation.version, openId, following]);
+  }, [read?.conversation.version, openId, following, replayAt]);
   function open(id: string | null) { setOpenId(id); store(openKey, id); setProblem(''); setFollowing(true); setUnseen(false); }
   function edit(text: string) { setDraft(text); if (!store(draftKey, text)) setProblem('This draft could not be stored. Send or copy it before closing this panel.'); }
   function askAgain(text: string) { setFollowing(true); edit(text); input.current?.focus(); }
@@ -337,6 +345,7 @@ export function AgentConversation({ snapshot, client, selectedId, onSelected, on
         : await client.call('conversation.send', { projectId, conversationId: next.conversationId!, changeId: next.changeId, text: next.text });
       setPending(null); store(pendingKey, null);
       store(draftKey, null); setDraft('');
+      onStarted?.(reply.conversation.conversationId);
       if (next.kind === 'start') open(reply.conversation.conversationId);
       else setRead(current => current && current.conversation.conversationId === reply.conversation.conversationId ? { ...current, conversation: reply.conversation, turns: [...current.turns.filter(t => t.id !== reply.turn.id), reply.turn] } : current);
     } catch (error) {
@@ -377,6 +386,7 @@ export function AgentConversation({ snapshot, client, selectedId, onSelected, on
     box.style.height = Math.min(box.scrollHeight + 2, 240) + 'px';
   }, [text, openId]);
   const title = summary?.agentTitle || summary?.title || read?.conversation.title || 'Conversation';
+  const turns = replayAt === null ? read?.turns : read?.turns.flatMap(turn => { const then = turnAt(turn, replayAt); return then ? [then] : []; });
   const canSend = !busy && !waiting && !!draft.trim();
   return <section className="conversation" aria-label={openId ? 'Conversation' : 'New conversation'}>
     <header className="conversation-head">
@@ -384,9 +394,10 @@ export function AgentConversation({ snapshot, client, selectedId, onSelected, on
       {openId && <button className="icon-button" aria-label="New conversation" title="New conversation" onClick={() => { open(null); setTimeout(() => input.current?.focus()); }}><Icon name="plus" size={16} /></button>}
       {onClose && <button className="icon-button" aria-label="Close Agent" title="Close" onClick={onClose}><Icon name="close" size={16} /></button>}
     </header>
+    {openId && replayAt !== null && <p className="conversation-replay" role="status"><Icon name="restore" size={13} />Replaying · <strong>{clockAt(replayAt, true)}</strong>{onNow && <button className="small-button" onClick={onNow}>Back to now</button>}</p>}
     {openId ? <ol className="conversation-turns" aria-label="Messages">
       {(read?.first ?? 0) > 0 && <li className="turn-note">{read!.first} earlier {read!.first === 1 ? 'message is' : 'messages are'} kept but not shown.</li>}
-      {read?.turns.map((turn, i) => <TurnView key={turn.id} turn={turn} running={turn.state === 'running' && i === read.turns.length - 1} observation={read.observation} projectRoot={snapshot.project.root} choosing={choosing} askAgain={askAgain} choose={(turnId, permissionId, optionId) => {
+      {read && turns?.map((turn, i) => <TurnView key={turn.id} turn={turn} at={replayAt} running={turn.state === 'running' && i === turns.length - 1} observation={read.observation} projectRoot={snapshot.project.root} choosing={choosing} askAgain={askAgain} choose={(turnId, permissionId, optionId) => {
         setChoosing(permissionId); setProblem('');
         void client.call('conversation.permission', { projectId, conversationId: openId!, turnId, permissionId, optionId }).then(reply => {
           setRead(current => current ? { ...current, conversation: reply.conversation, turns: current.turns.map(t => t.id === reply.turn.id ? reply.turn : t) } : current);

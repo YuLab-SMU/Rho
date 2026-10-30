@@ -83,16 +83,31 @@ inspect what happened. The application gives those actions direct places:
   ([activity episode](AGENT-ACTIVITY.md), [Agents and conversations](AGENT-PAGE-EPISODE.md),
   [Agents outside Rho](AGENT-PANEL-EPISODE.md#agents-outside-rho)).
 - **Project settings** manages source folders and explicitly checks available tools.
-- **Studio** shows the workspaces as tabs, each with its view count; the sidebar lists
-  them under Studio. The person and the Agent share one workspace: the one on screen,
-  else the one last open in the tab, else the first, else a new `workspace`. Studio is
-  the person's own arrangement: nothing opens there by itself. Sending a message from
-  another page follows the turn on the Overview's board; sent from Studio, it leaves
-  the person where they are, and Follow takes them to the board. The tab of an open
-  file the Agent last named says Reading, Edited, Ran…, and the topbar names the
-  Agent's newest action on every project page. Files open from the board, the Graph
-  and Sources ([canvas episode](AGENT-CANVAS-EPISODE.md),
-  [second pass](SIMULATED-PROJECT-EPISODE.md#second-pass)).
+- **Studio** shows how a conversation's work was done. Its tabs are the conversations
+  started in Rho (the three newest, the one shown and any the person arranged), then the
+  person's own workspaces, which the sidebar lists under Studio. A conversation's Studio
+  lays its files out by what each is to the work, as the answer board names them: the
+  data it read above the script it wrote and a Commands view of what ran, figures above
+  the tables and reports beside them, each role in one place up to its limit
+  (`studioLimits`). A file's view says which kept version it shows, with earlier and later.
+  The parts of the work sit in a chip in the Studio bar, named by the Agent's own words
+  between steps or by what the steps did, with rounds of editing and running; time runs
+  down the stage's right edge beside the Agent panel, long pauses folded. Choosing a
+  moment there, a part, or another version replays it: the views, the commands, the
+  part and the conversation in the Agent panel all show the record as it stood then, to
+  the second, and a text file shows its version kept then, read only. Arranging the
+  views saves the layout as `conversation-<id>`; later files join their role's place and
+  files the person closed stay closed. Studio opens on the work going on now, else the
+  tab last open, else the newest conversation's. The person's workspace is shared with
+  the Agent: nothing opens there by itself. Sending a message from another page follows
+  the turn on the Overview's board; sent from Studio, it leaves the person where they
+  are (a new conversation started from a conversation's Studio opens its own), and
+  Follow opens the running conversation's Studio. The tab of an open file the Agent last
+  named says Reading, Edited, Ran…, and the topbar names the Agent's newest action on
+  every project page. Files open from the board, the Graph and Sources
+  ([canvas episode](AGENT-CANVAS-EPISODE.md),
+  [second pass](SIMULATED-PROJECT-EPISODE.md#second-pass),
+  [process Studio](SIMULATED-PROJECT-EPISODE.md#process-studio)).
   Eight views render at once: those on screen, then the most recently shown, then the
   rest in layout order. A hidden view past that unmounts and mounts again from its
   owner when shown, keeping its buffer and undo but not its scroll or selection.
@@ -228,7 +243,14 @@ the same graph: `answerBoard` gives each file and command of a message a role,
 `boardThreads` keeps a later question that made no results with the answer it asks
 about, and `src/asking.ts` writes and reads back what a question was asked about.
 `web/answer-board.tsx` draws the board and records decisions (`conversation.decide`);
-`web/console.tsx` draws the Console from the same graph and `console.list`. For the Graph, `foldVersions` merges a message's versions of one
+`web/console.tsx` draws the Console from the same graph and `console.list`.
+A conversation's Studio (`web/studio-process.tsx`) reads its record, builds the graph
+whole and as cut at the moment shown (`turnsAt` in `src/replay.ts`), takes each file's
+role and kept versions from the whole record (`studioFiles` in `src/studio-layout.ts`)
+and lays the files out (`studioTree`, `studioMerge` over a saved arrangement).
+`src/studio-chapters.ts` names the parts of a message. The views find their file and
+moment through `web/process-context.ts`; `web/shell/process-views.tsx` frames a file's
+versions and `CommandPane` in `web/console.tsx` shows the conversation's commands. For the Graph, `foldVersions` merges a message's versions of one
 file and folds its unrelated commands (`foldLimits`); the `WorkStrip` keeps every step. `web/previews.ts` reads the card and Overview previews from a captured
 snapshot, or a registered result at its exact version: at most 16 files, two at a time, figures
 up to 2 MiB and tables to 3 rows by 4 columns.
@@ -306,9 +328,11 @@ control names. The report and images go to `work/frontend-reset/browser/` by def
 runs project files and writes an output no step names. It checks the sidebar counts,
 that a message sent from Studio leaves the person's workspace as they arranged it,
 the edited text on disk in the open editor, that nothing else opened there, the Agent
-page's record of the turn and a file it names shown in place, that Follow shows the
-answer board led by the figure the turn made, with the next question and its answer
-under it, and overflow at 1024/390. Evidence goes to
+page's record of the turn and a file it names shown in place, that Follow opens the
+conversation's Studio with its data, script, commands, output, parts and timeline, that
+a moment chosen on the timeline shows the views and the conversation as they were then,
+that the answer board is led by the figure the turn made, with the next question and its
+answer under it, and overflow at 1024/390. Evidence goes to
 `work/agent-canvas-acceptance/` by default.
 
 `npm run acceptance:agent-page` drives controlled peers for Claude Code and Codex
