@@ -9,12 +9,12 @@ The selected work is result review, retained historical evidence, macOS arm64
 [episode](REVIEW-EVIDENCE-EPISODE.md) records baseline, observations, fixes and limits.
 Native tools remain normal; Core is optional. No Core execution behavior changed.
 
-The [research positioning](PAPER.md) follows one single-cell judgment through the
-researcher's decisions and the support provided by related work. Against InsightLens,
-Loops, EVI, THREAD-Bio and conceptual modeling tools, the current framing does not
-establish an independent contribution and is no longer proposed as the paper's main
-direction. This is a research judgment, not a change to product requirements or an
-experiment plan.
+The [research positioning](PAPER.md) now treats Rho as part of ongoing human–Agent
+work: process organization, shared presentation and external context for continuation.
+The earlier judgment concerned a narrower scientific-review framing. Memory Sandbox,
+cotomi Act and Mycelium directly constrain novelty; how scoped corrections survive
+context selection, compression and continuation remains a candidate research question,
+not an established contribution. No experiment plan or product requirement is added.
 
 | Part | Current behavior | Evidence or remaining work |
 | --- | --- | --- |
