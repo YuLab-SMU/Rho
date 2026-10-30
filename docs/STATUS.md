@@ -9,12 +9,12 @@ The selected work is result review, retained historical evidence, macOS arm64
 [episode](REVIEW-EVIDENCE-EPISODE.md) records baseline, observations, fixes and limits.
 Native tools remain normal; Core is optional. No Core execution behavior changed.
 
-The [research positioning](PAPER.md) now treats Rho as part of ongoing human–Agent
-work: process organization, shared presentation and external context for continuation.
-The earlier judgment concerned a narrower scientific-review framing. Memory Sandbox,
-cotomi Act and Mycelium directly constrain novelty; how scoped corrections survive
-context selection, compression and continuation remains a candidate research question,
-not an established contribution. No experiment plan or product requirement is added.
+The [research positioning](PAPER.md) connects readable process organization,
+researcher understanding and inspectable scientific explanations with shared context
+and Agent continuation. InsightLens, WaitGPT and shared-memory systems constrain
+novelty. How these representations support understanding and carry scoped judgments
+into later work remains a candidate question; improved human understanding is not yet
+an observed Rho result. No experiment plan or product requirement is added.
 
 | Part | Current behavior | Evidence or remaining work |
 | --- | --- | --- |
