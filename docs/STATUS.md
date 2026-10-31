@@ -10,12 +10,14 @@ The selected work is result review, retained historical evidence, macOS arm64
 Native tools remain normal; Core is optional. No Core execution behavior changed.
 
 The [research method proposal](PAPER.md) centers on purpose-driven composition of
-shared scientific workspaces: selecting materials, arranging related views and
-operations, and carrying their meaning into Agent continuation. The single-cell
-walkthrough now distinguishes judging a result, inspecting a run and preparing a
-scientific explanation. DynaVis, DashChat, Generative UI and Data Formulator 2 extend
-the related-work comparison. Version coordination supports this broader mechanism;
-its novelty and human benefits are not established by existing Rho checks.
+shared scientific workspaces: obtaining and selecting materials, arranging related
+views and available operations, and carrying their meaning into Agent continuation.
+Plugins supply adaptable information, compute and environment capabilities. The
+single-cell walkthrough distinguishes scientific purposes and how available inputs
+and execution conditions change the workspace. Galaxy and JupyterLab constrain
+plugin-related novelty alongside the interface and shared-context comparisons.
+Remote single-cell connections remain illustrative; the proposal's novelty and human
+benefits are not established by existing Rho checks.
 
 | Part | Current behavior | Evidence or remaining work |
 | --- | --- | --- |
