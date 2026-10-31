@@ -9,6 +9,7 @@ import { statements, unfinished } from '../src/statements.js';
 import { Icon } from './icons.js';
 import { useProcess } from './process-context.js';
 import { PlaceChip, usePlaces, whereOf } from './servers.js';
+import { takeCell } from './notebook-target.js';
 import './notebook.css';
 
 // The project's live R and Python sessions, which the person shares with their Agent. Cells
@@ -546,6 +547,14 @@ export function NotebookPage({ client, snapshot, onConversation, onObject, scope
   // The person's own cell sits above the composer, which stays at the foot of the page. A view
   // shown again returns to the newest cell when the reader had been there.
   useEffect(() => { if (tail && atEnd.current) requestAnimationFrame(() => { const scroller = scrollerOf(page.current); scroller.scrollTo({ top: scroller.scrollHeight }); }); }, [tail, shown, compact, form]);
+  // A cell asked for from another page opens here in place of the newest one.
+  useEffect(() => {
+    if (!read || compact) return;
+    const cellId = takeCell(id => cells.some(c => c.cellId === id));
+    if (!cellId) return;
+    atEnd.current = false;
+    requestAnimationFrame(() => document.getElementById('cell-' + cellId)?.scrollIntoView({ block: 'start' }));
+  }, [read, compact]);
   // Output that grows after it is drawn (highlighted code, a plot read later) keeps the newest
   // cell in view for a reader who was there.
   useEffect(() => {

@@ -304,8 +304,10 @@ serverctl command). Grades 4/5, 6/11 and 0/7. The misses are analysis choices th
 stated and the benchmark's units; in step 3 the Agent showed that the stored DESeq2 results do
 not come from the capsule's raw counts, answered from its own refit, and gave the stored
 files' values too, which match the gold. The Servers view showed the place through serverctl,
-its skill and the live session; the Overview said "No work yet", since it does not count
-Notebook cells (open).
+its skill and the live session; the Overview said "No work yet", since it did not count
+Notebook cells. It now has a Notebook section: each session with cells, where it runs, and
+the newest cells by their purpose, each opening the Notebook at that cell (step 1 again;
+the pages acceptance checks a project with only Notebook cells).
 
 **Checks.** Rho-plugins 146/146, with a new test of a place whose setup lines make its folder
 (it fails on the old commands). Rho's discovery tests, with a continuation that adds knownRefs.

@@ -14,6 +14,7 @@ import { AgentActivity } from './agent-activity.js';
 import { AgentPage } from './agent-manage.js';
 import { AgentAccess } from './agents.js';
 import { SharedNotes, TouchedFiles, useProjectWork, WorkSessions } from './work-progress.js';
+import { NotebookWorkSection, useNotebookWork } from './notebook-work.js';
 import { AnswerBoard } from './answer-board.js';
 import { readPreview, type Preview } from './previews.js';
 import './overview.css';
@@ -104,6 +105,9 @@ export function ProjectOverview({ project, snapshot, client, section, notesText 
   const [hasWork, setHasWork] = useState(false);
   const workAllowed = snapshot.catalog.operations.some(o => o.method === 'project.work.read' && o.authorized);
   const work = useProjectWork(client, snapshot, section === 'overview' && workAllowed, setHasWork);
+  const readsKernel = snapshot.catalog.operations.some(o => o.method === 'kernel.read' && o.state === 'available' && o.authorized);
+  const notebook = useNotebookWork(client, project.id, snapshot.cursor, section === 'overview' && readsKernel);
+  const notebookRead = !readsKernel || notebook.read !== null || !!notebook.problem;
   const readSequence = useRef(0), runDialog = useRef<HTMLDialogElement>(null);
   const isFiles = section === 'files' || section === 'documents';
   const places = new Map<string, { compositionId: string; viewId: string }>();
@@ -119,12 +123,12 @@ export function ProjectOverview({ project, snapshot, client, section, notesText 
   const modified = new Map((files?.files ?? []).map(f => [f.path, f.modifiedAt] as const));
   const figures = [...(sources?.results ?? [])].sort((a, b) => (modified.get(b.path) ?? '').localeCompare(modified.get(a.path) ?? ''));
   const where = place(project);
-  // Nothing recorded yet: no workspaces, results, question or Agent notes. Runs are read
-  // separately, so an unread run list is not reported as an empty one, and nothing is painted
-  // over an otherwise empty project until that read settles.
-  const clean = !snapshot.compositions.length && !artifacts.length && !snapshot.taskMap?.question && !snapshot.taskMap?.items.length && !snapshot.conversations?.length && !hasWork;
-  const settled = !clean || ((runs !== null || !!runsProblem) && rootEntries !== null);
-  const emptyProject = section === 'overview' && clean && runs !== null && runs.length === 0 && rootEntries !== null;
+  // Nothing recorded yet: no workspaces, results, question, Agent notes or Notebook cells. Runs
+  // and cells are read separately, so an unread list is not reported as an empty one, and
+  // nothing is painted over an otherwise empty project until those reads settle.
+  const clean = !snapshot.compositions.length && !artifacts.length && !snapshot.taskMap?.question && !snapshot.taskMap?.items.length && !snapshot.conversations?.length && !hasWork && !notebook.cells && !notebook.problem;
+  const settled = !clean || ((runs !== null || !!runsProblem) && rootEntries !== null && notebookRead);
+  const emptyProject = section === 'overview' && clean && runs !== null && runs.length === 0 && rootEntries !== null && notebookRead;
   // The side column earns its place only when it has something to report.
   const recent = !!runsProblem || (runs?.length ?? 0) > 0;
   const touched = !!work.work && (work.work.files.length > 0 || work.work.omitted.fileReferences > 0);
@@ -225,6 +229,7 @@ export function ProjectOverview({ project, snapshot, client, section, notesText 
               : artifacts.length ? resultList : <p className="quiet-empty">No results or figures yet.</p>}
             {figures.length > shownFigures && <button className="text-button figures-more" onClick={() => onSection('files')}>{figures.length - shownFigures} more in Files <Icon name="chevron" size={12} /></button>}
           </section>}
+          <NotebookWorkSection work={notebook} snapshot={snapshot} onOpen={() => onSection('notebook')} />
           {snapshot.taskMap?.items.length ? <section className="project-section"><div className="section-heading"><h2>From your Agent</h2></div><ul className="agent-notes">{snapshot.taskMap.items.map(item => <li key={item.id} data-fact="agent"><strong>{item.title}</strong>{item.summary && <p>{item.summary}</p>}<small>{snapshot.taskMap!.vocabulary.states[item.state]?.label ?? item.state}</small></li>)}</ul></section> : null}
         </div>
         {side && <aside className="project-side">

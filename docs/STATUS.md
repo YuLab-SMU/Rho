@@ -208,7 +208,7 @@ The protocol now describes the server operations, the first index summarizes eac
 resolve continuation may add knownRefs, and the kernel looks for the folder after the setup
 lines. Steps 1 to 3 then found the server in five calls each and shared one live R session there
 (graded 4/5, 6/11, 0/7: analysis choices and, in step 3, stored results that the Agent showed
-do not come from the counts). The Overview does not count Notebook cells as work (open).
+do not come from the counts). The Overview, which said "No work yet", now shows the Notebook's work.
 
 ## Existing application
 
@@ -252,10 +252,10 @@ checks still held the 64-method limit and the plugin count, and the Skill's veri
 command was not an application script; corrected, Rho 261/261 and Plugins 132/132. The
 exploring pass first failed Rho 263/264, the Studio shell importing a module outside its
 allowed set, and ui:u2 also matched the New workspace row; corrected, Rho 264/264 and Plugins 132/132.
-The lab study pass records Rho 272/274 and Plugins 146/146 in the [ledger](VERIFICATION.json),
-in two full runs of 272: in the first the MCP v2 test (its 30 s limit) and the Agent settings
-test failed, and both passed alone; the ledger run does not name its two. The contract check
-passed. The servers' skills
+The Overview's Notebook pass records Rho 273/274 and Plugins 146/146 in the [ledger](VERIFICATION.json):
+the MCP v2 test at its 30 s limit, which passed alone (24 s); the pages acceptance, with a
+project whose only work is Notebook cells, ui:u2 and person-files passed. The lab study pass
+recorded 272/274 twice (MCP v2 and Agent settings, each passing alone). The servers' skills
 pass recorded Rho 271/274 and Plugins 145/145, and the remote sessions pass Rho 272/274 and
 Plugins 144/144: the MCP v2 test at its 30 s limit and cleanup races (`.rho`, `ENOTEMPTY`) in
 the Notebook, answer-decisions, ACP permission and Codex restart tests, each passing alone. The Data flow pass recorded Rho 273/274 and Plugins 141/141. The Sources pass recorded

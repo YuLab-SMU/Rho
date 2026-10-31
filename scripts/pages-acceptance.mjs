@@ -76,6 +76,31 @@ try {
   await page.getByRole('heading', { name: 'Pages 中文', exact: true }).waitFor();
   await page.getByText('pages-run', { exact: false }).first().waitFor();
   failing.push(...await measure('overview'));
+  // A project whose only work is in the Notebook is not empty: the Overview names the session
+  // and the newest cells, and a cell opens the Notebook where it is.
+  const quiet = await admin.call('project.create', { name: 'Notebook only' });
+  const kernelGrant = await admin.call('session.grant', { projectId: quiet.id, externalSessionId: 'pages-notebook', methods: ['kernel.run'] });
+  const kernelAgent = await RhoClient.fromFile(kernelGrant.connectionFile);
+  for (const [n, purpose] of [[1, 'First look at the scores'], [2, 'Second pass'], [3, 'Third pass'], [4, 'Summarise the scores']]) {
+    const ran = await kernelAgent.call('kernel.run', { projectId: quiet.id, language: 'r', code: `x${n} <- ${n}\n` + Array.from({ length: 40 }, (_, i) => `cat(${i}, "\\n")`).join('\n'), purpose, changeId: 'nb-' + n, waitMs: 30000 });
+    assert.equal(ran.cell.state, 'done', ran.cell.problem ?? '');
+  }
+  await page.reload();
+  await page.locator('.project-rail').getByRole('button', { name: /^Notebook only/ }).click();
+  const notebookWork = page.locator('.notebook-work');
+  await notebookWork.getByText('Summarise the scores', { exact: true }).waitFor();
+  assert.equal(await page.getByText('No work yet', { exact: true }).count(), 0, 'Notebook cells are work');
+  assert.match(await notebookWork.innerText(), /R [\d.]+ on this machine[\s\S]*4 cells[\s\S]*1 earlier cell in the Notebook/);
+  failing.push(...await measure('overview-notebook'));
+  await notebookWork.getByRole('button', { name: /Second pass/ }).click();
+  const asked = page.locator('.nb-cell').filter({ hasText: 'Second pass' });
+  await asked.waitFor();
+  await page.waitForTimeout(500);
+  const box = await asked.boundingBox();
+  assert.ok(box && box.y >= 0 && box.y < 450, `the Notebook opens at the cell chosen on the Overview (top ${box?.y})`);
+  await page.locator('.project-rail').getByRole('button', { name: /^Pages 中文/ }).click();
+  await page.getByRole('heading', { name: 'Pages 中文', exact: true }).waitFor();
+
   await page.locator('.project-nav').getByRole('button', { name: 'Project settings', exact: true }).click();
   await page.getByRole('button', { name: 'Check project', exact: true }).click();
   await page.getByText(/Rho can write in /).first().waitFor();

@@ -43,7 +43,10 @@ inspect what happened. The application gives those actions direct places:
   each workspace as its panes, opens the shared notes, and lists the files the
   Agent's tools named, most used first, each with a bar for its tool calls. Its Work
   progress shows Agent sessions started outside Rho and any choice waiting in a
-  session; conversations started in Rho answer on the board.
+  session; conversations started in Rho answer on the board. Work in the Notebook is
+  work: a Notebook section names each session with cells (where it runs, its cells
+  and values) and the three newest cells by their purpose, each opening the Notebook
+  at that cell; a project with only Notebook cells is not shown as empty.
   A project with nothing recorded yet shows its two next steps — work with the Agent
   or browse its files — rather than empty sections, leading with whichever one the
   project's listing says has something behind it.

@@ -133,3 +133,9 @@
   .workspace-grid { grid-template-columns: minmax(0, 1fr); }
 }
 
+
+/* The Notebook's sessions with cells: what runs where, and what each holds. */
+.notebook-work-sessions { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.notebook-work-sessions li { display: flex; align-items: center; gap: 8px; min-width: 0; color: var(--color-meta); font-size: 13px; }
+.notebook-work-sessions li > span { min-width: 0; overflow-wrap: anywhere; color: var(--color-ink); }
+.notebook-work-sessions li > small { margin-left: auto; flex: none; font-variant-numeric: tabular-nums; }
