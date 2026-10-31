@@ -84,6 +84,10 @@ export interface ShellServices {
   openPath?(path: string): void;
   // A URL for the current bytes of a project image, or null when it cannot be shown.
   imageUrl?(path: string): Promise<string | null>;
+  // The current bytes of a project file (as a file snapshot), or null when it cannot be read.
+  fileBytes?(path: string, maxBytes: number): Promise<Uint8Array | null>;
+  // The URL of the frame that shows an HTML page sent to it, sandboxed and without network.
+  pageFrame?: string;
   // CodeMirror extensions for a file's language (none when Rho has none for it).
   languageExtensions?(path: string): Promise<unknown[]>;
   // Code highlighted as the named language, as text and spans; null for a language Rho lacks.

@@ -437,8 +437,8 @@
     "kernel.interrupt": {
       "summary": "Interrupt one cell: a running cell stops and its session and values stay; a waiting cell is not run. A cell that has ended is returned unchanged.",
       "path": "operations/kernel.interrupt.json",
-      "bytes": 5221,
-      "sha256": "baa0aa15361c2557d1043a796ec5876cb65f0614d5f2d65488b070adc89dd9ae"
+      "bytes": 5956,
+      "sha256": "63316d82629e0308a6e1fbf312a90bd604f048e5aa0143227804b81a280f015d"
     },
     "kernel.plot": {
       "summary": "One plot a cell kept, as PNG bytes.",
@@ -449,14 +449,14 @@
     "kernel.read": {
       "summary": "The live sessions and their cells, oldest cell first: code, purpose, who ran it, what it printed, its plots and how it ended, and each session's variables. Reading never starts a session.",
       "path": "operations/kernel.read.json",
-      "bytes": 10465,
-      "sha256": "21196d4a985b9c52958d4a18f82a7f5ea9acb2882848421011d5875eefc54aa6"
+      "bytes": 11260,
+      "sha256": "8c66a189b6a4c557e74b0d74331484ab3dbcc55a7527822965b6109774c5c6bb"
     },
     "kernel.run": {
       "summary": "Run a cell of R or Python in the project's live session of that language, which the Agent and the person share: what one cell defines stays for the next. Starts the session when none is live. The same changeId from the same caller returns the same cell and never runs it twice. waitMs waits for the cell to end.",
       "path": "operations/kernel.run.json",
-      "bytes": 9972,
-      "sha256": "8938fd996cdac3a50d2245e17cb2781095042f2fd80efa30cf92e1ea5eaac365"
+      "bytes": 10707,
+      "sha256": "439eb48c163f5b1045736a1aac2d5b7636f8ea8669bbf8a4904e572f813a3b2f"
     },
     "kernel.stop": {
       "summary": "Person at this machine only: end one live session. Its values are gone, the running cell ends with an error and waiting cells are not run. A session that has ended is returned unchanged.",

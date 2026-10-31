@@ -85,6 +85,28 @@ export async function readBytes(client: BrowserClient, projectId: string, resour
   return Uint8Array.from(data, c => c.charCodeAt(0));
 }
 
+// A project file a page names (a stylesheet, a script, a font), as its current bytes, read once
+// per file version as a file snapshot. The protected resource is the service: at most this many
+// files are kept per tab, each within the page's own limit; past either the page shows without it.
+export const fileLimits = { files: 256 };
+const fileReads = new Map<string, Promise<Uint8Array | null>>();
+export function readFile(client: BrowserClient, snapshot: WorkspaceSnapshot, file: PreviewFile, maxBytes: number): Promise<Uint8Array | null> {
+  const allowed = (method: string) => snapshot.catalog.operations.some(o => o.method === method && o.authorized && o.state === 'available');
+  if (!allowed('resource.capture') || !allowed('resource.read') || (file.bytes ?? 0) > maxBytes) return Promise.resolve(null);
+  const projectId = snapshot.project.id, key = projectId + ':' + file.path + ':' + file.bytes + ':' + file.modifiedAt;
+  const known = fileReads.get(key);
+  if (known) return known;
+  if (fileReads.size >= fileLimits.files) return Promise.resolve(null);
+  const made = slot(async () => {
+    const resource = await client.call('resource.capture', { projectId, path: file.path, declaration: { path: file.path, kind: 'file', format: { mimeType: 'application/octet-stream' } } } as never) as { id: string; version: string };
+    const bytes = await readBytes(client, projectId, { id: resource.id, version: resource.version }, maxBytes);
+    return bytes.length > maxBytes ? null : bytes;
+  });
+  fileReads.set(key, made);
+  made.catch(() => fileReads.delete(key));
+  return made;
+}
+
 // Images a rendered document shows, each as its current bytes, read once per file version.
 // The protected resources are the service and the tab: at most this many images per page,
 // each within this many bytes; past either the document shows the image's description.

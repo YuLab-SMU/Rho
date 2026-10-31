@@ -4,16 +4,16 @@ import { Icon } from './icons.js';
 import { fileIcon, sourceLabels } from './project.js';
 import type { SourceItem, SourceRow } from './sources.js';
 
-// What a person puts on a Studio page of their own: the Notebook, the sessions' variables and
-// plots, and the project's files by
+// What a person puts on a Studio page of their own: the Notebook, the sessions' variables,
+// plots and data flow, and the project's files by
 // kind, each opening in the view it has elsewhere in Studio. A kind lists its first few files;
 // the rest are on its own page.
 export const pageAddLimits = { filesPerKind: 6 };
 const rows: SourceRow[] = ['results', 'data', 'code', 'reports', 'workflows', 'notes', 'references', 'environment'];
-export function PageAdd({ sources, notebook, variables = 'unavailable', plots = 'unavailable', onNotebook, onSessionView, onFile, onAll }: {
+export function PageAdd({ sources, notebook, variables = 'unavailable', plots = 'unavailable', flow = 'unavailable', onNotebook, onSessionView, onFile, onAll }: {
   sources: Record<SourceRow, SourceItem[]> | null; notebook: 'absent' | 'present' | 'unavailable';
-  variables?: 'absent' | 'present' | 'unavailable'; plots?: 'absent' | 'present' | 'unavailable';
-  onNotebook: () => void; onSessionView?: (kind: 'variables' | 'plots') => void; onFile: (path: string) => void; onAll: (row: SourceRow) => void;
+  variables?: 'absent' | 'present' | 'unavailable'; plots?: 'absent' | 'present' | 'unavailable'; flow?: 'absent' | 'present' | 'unavailable';
+  onNotebook: () => void; onSessionView?: (kind: 'variables' | 'plots' | 'flow') => void; onFile: (path: string) => void; onAll: (row: SourceRow) => void;
 }) {
   // A choice made from a menu closes it.
   const chose = (run: () => void) => (event: MouseEvent<HTMLButtonElement>) => { event.currentTarget.closest('details')?.removeAttribute('open'); run(); };
@@ -26,6 +26,9 @@ export function PageAdd({ sources, notebook, variables = 'unavailable', plots = 
     </button>}
     {plots !== 'unavailable' && onSessionView && <button className="page-add-notebook" onClick={chose(() => onSessionView('plots'))}>
       <Icon name="chart" size={17} /><span><strong>Plots</strong><small>{plots === 'present' ? 'On this page' : 'What the live sessions draw, the newest first'}</small></span>
+    </button>}
+    {flow !== 'unavailable' && onSessionView && <button className="page-add-notebook" onClick={chose(() => onSessionView('flow'))}>
+      <Icon name="workflow" size={17} /><span><strong>Data flow</strong><small>{flow === 'present' ? 'On this page' : 'How each value was made: what each cell read and made'}</small></span>
     </button>}
     {!sources ? <p className="page-add-note" role="status">Reading the project folders…</p>
       : rows.map(row => {

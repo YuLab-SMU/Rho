@@ -4,6 +4,10 @@
     {
       "package": "@rho-workspace/plugin-markdown",
       "version": "0.2.0"
+    },
+    {
+      "package": "@rho-workspace/plugin-html",
+      "version": "0.1.0"
     }
   ]
 }

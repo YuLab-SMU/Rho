@@ -20,7 +20,7 @@ import { BrowserAccess, browserLimits, localBrowserId, localBrowserPrincipal } f
 import { addToAgent, connectLimits, mcpCommand, mcpName, outsideLabel, type OutsideAgent } from './agent-connect.js';
 import { NativeFolderPicker, nativeFolderLimits } from './native-folders.js';
 import { homedir } from 'node:os';
-import { serveWeb, webRoot, installedWebEntries } from './web-assets.js';
+import { serveWeb, servePageFrame, pageFramePath, webRoot, installedWebEntries } from './web-assets.js';
 import { Presentation, presentationWitnessLimits, visibilityLimits } from './presentation.js';
 import { presentationSchemas } from './presentation-contracts.js';
 import { isNativeTime } from './native-time.js';
@@ -505,7 +505,7 @@ export class RhoService {
   private async handle(req: http.IncomingMessage, res: http.ServerResponse) {
     res.setHeader('cache-control', 'no-store'); res.setHeader('x-content-type-options', 'nosniff');
     res.setHeader('referrer-policy', 'no-referrer');
-    res.setHeader('content-security-policy', "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob:; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'");
+    res.setHeader('content-security-policy', "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob:; connect-src 'self'; frame-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'");
     res.setHeader('cross-origin-opener-policy', 'same-origin');
     res.setHeader('cross-origin-resource-policy', 'same-origin');
     let apiVersion = '2.0';
@@ -552,6 +552,7 @@ export class RhoService {
       }
       if (!url.pathname.startsWith('/api/')) {
         requireThat((req.method === 'GET' || req.method === 'HEAD') && !url.search, 'not_found', 'Use the same-origin browser entry without query credentials.');
+        if (url.pathname === pageFramePath) { servePageFrame(res, req.method === 'HEAD'); return; }
         await serveWeb(url.pathname, res, this.config.webRoot, req.method === 'HEAD'); return;
       }
       const method = url.pathname.startsWith('/api/v2/') ? url.pathname.slice(8) : '';

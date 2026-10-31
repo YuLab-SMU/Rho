@@ -61,20 +61,28 @@ async function addToPage(client: BrowserClient, projectId: string, compositionId
 export const addNotebook = (client: BrowserClient, projectId: string, compositionId: string, beside: string | null) =>
   addToPage(client, projectId, compositionId, notebookOn, tree => withNotebook(tree, beside), 'notebook');
 
-// The sessions' variables and plots as views of their own, one of each per page. Added to a page,
-// either takes a column along the page's right side, beside a script and its console, and the
-// other goes above or below it there.
-export type SessionView = 'variables' | 'plots';
-export const sessionComponents: Record<SessionView, string> = { variables: 'rho.variables', plots: 'rho.plots' };
-const sessionTitles: Record<SessionView, string> = { variables: 'Variables', plots: 'Plots' };
+// The sessions' variables, plots and data flow as views of their own, one of each per page.
+// Added to a page, the first takes a column along the page's right side, beside a script and its
+// console. Variables go above Plots there and Plots below; the data flow is a tab beside the
+// Variables, as both answer what the session holds.
+export type SessionView = 'variables' | 'plots' | 'flow';
+export const sessionComponents: Record<SessionView, string> = { variables: 'rho.variables', plots: 'rho.plots', flow: 'rho.flow' };
+export const sessionTitles: Record<SessionView, string> = { variables: 'Variables', plots: 'Plots', flow: 'Data flow' };
 export const sessionView = (kind: SessionView): LayoutNode => ({ id: kind, kind: 'view', component: sessionComponents[kind], version: '1', props: { title: sessionTitles[kind] }, bindings: {} });
 export const sessionViewOn = (kind: SessionView, nodes: unknown[] | undefined) => (nodes as LayoutNode[] | undefined)?.find(n => n.kind !== 'group' && n.component === sessionComponents[kind])?.id ?? null;
 export function withSessionView(tree: LayoutTree | null, kind: SessionView): LayoutTree | null {
   const view = sessionView(kind);
   if (!tree) return { rootId: 'root', nodes: [{ id: 'root', kind: 'group', children: [view.id] }, view] };
   if (sessionViewOn(kind, tree.nodes)) return null;
-  const other = sessionViewOn(kind === 'variables' ? 'plots' : 'variables', tree.nodes);
-  return other ? addBeside(tree, view as never, other, kind === 'variables' ? 'top' : 'bottom', newId) : addAtEdge(tree, view as never, 'right', newId);
+  const tab = kind === 'flow' ? sessionViewOn('variables', tree.nodes) : kind === 'variables' ? sessionViewOn('flow', tree.nodes) : null;
+  const holder = tab && tree.nodes.find(n => n.kind === 'group' && n.children?.includes(tab) && (n.presentation as { mode?: string } | undefined)?.mode !== 'split');
+  if (holder) {
+    const nodes = structuredClone(tree.nodes), group = nodes.find(n => n.id === holder.id)!;
+    group.children = [...group.children!, view.id];
+    return { rootId: tree.rootId, nodes: [...nodes, view] };
+  }
+  const other = kind === 'plots' ? sessionViewOn('variables', tree.nodes) ?? sessionViewOn('flow', tree.nodes) : sessionViewOn('plots', tree.nodes);
+  return other ? addBeside(tree, view as never, other, kind === 'plots' ? 'bottom' : 'top', newId) : addAtEdge(tree, view as never, 'right', newId);
 }
 export const addSessionView = (client: BrowserClient, projectId: string, compositionId: string, kind: SessionView) =>
   addToPage(client, projectId, compositionId, nodes => sessionViewOn(kind, nodes), tree => withSessionView(tree, kind), kind);

@@ -50,7 +50,8 @@ inspect what happened. The application gives those actions direct places:
 - **Sources** counts the project's Data, Code, Results & figures and Notes from one
   bounded walk of its folders, by file name. A project that holds them also lists
   Workflows (`Makefile`, `Snakefile`, `.smk`, `.nf`, `.wdl`, `_targets.R`…), Reports (`.Rmd`,
-  `.qmd`, `.Rnw` and the page rendered beside one, whose `_files` folder is left out),
+  `.qmd`, `.Rnw` and the page rendered beside one, whose `_files` folder is left out, as are
+  the versioned libraries a saved page keeps in a `lib`, `libs` or `site_libs` folder beside it),
   References (`.bib`, `.ris`, PDFs in a `refs` or `literature` folder) and Environment
   (`renv.lock`, `requirements.txt`, `environment.yml`, `pyproject.toml`, `Dockerfile`…); each file
   is in one row, while the Graph and the board keep calling a file by what it is. Variables,
@@ -63,7 +64,7 @@ inspect what happened. The application gives those actions direct places:
   in place in its own view, without writing a layout: a CSV or image as a snapshot
   of its current bytes in the table or media view, a Markdown file in the Markdown
   reader (its to-dos tick in place; Edit shows the editor with a formatting toolbar,
-  Source when the tab cannot edit), other text in the editor, highlighted when Rho
+  Source when the tab cannot edit), an HTML file as its page (below), other text in the editor, highlighted when Rho
   has its language, a registered result as its exact version. ← and → or the buttons beside "3 of 6" move through
   the kind, ↑ and ↓ move in the sidebar, and Open in Studio places the file in the
   workspace ([pass](AGENT-CANVAS-EPISODE.md#browsing-sources-from-the-sidebar)).
@@ -149,6 +150,25 @@ inspect what happened. The application gives those actions direct places:
   newest (arrows, or the strip below), and brings a new one forward as it is drawn. Plots of
   an ended session stay with their cells in the Notebook. With these views on the page, the
   Notebook leaves its own variables and plots out.
+- **Data flow** (`rho.flow`) shows how the values of a live session were made, as a tab beside
+  Variables (else in the right column). Each cell that made something still there is a box, in
+  the order the cells ran: its first line or purpose, the project files and folders it read, and
+  what it made one to a line (values with type and size, its plots, the files it wrote). A line
+  in the left margin runs from a value, or a written file, to each box that read it. A cell
+  that changed a value it read (`m$x <- …`) continues the cell that made it: its box says
+  "Changes what R 6 made", and what that value came from goes with it. A box that read a value
+  or file made again since says so in amber. Pointing at a box keeps its path in view and fades
+  the rest; the newest cell's box is outlined. A value opens as its own view, a file in its
+  viewer; the box's head opens its code (with the code of the cells it continues), its plots,
+  who ran it and Show in the Notebook. It follows the kernel's records (below), not the code:
+  60 values, 8 plots and 24 written files are drawn at most, and older ones are counted
+  ([episode](SIMULATED-PROJECT-EPISODE.md#data-flow-html-pages-and-object-dependent-cases)).
+- **HTML pages** (a knitted report, a saved widget, a page an Agent wrote) open as the page they
+  make, with Page and Edit (Source) in the header over the same buffer as the editor. The page
+  runs in a sandboxed frame of its own: its scripts run, it cannot reach Rho, and nothing loads
+  from the web. The styles, scripts, images and fonts it names in the project are read and put
+  into it; a note says how many web files it named and which project files could not be read.
+  A link to a project file opens it in Rho; a link outside is named, not followed.
 - **Values** of the live sessions open as views of their own (`rho.object`). A variable's
   name in the Notebook, and each name a cell made or changed (listed under the cell while
   its session is live; removed names are struck through), opens it. On the person's page
@@ -285,7 +305,7 @@ inspect what happened. The application gives those actions direct places:
   it, shows a layout of several groups one view at a time with all its tabs, as a phone
   does; the saved layout is unchanged. New workspace, under Studio in the sidebar and in
   the command palette, makes an empty page of the person's own (Workspace 2, 3, …). An
-  empty page offers the Notebook, Variables, Plots and the project's files by kind; Add view
+  empty page offers the Notebook, Variables, Plots, Data flow and the project's files by kind; Add view
   in the Studio bar offers the same on any of the person's pages. A file opens in the view it has
   elsewhere in Studio, the Notebook in a pane right of what is there. Pages cannot yet be
   renamed or removed, and they count toward the 32 layouts a project keeps.
@@ -405,6 +425,11 @@ about, and `src/asking.ts` writes and reads back what a question was asked about
 `web/object-view.tsx` draws a value from `kernel.inspect`. `src/statements.ts` finds the
 statement a script line runs (`statementAt`), and `web/entries/documents.tsx` sends it
 through the page's `runCode` shell service.
+`web/flow.tsx` draws Data flow from the same read, with `src/lineage.ts` (`lineage`, `lanes`,
+`related`) making its boxes and lanes from each cell's `defined`, `used` and `files`.
+The HTML page view is `html.reader` from Rho-plugins (HTML 0.1.0); Rho gives it `pageFrame`, the
+service's `/frame.html` (sandboxed, with its own policy and no network; the page's policy adds
+only `frame-src 'self'`), and `fileBytes`, a file snapshot's bytes (`readFile` in `web/previews.ts`).
 `web/notebook.tsx` draws the Notebook, Variables and Plots from one shared `kernel.read`, and the Notebook's Studio view
 (`SessionPane`) from the same, scoped to the conversation's principal, its start and the
 moment shown inside a conversation's Studio. `web/explore.ts` places the Notebook

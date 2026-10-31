@@ -12,6 +12,7 @@ import { openRun, runFirstLine, RunView, SourceLine } from './facts.js';
 import { ActionForm } from './action-form.js';
 import { CommandPane } from '../console.js';
 import { FormSwitch, PlotsPane, SessionPane, VariablesPane, type NotebookForm, type Prepared } from '../notebook.js';
+import { FlowPane } from '../flow.js';
 import { addNotebook, addObject, canExplore, explorableTable, languageNames, loadTable, notebookComponent, notebookView, objectComponent, projectPath, scriptLanguage, scriptPrepared, sessionComponents, type Language } from '../explore.js';
 import { ObjectView } from '../object-view.js';
 import { ExploreIn } from '../explore-in.js';
@@ -279,6 +280,7 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
     if (view.component === 'rho.console') return <CommandPane client={client} snapshot={snapshot} />;
     if (view.component === sessionComponents.variables) return <VariablesPane client={client} snapshot={snapshot} onObject={openObject} />;
     if (view.component === sessionComponents.plots) return <PlotsPane client={client} snapshot={snapshot} />;
+    if (view.component === sessionComponents.flow) return <FlowPane client={client} snapshot={snapshot} onObject={openObject} onPath={shellAbove?.openPath} />;
     if (view.component === notebookComponent) {
       const form: NotebookForm = forms[id] ?? (view.props.form === 'console' ? 'console' : 'notebook');
       return <>{isVisible && createPortal(<FormSwitch form={form} onForm={f => chooseForm(id, f)} />, ownHeader(id), 'form-' + id)}<SessionPane form={form} beside={{ variables: layout.views.some(v => v.component === sessionComponents.variables), plots: layout.views.some(v => v.component === sessionComponents.plots) }} client={client} snapshot={snapshot} prepared={prepared} onTaken={() => setPrepared(null)} onConversation={onConversation} onObject={openObject} /></>;

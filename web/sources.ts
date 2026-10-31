@@ -101,11 +101,16 @@ const referenceFolders = new Set(['refs', 'references', 'literature', 'papers', 
 const stem = (path: string) => path.toLowerCase().replace(/\.[^./]+$/, '');
 // A report's source, by its path without extension, so its rendered page joins it.
 export const literateSources = (files: Array<{ path: string }>) => new Set(files.filter(f => /\.(rmd|qmd|rnw)$/i.test(f.path)).map(f => stem(f.path)));
-export function rowOf(file: { path: string; category: SourceKind | null }, literate: Set<string>): SourceRow | null {
+// The folders that hold an HTML page, so the libraries a saved widget keeps beside it join it.
+export const pageFolders = (files: Array<{ path: string }>) => new Set(files.filter(f => /\.html?$/i.test(f.path)).map(f => f.path.toLowerCase().split('/').slice(0, -1).join('/')));
+const library = /^[a-z][\w.]*(-[a-z][\w.]*)*-\d+(\.\d+)+$/, libraries = /^(lib|libs|site_libs|.+_files)$/;
+export function rowOf(file: { path: string; category: SourceKind | null }, literate: Set<string>, pages: Set<string> = new Set()): SourceRow | null {
   const segments = file.path.toLowerCase().split('/'), name = segments.at(-1)!, ext = name.includes('.') ? name.split('.').at(-1)! : '';
   // What rendering a report wrote beside it (report_files/: its scripts, styles and figures) is
-  // part of that report, not something a person looks for.
+  // part of that report, not something a person looks for; so are the versioned libraries a
+  // saved page keeps in a folder beside it (lib/jquery-3.5.1/).
   if (segments.slice(0, -1).some((folder, i) => folder.endsWith('_files') && literate.has([...segments.slice(0, i), folder.slice(0, -'_files'.length)].join('/')))) return null;
+  if (segments.slice(0, -1).some((folder, i) => i > 0 && library.test(folder) && libraries.test(segments[i - 1]!) && pages.has(segments.slice(0, i - 1).join('/')))) return null;
   if (environmentNames.has(name) || /^requirements([-_.][^/]*)?\.txt$/.test(name) || ext === 'rproj') return 'environment';
   if (workflowNames.has(name) || ['smk', 'nf', 'wdl', 'cwl'].includes(ext)) return 'workflows';
   if (['rmd', 'qmd', 'rnw'].includes(ext) || (['html', 'pdf', 'docx'].includes(ext) && literate.has(stem(file.path)))) return 'reports';
@@ -139,9 +144,9 @@ export function sourceItems(row: SourceRow, files: ProjectFile[], resources: Res
   for (const resource of newest.values()) items.set(resource.path, {
     key: 'result:' + resource.path, path: resource.path, name: lastSegment(resource.path), folder: folderName(resource.path, project), bytes: resource.bytes ?? null,
     category: resource.kind === 'media' ? 'figures' : 'results', resource: { id: resource.id, version: resource.version, kind: resource.kind, path: resource.path } });
-  const literate = literateSources(files);
+  const literate = literateSources(files), pages = pageFolders(files);
   for (const file of files) {
-    const match = rowOf(file, literate) === row;
+    const match = rowOf(file, literate, pages) === row;
     if (match && !items.has(file.path)) items.set(file.path, { key: 'file:' + file.path, path: file.path, name: file.name, folder: folderName(file.path, project), bytes: file.bytes, category: file.category });
   }
   // Files at the top of the project come first, then each folder by name.

@@ -19654,6 +19654,29 @@ export const ownerContracts: OwnerContractSnapshot = {
                       }
                     ]
                   },
+                  "files": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "how": {
+                          "enum": [
+                            "read",
+                            "wrote"
+                          ]
+                        },
+                        "path": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "path",
+                        "how"
+                      ],
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
                   "interrupt": {
                     "anyOf": [
                       {
@@ -19783,6 +19806,13 @@ export const ownerContracts: OwnerContractSnapshot = {
                       "not-run",
                       "unknown"
                     ]
+                  },
+                  "used": {
+                    "items": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "type": "array"
                   }
                 },
                 "required": [
@@ -19927,6 +19957,29 @@ export const ownerContracts: OwnerContractSnapshot = {
                         }
                       ]
                     },
+                    "files": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "how": {
+                            "enum": [
+                              "read",
+                              "wrote"
+                            ]
+                          },
+                          "path": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "path",
+                          "how"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
                     "interrupt": {
                       "anyOf": [
                         {
@@ -20056,6 +20109,13 @@ export const ownerContracts: OwnerContractSnapshot = {
                         "not-run",
                         "unknown"
                       ]
+                    },
+                    "used": {
+                      "items": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "type": "array"
                     }
                   },
                   "required": [
@@ -20364,6 +20424,29 @@ export const ownerContracts: OwnerContractSnapshot = {
                       }
                     ]
                   },
+                  "files": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "how": {
+                          "enum": [
+                            "read",
+                            "wrote"
+                          ]
+                        },
+                        "path": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "path",
+                        "how"
+                      ],
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
                   "interrupt": {
                     "anyOf": [
                       {
@@ -20493,6 +20576,13 @@ export const ownerContracts: OwnerContractSnapshot = {
                       "not-run",
                       "unknown"
                     ]
+                  },
+                  "used": {
+                    "items": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "type": "array"
                   }
                 },
                 "required": [
@@ -21855,12 +21945,12 @@ export const ownerContracts: OwnerContractSnapshot = {
     },
     "kernel": {
       "package": "@rho-workspace/plugin-kernel",
-      "packageVersion": "0.1.0",
+      "packageVersion": "0.1.1",
       "entry": "./operations",
       "entryPath": "@rho-workspace/plugin-kernel/dist/operations.js",
       "entrySha256": "1e385e736c769d742bd871ecf8e53d83acbbdadee4bcd1087b4ecef799a02c4e",
       "exports": {
-        "operationContracts": "1929a68515f6e7518a9f7676eb603edb3e2463505d8fc11eacc6785613ff0587"
+        "operationContracts": "7f3a4d271b0a8d786c6b9aad22d97ddc70bb14847c938620e7d42a1f380c0558"
       }
     },
     "entry-files": {

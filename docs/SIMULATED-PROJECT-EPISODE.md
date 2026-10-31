@@ -1405,3 +1405,107 @@ top of the existing ones. The same `quad` project and service were used.
   the Notebook.
 - **The shell and interaction acceptances** were not run again; they failed before this pass.
 - No independent person has used Sources this way.
+
+## Data flow, HTML pages and object-dependent cases
+
+The person found the code and the variables of an interactive session unconnected, asked for a
+graph view to guide them through it, and asked that an HTML file show as its page instead of its
+source. They proposed BixBench capsules whose answers depend on objects built across cells and
+asked for several such cases. Each case ran in a disposable project under `/tmp/rho-cases/root`
+on a service of its own (port 53977), typed into the Notebook in headless Chrome as the person.
+
+### What was built
+
+- **What each cell read** (Notebook 0.1.1). Besides `defined` and `removed`, a cell names the
+  values it read (`used`) and the project files and folders its strings named (`files`, read or
+  wrote), from its parsed code before it runs. Function arguments, comprehension and lambda
+  variables and what a function assigns for itself are not the session's; a name the cell
+  assigned in an earlier statement is its own, so a cell run again does not read the value it
+  replaces; a field after `$`/`@` and a string used as a key or index are not names or paths.
+- **Data flow** (`rho.flow`), a tab beside Variables, as described in [Frontend](FRONTEND.md):
+  one box per cell that made something still there, in run order, with lanes in the left margin
+  from a value to each cell that read it, "Changes what R 6 made" where a cell changed a value it
+  read, and an amber note where a cell read a value or file made again since.
+- **HTML pages** (HTML 0.1.0, `html.reader`), with Page and Edit over the Documents buffer, in a
+  sandboxed frame the service serves at `/frame.html` with its own policy; the project files a
+  page names are read as file snapshots and put into it.
+
+### What the runs showed
+
+- **bix-46 (R, a DESeqResults object).** `readRDS("data/res_1vs97.rds")`, the annotation CSV,
+  `as.data.frame`, a merge on `Locus.Tag`, then a significance column, a volcano plot and a CSV of
+  the significant genes. mexG read −4.964 (−4.96) and PA14_35160 −4.10, both as expected. The
+  first try asked for `Product.Description`, which the annotation does not have; the error stopped
+  that cell and the four after it, and `names(ann)[10:21]` showed `Product.Name`.
+- **Printing a value changed it.** The first graph made cell 2, `res97`, the value's maker. The
+  session's listing had said `6` (its length) after `readRDS` and `5828 × 6` after printing: the
+  first `dim()` on an S4 class that `readRDS` has just loaded answers as if it had no method. The R
+  runner now asks the class what it extends before listing it. A kernel test with a sparse Matrix
+  read from a file failed before (`6`) and passes after (`2 × 3`); in a new R session in the
+  browser, printing `res97` no longer made it.
+- **Boxes that wrapped read as a chain.** In a 300 px column the first layout put cells of one
+  level under each other, and a line from `res97` ran behind the annotation's box. Boxes now
+  follow the run order, one to a line, with the lines in the margin; a file a cell read is named
+  in its box. Pointing at R 9 kept R 1 → R 5 → R 9 → plot and CSV in view and faded R 3.
+- **Phylogenetics (Python, bix-58 and bix-60 files).** Ten untrimmed alignments from bix-58, ten
+  ClipKIT outputs and ten trees from bix-60. Treeness (internal over total branch length) is 0
+  for the eight 3-taxon trees, 0.0884 and 0.0079 for the two 4-taxon ones; the mean of all 10 is
+  ×1000 = 10, and any five including both 4-taxon trees give 19, bix-60's answer for "all 5
+  trees". By columns removed the largest reduction is 1038775 (13.3%), not bix-58's 1014314
+  (7.6%). ClipKIT 2.14.0, installed in a disposable venv and run from the session, wrote alignments
+  of exactly the lengths of bix-60's files; by residues removed it is also 1038775. bix-58's answer
+  is not reproduced from these files.
+- **What the Python records got wrong, and the fixes.** Cell 8 said it changed what cell 7 made
+  through `p`, a comprehension variable that collided with cell 7's loop variable; in R the same
+  happens with `function(x)` beside a global `x`. A rerun of `raw = …; len(raw)` read the old
+  `raw`. Folders named in code (`Path('alignments').glob`, the `clipkit` folder ClipKIT wrote
+  into) were not recorded, so the subprocess's output had no line to the cell that read it. Column
+  names `'trimmed'` and `'clipkit'` matched folders of those names. After the fixes the Python run
+  recorded `alignments/`, `trimmed/` and `trees/` read, `clipkit/` written by cell 7 and read by
+  cell 8, and nothing for the column names. Cell 8's box first kept `raw` and `trimmed` through
+  `lengths`, which cell 10 had changed again; what a changed value came from now goes with the
+  value, so cell 8 holds `own` from `clipkit/` and cell 10 continues 3 and 8.
+- **A stale plot.** The bar chart of cell 9 was drawn from `lengths` before cell 10 added a
+  column; its box reads "Read before it was made again: lengths".
+- **Restarting a session.** `kernel.stop` from a script was refused ("Only the person at this
+  machine ends a live session"); the sessions were stopped from the Notebook page, which asks first.
+  The first two R and Python reruns had gone on in the old sessions without the stop.
+- **HTML.** From the R session, `htmlwidgets::saveWidget(..., selfcontained = FALSE, libdir =
+  "lib")` wrote a plotly volcano with eight library folders, and `rmarkdown::render` knitted a
+  report. The widget drew and answered the pointer with plotly.js, jQuery and the bindings read
+  from `out/lib`; the report showed −4.96, −4.1 and its plot, and its link to the significant
+  genes opened the CSV as a table. The report's script asked for MathJax from the web, which the
+  frame's policy refused. The widget's libraries had counted as 8 Code files and a Note; a saved
+  page's versioned libraries in `lib`, `libs` or `site_libs` are now left out of the rows.
+- **Knitting in the session changed `m`.** `rmarkdown::render` evaluates in the global
+  environment by default, so the report's own `m <- merge(...)` replaced the session's `m`. The
+  cell said "Made or changed m" though its code names `m` only in strings, and the widget made
+  from the earlier `m` is now marked as read before it changed. `out/report.html` itself is not
+  recorded: `render` names it, not the cell.
+
+### Verification
+
+- Rho 273/274 (`node --test test/*.test.mjs` after `npm run build`): the MCP v2 test was cancelled
+  at its 30 s limit and passed alone in 19.8 s. Plugins 141/141, with the kernel's new tests (what
+  a cell read and made, function and comprehension scope, folders, reruns, keys, S4 listing) and
+  the HTML package's. `check:contracts` passed. The sources, ui:u2, agent-canvas, graph,
+  agent-page, agent-ui, review and person-files acceptances passed; the shell (editor focus at
+  390 px) and interaction (`/^workspace/` row) acceptances failed as before.
+- `test/lineage.test.mjs` covers the boxes, links, continued values, stale reads, lanes and limits.
+- The screens above were read at 1440 × 900 and with a 1300–1500 px tall column.
+
+### Left open
+
+- **Records come from the code as written.** A name built at run time, a file named by a
+  variable or written by a function (`render`, a subprocess's output named in an f-string) is not
+  seen; a function's mentions count as reads when it is defined.
+- **Data flow is per session** and holds only what is still there; earlier versions of a value
+  are named, not drawn. Folders in a box cannot be opened.
+- **HTML pages**: a script on the page can still navigate its own frame; nested frames, a
+  stylesheet's `@import` contents and files a script loads at run time are not read. Each project
+  file a page takes is kept as a file snapshot.
+- **bix-58** is not reproduced from these files; bix-26 and bix-32 (KEGG enrichment) and bix-33
+  (a 1.08 GB `.h5ad`) were not run.
+- `npm install` in Rho-plugins fails: Markdown and Annotations still name Documents up to 0.4.7
+  as a peer while Documents is 0.4.9. The HTML package was linked by hand.
+- No independent person has used Data flow or the page view.

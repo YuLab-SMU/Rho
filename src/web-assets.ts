@@ -20,6 +20,30 @@ export async function installedWebEntries(root = webRoot) {
     return manifest.ownerEntries as InstalledUiEntry[];
   } catch (e: any) { if (e.code === 'ENOENT') return []; throw e; }
 }
+// The frame an HTML page is shown in (the HTML page view's pageFrame): a document of the
+// service's own, sandboxed with scripts allowed and nothing else, so the page has an origin of
+// its own and cannot reach the service, its storage or its session; its policy loads nothing
+// from the network and lets the page's own inline scripts, styles and data run. It tells the
+// view that embeds it that it is ready, then writes the one page that view sends it.
+export const pageFramePath = '/frame.html';
+export const pageFramePolicy = "sandbox allow-scripts; default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' data: blob:; style-src 'unsafe-inline' data: blob:; img-src data: blob:; font-src data: blob:; media-src data: blob:; base-uri 'none'; form-action 'none'; frame-ancestors 'self'";
+const pageFrame = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Page</title></head><body><script>
+(function () {
+  var shown = false;
+  addEventListener('message', function (event) {
+    if (shown || event.source !== parent || !event.data || event.data.type !== 'rho-html-page' || typeof event.data.html !== 'string') return;
+    shown = true;
+    document.open(); document.write(event.data.html); document.close();
+  });
+  parent.postMessage({ type: 'rho-html-ready' }, '*');
+})();
+</script></body></html>
+`;
+export function servePageFrame(response: ServerResponse, head = false) {
+  const bytes = Buffer.from(pageFrame);
+  response.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'content-length': bytes.length, 'content-security-policy': pageFramePolicy });
+  response.end(head ? undefined : bytes);
+}
 const types: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.woff2': 'font/woff2', '.svg': 'image/svg+xml' };
 export async function serveWeb(pathname: string, response: ServerResponse, root = webRoot, head = false) {
   requireThat(pathname === '/' || pathname === '/index.html' || /^\/assets\/[A-Za-z0-9_-][A-Za-z0-9._-]*\.(js|css|woff2|svg)$/.test(pathname), 'not_found', 'Static asset is not in the browser build.');

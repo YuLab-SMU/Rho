@@ -8112,6 +8112,10 @@ export interface KernelInterruptOutput {
     cut: boolean;
     defined?: string[];
     endedAt: string | null;
+    files?: {
+      how: 'read' | 'wrote';
+      path: string;
+    }[];
     interrupt: {
       at: string;
       by: string;
@@ -8133,6 +8137,7 @@ export interface KernelInterruptOutput {
     sessionId: string;
     startedAt: string | null;
     state: 'queued' | 'running' | 'done' | 'error' | 'interrupted' | 'not-run' | 'unknown';
+    used?: string[];
   };
 }
 
@@ -8165,6 +8170,10 @@ export interface KernelReadOutput {
     cut: boolean;
     defined?: string[];
     endedAt: string | null;
+    files?: {
+      how: 'read' | 'wrote';
+      path: string;
+    }[];
     interrupt: {
       at: string;
       by: string;
@@ -8186,6 +8195,7 @@ export interface KernelReadOutput {
     sessionId: string;
     startedAt: string | null;
     state: 'queued' | 'running' | 'done' | 'error' | 'interrupted' | 'not-run' | 'unknown';
+    used?: string[];
   }[];
   omitted: number;
   sessions: {
@@ -8235,6 +8245,10 @@ export interface KernelRunOutput {
     cut: boolean;
     defined?: string[];
     endedAt: string | null;
+    files?: {
+      how: 'read' | 'wrote';
+      path: string;
+    }[];
     interrupt: {
       at: string;
       by: string;
@@ -8256,6 +8270,7 @@ export interface KernelRunOutput {
     sessionId: string;
     startedAt: string | null;
     state: 'queued' | 'running' | 'done' | 'error' | 'interrupted' | 'not-run' | 'unknown';
+    used?: string[];
   };
   session: {
     cells: number;

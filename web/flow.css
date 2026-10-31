@@ -1,0 +1,48 @@
+/* The Data flow view: boxes in the order their cells ran, with lanes in the margin on the left
+   from what a cell made to each cell that read it. */
+.flow-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.flow-lede { margin: -4px 0 0; color: var(--color-meta); font-size: 12px; }
+.flow-canvas { position: relative; display: flex; flex-direction: column; gap: 10px; padding: 2px 0 8px; }
+.flow-links { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+.flow-links path { fill: none; stroke: var(--color-hairline-strong); stroke-width: 1.4; transition: stroke .12s, opacity .12s; }
+.flow-links path.on { stroke: var(--color-accent); stroke-width: 1.8; }
+.flow-links path.off { opacity: .2; }
+.flow-links marker path { fill: var(--color-meta); stroke: none; }
+.flow-step { position: relative; display: flex; flex-direction: column; gap: 5px; min-width: 0; padding: 7px 9px 7px; border: 1px solid var(--color-hairline-strong); border-radius: 10px; background: var(--color-surface); transition: opacity .12s, border-color .12s; }
+.flow-step.earlier { border-style: dashed; background: var(--color-canvas); }
+.flow-step.latest { border-color: var(--color-accent); box-shadow: 0 0 0 2px var(--color-accent-soft); }
+.flow-step.open { border-color: var(--color-accent-strong); }
+.flow-step.faded { opacity: .38; }
+.flow-step-head { display: flex; align-items: center; gap: 6px; min-width: 0; min-height: 0; margin: 0; padding: 0; border: 0; background: none; box-shadow: none; color: var(--color-muted); font-size: 12px; font-weight: 600; text-align: left; }
+button.flow-step-head { cursor: pointer; }
+.flow-step-head code { flex: 1; min-width: 0; overflow: hidden; color: var(--color-ink); font-size: 11.5px; font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
+button.flow-step-head:hover code { text-decoration: underline; text-underline-offset: 2px; }
+.flow-step-head .nb-lang { flex: none; padding: 0 6px; font-size: 10.5px; }
+.flow-step-head > svg { flex: none; color: var(--color-meta); transition: transform .12s; }
+.flow-step.open .flow-step-head > svg { transform: rotate(90deg); }
+.flow-newest { flex: none; color: var(--color-accent); font-size: 10.5px; font-weight: 650; }
+.flow-reads { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 4px; margin: 0; color: var(--color-meta); font-size: 11px; }
+.flow-file { display: inline-flex; align-items: center; gap: 3px; min-width: 0; max-width: 100%; min-height: 0; padding: 0 5px; border: 0; border-radius: 5px; background: none; box-shadow: none; color: var(--color-muted); font-size: 11px; font-weight: 500; overflow-wrap: anywhere; text-align: left; }
+button.flow-file:hover { background: var(--color-hover); color: var(--color-ink); }
+.flow-file > svg { flex: none; }
+/* What a cell made, one to a line, so a lane leaves the box beside the value it carries. */
+.flow-outs { display: flex; flex-direction: column; gap: 3px; margin: 0; padding: 0; list-style: none; }
+.flow-out { display: flex; align-items: center; gap: 6px; width: 100%; min-width: 0; min-height: 0; padding: 3px 7px; border: 1px solid var(--color-hairline); border-radius: 7px; background: var(--color-well); box-shadow: none; color: var(--color-ink); font-size: 12px; font-weight: 500; text-align: left; }
+.flow-out:not(:disabled):hover { border-color: var(--color-accent); background: var(--color-hover); }
+.flow-out:disabled { opacity: 1; cursor: default; }
+.flow-out > svg { flex: none; color: var(--color-meta); }
+.flow-out > span { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.flow-out.value > span { font-family: var(--font-mono); font-size: 11.5px; }
+.flow-out > small { flex: 0 1 auto; min-width: 0; margin-left: auto; overflow: hidden; color: var(--color-meta); font-size: 11px; font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
+.flow-out.plot { background: var(--color-hue-iris); color: var(--color-hue-iris-ink); border-color: transparent; }
+.flow-out.wrote { background: var(--color-hue-moss); color: var(--color-hue-moss-ink); border-color: transparent; }
+.flow-out.plot > svg, .flow-out.wrote > svg, .flow-out.wrote > small { color: inherit; }
+.flow-step-note { margin: 0; color: var(--color-meta); font-size: 11px; }
+.flow-step-note.stale { color: var(--color-amber-text); }
+.flow-cell { display: flex; flex-direction: column; gap: 8px; margin-top: 3px; padding-top: 8px; border-top: 1px solid var(--color-divider); }
+.flow-cell > footer { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; color: var(--color-meta); font-size: 12px; }
+.flow-cell > footer > button { margin-left: auto; }
+.flow-cell-earlier { display: flex; flex-direction: column; gap: 4px; opacity: .8; }
+.flow-cell-earlier > .nb-lang { align-self: flex-start; }
+.flow-cell-plots { display: flex; flex-wrap: wrap; gap: 8px; }
+.flow-cell-plots img { max-width: min(100%, 320px); height: auto; border: 1px solid var(--color-hairline); border-radius: 6px; background: #fff; }

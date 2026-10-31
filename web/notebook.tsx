@@ -15,21 +15,21 @@ import './notebook.css';
 // its plots and how it ended. Where a session started or ended the list says so, since values
 // from before an end are gone. The person runs their own cells below, in the same sessions.
 type Read = RhoOutput<'kernel.read'>;
-type Cell = Read['cells'][number];
-type Session = Read['sessions'][number];
+export type Cell = Read['cells'][number];
+export type Session = Read['sessions'][number];
 type Output = Cell['outputs'][number];
 type Language = Cell['language'];
-const languages: Language[] = ['r', 'python'];
-const languageName: Record<Language, string> = { r: 'R', python: 'Python' };
+export const languages: Language[] = ['r', 'python'];
+export const languageName: Record<Language, string> = { r: 'R', python: 'Python' };
 // A Notebook view at least this wide shows the sessions beside the cells.
 export const notebookViewLimits = { cells: 300, codeLines: 14, outputLines: 12, railPlots: 12, cachedPlots: 64, wideViewPx: 840 };
 const me = 'browser:local';
 const failure = (error: unknown) => error instanceof Error ? error.message : 'The live session could not be reached.';
-const versionOf = (session: Session) => session.version?.replace(/^R version (\S+).*$/, 'R $1') ?? languageName[session.language];
-const at = (iso: string) => clock(Date.parse(iso));
+export const versionOf = (session: Session) => session.version?.replace(/^R version (\S+).*$/, 'R $1') ?? languageName[session.language];
+export const at = (iso: string) => clock(Date.parse(iso));
 
 interface Author { name: string; conversationId?: string; title?: string }
-function useAuthors(snapshot: WorkspaceSnapshot) {
+export function useAuthors(snapshot: WorkspaceSnapshot) {
   return useMemo(() => {
     const byPrincipal = new Map<string, Author>();
     for (const c of snapshot.conversations ?? []) if (c.principal) byPrincipal.set(c.principal, { name: agentName(c.client), conversationId: c.conversationId, title: c.title });
@@ -51,7 +51,7 @@ function readSessions(client: BrowserClient, projectId: string) {
   }
   return pending;
 }
-function useKernel(client: BrowserClient, projectId: string, cursor: number) {
+export function useKernel(client: BrowserClient, projectId: string, cursor: number) {
   const [read, setRead] = useState<Read | null>(null);
   const [state, setState] = useState({ off: false, problem: '' });
   const again = () => readSessions(client, projectId).then(value => { setRead(value); setState({ off: false, problem: '' }); },
@@ -62,7 +62,7 @@ function useKernel(client: BrowserClient, projectId: string, cursor: number) {
 
 // Plots are read once each and kept for this page; the oldest leave first.
 const plotCache = new Map<string, Promise<string>>();
-function usePlot(client: BrowserClient, projectId: string, cellId: string, plot: number) {
+export function usePlot(client: BrowserClient, projectId: string, cellId: string, plot: number) {
   const [src, setSrc] = useState<string | null>(null);
   const [problem, setProblem] = useState('');
   useEffect(() => {
@@ -87,7 +87,7 @@ function Plot({ client, projectId, cell, output, label }: { client: BrowserClien
   return <figure className="nb-plot" style={{ maxWidth: width }}>{src ? <img src={src} width={width} height={height} alt={label} /> : <div className="nb-plot-wait" style={{ aspectRatio: `${width} / ${height}` }} aria-label="Reading the plot" />}</figure>;
 }
 
-function Code({ code, language }: { code: string; language: Language }) {
+export function Code({ code, language }: { code: string; language: Language }) {
   const lines = code.replace(/\n+$/, '').split('\n');
   const [whole, setWhole] = useState(false);
   const long = lines.length > notebookViewLimits.codeLines + 2;
@@ -662,7 +662,7 @@ export function NotebookPage({ client, snapshot, onConversation, onObject, scope
 }
 
 // The newest session of each language.
-function latestSessions(read: Read | null) {
+export function latestSessions(read: Read | null) {
   const out: Partial<Record<Language, Session>> = {};
   for (const s of read?.sessions ?? []) if (!out[s.language] || s.startedAt > out[s.language]!.startedAt) out[s.language] = s;
   return out;

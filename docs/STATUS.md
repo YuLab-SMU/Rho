@@ -162,6 +162,17 @@ Variables lists the live sessions' values between Code and Results, each opening
 Workflows, Reports, References and Environment appear when the project holds such files. The
 Notebook's language switch is the small chip each cell carries, in its input as at the console.
 
+[Data flow](SIMULATED-PROJECT-EPISODE.md#data-flow-html-pages-and-object-dependent-cases) joins
+code and values: each cell now names what it read and the project files and folders it named
+(Notebook 0.1.1), and a Data flow tab beside Variables shows each cell that made something still
+there, in run order, with lines from each value to the cells that read it, values changed in place
+and reads made stale. An HTML file opens as its page (HTML 0.1.0) in a sandboxed frame with no
+network, with its project styles, scripts and images. In bix-46 (R, a DESeqResults object) both
+answers matched; the phylogenetics files of bix-58/60 (Python, ClipKIT run in the session) gave
+bix-60's 19 only for five of the ten trees and did not reproduce bix-58. The runs found and fixed an
+S4 value listed as changed by printing, scope and rerun errors in what a cell read, and unrecorded
+folders.
+
 ## Existing application
 
 - Projects opens selected folders and manages finite source folders. Sources counts
@@ -204,8 +215,10 @@ checks still held the 64-method limit and the plugin count, and the Skill's veri
 command was not an application script; corrected, Rho 261/261 and Plugins 132/132. The
 exploring pass first failed Rho 263/264, the Studio shell importing a module outside its
 allowed set, and ui:u2 also matched the New workspace row; corrected, Rho 264/264 and Plugins 132/132.
-The Sources pass records Rho 268/269 in the [ledger](VERIFICATION.json), Plugins unchanged at
-134/134: the MCP v2 test was cancelled at its 30 s limit and passed alone in 18.1 s. The contract
+The Data flow pass records Rho 273/274 and Plugins 141/141 in the [ledger](VERIFICATION.json): the
+MCP v2 test was cancelled at its 30 s limit and passed alone in 19.8 s; the contract check and the
+same eight acceptances passed, and shell and interaction failed as before. The Sources pass recorded
+Rho 268/269, Plugins unchanged at 134/134: the MCP v2 test was cancelled at its 30 s limit and passed alone in 18.1 s. The contract
 check and the sources, ui:u2, agent-canvas, graph, agent-page, agent-ui, review and person-files
 acceptances passed; ui:u2 first failed counting the Overview's 3-row previews among the grid's
 reads, and now counts from the Table tab. The shell acceptance (editor focus at 390 px) and the

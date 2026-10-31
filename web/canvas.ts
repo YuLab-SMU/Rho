@@ -27,8 +27,8 @@ interface Node { id: string; kind: 'group' | 'view'; children?: string[]; presen
 // the person made are never trimmed.
 export const canvasLimits = { maxViewsPerSide: 6 };
 const agentGroup = 'canvas-';
-const markdownReader = 'markdown.reader';
-const sideOf = (node: Node): Side | null => node.kind !== 'view' ? null : node.component === 'rho.editor' || node.component === markdownReader ? 'code' : node.component === 'rho.table' || node.component === 'rho.media' ? 'data' : null;
+const markdownReader = 'markdown.reader', htmlReader = 'html.reader';
+const sideOf = (node: Node): Side | null => node.kind !== 'view' ? null : node.component === 'rho.editor' || node.component === markdownReader || node.component === htmlReader ? 'code' : node.component === 'rho.table' || node.component === 'rho.media' ? 'data' : null;
 
 // Files no Studio view reads; anything else that is text opens in the editor.
 const unviewable = /\.(png|jpe?g|svg|gif|pdf|tiff?|webp|xlsx?|rds|rda|rdata|parquet|feather|h5|h5ad|bam|zip|gz)$/i;
@@ -56,8 +56,9 @@ export async function viewFor(client: BrowserClient, snapshot: WorkspaceSnapshot
     return { side: 'data', node: { id: fileKey(path) + resource.version.slice(0, 12), kind: 'view', component: owner.id, version: owner.version, props: { title }, bindings: { [binding]: { id: resource.id, version: resource.version } } } };
   }
   if (unviewable.test(path)) return null;
-  // Markdown reads as formatted text, from the same buffer the editor shows under Source.
-  const editor = (/\.(md|markdown)$/i.test(path) ? component(snapshot, markdownReader) : undefined) ?? component(snapshot, 'rho.editor');
+  // Markdown reads as formatted text and HTML as its page, from the same buffer the editor shows
+  // under Source.
+  const editor = (/\.(md|markdown)$/i.test(path) ? component(snapshot, markdownReader) : /\.html?$/i.test(path) ? component(snapshot, htmlReader) : undefined) ?? component(snapshot, 'rho.editor');
   if (!editor) return null;
   // Opening an unchanged buffer adopts what is on disk now, so an Agent's own edit shows.
   const document = await client.call('document.open', { projectId, path });
