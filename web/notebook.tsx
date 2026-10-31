@@ -5,6 +5,7 @@ import { durationText } from '../src/conversation-presentation.js';
 import { agentName } from './agent-now.js';
 import { clock } from './timeline-kinds.js';
 import { highlight } from './languages.js';
+import { statements, unfinished } from '../src/statements.js';
 import { Icon } from './icons.js';
 import { useProcess } from './process-context.js';
 import './notebook.css';
@@ -268,6 +269,146 @@ function Composer({ language, setLanguage, draft, setDraft, busy, problem, note,
   </form>;
 }
 
+export { FormSwitch, type NotebookForm } from './notebook-form.js';
+import type { NotebookForm } from './notebook-form.js';
+const prompts: Record<Language, [string, string]> = { r: ['>', '+'], python: ['>>>', '...'] };
+
+// The code of one cell as typed at the prompt: the first line after the prompt, the rest after
+// the continuation mark. Lines do not wrap, so the marks stay beside their lines.
+function PromptCode({ code, language }: { code: string; language: Language }) {
+  const text = code.replace(/\n+$/, ''), [first, rest] = prompts[language];
+  // Each statement starts at the prompt; only the lines that carry one on take the continuation mark.
+  const marks = useMemo(() => {
+    const out = text.split('\n').map(() => first);
+    for (const s of statements(text, language)) for (let line = s.from + 1; line <= s.to; line++) out[line - 1] = rest;
+    return out.join('\n');
+  }, [text, language]);
+  const ref = useRef<HTMLElement>(null);
+  useEffect(() => {
+    let live = true;
+    if (ref.current) ref.current.textContent = text;
+    highlight(text, language).then(fragment => { if (live && fragment && ref.current) ref.current.replaceChildren(fragment); }, () => {});
+    return () => { live = false; };
+  }, [text, language]);
+  return <div className="nbc-code"><pre className="nbc-prompt" aria-hidden="true">{marks}</pre><pre className="nbc-input"><code ref={ref}>{text}</code></pre></div>;
+}
+
+// A plot in the console: under its prompt, or a line that opens it here when the page shows
+// plots in a view of their own.
+function ConsolePlot({ client, projectId, cell, output, number, beside }: { client: BrowserClient; projectId: string; cell: Cell; output: Output; number?: number; beside: boolean }) {
+  const [open, setOpen] = useState(!beside);
+  useEffect(() => setOpen(!beside), [beside]);
+  return <div className="nbc-plot">
+    {beside && <button className="text-button nbc-plot-line" aria-expanded={open} onClick={() => setOpen(!open)}><Icon name="chart" size={13} />{number ? `Plot ${number}${open ? '' : ' · in Plots'}` : 'Plot'}</button>}
+    {open && <PlotSmall client={client} projectId={projectId} cell={cell} output={output} />}
+  </div>;
+}
+function PlotSmall({ client, projectId, cell, output }: { client: BrowserClient; projectId: string; cell: Cell; output: Output }) {
+  const { src, problem } = usePlot(client, projectId, cell.cellId, output.plot!);
+  if (problem) return <p className="nbc-quiet">This plot could not be read. {problem}</p>;
+  return src ? <img className="nbc-plot-img" src={src} alt={`Plot drawn by ${cell.purpose ?? 'this cell'}`} /> : <span className="nb-plot-wait nbc-plot-img" />;
+}
+
+// One cell as the console shows it. A cell someone else ran says who, and why, as a comment.
+function ConsoleCell({ cell, author, who, client, projectId, now, plotsBeside, plotNumber, onConversation }: {
+  cell: Cell; author: Author; who: (by: string) => Author; client: BrowserClient; projectId: string; now: number; plotsBeside: boolean; plotNumber: (cellId: string, plot: number) => number | undefined; onConversation: (id: string) => void;
+}) {
+  const interrupted = cell.interrupt ? `Interrupted by ${who(cell.interrupt.by).name === 'You' ? 'you' : who(cell.interrupt.by).name}` : null;
+  return <div className={'nbc-cell ' + cell.state + ' ' + cell.language} id={'cell-' + cell.cellId}>
+    {author.name !== 'You' && <p className="nbc-who"># {author.conversationId ? <button className="text-button" title={author.title ? 'Open ' + author.title : undefined} onClick={() => onConversation(author.conversationId!)}>{author.name}</button> : author.name}{cell.purpose ? ' · ' + cell.purpose : ''}</p>}
+    <PromptCode code={cell.code} language={cell.language} />
+    {cell.outputs.map((output, i) => output.kind === 'plot'
+      ? <ConsolePlot key={i} client={client} projectId={projectId} cell={cell} output={output} number={plotNumber(cell.cellId, output.plot!)} beside={plotsBeside} />
+      : <pre key={i} className={'nbc-out ' + output.kind}>{(output.text ?? '').replace(/\n$/, '')}</pre>)}
+    {cell.cut && <p className="nbc-quiet">Only the first {sizeText(cell.kept)} of the {sizeText(cell.bytes)} it printed were kept.</p>}
+    {cell.state === 'running' && <p className="nbc-state running"><span className="pulse-dot" aria-hidden="true" />Running {durationText(now - Date.parse(cell.startedAt ?? cell.queuedAt))}</p>}
+    {cell.state === 'queued' && <p className="nbc-state">Waiting for the cell before it</p>}
+    {(interrupted || cell.state === 'not-run' || cell.state === 'unknown' || (cell.problem && cell.state !== 'error' && cell.state !== 'interrupted')) &&
+      <p className="nbc-state">{interrupted ?? (cell.state === 'not-run' ? 'Not run' : cell.state === 'unknown' ? 'Outcome unknown' : cell.problem)}</p>}
+  </div>;
+}
+function ConsoleMark({ session, edge, who }: { session: Session; edge: 'start' | 'end'; who: (by: string) => Author }) {
+  const name = languageName[session.language];
+  if (edge === 'start') { const by = who(session.startedBy).name; return <p className="nbc-mark">{name} session started{session.version ? ' · ' + versionOf(session) : ''} · by {by === 'You' ? 'you' : by} at {at(session.startedAt)}</p>; }
+  const how = session.ending === 'stopped' ? `stopped by ${session.stop ? (who(session.stop.by).name === 'You' ? 'you' : who(session.stop.by).name) : 'request'}` : session.ending === 'rho-closed' ? 'Rho closed' : session.ending === 'not-started' ? 'it did not start' : 'its process ended';
+  return <p className={'nbc-mark ended' + (session.ending === 'stopped' ? '' : ' problem')}>{name} session ended at {at(session.endedAt!)} · {how}. Values defined before this are gone.</p>;
+}
+// The sessions above the console: their state, Interrupt while a cell runs, Stop, and Clear.
+function ConsoleBar({ sessions, asking, onInterrupt, onStop, onClear }: { sessions: Partial<Record<Language, Session>>; asking: string; onInterrupt: (language: Language) => void; onStop: (session: Session) => void; onClear?: () => void }) {
+  const live = languages.filter(l => sessions[l] && sessions[l]!.state !== 'ended');
+  return <div className="nbc-bar">
+    {!live.length && <span className="nbc-bar-session off"><span className="nb-dot" aria-hidden="true" />No live session · the first cell starts one</span>}
+    {live.map(l => { const s = sessions[l]!; return <span key={l} className={'nbc-bar-session ' + s.state}>
+      <span className="nb-dot" aria-hidden="true" />{versionOf(s)} · {s.state === 'busy' ? 'running' : s.state}
+      {s.state === 'busy' && <button className="text-button" disabled={asking.startsWith('interrupt:')} onClick={() => onInterrupt(l)}>Interrupt</button>}
+      <button className="text-button nbc-stop" disabled={asking === 'stop:' + s.sessionId} title={`End the ${languageName[l]} session; its values are gone`} onClick={() => onStop(s)}>Stop</button>
+    </span>; })}
+    {onClear && <button className="text-button nbc-clear" title="Clear the console (Ctrl+L); the sessions keep their values" onClick={onClear}>Clear</button>}
+  </div>;
+}
+
+// The prompt: Enter runs finished code and goes on to another line in unfinished code, as a
+// console does; Shift+Enter adds a line and ⌘/Ctrl+Enter runs whatever is there. ↑ and ↓ bring
+// back what the person ran; Esc interrupts the running cell; Ctrl+L clears the view.
+function ConsolePrompt({ language, setLanguage, draft, setDraft, note, problem, busy, running, input, history, onRun, onInterrupt, onClear }: {
+  language: Language; setLanguage: (l: Language) => void; draft: string; setDraft: (text: string) => void; note: string; problem: string; busy: boolean; running: boolean;
+  input: React.RefObject<HTMLTextAreaElement | null>; history: Array<{ code: string; language: Language }>; onRun: (code: string) => void; onInterrupt: () => void; onClear: () => void;
+}) {
+  const [back, setBack] = useState<{ at: number; kept: string } | null>(null);
+  const lines = draft.split('\n').length, [first, rest] = prompts[language];
+  // Where the caret goes once the new text is in the box, before the next key arrives.
+  const caret = useRef<number | null>(null);
+  useLayoutEffect(() => { const el = input.current; if (el && caret.current !== null) { el.selectionStart = el.selectionEnd = Math.min(caret.current, el.value.length); caret.current = null; } }, [draft]);
+  const recall = (at: number) => {
+    const kept = back?.kept ?? draft;
+    if (at >= history.length) { setBack(null); caret.current = kept.length; setDraft(kept); return; }
+    const item = history[at]!;
+    setBack({ at, kept }); setLanguage(item.language); caret.current = item.code.length; setDraft(item.code);
+  };
+  // A command brought back and not yet changed moves through the history from any line.
+  const browsing = !!back && history[back.at]?.code === draft;
+  const send = () => { const code = draft.replace(/\s+$/, ''); if (code.trim()) { setBack(null); onRun(code); } };
+  function keys(event: React.KeyboardEvent<HTMLTextAreaElement>) {
+    const el = event.currentTarget;
+    if (event.nativeEvent.isComposing) return;
+    if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); send(); return; }
+    if (event.key === 'Enter' && !event.shiftKey && !event.altKey) {
+      if (!unfinished(draft, language) && el.selectionStart === draft.length) { event.preventDefault(); send(); return; }
+      // Another line, indented as the one before it, and further after a block's header.
+      event.preventDefault();
+      const before = draft.slice(0, el.selectionStart), line = before.split('\n').at(-1)!, indent = line.match(/^\s*/)![0] + (/[:{(\[]\s*$/.test(line) ? (language === 'python' ? '    ' : '  ') : '');
+      caret.current = before.length + 1 + indent.length;
+      setDraft(before + '\n' + indent + draft.slice(el.selectionEnd));
+      return;
+    }
+    // A closing bracket typed on an empty line goes back one step of indentation.
+    if ('}])'.includes(event.key) && event.key.length === 1 && !event.metaKey && !event.ctrlKey) {
+      const before = draft.slice(0, el.selectionStart), line = before.split('\n').at(-1)!;
+      if (line.length && !line.trim()) {
+        event.preventDefault();
+        const kept = before.slice(0, before.length - Math.min(line.length, language === 'python' ? 4 : 2)) + event.key;
+        caret.current = kept.length; setDraft(kept + draft.slice(el.selectionEnd));
+        return;
+      }
+    }
+    if (event.key === 'ArrowUp' && (browsing || !draft.slice(0, el.selectionStart).includes('\n')) && history.length) { event.preventDefault(); recall(Math.max(0, (back?.at ?? history.length) - 1)); return; }
+    if (event.key === 'ArrowDown' && back && (browsing || !draft.slice(el.selectionEnd).includes('\n'))) { event.preventDefault(); recall(back.at + 1); return; }
+    if (event.key === 'Escape' && running) { event.preventDefault(); onInterrupt(); return; }
+    if (event.key.toLowerCase() === 'l' && event.ctrlKey && !event.metaKey) { event.preventDefault(); onClear(); }
+  }
+  return <div className={'nbc-prompt-row ' + language}>
+    {note && <p className="nbc-quiet">{note}</p>}
+    <div className="nbc-prompt-line">
+      <button type="button" className={'nbc-lang ' + language} title={`Runs in the ${languageName[language]} session you share with the Agent. Switch to ${languageName[language === 'r' ? 'python' : 'r']}`} onClick={() => { setLanguage(language === 'r' ? 'python' : 'r'); input.current?.focus(); }}>{languageName[language]}</button>
+      <pre className="nbc-prompt" aria-hidden="true">{[first, ...Array(lines - 1).fill(rest)].join('\n')}</pre>
+      <textarea ref={input} rows={lines} value={draft} spellCheck={false} autoComplete="off" autoCapitalize="off" aria-label={`${languageName[language]} prompt`}
+        onChange={event => { setBack(null); setDraft(event.target.value); }} onKeyDown={keys} />
+      {busy && <span className="nbc-busy">Sending…</span>}
+    </div>
+    {problem && <p className="inline-error" role="alert">{problem}</p>}
+  </div>;
+}
+
 // The box that scrolls the cells: a Studio view scrolls itself; on the page, the nearest box that
 // scrolls, or the document itself.
 function scrollerOf(element: HTMLElement | null): Element {
@@ -288,7 +429,7 @@ type Row = { at: number; order: number; key: string } & ({ cell: Cell } | { sess
 export interface Prepared { key: string; language: Language; code: string; note: string }
 // The variables and plots leave its side when the page shows them in views of their own.
 export interface Beside { variables?: boolean; plots?: boolean }
-export function SessionPane({ client, snapshot, prepared, onTaken, onConversation, onObject, beside }: { client: BrowserClient; snapshot: WorkspaceSnapshot; prepared?: Prepared | null; onTaken?: () => void; onConversation?: (id: string) => void; onObject?: (language: Language, name: string) => void; beside?: Beside }) {
+export function SessionPane({ client, snapshot, prepared, onTaken, onConversation, onObject, beside, form }: { client: BrowserClient; snapshot: WorkspaceSnapshot; prepared?: Prepared | null; onTaken?: () => void; onConversation?: (id: string) => void; onObject?: (language: Language, name: string) => void; beside?: Beside; form?: NotebookForm }) {
   const process = useProcess();
   const principal = snapshot.conversations?.find(c => c.conversationId === process?.conversationId)?.principal ?? null;
   const starts = process ? process.whole.turns.filter(t => t.conversationId === process.conversationId).map(t => t.start) : [];
@@ -309,13 +450,13 @@ export function SessionPane({ client, snapshot, prepared, onTaken, onConversatio
     return () => observer.disconnect();
   }, []);
   return <div className="nb-view" ref={box}>
-    <NotebookPage client={client} snapshot={snapshot} onConversation={onConversation ?? (() => {})} compact={!wide} inView shown={shown} prepared={prepared} onTaken={onTaken} onObject={onObject} beside={beside}
+    <NotebookPage client={client} snapshot={snapshot} onConversation={onConversation ?? (() => {})} compact={!wide} inView shown={shown} prepared={prepared} onTaken={onTaken} onObject={onObject} beside={beside} form={form}
       scope={process ? { principal, since, at: process.at } : undefined} />
   </div>;
 }
 
-export function NotebookPage({ client, snapshot, onConversation, onObject, scope, compact = false, inView = false, shown = 0, prepared, onTaken, beside = {} }: {
-  client: BrowserClient; snapshot: WorkspaceSnapshot; onConversation: (id: string) => void; onObject?: (language: Language, name: string) => void; compact?: boolean; inView?: boolean; shown?: number; prepared?: Prepared | null; onTaken?: () => void; beside?: Beside;
+export function NotebookPage({ client, snapshot, onConversation, onObject, scope, compact = false, inView = false, shown = 0, prepared, onTaken, beside = {}, form = 'notebook' }: {
+  client: BrowserClient; snapshot: WorkspaceSnapshot; onConversation: (id: string) => void; onObject?: (language: Language, name: string) => void; compact?: boolean; inView?: boolean; shown?: number; prepared?: Prepared | null; onTaken?: () => void; beside?: Beside; form?: NotebookForm;
   scope?: { principal: string | null; since: number | null; at: number | null } }) {
   const projectId = snapshot.project.id;
   const { read, off, problem, again } = useKernel(client, projectId, snapshot.cursor);
@@ -339,6 +480,7 @@ export function NotebookPage({ client, snapshot, onConversation, onObject, scope
   const [busy, setBusy] = useState(false);
   const [runProblem, setRunProblem] = useState('');
   const [asking, setAsking] = useState('');
+  const [cleared, setCleared] = useState(0);
   const [askProblem, setAskProblem] = useState('');
   const pending = useRef<{ code: string; language: Language; changeId: string } | null>(null);
   const input = useRef<HTMLTextAreaElement>(null);
@@ -386,7 +528,7 @@ export function NotebookPage({ client, snapshot, onConversation, onObject, scope
   }, [!!read]);
   // The person's own cell sits above the composer, which stays at the foot of the page. A view
   // shown again returns to the newest cell when the reader had been there.
-  useEffect(() => { if (tail && atEnd.current) requestAnimationFrame(() => { const scroller = scrollerOf(page.current); scroller.scrollTo({ top: scroller.scrollHeight }); }); }, [tail, shown, compact]);
+  useEffect(() => { if (tail && atEnd.current) requestAnimationFrame(() => { const scroller = scrollerOf(page.current); scroller.scrollTo({ top: scroller.scrollHeight }); }); }, [tail, shown, compact, form]);
   // Output that grows after it is drawn (highlighted code, a plot read later) keeps the newest
   // cell in view for a reader who was there.
   useEffect(() => {
@@ -395,7 +537,7 @@ export function NotebookPage({ client, snapshot, onConversation, onObject, scope
     const observer = new ResizeObserver(() => { if (atEnd.current && element.isConnected) { const scroller = scrollerOf(element); scroller.scrollTo({ top: scroller.scrollHeight }); } });
     observer.observe(element);
     return () => observer.disconnect();
-  }, [!!read, compact]);
+  }, [!!read, compact, form]);
 
   async function run(code: string, lang: Language) {
     if (!code.trim() || busy) return;
@@ -440,6 +582,33 @@ export function NotebookPage({ client, snapshot, onConversation, onObject, scope
   // A value named in a cell opens while that cell's session is live; with an ended session its
   // values are gone, and the same name in a newer session is another value.
   const current = new Set(languages.map(l => latest[l]).filter(session => session && session.state !== 'ended').map(session => session!.sessionId));
+  // The console: the cells as one transcript, each prompt with what it printed, and the prompt
+  // under the last of them. Cleared output leaves this view only.
+  if (form === 'console') {
+    const history = cells.filter(c => c.by === me).map(c => ({ code: c.code.replace(/\n+$/, ''), language: c.language }));
+    const shownRows = rows.filter(row => row.at > cleared);
+    // Plots of the live sessions are numbered as the Plots view counts them.
+    const plotNumbers = new Map((read?.cells ?? []).filter(c => current.has(c.sessionId)).flatMap(c => c.outputs.filter(o => o.kind === 'plot').map(o => c.cellId + ':' + o.plot)).map((key, i) => [key, i + 1]));
+    return <div className="nb-console" ref={page} onMouseUp={event => {
+      if (!composing || window.getSelection()?.toString() || (event.target as HTMLElement).closest('button, a, textarea, summary, img')) return;
+      input.current?.focus({ preventScroll: true });
+    }}>
+      <ConsoleBar sessions={latest} asking={asking} onInterrupt={l => void interrupt(l)} onStop={session => void stop(session)} onClear={composing ? () => setCleared(rows.at(-1)?.at ?? Date.now()) : undefined} />
+      {problem && <p className="inline-error" role="alert">{problem}</p>}
+      {askProblem && <p className="inline-error" role="alert">{askProblem}</p>}
+      <div className="nbc-log" role="log" aria-label="Console">
+        {!read ? <p className="nbc-quiet">Reading the live sessions…</p>
+          : !cells.length ? <p className="nbc-quiet">{nothing}</p> : null}
+        {read && read.omitted > 0 && cleared === 0 && <p className="nbc-quiet">{read.omitted} earlier {read.omitted === 1 ? 'cell is' : 'cells are'} kept but not shown.</p>}
+        {cleared > 0 && <p className="nbc-quiet">Earlier output is cleared from this view; the sessions keep their values. <button className="text-button" onClick={() => setCleared(0)}>Show it again</button></p>}
+        {shownRows.map(row => 'cell' in row
+          ? <ConsoleCell key={row.key} cell={row.cell} author={who(row.cell.by)} who={who} client={client} projectId={projectId} now={now} plotsBeside={!!beside.plots} plotNumber={(cellId, plot) => plotNumbers.get(cellId + ':' + plot)} onConversation={onConversation} />
+          : <ConsoleMark key={row.key} session={row.session} edge={row.edge} who={who} />)}
+      </div>
+      {composing && <ConsolePrompt language={shownLanguage} setLanguage={setLanguage} draft={draft} setDraft={text => { setDraft(text); if (!text) setNote(''); }} note={note} problem={runProblem} busy={busy} input={input} history={history}
+        running={latest[shownLanguage]?.state === 'busy'} onRun={code => void run(code, shownLanguage)} onInterrupt={() => void interrupt(shownLanguage)} onClear={() => setCleared(rows.at(-1)?.at ?? Date.now())} />}
+    </div>;
+  }
   if (compact) return <div className="nb-page compact" ref={page}>
     <div className="nb-main">
       {problem && <p className="inline-error" role="alert">{problem}</p>}

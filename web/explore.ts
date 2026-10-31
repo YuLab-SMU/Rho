@@ -25,8 +25,8 @@ export async function loadTable(client: BrowserClient, projectId: string, path: 
 
 // The Notebook as a view of a Studio page: one per page, showing the live sessions.
 export const notebookComponent = 'rho.notebook';
-export const notebookView = (id = 'notebook'): LayoutNode & { component: string; version: string; props: { title: string }; bindings: Record<string, never> } =>
-  ({ id, kind: 'view', component: notebookComponent, version: '1', props: { title: 'Notebook' }, bindings: {} });
+export const notebookView = (id = 'notebook', form?: 'notebook' | 'console'): LayoutNode & { component: string; version: string; props: { title: string; form?: string }; bindings: Record<string, never> } =>
+  ({ id, kind: 'view', component: notebookComponent, version: '1', props: { title: 'Notebook', ...(form ? { form } : {}) }, bindings: {} });
 export const notebookOn = (nodes: unknown[] | undefined) => (nodes as LayoutNode[] | undefined)?.find(n => n.kind !== 'group' && n.component === notebookComponent)?.id ?? null;
 const newId = (kind: string) => `${kind}-${crypto.randomUUID().slice(0, 8)}`;
 // The page with the Notebook in a pane of its own beside a view, or as its one view.

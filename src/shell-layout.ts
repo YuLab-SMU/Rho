@@ -183,6 +183,14 @@ export function moveView(tree: LayoutTree, viewId: string, direction: 1 | -1, ne
   }
   return tidy(next);
 }
+// Changes how a view shows what it shows (its props), keeping where it is and what it is bound to.
+export function setViewProps(tree: LayoutTree, viewId: string, props: Record<string, unknown>): LayoutTree | null {
+  const node = tree.nodes.find(n => n.id === viewId && n.kind === 'view');
+  if (!node) return null;
+  const next = copy(tree), view = next.nodes.find(n => n.id === viewId)!;
+  view.props = { ...(view.props as Record<string, unknown> | undefined), ...props };
+  return next;
+}
 // Closes a view: its node leaves the tree; its records, input and runs stay with their owners.
 export function closeView(tree: LayoutTree, viewId: string): LayoutTree | null {
   if (!parentOf(tree.nodes, viewId)) return null;

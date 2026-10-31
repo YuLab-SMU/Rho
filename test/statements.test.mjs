@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { runPurpose, selectionCode, statementAt, statements } from '../dist/statements.js';
+import { runPurpose, selectionCode, statementAt, statements, unfinished } from '../dist/statements.js';
 
 const r = `# Ozone and weather
 aq <- read.csv("data/airquality.csv")
@@ -73,4 +73,11 @@ test('Python statements take blocks, decorators, clauses and brackets', () => {
   assert.equal(selectionCode('  x <- 1', 'r'), '  x <- 1');
   assert.equal(runPurpose('code/analysis.R', 6, 7), 'analysis.R · lines 6–7');
   assert.equal(runPurpose('analysis.R', 3, 3), 'analysis.R · line 3');
+});
+
+test('at a console prompt, Enter runs finished code and goes on to another line in unfinished code', () => {
+  for (const code of ['x <- 1', 'summary(aq)', 'f <- function(x) {\n  x + 1\n}', 'd |>\n  head()', '# just a comment', '']) assert.equal(unfinished(code, 'r'), false, code);
+  for (const code of ['plot(x,', 'f <- function(x) {', 'd |>', 'x <- "a string', 'f <- function(x)', 'y <- 1 +  # more']) assert.equal(unfinished(code, 'r'), true, code);
+  for (const code of ['x = 1', 'if ok: a = 1', 'for v in xs:\n    print(v)\n', 'total = (1 +\n  2)']) assert.equal(unfinished(code, 'python'), false, code);
+  for (const code of ['for v in xs:', 'for v in xs:\n    print(v)', 'def f(x):\n    return x', 'total = (1 +', 's = """one']) assert.equal(unfinished(code, 'python'), true, code);
 });

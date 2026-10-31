@@ -143,6 +143,11 @@ script. Variables and Plots are views of their own, in a column along the page's
 R now draws on one device for the whole session, so a later cell draws over an earlier plot
 and a sourced script keeps each plot. No Agent ran cells in this layout.
 
+The Notebook has [two forms](SIMULATED-PROJECT-EPISODE.md#two-forms-of-the-notebook) of the same
+sessions, switched in its header: the notebook, and a console with one transcript of prompts and
+output, Enter that runs finished code and continues unfinished code, history, Esc and Clear. A
+Studio view saves its form with the page; one placed by running a script's line starts as a console.
+
 ## Existing application
 
 - Projects opens selected folders and manages finite source folders. Sources counts
@@ -185,10 +190,11 @@ checks still held the 64-method limit and the plugin count, and the Skill's veri
 command was not an application script; corrected, Rho 261/261 and Plugins 132/132. The
 exploring pass first failed Rho 263/264, the Studio shell importing a module outside its
 allowed set, and ui:u2 also matched the New workspace row; corrected, Rho 264/264 and Plugins 132/132.
-The four-pane pass records Rho 268/268 and Plugins 134/134 in the [ledger](VERIFICATION.json), with the contract check and the
-agent-canvas, graph, agent-page, agent-ui, review, ui:u2 and sources browser
-acceptances; the reading fix in the R runner came after the acceptances, and both suites
-ran again on the final code. Earlier passes: value view Rho 265/265 and Plugins 134/134; choices and Console Rho 260/260 and Plugins 125/125; figures and cost Rho 258/258; project notes Rho 249/249 and Plugins 120/120 (ui:u2 first
+The two-forms pass records Rho 269/269 in the [ledger](VERIFICATION.json), Plugins unchanged
+at 134/134, with the contract check and the agent-canvas, graph, agent-page, agent-ui, review,
+ui:u2 and sources browser acceptances; graph first failed waiting 30 s for a table preview after
+the suite and passed when run again alone on the same build. Earlier passes: four panes Rho
+268/268 and Plugins 134/134, both suites run again after the R runner's reading fix; value view Rho 265/265 and Plugins 134/134; choices and Console Rho 260/260 and Plugins 125/125; figures and cost Rho 258/258; project notes Rho 249/249 and Plugins 120/120 (ui:u2 first
 failed until the notes stopped opening with every project); meaning layer Rho 253/253;
 descriptions Rho 257/257 and Plugins 122/122, each with the same seven acceptances.
 The [episode](REVIEW-EVIDENCE-EPISODE.md) records contract, browser and installed results.

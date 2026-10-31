@@ -92,6 +92,22 @@ inspect what happened. The application gives those actions direct places:
   the reader is there, also when it is shown again or resized. Only the reader's own
   wheel, touch, keys or scroll bar take it off the end
   ([episode](SIMULATED-PROJECT-EPISODE.md#the-notebook)).
+- **Two forms.** Notebook | Console switches how the same sessions read: as a notebook (above)
+  or as a console, one transcript as R or Python print it at a terminal. Each cell is its code
+  after the prompt (`>`/`+` in R, `>>>`/`...` in Python, a new statement at the prompt) and what
+  it printed under it, messages muted, warnings amber, errors red; a cell someone else ran has
+  a comment line with who and why (`# Claude Code · Fit the model`). Plots show under their
+  prompt, or as a line that opens them in place when the page has Plots. Session starts and
+  ends are marked. A bar above names each session's state with Interrupt and Stop, and Clear
+  (Ctrl+L) hides earlier output from this view only. The prompt sits under the last output:
+  Enter runs finished code and goes on to another line, indented, in unfinished code (an
+  open bracket or string, a trailing operator, a Python block before its empty line);
+  Shift+Enter adds a line, ⌘/Ctrl+Enter runs whatever is there, ↑/↓ bring back what the person
+  ran, a closing bracket on an empty line steps back, Esc interrupts, and the R/Python chip
+  switches language. A click in the transcript puts the keyboard in the prompt. A Studio view
+  saves its form with the page (`props.form`); the Notebook page keeps it in the browser. A
+  Notebook placed under a script by running one of its lines starts as a console
+  ([episode](SIMULATED-PROJECT-EPISODE.md#two-forms-of-the-notebook)).
 - **Explore in R or Python** sits in the header of a table view (`.csv`, `.tsv`, also
   gzipped) and of an R or Python script, on the answer board's tables and on the file
   page. A table opens on the person's workspace with the page's Notebook beside it, or

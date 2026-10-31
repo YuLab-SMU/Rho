@@ -1,7 +1,7 @@
 import { useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import type { BrowserClient, CompositionSummary, WorkspaceSnapshot } from '../../src/browser.js';
-import { addBeside, closeView, dockView, groupNode, groupOf, moveTab, moveView, placeView, regions, resizeSplit, selectionScope, splitView, tabGroups, viewOrder, type LayoutNode, type LayoutTree, type Region } from '../../src/shell-layout.js';
+import { addBeside, closeView, dockView, groupNode, groupOf, moveTab, moveView, placeView, regions, resizeSplit, selectionScope, setViewProps, splitView, tabGroups, viewOrder, type LayoutNode, type LayoutTree, type Region } from '../../src/shell-layout.js';
 import type { Command, CommandGroup } from '../commands.js';
 import { Icon } from '../icons.js';
 import { registry } from '../registry.js';
@@ -11,7 +11,7 @@ import { AgentColumn, Bar, Digest, Evidence, Interruption, waiting } from './lay
 import { openRun, runFirstLine, RunView, SourceLine } from './facts.js';
 import { ActionForm } from './action-form.js';
 import { CommandPane } from '../console.js';
-import { PlotsPane, SessionPane, VariablesPane, type Prepared } from '../notebook.js';
+import { FormSwitch, PlotsPane, SessionPane, VariablesPane, type NotebookForm, type Prepared } from '../notebook.js';
 import { addNotebook, addObject, canExplore, explorableTable, languageNames, loadTable, notebookComponent, notebookView, objectComponent, projectPath, scriptLanguage, scriptPrepared, sessionComponents, type Language } from '../explore.js';
 import { ObjectView } from '../object-view.js';
 import { ExploreIn } from '../explore-in.js';
@@ -170,7 +170,7 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
     const notebook = layout.views.find(v => v.component === notebookComponent)?.id;
     if (!notebook) {
       const view = byId.get(viewId), now = treeNow(), ready = view && now && placeView(now, view, newId);
-      const next = ready && addBeside(ready, notebookView('notebook') as never, viewId, 'bottom', newId);
+      const next = ready && addBeside(ready, notebookView('notebook', 'console') as never, viewId, 'bottom', newId);
       if (allowed('composition.apply') && next) await writeLayout(next);
     } else {
       const group = groupOf(root, notebook);
@@ -180,6 +180,14 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
     runs.current = sent.catch(() => {});
     await sent.catch(refusal);
   };
+  // The Notebook's form is the person's choice, saved with the page; this tab shows it at once.
+  const [forms, setForms] = useState<Record<string, NotebookForm>>({});
+  useEffect(() => setForms({}), [layout.version]);
+  function chooseForm(viewId: string, form: NotebookForm) {
+    setForms(f => ({ ...f, [viewId]: form }));
+    const now = treeNow(), next = now && setViewProps(now, viewId, { form });
+    if (next && allowed('composition.apply')) void writeLayout(next);
+  }
   const shellAbove = useContext(ShellContext), runnable = !process && !!tree && canExplore(snapshot);
   const shellHere = useMemo<ShellServices | undefined>(() => runnable ? { ...shellAbove, runCode: run => runFromScript.current(run) } : shellAbove, [shellAbove, runnable]);
   // What reaches a value waits in the Notebook's line, for the person to build on and run.
@@ -271,7 +279,10 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
     if (view.component === 'rho.console') return <CommandPane client={client} snapshot={snapshot} />;
     if (view.component === sessionComponents.variables) return <VariablesPane client={client} snapshot={snapshot} onObject={openObject} />;
     if (view.component === sessionComponents.plots) return <PlotsPane client={client} snapshot={snapshot} />;
-    if (view.component === notebookComponent) return <SessionPane beside={{ variables: layout.views.some(v => v.component === sessionComponents.variables), plots: layout.views.some(v => v.component === sessionComponents.plots) }} client={client} snapshot={snapshot} prepared={prepared} onTaken={() => setPrepared(null)} onConversation={onConversation} onObject={openObject} />;
+    if (view.component === notebookComponent) {
+      const form: NotebookForm = forms[id] ?? (view.props.form === 'console' ? 'console' : 'notebook');
+      return <>{isVisible && createPortal(<FormSwitch form={form} onForm={f => chooseForm(id, f)} />, ownHeader(id), 'form-' + id)}<SessionPane form={form} beside={{ variables: layout.views.some(v => v.component === sessionComponents.variables), plots: layout.views.some(v => v.component === sessionComponents.plots) }} client={client} snapshot={snapshot} prepared={prepared} onTaken={() => setPrepared(null)} onConversation={onConversation} onObject={openObject} /></>;
+    }
     if (view.component === objectComponent) {
       const language = view.props.language === 'python' ? 'python' : 'r', name = String(view.props.name ?? title(view));
       return <ObjectView client={client} snapshot={snapshot} language={language} name={name} onUse={expression => useInNotebook(language, expression, name)} />;

@@ -6,7 +6,7 @@
 import type { Language } from './explore-code.js';
 
 export interface Statement { from: number; to: number; code: string }
-interface Logical { from: number; to: number; indent: number; head: string; tail: string; blank: boolean }
+interface Logical { from: number; to: number; indent: number; head: string; tail: string; blank: boolean; open?: boolean }
 
 // R continues a line that ends with an operator, or with a header (`function (x)`, `if (a)`)
 // whose body is on the next line.
@@ -56,7 +56,7 @@ function logicalLines(text: string, language: Language): Logical[] {
     // A single-quoted string ends at its line in Python; R strings may run over lines.
     if (quote.length === 1 && language === 'python') quote = '';
     const open = depth > 0 || !!quote || (language === 'python' ? current.tail.endsWith('\\') : rContinues(current.tail.trim()));
-    if (!open || i === lines.length - 1) { out.push(current); current = null; }
+    if (!open || i === lines.length - 1) { out.push({ ...current, open }); current = null; }
   }
   return out;
 }
@@ -101,6 +101,20 @@ export function statementAt(text: string, line: number, language: Language): { s
   if (!at) return { statement: null, next };
   const code = lines.slice(at.from - 1, at.to).join('\n');
   return { statement: { from: at.from, to: at.to, code: language === 'python' ? dedent(code) : code }, next };
+}
+// Whether code typed at a console prompt is still unfinished, so Enter goes on to another line
+// instead of running it: an open bracket or string, a line ending in an operator, or in Python
+// a block that has not yet had its empty line.
+export function unfinished(code: string, language: Language) {
+  if (!code.trim()) return false;
+  const logical = logicalLines(code.replace(/\n+$/, ''), language), last = logical.filter(l => !l.blank).at(-1);
+  if (!last) return false;
+  if (last.open) return true;
+  if (language !== 'python' || /\n[ \t]*$/.test(code)) return false;
+  const all = statements(code, language), final = all.at(-1);
+  if (!final) return false;
+  const lines = code.split('\n').slice(final.from - 1, final.to);
+  return lines.some(l => /:\s*(#.*)?$/.test(l)) && lines.length >= 1 && /:\s*(#.*)?$|^\s+\S/.test(lines.at(-1)!);
 }
 // Selected text runs as it is; Python's is moved left so an indented part of a block runs.
 export const selectionCode = (code: string, language: Language) => language === 'python' ? dedent(code) : code;

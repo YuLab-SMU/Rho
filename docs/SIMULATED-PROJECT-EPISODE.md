@@ -1209,3 +1209,62 @@ screenshots at 1440 × 900, 760 and 390 px.
   coefficients until Show all.
 - **Arrange views** stayed open while other parts of the page were clicked.
 - No independent person has used the layout.
+
+## Two forms of the Notebook
+
+The person found the Notebook in the four panes not a good experience: a notebook and the RStudio
+console feel different, and the Notebook should take either form and switch between them. The same
+`quad` project and service were used, with the four panes of Workspace 4 and a new Workspace 5.
+
+### What was built
+
+- **Notebook | Console** in the Notebook's header, and in the Notebook page's heading. A Studio
+  view saves the form with its page (`props.form`, one conditional layout write, so Undo reverts
+  it); the page keeps it in this browser. A Notebook placed under a script by running one of its
+  lines starts as a console.
+- **The console** shows the cells as one transcript (prompt, code, output) with the prompt under
+  it, as described in [Frontend](FRONTEND.md). `unfinished` in `src/statements.ts` decides whether
+  Enter runs the code or goes on to another line.
+
+### What the screens showed
+
+- **Workspace 4 as a console.** The script's earlier lines read as `> nrow(complete)` with their
+  output; `plot(…)` over two lines took `>` and `+`. Every plot line read "Plot 1", numbered
+  within its cell; plots are now numbered as the Plots view counts them.
+- **Typing.** `for (i in 1:3) {`, Enter, `print(i * 10)`, Enter, `}`, Enter first ran
+  `rint(i * 10)` and `p}`: the caret was placed a frame after the new text, and the next keys
+  landed before it. The caret is now placed as the text changes; the same keys gave `[1] 10`,
+  `[1] 20`, `[1] 30`. A second ↑ moved within the recalled code instead of going further back; a
+  command brought back and unchanged now moves through the history from any line. A closing
+  `}` on an empty line now steps back.
+- **Python, a long cell and Esc.** The chip switched to Python; `for v in [1, 2]:` took `...`
+  and four spaces and ran after the empty line, printing 3 and 6, below a "Python session
+  started" mark. A loop printing every half second streamed into the transcript with "Running
+  2.0 s"; Esc left "Interrupted by you" after `tick 5`. Running was shown in the bar, under the
+  cell and at the prompt; the prompt's was removed.
+- **Saved and cleared.** After a reload the view was still a console. Ctrl+L left "Earlier
+  output is cleared from this view; the sessions keep their values", and Show it again brought
+  back 59 cells.
+- **Someone else's cell.** A cell sent through the operator's connection read
+  `# An Agent · Look at how ozone is distributed` above its prompt, with the histogram under it
+  on the Notebook page, which has no Plots view. Its second statement first took `+`; each
+  statement now starts at the prompt.
+- **A new page.** On Workspace 5, ⌘+Enter on `fit <- …` put the Notebook under the script as a
+  console and kept the keyboard in the script. At 390 px, R's columns kept their places and
+  scroll sideways.
+
+### Verification
+
+- `test/statements.test.mjs`: Enter in finished and unfinished R and Python. The Rho suite,
+  the contract check and the seven browser acceptances in Status passed; the graph acceptance
+  first timed out waiting for a table preview and passed when run again alone.
+- The flows above were run in a real browser at 1440 and 390 px; the screenshots were read.
+
+### Left open
+
+- **An Agent's cells** were stood in for by the operator's connection; no conversation ran here.
+- **A cell's code and its output** are not interleaved statement by statement as R's console
+  echoes them: a selection of two statements shows both, then all they printed.
+- **Completion** (Tab) is not there, and help (`?lm`) was not tried.
+- **Plot numbers** count all plots of the live sessions; the Plots view counts its 24 newest.
+- No independent person has used either form.

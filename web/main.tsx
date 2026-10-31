@@ -13,6 +13,7 @@ import { compositionName, defaultWorkspace, fileKey, openInWorkspace, processCom
 import { Icon } from './icons.js';
 import { addNotebook, addObject, addSessionView, canExplore, createWorkspace, loadTable, notebookOn, scriptLanguage, scriptPrepared, sessionViewOn, type Language, type SessionView } from './explore.js';
 import { PageAdd } from './page-add.js';
+import { FormSwitch, savedForm, saveForm } from './notebook-form.js';
 import type { Prepared } from './notebook.js';
 import { CommandPalette, type Command, type CommandGroup } from './commands.js';
 import { PluginCatalog, PluginNavigation } from './plugins.js';
@@ -118,6 +119,7 @@ function App() {
   const [layoutCommands, setLayoutCommands] = useState<CommandGroup | null>(null);
   // Code waiting for a Notebook's line, kept while the person moves to the page it opens on.
   const [prepared, setPrepared] = useState<Prepared | null>(null);
+  const [notebookForm, setNotebookForm] = useState(savedForm);
   // A view may place its own section (for example Changes) at the top of the context panel.
   const [contextSlot, setContextSlot] = useState<HTMLDivElement | null>(null);
   const [reconnect, setReconnect] = useState(0), [commands, setCommands] = useState(false), [confirming, setConfirming] = useState(false);
@@ -611,8 +613,8 @@ function App() {
               : section === 'review' ? <Suspense fallback={<Loading text="Opening review…" />}><Reviews key={snapshot.project.id+':'+connection.principalId} client={client!} snapshot={snapshot} principalId={connection.principalId} annotationId={reviewId} initialAnchor={reviewAnchor} onGraph={ref=>{showSection('graph');setGraphResource(ref);}} onSent={id => { setSelectedConversation(id); setAgentOpen(true); }} /></Suspense>
               : section === 'console' ? <section className="project-page console-section" aria-labelledby="console-title"><header className="page-heading"><div><h1 id="console-title">Console</h1></div></header>
                   <Suspense fallback={<Loading text="Opening the Console…" />}><ConsolePage client={client!} snapshot={snapshot} files={files} focusTurn={consoleTurn} onPath={showPath} onConversation={id => { setSelectedConversation(id); setAgentOpen(true); setContext(false); }} /></Suspense></section>
-              : section === 'notebook' ? <section className="project-page notebook-section" aria-labelledby="notebook-title"><header className="page-heading"><div><h1 id="notebook-title">Notebook</h1><p>Live R and Python sessions you share with the Agent</p></div></header>
-                  <Suspense fallback={<Loading text="Opening the Notebook…" />}><NotebookPage client={client!} snapshot={snapshot} onConversation={openConversation} onObject={openObject} /></Suspense></section>
+              : section === 'notebook' ? <section className="project-page notebook-section" aria-labelledby="notebook-title"><header className="page-heading"><div><h1 id="notebook-title">Notebook</h1><p>Live R and Python sessions you share with the Agent</p></div><FormSwitch form={notebookForm} onForm={form => { setNotebookForm(form); saveForm(form); }} /></header>
+                  <Suspense fallback={<Loading text="Opening the Notebook…" />}><NotebookPage client={client!} snapshot={snapshot} onConversation={openConversation} onObject={openObject} form={notebookForm} /></Suspense></section>
               : section === 'graph' ? <Suspense fallback={<Loading text="Opening the graph…" />}><WorkGraph initialResource={graphResource} client={client!} snapshot={snapshot} files={files} agentNow={agentNow} following={following} principalId={connection.principalId} notesText={notes.text}
                   onFollow={() => follow()} onStopFollowing={() => setFollowing(false)} onStudio={layout} workspace={sharedWorkspace} onAbout={about} onAgent={id => { if (id) setSelectedConversation(id); setAgentOpen(true); setContext(false); }} /></Suspense>
               : <Suspense fallback={<Loading text="Opening project…" />}><ProjectOverview key={project.id} section={section} notesText={notes.text} workspace={sharedWorkspace} onExplore={exploreFile} category={category} files={files} sources={sources} onFile={showFile} linked={!!link} onPath={showPath} onNewConversation={() => talk()} onSection={showSection} onConsole={showConsole} onAgent={id => { if (id) setSelectedConversation(id); setAgentOpen(true); }} client={client!} onProjectChanged={next => { setProject(next); setProjects(list => list.map(p => p.id === next.id ? next : p)); }} project={project} snapshot={snapshot} onLayout={layout} onOpened={(id, view) => { layout(id, view); reread(); }} /></Suspense>}
