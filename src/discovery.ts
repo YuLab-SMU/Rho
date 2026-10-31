@@ -11,6 +11,7 @@ const applicationEffects: Record<string, string> = Object.fromEntries([
   ...['workspace.save', 'workspace.export', 'workspace.restore', 'action.export'].map(m => [m, 'file']),
   ...['action.retry', 'action.cancel'].map(m => [m, 'native']),
 ]);
+const rhoSummary = 'The project in Rho: its folder\'s entries, managed runs, the views on the person\'s screen and what is selected in them, the task map, and which plugins are on.';
 const metadata = new Set(['capability.index', 'capability.resolve', 'binding.activity.append', 'task.routing.put', 'feedback.submit', 'view.observe', 'view.observations.read']);
 // A projection of the existing selected descriptors and public contracts. No
 // second capability registry, persisted cache or invalidation daemon is created.
@@ -54,7 +55,15 @@ export class Discovery {
     const catalog = await this.snapshot(), q = input.query;
     const entries = catalog.entries.filter(e => (!q.owner || e.owner === q.owner) && (!q.search || (e.id + ' ' + e.summary).toLowerCase().includes(q.search.toLowerCase())));
     if (!q.owner && !q.search) {
-      const groups = [...new Set<string>(entries.map(e => e.owner))].sort().map(owner => ({ owner, operations: entries.filter(e => e.owner === owner).length }));
+      // Each owner says in a line what it is, so an Agent can choose one without listing them all.
+      const about = (owner: string) => {
+        if (owner === 'rho') return { name: 'Rho', summary: rhoSummary };
+        const presentation = (this.plugins.descriptor(owner) as any)?.presentation;
+        if (!presentation?.description) return {};
+        const first = String(presentation.description).split(/(?<=\.)\s/)[0]!;
+        return { name: String(presentation.displayName ?? owner).slice(0, 64), summary: Array.from(first).slice(0, 240).join('') };
+      };
+      const groups = [...new Set<string>(entries.map(e => e.owner))].sort().map(owner => ({ owner, operations: entries.filter(e => e.owner === owner).length, ...about(owner) }));
       const result = { catalogRef: catalog.catalogRef, authorizationRef: catalog.authorizationRef, scopeHint: catalog.scopeHint, groups, entries: [], next: null, complete: true };
       requireThat(!q.cursor && q.after === 0, 'invalid', 'Owner discovery has no continuation. Select an owner.');
       requireThat(size(result) <= q.maxBytes, 'limit', 'Owner index exceeds this page budget.', { requiredBytes: size(result) });
@@ -80,25 +89,29 @@ export class Discovery {
     requireThat(input.catalogRef === catalog.catalogRef, 'stale', 'Catalog or authorization changed. Read the current small index; immutable available bodies can still be reused.');
     const selected = [...new Set<string>(input.selected)], references: string[] = [];
     for (const id of selected) {
-      const entry = catalog.entries.find(e => e.id === id); requireThat(entry, 'scope', 'Selected operation is not currently available to this role.');
+      const entry = catalog.entries.find(e => e.id === id); requireThat(entry, 'scope', `${id} is not in this role's current index. Select operations by their id as the index lists them, such as ${catalog.entries[0]?.id ?? 'project.entries'}.`, { selected: id });
       for (const ref of [...entry.skillRefs, entry.contractRef]) if (!references.includes(ref)) references.push(ref);
     }
-    const known = new Set(input.knownRefs), omittedKnownRefs = references.filter(ref => known.has(ref)), remaining = references.filter(ref => !known.has(ref));
-    const bundleRef = digest(canonical([catalog.catalogRef, selected, references])), pin = digest(canonical([this.principal.id, bundleRef, input.knownRefs, input.maxBytes]));
+    // A page's position counts in the bundle's own list, and knownRefs only leave out what the
+    // caller holds: a continuation that names the bodies the earlier pages gave is still the same one.
+    const known = new Set(input.knownRefs), omittedKnownRefs = references.filter(ref => known.has(ref));
+    const bundleRef = digest(canonical([catalog.catalogRef, selected, references])), pin = digest(canonical([this.principal.id, bundleRef]));
     let offset = 0;
-    if (input.cursor) { const [position, identity] = input.cursor.split(':'); requireThat(identity === pin, 'stale', 'Resolved bundle, authorization or query changed.'); offset = Number(position); }
-    requireThat(Number.isSafeInteger(offset) && offset >= 0 && offset <= remaining.length, 'invalid', 'Resolved page position is invalid.');
+    if (input.cursor) { const [position, identity] = input.cursor.split(':'); requireThat(identity === pin, 'stale', 'The selected bundle or authorization changed since that page. Resolve again without its cursor.'); offset = Number(position); }
+    requireThat(Number.isSafeInteger(offset) && offset >= 0 && offset <= references.length, 'invalid', 'Resolved page position is invalid.');
     const result: any = { bundleRef, items: [], omittedKnownRefs, next: null, complete: true, requiredBytes: null };
-    for (const ref of remaining.slice(offset)) {
-      const item = catalog.objects.get(ref), trial = { ...result, items: [...result.items, item], next: (offset + result.items.length + 1) + ':' + pin, complete: false };
+    let at = offset;
+    for (; at < references.length; at++) {
+      if (known.has(references[at]!)) continue;
+      const item = catalog.objects.get(references[at]!), trial = { ...result, items: [...result.items, item], next: (at + 1) + ':' + pin, complete: false };
       if (result.items.length >= 32 || size(trial) > input.maxBytes) break;
       result.items.push(item);
     }
-    result.complete = offset + result.items.length === remaining.length;
+    result.complete = at === references.length;
     if (!result.complete) {
-      result.next = (offset + result.items.length) + ':' + pin;
+      result.next = at + ':' + pin;
       if (!result.items.length) {
-        result.requiredBytes = size({ ...result, items: [catalog.objects.get(remaining[offset]!)], next: (offset + 1) + ':' + pin });
+        result.requiredBytes = size({ ...result, items: [catalog.objects.get(references[at]!)], next: (at + 1) + ':' + pin });
         requireThat(result.requiredBytes <= 65536, 'limit', 'One complete contract exceeds the selected 64 KiB profile. Preserve it; execution is unavailable.', { requiredBytes: result.requiredBytes });
       }
     }

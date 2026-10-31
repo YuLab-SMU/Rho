@@ -744,7 +744,9 @@ The static `protocol/index.json` is an index of hashed operation files.
 
 Known references are omitted only for currently selected/available immutable
 bodies. The MCP adapter advertises only references it actually retained complete.
-After model context loss, omit missing knownRefs to get their bodies again. A new MCP
+After model context loss, omit missing knownRefs to get their bodies again. A page's
+`next` counts in the selection's own list, so continuing it with knownRefs that now name
+the bodies earlier pages gave is the same continuation, not a stale one. A new MCP
 process under the same private connection keeps the bodies that connection retained,
 so the next message of one conversation begins with them rather than refetching;
 another connection, an evicted body, a body over the budget and a superseded contract

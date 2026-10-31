@@ -65,5 +65,5 @@
     ],
     "type": "object"
   },
-  "description": null
+  "description": "One skill bound to a server, as its file reads now: how that server is used. Read it before naming a place there or running work on it."
 }

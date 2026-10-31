@@ -24,7 +24,7 @@ test('default progressive MCP pages whole contracts, reuses knownRefs, keeps res
  const file=path.join(root,'business.private.json');await service.agentConnection(p.id,'business',file,['document.read'],undefined);
  const calls=[],dispatch=service.dispatch.bind(service);service.dispatch=async(request,principal,ref)=>{if(principal.profile)calls.push({method:request.method,bodyBytes:Buffer.byteLength(JSON.stringify(request.body)),contractRef:ref??null});return dispatch(request,principal,ref);};
  client=await connect(file,measures);const tools=await client.listTools();assert.deepEqual(tools.tools.map(t=>t.name),['rho_index','rho_resolve','rho_call','rho_read']);assert.ok(JSON.stringify(tools).length<8000);assert.equal(calls.length,0);
- const groups=await call(client,'rho_index',{});assert.deepEqual(groups.value.groups,[{owner:'documents',operations:1}]);assert.deepEqual(groups.value.entries,[]);
+ const groups=await call(client,'rho_index',{});assert.deepEqual(groups.value.groups,[{owner:'documents',operations:1,name:'Documents',summary:'Claude Code and you work on the same code and notes.'}]);assert.deepEqual(groups.value.entries,[]);
  let index=await call(client,'rho_index',{owner:'documents',cursor:null,maxBytes:16384});assert.equal(index.ok,true);assert.deepEqual(index.value.entries.map(e=>e.id),['document.read']);
  const oldAuthorization=index.value.authorizationRef;const entry=index.value.entries[0],invoke={operation:'document.read',contractRef:entry.contractRef,input:{documentId:doc.id}};
  assert.equal((await call(client,'rho_call',invoke)).error.kind,'condition');assert.equal(calls.some(c=>c.method==='document.read'),false);
@@ -47,6 +47,14 @@ test('default progressive MCP pages whole contracts, reuses knownRefs, keeps res
  assert.deepEqual(viaMcp.value,await admin.call('document.read',{projectId:p.id,documentId:doc.id}));
  const known=await call(client,'rho_resolve',{catalogRef:index.value.catalogRef,selected:['document.read'],knownRefs:[...objects.keys()],cursor:null,maxBytes:1024});assert.equal(known.value.items.length,0);assert.equal(known.value.omittedKnownRefs.length,objects.size);
  const refetched=await call(client,'rho_resolve',{catalogRef:index.value.catalogRef,selected:['document.read'],knownRefs:[],cursor:null,maxBytes:65536});assert.equal(refetched.value.items.length,objects.size);
+ // Continuing a page while naming the bodies earlier pages gave is the same continuation: nothing is sent twice.
+ let part=await call(client,'rho_resolve',{catalogRef:index.value.catalogRef,selected:['document.read'],knownRefs:[],cursor:null,maxBytes:1024});const got=[];let continued=0;
+ for(let n=0;n<10&&!part.value.complete;n++){
+   for(const o of part.value.items){assert.ok(!got.includes(o.ref));got.push(o.ref);}
+   part=await call(client,'rho_resolve',{catalogRef:index.value.catalogRef,selected:['document.read'],knownRefs:[...got],cursor:part.value.next,maxBytes:Math.max(1024,part.value.requiredBytes??0)});assert.equal(part.ok,true,JSON.stringify(part.error));if(got.length)continued++;
+ }
+ for(const o of part.value.items){assert.ok(!got.includes(o.ref));got.push(o.ref);}
+ assert.equal(part.value.complete,true);assert.ok(continued>0);assert.deepEqual(new Set(got),new Set(objects.keys()));
  const count=calls.length;assert.equal((await call(client,'rho_resolve',{catalogRef:index.value.catalogRef,selected:Array(17).fill('document.read'),knownRefs:[],cursor:null,maxBytes:65536})).error.kind,'invalid');assert.equal(calls.length,count);
  assert.equal((await call(client,'rho_call',{...invoke,input:{documentId:doc.id,projectId:'other'}})).error.kind,'invalid');
  await admin.call('capability.configure',{projectId:p.id,expectedVersion:0,changeId:'off',enabled:['files','tables','agent']});

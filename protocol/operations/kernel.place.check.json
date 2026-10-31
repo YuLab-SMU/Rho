@@ -147,5 +147,5 @@
     ],
     "type": "object"
   },
-  "description": null
+  "description": "Connect to a place on a server and report its system, machine, the folder after its setup lines, and R and Python there. Runs the place's setup lines; starts no session."
 }

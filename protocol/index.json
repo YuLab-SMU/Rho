@@ -149,8 +149,8 @@
     "capability.index": {
       "summary": "Read a small role-narrowed index of currently authorized, enabled operations and immutable Skill/contract references.",
       "path": "operations/capability.index.json",
-      "bytes": 5135,
-      "sha256": "3e5a439bdb628fdfcb8514866574c71829a3992a5846b25ac967705534ccfc3f"
+      "bytes": 5337,
+      "sha256": "5ca63f5cd2381b7e7b3c7c2a60d15fb25937e60b88e69582cc107fd88df08b50"
     },
     "capability.list": {
       "summary": "Read registered actions and components. Does not start R or a Core Host.",
@@ -441,34 +441,34 @@
       "sha256": "63316d82629e0308a6e1fbf312a90bd604f048e5aa0143227804b81a280f015d"
     },
     "kernel.place.check": {
-      "summary": "kernel.place.check",
+      "summary": "Connect to a place on a server and report its system, machine, the folder after its setup lines, and R and Python there. Runs the place's setup lines; starts no session.",
       "path": "operations/kernel.place.check.json",
-      "bytes": 3022,
-      "sha256": "00528608bab6ce68c35d0feb188792310541225f9aab02847d1d7471c33169a1"
+      "bytes": 3189,
+      "sha256": "90fbf4656ca73b7266995c758123e4b592f74925576ecf096db5433a5cd2e920"
     },
     "kernel.place.copy": {
-      "summary": "kernel.place.copy",
+      "summary": "Copy one file within a place's folder on its server into the project under remote/<place>/, with its size, time and digest, so it can be opened here. Large files stay on the server.",
       "path": "operations/kernel.place.copy.json",
-      "bytes": 1923,
-      "sha256": "7de3981be683edec03c68abc728b944934cbe363113418699d5c3656ca515126"
+      "bytes": 2102,
+      "sha256": "c879d1bc37b29ce44281104c3ee913ffac4e56fe49cfb7bb2998061713d12cf0"
     },
     "kernel.place.list": {
-      "summary": "kernel.place.list",
+      "summary": "The files in a folder within a place's folder on its server, folders first, with sizes and times. Paths leading out of the place's folder, links among them, are refused.",
       "path": "operations/kernel.place.list.json",
-      "bytes": 2106,
-      "sha256": "a6576401df413a29fd23096cd90e1380805c693587399703b84baaa4119be4c9"
+      "bytes": 2273,
+      "sha256": "806ba4b1089066130bbc11568c78494e6b04b626279a4e00cdb087fd76c88e5c"
     },
     "kernel.place.set": {
-      "summary": "kernel.place.set",
+      "summary": "Name a place on a remote server for live sessions (reached through serverctl or ssh, with a folder and setup lines), change or remove one, or choose where R or Python starts next. Follow the server's own skill (kernel.servers) for its folder and setup.",
       "path": "operations/kernel.place.set.json",
-      "bytes": 8744,
-      "sha256": "6e7dd90d7df3998fec1949510bfb21d539f6fdcc77bfcf7382b2c5ba5aa84f9e"
+      "bytes": 8994,
+      "sha256": "7cfb22601056eb94d1b516b2929ff2538b5af253b8048ded6f8aac5b7689bb47"
     },
     "kernel.places": {
-      "summary": "kernel.places",
+      "summary": "Where live sessions run: this machine and the places named on the person's remote servers (a server, a folder there and the setup lines run before a session, such as module load), where each language's next session starts, and the files copied from them into the project.",
       "path": "operations/kernel.places.json",
-      "bytes": 7282,
-      "sha256": "17a14240bda05aa7d07b3c38b9a2ef0659163c24116249982e10df672f1455b6"
+      "bytes": 7551,
+      "sha256": "3f47c6863846fe08a6e713b89ee204da9bfe9f95b6d230fb1688c95bb828c454"
     },
     "kernel.plot": {
       "summary": "One plot a cell kept, as PNG bytes.",
@@ -483,22 +483,22 @@
       "sha256": "ac6e56ffef48cd07964fee7f4c725c0c347557d617ff8c8880a70e97a515e887"
     },
     "kernel.run": {
-      "summary": "Run a cell of R or Python in the project's live session of that language, which the Agent and the person share: what one cell defines stays for the next. Starts the session when none is live. The same changeId from the same caller returns the same cell and never runs it twice. waitMs waits for the cell to end.",
+      "summary": "Run a cell of R or Python in the project's live session of that language, which the Agent and the person share: what one cell defines stays for the next. Starts the session when none is live, on this machine or at a place on one of the person's servers (place, or where kernel.places says that language runs next). The same changeId from the same caller returns the same cell and never runs it twice. waitMs waits for the cell to end.",
       "path": "operations/kernel.run.json",
-      "bytes": 12087,
-      "sha256": "e11747a330c96cfc32296074f77cef38dc3f55115039e29b8b0574401c0c63cb"
+      "bytes": 12210,
+      "sha256": "5886c1ad02346ab653b9d36ac47259df6ad75db7313b5fd9e5ff0d247cae2174"
     },
     "kernel.server.skill": {
-      "summary": "kernel.server.skill",
+      "summary": "One skill bound to a server, as its file reads now: how that server is used. Read it before naming a place there or running work on it.",
       "path": "operations/kernel.server.skill.json",
-      "bytes": 1305,
-      "sha256": "ac2b9402bfd746c6c19e7b377ceb816126bfa2a99864333c292fe38a7fabd283"
+      "bytes": 1438,
+      "sha256": "66ab767f0a3b8bcc3fc59f6332b3529c0fe8509b4f0a5c4c14f49b47d7362a6d"
     },
     "kernel.servers": {
-      "summary": "kernel.servers",
+      "summary": "The remote servers the person manages with serverctl, read from its registry now (no server is connected to), and the skills bound to each: how that server is used, its modules, data and limits.",
       "path": "operations/kernel.servers.json",
-      "bytes": 3110,
-      "sha256": "d48c7035d3127c5e3ec5f358cbed300d8829235a4ed2032acf59005f72c8730c"
+      "bytes": 3302,
+      "sha256": "1101a46d0d02626c721b6f2a645a82774736d1aeef6c79aace71816c5a8315e4"
     },
     "kernel.stop": {
       "summary": "Person at this machine only: end one live session. Its values are gone, the running cell ends with an error and waiting cells are not run. A session that has ended is returned unchanged.",

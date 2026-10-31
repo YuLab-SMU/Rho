@@ -200,6 +200,16 @@ waits on the person's choice. The serverctl on this machine's path is older than
 ("schema 8 is newer than supported 5"), and Rho shows that. A session left running after a drop,
 scheduler compute nodes and the real lab cluster were not exercised.
 
+[A study on a lab server](REMOTE-EPISODE.md#a-study-on-a-lab-server): the pa14-qs case in
+Rho-cases asks one paper's BixBench study in steps of an Agent with Rho's tools only, its data
+on a disposable server reached through serverctl with its own skill. Its first run spent 15 of
+23 calls finding operations and reported the place's folder missing while a session ran in it.
+The protocol now describes the server operations, the first index summarizes each owner, a
+resolve continuation may add knownRefs, and the kernel looks for the folder after the setup
+lines. Steps 1 to 3 then found the server in five calls each and shared one live R session there
+(graded 4/5, 6/11, 0/7: analysis choices and, in step 3, stored results that the Agent showed
+do not come from the counts). The Overview does not count Notebook cells as work (open).
+
 ## Existing application
 
 - Projects opens selected folders and manages finite source folders. Sources counts
@@ -242,16 +252,13 @@ checks still held the 64-method limit and the plugin count, and the Skill's veri
 command was not an application script; corrected, Rho 261/261 and Plugins 132/132. The
 exploring pass first failed Rho 263/264, the Studio shell importing a module outside its
 allowed set, and ui:u2 also matched the New workspace row; corrected, Rho 264/264 and Plugins 132/132.
-The servers' skills pass records Rho 271/274 and Plugins 145/145 in the [ledger](VERIFICATION.json):
-in three full runs (272, 272, 271) the MCP v2 test was cancelled at its 30 s limit each time,
-the Notebook test failed twice (the error read once: cleanup removing `.rho`, `ENOTEMPTY`), and
-the same cleanup failed the answer-decisions and an ACP permission test once each; each passed
-alone, the Notebook three times. The contract check passed. The remote sessions pass recorded Rho 272/274 and Plugins 144/144:
-the MCP v2 test was cancelled at its 30 s limit and a Codex restart test failed removing its
-`.rho/rho` folder in cleanup; both passed alone (20.8 s for MCP v2). An earlier full run lost an ACP
-permission test and the Notebook test to the same load and cleanup race; both passed alone and
-three times as files. The contract check and the same eight acceptances passed, and shell and
-interaction failed as before. The Data flow pass recorded Rho 273/274 and Plugins 141/141. The Sources pass recorded
+The lab study pass records Rho 272/274 and Plugins 146/146 in the [ledger](VERIFICATION.json),
+in two full runs of 272: in the first the MCP v2 test (its 30 s limit) and the Agent settings
+test failed, and both passed alone; the ledger run does not name its two. The contract check
+passed. The servers' skills
+pass recorded Rho 271/274 and Plugins 145/145, and the remote sessions pass Rho 272/274 and
+Plugins 144/144: the MCP v2 test at its 30 s limit and cleanup races (`.rho`, `ENOTEMPTY`) in
+the Notebook, answer-decisions, ACP permission and Codex restart tests, each passing alone. The Data flow pass recorded Rho 273/274 and Plugins 141/141. The Sources pass recorded
 Rho 268/269, Plugins unchanged at 134/134: the MCP v2 test was cancelled at its 30 s limit and passed alone in 18.1 s. The contract
 check and the sources, ui:u2, agent-canvas, graph, agent-page, agent-ui, review and person-files
 acceptances passed; ui:u2 first failed counting the Overview's 3-row previews among the grid's

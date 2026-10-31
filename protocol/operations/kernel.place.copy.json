@@ -88,5 +88,5 @@
     ],
     "type": "object"
   },
-  "description": null
+  "description": "Copy one file within a place's folder on its server into the project under remote/<place>/, with its size, time and digest, so it can be opened here. Large files stay on the server."
 }

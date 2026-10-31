@@ -132,5 +132,5 @@
     ],
     "type": "object"
   },
-  "description": null
+  "description": "The remote servers the person manages with serverctl, read from its registry now (no server is connected to), and the skills bound to each: how that server is used, its modules, data and limits."
 }

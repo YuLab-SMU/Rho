@@ -2,19 +2,19 @@
   "schemaVersion": 1,
   "checks": {
     "rho-tests": {
-      "command": "RHO_CORE_BINARY=<selected unchanged binary> npm test (npm run build && node --test test/*.test.mjs)",
-      "checkedAt": "2026-10-31T14:02:10+00:00",
+      "command": "node --test test/*.test.mjs",
+      "checkedAt": "2026-10-31T14:49:13.148Z",
       "exitCode": 1,
       "tests": 274,
-      "passing": 271,
+      "passing": 272,
       "passed": false
     },
     "plugin-tests": {
-      "command": "RHO_CORE_BINARY=<selected unchanged binary> npm test (node --test test/*.test.mjs)",
-      "checkedAt": "2026-10-31T13:58:40+00:00",
+      "command": "node --test test/*.test.mjs",
+      "checkedAt": "2026-10-31T14:49:36.441Z",
       "exitCode": 0,
-      "tests": 145,
-      "passing": 145,
+      "tests": 146,
+      "passing": 146,
       "passed": true
     }
   }

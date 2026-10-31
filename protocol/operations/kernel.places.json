@@ -277,5 +277,5 @@
     ],
     "type": "object"
   },
-  "description": null
+  "description": "Where live sessions run: this machine and the places named on the person's remote servers (a server, a folder there and the setup lines run before a session, such as module load), where each language's next session starts, and the files copied from them into the project."
 }

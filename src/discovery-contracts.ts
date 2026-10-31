@@ -398,5 +398,5 @@ Object.assign(discoverySchemas.IndexInput.properties.query.properties, {
 });
 discoverySchemas.IndexOutput.properties.groups = {
   type: 'array', maxItems: 32, items: { type: 'object', additionalProperties: false,
-    properties: { owner: { type: 'string' }, operations: { type: 'integer', minimum: 1 } }, required: ['owner', 'operations'] }
+    properties: { owner: { type: 'string' }, operations: { type: 'integer', minimum: 1 }, name: { type: 'string', maxLength: 64 }, summary: { type: 'string', maxLength: 240 } }, required: ['owner', 'operations'] }
 };

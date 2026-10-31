@@ -508,5 +508,5 @@
     ],
     "type": "object"
   },
-  "description": "Run a cell of R or Python in the project's live session of that language, which the Agent and the person share: what one cell defines stays for the next. Starts the session when none is live. The same changeId from the same caller returns the same cell and never runs it twice. waitMs waits for the cell to end."
+  "description": "Run a cell of R or Python in the project's live session of that language, which the Agent and the person share: what one cell defines stays for the next. Starts the session when none is live, on this machine or at a place on one of the person's servers (place, or where kernel.places says that language runs next). The same changeId from the same caller returns the same cell and never runs it twice. waitMs waits for the cell to end."
 }

@@ -204,6 +204,14 @@
             "operations": {
               "type": "integer",
               "minimum": 1
+            },
+            "name": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "summary": {
+              "type": "string",
+              "maxLength": 240
             }
           },
           "required": [

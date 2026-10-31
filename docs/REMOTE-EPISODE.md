@@ -264,3 +264,49 @@ races that pass alone (see [Status](STATUS.md)).
   places and reads a server's skill was not observed: its first command waits on the person.
 - The real cluster was not connected to.
 
+
+## A study on a lab server
+
+The request (2026-10-31, later): polish the use of servers with one paper's study as a stable
+case. The case is `pa14-qs` in Rho-cases, a local repository beside Rho: seven BixBench
+capsules from one PA14 quorum-sensing paper, asked in four steps, with all of the data on a
+disposable Debian server that stands for a lab's (R only after `module load R/4.2`, data
+read-only under `/srv/lab`, login notices on standard output). serverctl reaches it from a
+throwaway registry with the server's own skill bound to it. Each step is a new Claude Code
+with Rho's four tools only (Claude Opus 5.5, no shell, the default grant), graded with
+rho-bio-eval's checker; the case keeps each run's stream, grade, Rho's places and cells
+afterwards and the sources it ran.
+
+**Observed in the first run (step 1, 4/5).** The Agent read the skill, named a place through
+serverctl with the skill's folder and `mkdir -p` and `module load R/4.2` as setup lines, and ran
+two cells there. 15 of its 23 calls went to finding operations: the first index gave owners
+and counts only, and the seven server and place operations had no description in the
+protocol, so their summaries were their names and searches for `remote` found nothing. A
+resolve continued with knownRefs added was refused as stale. Its check said the folder was
+not on the server while the session then ran in it: the check looked before the setup lines
+that make it, and so did the session, which found it only because the check had made it.
+
+**What changed.**
+
+- The protocol describes `kernel.places`, `kernel.place.*`, `kernel.servers`,
+  `kernel.server.skill` and `kernel.run`'s place.
+- The first index gives each owner's name and the first sentence of its description.
+- A resolve page's position counts in the selection's own list; knownRefs only leave out what
+  the caller holds, so a continuation that names what earlier pages gave is the same one. An
+  unknown operation id is named in its refusal.
+- The kernel (Rho-plugins) looks for a place's folder after its setup lines, in the check and
+  in the session alike.
+
+**Run again.** Step 1: 4/5 in 11 to 12 calls instead of 23. Steps 1 to 3 in one project: each
+Agent found the server in five calls; steps 2 and 3 found step 1's place and ran in the same
+live R session there (13 cells, 49 values, six files written in the place's folder, one
+serverctl command). Grades 4/5, 6/11 and 0/7. The misses are analysis choices the Agents
+stated and the benchmark's units; in step 3 the Agent showed that the stored DESeq2 results do
+not come from the capsule's raw counts, answered from its own refit, and gave the stored
+files' values too, which match the gold. The Servers view showed the place through serverctl,
+its skill and the live session; the Overview said "No work yet", since it does not count
+Notebook cells (open).
+
+**Checks.** Rho-plugins 146/146, with a new test of a place whose setup lines make its folder
+(it fails on the old commands). Rho's discovery tests, with a continuation that adds knownRefs.
+Step 4 (KEGG enrichment) is not run: its reference downloads KEGG at run time.

@@ -3359,6 +3359,8 @@ export interface CapabilityIndexOutput {
   groups?: {
     owner: string;
     operations: number;
+    name?: string;
+    summary?: string;
   }[];
 }
 

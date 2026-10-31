@@ -335,5 +335,5 @@
     ],
     "type": "object"
   },
-  "description": null
+  "description": "Name a place on a remote server for live sessions (reached through serverctl or ssh, with a folder and setup lines), change or remove one, or choose where R or Python starts next. Follow the server's own skill (kernel.servers) for its folder and setup."
 }

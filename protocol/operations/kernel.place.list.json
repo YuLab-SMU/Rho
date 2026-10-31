@@ -100,5 +100,5 @@
     ],
     "type": "object"
   },
-  "description": null
+  "description": "The files in a folder within a place's folder on its server, folders first, with sizes and times. Paths leading out of the place's folder, links among them, are refused."
 }
