@@ -1,0 +1,326 @@
+{
+  "method": "kernel.place.set",
+  "inputSchema": {
+    "additionalProperties": false,
+    "minProperties": 1,
+    "properties": {
+      "projectId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "place": {
+        "additionalProperties": false,
+        "properties": {
+          "destination": {
+            "pattern": "^[A-Za-z0-9_.%+@:\\[\\]/][A-Za-z0-9_.%+@:\\[\\]/-]{0,254}$",
+            "type": "string"
+          },
+          "folder": {
+            "maxLength": 1024,
+            "pattern": "^(~|~/[^\\n\\u0000]*|/[^\\n\\u0000]*)$",
+            "type": "string"
+          },
+          "label": {
+            "maxLength": 80,
+            "type": "string"
+          },
+          "placeId": {
+            "pattern": "^(?!local$)[a-z][a-z0-9-]{0,31}$",
+            "type": "string"
+          },
+          "setup": {
+            "maxLength": 4096,
+            "type": "string"
+          }
+        },
+        "required": [
+          "placeId",
+          "destination",
+          "folder"
+        ],
+        "type": "object"
+      },
+      "remove": {
+        "pattern": "^(?!local$)[a-z][a-z0-9-]{0,31}$",
+        "type": "string"
+      },
+      "use": {
+        "additionalProperties": false,
+        "properties": {
+          "python": {
+            "pattern": "^[a-z][a-z0-9-]{0,31}$",
+            "type": "string"
+          },
+          "r": {
+            "pattern": "^[a-z][a-z0-9-]{0,31}$",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      }
+    },
+    "required": [
+      "projectId"
+    ],
+    "type": "object"
+  },
+  "outputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "copies": {
+        "items": {
+          "additionalProperties": false,
+          "properties": {
+            "by": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "bytes": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "copiedAt": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "modifiedAt": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "path": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "placeId": {
+              "pattern": "^(?!local$)[a-z][a-z0-9-]{0,31}$",
+              "type": "string"
+            },
+            "sha256": {
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
+            },
+            "to": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "placeId",
+            "path",
+            "to",
+            "bytes",
+            "modifiedAt",
+            "sha256",
+            "copiedAt",
+            "by"
+          ],
+          "type": "object"
+        },
+        "type": "array"
+      },
+      "places": {
+        "items": {
+          "additionalProperties": false,
+          "properties": {
+            "at": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "by": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "check": {
+              "anyOf": [
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "at": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "by": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "folder": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "host": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "jsonlite": {
+                      "anyOf": [
+                        {
+                          "type": "boolean"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "matplotlib": {
+                      "anyOf": [
+                        {
+                          "type": "boolean"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "ms": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "problem": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "python": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "r": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "system": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "at",
+                    "by",
+                    "ok",
+                    "ms",
+                    "system",
+                    "host",
+                    "folder",
+                    "r",
+                    "jsonlite",
+                    "python",
+                    "matplotlib",
+                    "problem"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "destination": {
+              "pattern": "^[A-Za-z0-9_.%+@:\\[\\]/][A-Za-z0-9_.%+@:\\[\\]/-]{0,254}$",
+              "type": "string"
+            },
+            "folder": {
+              "maxLength": 1024,
+              "pattern": "^(~|~/[^\\n\\u0000]*|/[^\\n\\u0000]*)$",
+              "type": "string"
+            },
+            "label": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "placeId": {
+              "pattern": "^(?!local$)[a-z][a-z0-9-]{0,31}$",
+              "type": "string"
+            },
+            "setup": {
+              "maxLength": 4096,
+              "type": "string"
+            }
+          },
+          "required": [
+            "placeId",
+            "label",
+            "destination",
+            "folder",
+            "setup",
+            "by",
+            "at",
+            "check"
+          ],
+          "type": "object"
+        },
+        "type": "array"
+      },
+      "use": {
+        "additionalProperties": false,
+        "properties": {
+          "python": {
+            "pattern": "^[a-z][a-z0-9-]{0,31}$",
+            "type": "string"
+          },
+          "r": {
+            "pattern": "^[a-z][a-z0-9-]{0,31}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "r",
+          "python"
+        ],
+        "type": "object"
+      }
+    },
+    "required": [
+      "places",
+      "use",
+      "copies"
+    ],
+    "type": "object"
+  },
+  "description": null
+}

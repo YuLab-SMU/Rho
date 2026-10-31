@@ -42,7 +42,7 @@ export interface NativeAdapterRegistration {
   proof: { kind: 'claude-code-init'; sessionId: string; clientVersion: string };
 }
 export const serviceLimits = { maxRequestBytes: 1024 * 1024, maxEventBytes: 65536, eventRetention: 256, maxSubscriptions: 8, maxQueue: 32, maxContexts: 128, maxBindings: 64, maxActivities: 256, maxContextBytes: 1024 * 1024, maxRetainedMetadataBytes: 32 * 1024 * 1024 };
-export interface ServiceConfig extends Partial<typeof serviceLimits>, Partial<typeof requestLimits>, PluginConfig { root: string; stateDir: string; coreBinary?: string; rscript: string; python?: string; port?: number; nativeFolders?: Partial<typeof nativeFolderLimits>; workspace?: Partial<typeof workspaceLimits>; interactions?: Partial<typeof interactionLimits>; taskMap?: Partial<typeof taskMapLimits>; browser?: Partial<typeof browserLimits>; webRoot?: string; agentNativeActivity?: Partial<typeof nativeActivityLimits>; presentationWitness?: Partial<typeof presentationWitnessLimits>; visibility?: Partial<typeof visibilityLimits>; agentDelivery?: Partial<typeof agentDeliveryLimits>; deliveryTransportTimeoutMs?: number; claude?: string; agentBackend?: ConversationConfig['backend']; claudeAcp?: ConversationConfig['claudeAcp']; codex?: string; codexAcp?: ConversationConfig['codexAcp']; conversations?: Partial<typeof conversationLimits>; describe?: Partial<typeof describeLimits>; modelsDev?: { url?: string; maxBytes?: number; timeoutMs?: number; refreshMs?: number; retryMs?: number }; evidence?: Partial<typeof evidenceExportLimits>; connect?: Partial<typeof connectLimits> }
+export interface ServiceConfig extends Partial<typeof serviceLimits>, Partial<typeof requestLimits>, PluginConfig { root: string; stateDir: string; coreBinary?: string; rscript: string; python?: string; ssh?: string; port?: number; nativeFolders?: Partial<typeof nativeFolderLimits>; workspace?: Partial<typeof workspaceLimits>; interactions?: Partial<typeof interactionLimits>; taskMap?: Partial<typeof taskMapLimits>; browser?: Partial<typeof browserLimits>; webRoot?: string; agentNativeActivity?: Partial<typeof nativeActivityLimits>; presentationWitness?: Partial<typeof presentationWitnessLimits>; visibility?: Partial<typeof visibilityLimits>; agentDelivery?: Partial<typeof agentDeliveryLimits>; deliveryTransportTimeoutMs?: number; claude?: string; agentBackend?: ConversationConfig['backend']; claudeAcp?: ConversationConfig['claudeAcp']; codex?: string; codexAcp?: ConversationConfig['codexAcp']; conversations?: Partial<typeof conversationLimits>; describe?: Partial<typeof describeLimits>; modelsDev?: { url?: string; maxBytes?: number; timeoutMs?: number; refreshMs?: number; retryMs?: number }; evidence?: Partial<typeof evidenceExportLimits>; connect?: Partial<typeof connectLimits> }
 const ajv = new Ajv({ allErrors: true, strict: false, allowUnionTypes: true });
 // The same timestamp check every published contract uses; an unknown format would be skipped silently.
 ajv.addFormat('date-time', { type: 'string', validate: isNativeTime });
@@ -674,7 +674,7 @@ export class RhoService {
         if (pending || this.closing) return;
         pending = setTimeout(() => { pending = undefined; void this.serial(p.id, () => this.emit(p, 'kernel.changed', p.id, localBrowserId)).catch(() => {}); }, 250);
       };
-      host = new KernelHost(p.root, { limits: this.config.kernel, rscript: this.bridge.rscript, python: this.config.python, onChange: changed });
+      host = new KernelHost(p.root, { limits: this.config.kernel, rscript: this.bridge.rscript, python: this.config.python, ssh: this.config.ssh, onChange: changed });
       this.kernels.set(p.id, host);
     }
     return host;
@@ -977,12 +977,19 @@ export class RhoService {
       if (method === 'kernel.stop') requireThat(principal.id === localBrowserId, 'unauthorized', 'Only the person at this machine ends a live session. Open Rho in a browser on this machine.');
       await capabilities.assertAvailable(method, principal);
       const host = this.kernelFor(p);
-      if (method === 'kernel.run') return host.run({ language: b.language, code: b.code, purpose: b.purpose, changeId: b.changeId, by: principal.id, waitMs: b.waitMs });
+      if (method === 'kernel.run') return host.run({ language: b.language, code: b.code, purpose: b.purpose, changeId: b.changeId, by: principal.id, waitMs: b.waitMs, place: b.place });
       if (method === 'kernel.read') return host.read(b.limit, b.cellId);
       if (method === 'kernel.inspect') return host.inspect({ language: b.language, name: b.name, path: b.path, offset: b.offset, limit: b.limit, sort: b.sort });
       if (method === 'kernel.plot') return host.plot(b.cellId, b.plot);
       if (method === 'kernel.interrupt') return host.interrupt(b.cellId, principal.id);
       if (method === 'kernel.stop') return host.stop(b.sessionId, principal.id);
+      // Places on servers: the person and their Agent name, check and choose them, and list and
+      // copy their files, each with the person's own ssh setup.
+      if (method === 'kernel.places') return host.places();
+      if (method === 'kernel.place.set') return host.setPlace({ place: b.place, remove: b.remove, use: b.use }, principal.id);
+      if (method === 'kernel.place.check') return host.check(b.placeId, principal.id);
+      if (method === 'kernel.place.list') return host.list(b.placeId, b.path ?? '');
+      if (method === 'kernel.place.copy') return host.copy(b.placeId, b.path, principal.id);
     }
     if (method === 'capability.index' || method === 'capability.resolve' || contractRef) {
       const route = await routing.read(), bindings = await readJson<any[]>(path.join(await this.dataDir(p), 'bindings.json'), []);

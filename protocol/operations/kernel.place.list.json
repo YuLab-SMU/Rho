@@ -1,0 +1,104 @@
+{
+  "method": "kernel.place.list",
+  "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "projectId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "path": {
+        "maxLength": 1024,
+        "type": "string"
+      },
+      "placeId": {
+        "pattern": "^(?!local$)[a-z][a-z0-9-]{0,31}$",
+        "type": "string"
+      }
+    },
+    "required": [
+      "projectId",
+      "placeId"
+    ],
+    "type": "object"
+  },
+  "outputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "cut": {
+        "type": "boolean"
+      },
+      "entries": {
+        "items": {
+          "additionalProperties": false,
+          "properties": {
+            "bytes": {
+              "minimum": 0,
+              "type": "number"
+            },
+            "kind": {
+              "enum": [
+                "folder",
+                "file",
+                "link",
+                "other"
+              ]
+            },
+            "modifiedAt": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "name": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "name",
+            "kind",
+            "bytes",
+            "modifiedAt"
+          ],
+          "type": "object"
+        },
+        "type": "array"
+      },
+      "folder": {
+        "type": "string"
+      },
+      "omitted": {
+        "minimum": 0,
+        "type": "integer"
+      },
+      "path": {
+        "type": "string"
+      },
+      "placeId": {
+        "pattern": "^(?!local$)[a-z][a-z0-9-]{0,31}$",
+        "type": "string"
+      },
+      "readAt": {
+        "minLength": 1,
+        "type": "string"
+      }
+    },
+    "required": [
+      "placeId",
+      "path",
+      "readAt",
+      "folder",
+      "entries",
+      "omitted",
+      "cut"
+    ],
+    "type": "object"
+  },
+  "description": null
+}

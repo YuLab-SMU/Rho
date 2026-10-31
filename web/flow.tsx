@@ -3,6 +3,7 @@ import type { BrowserClient, WorkspaceSnapshot } from '../src/browser.js';
 import { cellLabel, lanes, lineage, related, type Lineage, type LineageNode, type LineageStep } from '../src/lineage.js';
 import { Icon } from './icons.js';
 import { at, Code, languageName, languages, latestSessions, useAuthors, useKernel, usePlot, versionOf, type Cell, type Session } from './notebook.js';
+import { whereOf } from './servers.js';
 import './flow.css';
 
 type Language = Cell['language'];
@@ -10,8 +11,9 @@ type Language = Cell['language'];
 // cell that made something still there, as a box in the order the cells ran, holding what it made
 // one to a line. A line in the margin runs from a value (or a written file) to each box that read
 // it. A value opens as its own view and a file in its viewer; a box opens to show its cell's code.
-// Pointing at a box keeps its path in view: what it came from and what came of it.
-export function FlowPane({ client, snapshot, onObject, onPath }: { client: BrowserClient; snapshot: WorkspaceSnapshot; onObject?: (language: Language, name: string) => void; onPath?: (path: string) => void }) {
+// Pointing at a box keeps its path in view: what it came from and what came of it. A file named in
+// a session on a server is in that server's folder, and is shown there.
+export function FlowPane({ client, snapshot, onObject, onPath, onRemote }: { client: BrowserClient; snapshot: WorkspaceSnapshot; onObject?: (language: Language, name: string) => void; onPath?: (path: string) => void; onRemote?: (placeId: string, path: string) => void }) {
   const projectId = snapshot.project.id;
   const { read, off, problem } = useKernel(client, projectId, snapshot.cursor);
   const latest = useMemo(() => latestSessions(read), [read]);
@@ -28,12 +30,12 @@ export function FlowPane({ client, snapshot, onObject, onPath }: { client: Brows
   if (!read) return <div className="nb-pane"><p className="nb-empty-line">Reading the live sessions…</p></div>;
   return <div className="nb-pane flow-pane" aria-labelledby={id}>
     <header className="flow-head">
-      <h2 id={id} className="nb-pane-state">{session ? <><span className={'nb-dot ' + session.state} aria-hidden="true" />{versionOf(session)} · {session.state === 'busy' ? 'running a cell' : session.state === 'starting' ? 'starting' : 'idle'}</> : 'Data flow'}</h2>
+      <h2 id={id} className="nb-pane-state">{session ? <><span className={'nb-dot ' + session.state} aria-hidden="true" />{[versionOf(session), whereOf(session), session.state === 'busy' ? 'running a cell' : session.state === 'starting' ? 'starting' : 'idle'].filter(Boolean).join(' · ')}</> : 'Data flow'}</h2>
       {live.length > 1 && <div className="nb-tabs" role="group" aria-label="Session">{live.map(l => <button key={l} aria-pressed={l === shown} onClick={() => setChosen(l)}>{languageName[l]}</button>)}</div>}
     </header>
     {!session || !graph ? <p className="nb-empty-line">No live session. Once a cell runs in R or Python, this shows how its values were made: the files and values each cell read, and what it made of them.</p>
       : !graph.steps.length ? <p className="nb-empty-line">Nothing made in {languageName[session.language]} yet.</p>
-      : <Flow key={session.sessionId} graph={graph} session={session} cells={cells} client={client} snapshot={snapshot} onObject={onObject} onPath={onPath} />}
+      : <Flow key={session.sessionId} graph={graph} session={session} cells={cells} client={client} snapshot={snapshot} onObject={onObject} onPath={session.place ? (onRemote && (file => onRemote(session.place!.placeId, file))) : onPath} />}
   </div>;
 }
 
@@ -67,7 +69,7 @@ function Flow({ graph, session, cells, client, snapshot, onObject, onPath }: { g
         const cell = s.cell ? byCell.get(s.cell.cellId) : undefined;
         return <StepBox key={s.id} step={s} cell={cell} values={values} faded={!!path && !path.has(s.id)} onPoint={setPointed}
           open={s.id === selected} onOpen={() => setSelected(selected === s.id ? null : s.id)}
-          onNode={node => node.kind === 'value' ? onObject?.(session.language, node.name) : node.kind === 'file' ? onPath?.(node.name) : setSelected(s.id)} onFile={file => onPath?.(file)}>
+          onNode={node => node.kind === 'value' ? onObject?.(session.language, node.name) : node.kind === 'file' ? onPath?.(node.name) : setSelected(s.id)} onFile={file => onPath?.(file)} folders={!!session.place}>
           {s.id === selected && cell && <StepCell step={s} cell={cell} byCell={byCell} client={client} snapshot={snapshot} />}
         </StepBox>;
       })}
@@ -82,7 +84,8 @@ function Flow({ graph, session, cells, client, snapshot, onObject, onPath }: { g
 const folder = (path: string) => path.endsWith('/');
 const fileName = (path: string) => (path.replace(/\/$/, '').split('/').at(-1) ?? path) + (folder(path) ? '/' : '');
 const and = (items: string[]) => items.length < 2 ? items.join('') : items.slice(0, -1).join(', ') + ' and ' + items.at(-1);
-function StepBox({ step, cell, values, faded, open, onPoint, onOpen, onNode, onFile, children }: { step: LineageStep; cell?: Cell; values: Map<string, Session['variables'][number]>; faded: boolean; open: boolean; onPoint: (id: string | null) => void; onOpen: () => void; onNode: (node: LineageNode) => void; onFile: (path: string) => void; children?: React.ReactNode }) {
+// A folder opens where it can be listed: in a session on a server, in the Servers view.
+function StepBox({ step, cell, values, faded, open, onPoint, onOpen, onNode, onFile, folders = false, children }: { step: LineageStep; cell?: Cell; values: Map<string, Session['variables'][number]>; faded: boolean; open: boolean; onPoint: (id: string | null) => void; onOpen: () => void; onNode: (node: LineageNode) => void; onFile: (path: string) => void; folders?: boolean; children?: React.ReactNode }) {
   const reads = step.reads.slice(0, flowLimits.reads), name = cell ? languageName[cell.language] : '';
   return <section className={'flow-step ' + step.kind + (step.latest ? ' latest' : '') + (open ? ' open' : '') + (faded ? ' faded' : '')} data-step={step.id} onPointerEnter={() => onPoint(step.id)}>
     {step.cell && cell
@@ -91,13 +94,13 @@ function StepBox({ step, cell, values, faded, open, onPoint, onOpen, onNode, onF
           <Icon name="chevron" size={12} />
         </button>
       : <p className="flow-step-head">Already in the session</p>}
-    {reads.length > 0 && <p className="flow-reads">Reads {reads.map(file => folder(file)
+    {reads.length > 0 && <p className="flow-reads">Reads {reads.map(file => folder(file) && !folders
       ? <span key={file} className="flow-file" title={file}><Icon name="folder" size={11} stroke={1.8} />{fileName(file)}</span>
-      : <button key={file} className="flow-file" title={'Open ' + file} onClick={() => onFile(file)}><Icon name="file" size={11} stroke={1.8} />{fileName(file)}</button>)}{step.reads.length > reads.length && <span>and {step.reads.length - reads.length} more</span>}</p>}
+      : <button key={file} className="flow-file" title={'Open ' + file} onClick={() => onFile(file)}><Icon name={folder(file) ? 'folder' : 'file'} size={11} stroke={1.8} />{fileName(file)}</button>)}{step.reads.length > reads.length && <span>and {step.reads.length - reads.length} more</span>}</p>}
     {step.earlier.length > 0 && <p className="flow-step-note">Changes what {and(step.earlier.map(c => `${name} ${c.number}`))} made</p>}
     <ul className="flow-outs">{step.nodes.map(node => {
       const value = node.kind === 'value' ? values.get(node.name) : undefined, wrote = node.id.startsWith('wrote:'), into = node.kind === 'file' && folder(node.name);
-      return <li key={node.id}><button data-node={node.id} className={'flow-out ' + node.kind + (wrote ? ' wrote' : '')} disabled={into}
+      return <li key={node.id}><button data-node={node.id} className={'flow-out ' + node.kind + (wrote ? ' wrote' : '')} disabled={into && !folders}
         title={node.kind === 'value' ? `Look at ${node.name}${value?.summary ? ' · ' + value.summary : ''}` : into ? `Wrote into ${node.name}` : node.kind === 'file' ? `Open ${node.name}` : 'Show the code that drew it'} onClick={() => onNode(node)}>
         <Icon name={node.kind === 'value' ? 'braces' : node.kind === 'plot' ? 'chart' : into ? 'folder' : 'file'} size={12} stroke={1.8} />
         <span>{node.kind === 'file' ? fileName(node.name) : node.name}</span>

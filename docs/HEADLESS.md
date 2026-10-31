@@ -974,6 +974,16 @@ exploratory code there and to keep the code results rest on in scripts.
 | Start | `startTimeoutMs` 30 s | Kill the process; waiting cells are not run, with what it printed. |
 | Stop | `stopGraceMs` 3000 | SIGKILL the process group. |
 | Ended sessions kept | `maxEndedSessions` 20 | The oldest ended session record goes. |
+| Places | `maxPlaces` 16 | Refuse another (`limit`, named). |
+| Start on a server | `remoteStartTimeoutMs` 90 s | End its ssh; waiting cells are not run, with what ssh and the login printed. |
+| A place's check, listing, signal | `remoteCheckTimeoutMs` 60 s, `remoteListTimeoutMs` 30 s, `remoteSignalTimeoutMs` 15 s | End that ssh; say it took too long. |
+| A listing | `remoteEntries` 500 from `remoteListBytes` 1 MiB | List the first, count the rest (`omitted`), mark a cut listing (`cut`). |
+| A copy from a server | `remoteCopyBytes` 64 MiB, `remoteCopyTimeoutMs` 10 min; `maxCopies` 500 records | Refuse a larger file (`limit`, named) before it is sent; a file that changed while copied is refused. |
 
 Memory and time used by a cell's own code are not bounded. `--python` (or
-`RHO_PYTHON`) names Python; R is `--rscript` and needs the `jsonlite` package.
+`RHO_PYTHON`) names Python; R is `--rscript` and needs the `jsonlite` package. `--ssh`
+(or `RHO_SSH`) names the ssh program sessions on a server use; it is `ssh`, with the
+person's own config, unless named. The Notebook's operations `kernel.places`,
+`kernel.place.set`, `kernel.place.check`, `kernel.place.list` and `kernel.place.copy` name
+and check places, choose where each language runs, and list and copy a place's files; the
+[remote episode](REMOTE-EPISODE.md) records how a session runs there and ends.

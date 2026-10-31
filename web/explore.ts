@@ -1,6 +1,6 @@
 import { BrowserApiError, type BrowserClient, type WorkspaceSnapshot } from '../src/browser.js';
 import { addAtEdge, addBeside, addWithRoom, type LayoutNode, type LayoutTree } from '../src/shell-layout.js';
-import { loadCode, sourceCode, valueName, type Language } from '../src/explore-code.js';
+import { languageNames, loadCode, sourceCode, valueName, type Language } from '../src/explore-code.js';
 
 // Looking into a result in the live sessions the person shares with the Agent. A table loads
 // into a new value, so the person starts where the result is; a script is put into the
@@ -15,12 +15,22 @@ export function scriptPrepared(path: string, language: Language, dirty: boolean)
   return { key: crypto.randomUUID(), language, code: sourceCode(path, language), note: `From ${name}${dirty ? ' as saved; your unsaved changes are not in it' : ''}. Running it again writes its outputs again. Check it, then press Run.` };
 }
 // Loads a table into the session of that language as a new value. The cell is the person's,
-// named for what it loads; it runs in the shared session as any cell they run there.
+// named for what it loads; it runs in the shared session as any cell they run there. A session on
+// a server reads the server's files: a copy from that server loads from where it was copied, and
+// a file only on this machine is not sent there; the person is told where each is.
 export async function loadTable(client: BrowserClient, projectId: string, path: string, language: Language) {
   const read = await client.call('kernel.read', { projectId, limit: 1 });
-  const taken = new Set(read.sessions.filter(s => s.language === language && s.state !== 'ended').flatMap(s => s.variables.map(v => v.name)));
-  const name = valueName(path, language, taken);
-  return client.call('kernel.run', { projectId, language, code: loadCode(path, language, name), purpose: `Load ${path.split('/').at(-1)} as ${name}`, changeId: 'explore-' + crypto.randomUUID() });
+  const live = read.sessions.find(s => s.language === language && s.state !== 'ended');
+  const taken = new Set(live?.variables.map(v => v.name) ?? []);
+  const name = valueName(path, language, taken), file = path.split('/').at(-1)!;
+  const places = live?.place ? null : await client.call('kernel.places', { projectId }).catch(() => null);
+  const placeId = live ? live.place?.placeId ?? null : places && places.use[language] !== 'local' ? places.use[language] : null;
+  if (!placeId) return client.call('kernel.run', { projectId, language, code: loadCode(path, language, name), purpose: `Load ${file} as ${name}`, changeId: 'explore-' + crypto.randomUUID() });
+  const known = places ?? await client.call('kernel.places', { projectId });
+  const label = live?.place?.label ?? known.places.find(p => p.placeId === placeId)?.label ?? placeId;
+  const copy = known.copies.find(c => c.placeId === placeId && c.to === path);
+  if (!copy) throw new Error(`${languageNames[language]} runs on ${label}, and ${file} is on this machine only. Choose This machine beside the language in the Notebook to load it here, or put the file in the folder on ${label}.`);
+  return client.call('kernel.run', { projectId, language, code: loadCode(copy.path, language, name), purpose: `Load ${file} on ${label} as ${name}`, changeId: 'explore-' + crypto.randomUUID() });
 }
 
 // The Notebook as a view of a Studio page: one per page, showing the live sessions.
@@ -61,27 +71,28 @@ async function addToPage(client: BrowserClient, projectId: string, compositionId
 export const addNotebook = (client: BrowserClient, projectId: string, compositionId: string, beside: string | null) =>
   addToPage(client, projectId, compositionId, notebookOn, tree => withNotebook(tree, beside), 'notebook');
 
-// The sessions' variables, plots and data flow as views of their own, one of each per page.
-// Added to a page, the first takes a column along the page's right side, beside a script and its
-// console. Variables go above Plots there and Plots below; the data flow is a tab beside the
-// Variables, as both answer what the session holds.
-export type SessionView = 'variables' | 'plots' | 'flow';
-export const sessionComponents: Record<SessionView, string> = { variables: 'rho.variables', plots: 'rho.plots', flow: 'rho.flow' };
-export const sessionTitles: Record<SessionView, string> = { variables: 'Variables', plots: 'Plots', flow: 'Data flow' };
+// The sessions' variables, plots and data flow, and the servers they can run on, as views of
+// their own, one of each per page. Added to a page, the first takes a column along the page's
+// right side, beside a script and its console. Variables go above Plots there and Plots below;
+// the data flow and the servers are tabs beside the Variables, as they answer what the sessions
+// hold and where.
+export type SessionView = 'variables' | 'plots' | 'flow' | 'servers';
+export const sessionComponents: Record<SessionView, string> = { variables: 'rho.variables', plots: 'rho.plots', flow: 'rho.flow', servers: 'rho.servers' };
+export const sessionTitles: Record<SessionView, string> = { variables: 'Variables', plots: 'Plots', flow: 'Data flow', servers: 'Servers' };
 export const sessionView = (kind: SessionView): LayoutNode => ({ id: kind, kind: 'view', component: sessionComponents[kind], version: '1', props: { title: sessionTitles[kind] }, bindings: {} });
 export const sessionViewOn = (kind: SessionView, nodes: unknown[] | undefined) => (nodes as LayoutNode[] | undefined)?.find(n => n.kind !== 'group' && n.component === sessionComponents[kind])?.id ?? null;
 export function withSessionView(tree: LayoutTree | null, kind: SessionView): LayoutTree | null {
   const view = sessionView(kind);
   if (!tree) return { rootId: 'root', nodes: [{ id: 'root', kind: 'group', children: [view.id] }, view] };
   if (sessionViewOn(kind, tree.nodes)) return null;
-  const tab = kind === 'flow' ? sessionViewOn('variables', tree.nodes) : kind === 'variables' ? sessionViewOn('flow', tree.nodes) : null;
+  const tab = kind === 'flow' || kind === 'servers' ? sessionViewOn('variables', tree.nodes) ?? sessionViewOn(kind === 'flow' ? 'servers' : 'flow', tree.nodes) : kind === 'variables' ? sessionViewOn('flow', tree.nodes) ?? sessionViewOn('servers', tree.nodes) : null;
   const holder = tab && tree.nodes.find(n => n.kind === 'group' && n.children?.includes(tab) && (n.presentation as { mode?: string } | undefined)?.mode !== 'split');
   if (holder) {
     const nodes = structuredClone(tree.nodes), group = nodes.find(n => n.id === holder.id)!;
     group.children = [...group.children!, view.id];
     return { rootId: tree.rootId, nodes: [...nodes, view] };
   }
-  const other = kind === 'plots' ? sessionViewOn('variables', tree.nodes) ?? sessionViewOn('flow', tree.nodes) : sessionViewOn('plots', tree.nodes);
+  const other = kind === 'plots' ? sessionViewOn('variables', tree.nodes) ?? sessionViewOn('flow', tree.nodes) ?? sessionViewOn('servers', tree.nodes) : sessionViewOn('plots', tree.nodes);
   return other ? addBeside(tree, view as never, other, kind === 'plots' ? 'bottom' : 'top', newId) : addAtEdge(tree, view as never, 'right', newId);
 }
 export const addSessionView = (client: BrowserClient, projectId: string, compositionId: string, kind: SessionView) =>

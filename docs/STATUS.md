@@ -173,6 +173,20 @@ bix-60's 19 only for five of the ten trees and did not reproduce bix-58. The run
 S4 value listed as changed by printing, scope and rerun errors in what a cell read, and unrecorded
 folders.
 
+[Live sessions on a server](REMOTE-EPISODE.md): R and Python can run in a folder on a server
+that ssh reaches as the person's own setup does (Notebook 0.2.0). A place names the ssh
+destination, the folder and setup lines; a check reports the system, R and Python there; each
+language's next session starts where the project marks it. A Servers view adds, checks and
+chooses places and lists a place's files, opening one as a copy under `remote/<place>/` with its
+size, time and digest; the Notebook, Variables and Data flow name where a session runs. On a
+disposable Linux server holding bix-46's data only, the analysis ran there (mexG −4.96, its
+plot shown here), a written file opened from Data flow, and a dropped network left the running
+cell unknown and ran nothing again. The episode fixed interrupt under dash, UTF-8 text from a
+login without a UTF-8 locale and Explore loading local paths on the server. A session that keeps
+running on a server after a drop, scheduler compute nodes and the real lab cluster were not
+exercised; an Agent asked in plain words used its own shell first and its trial waits on the
+person's choice.
+
 ## Existing application
 
 - Projects opens selected folders and manages finite source folders. Sources counts
@@ -215,9 +229,12 @@ checks still held the 64-method limit and the plugin count, and the Skill's veri
 command was not an application script; corrected, Rho 261/261 and Plugins 132/132. The
 exploring pass first failed Rho 263/264, the Studio shell importing a module outside its
 allowed set, and ui:u2 also matched the New workspace row; corrected, Rho 264/264 and Plugins 132/132.
-The Data flow pass records Rho 273/274 and Plugins 141/141 in the [ledger](VERIFICATION.json): the
-MCP v2 test was cancelled at its 30 s limit and passed alone in 19.8 s; the contract check and the
-same eight acceptances passed, and shell and interaction failed as before. The Sources pass recorded
+The remote sessions pass records Rho 272/274 and Plugins 144/144 in the [ledger](VERIFICATION.json):
+the MCP v2 test was cancelled at its 30 s limit and a Codex restart test failed removing its
+`.rho/rho` folder in cleanup; both passed alone (20.8 s for MCP v2). An earlier full run lost an ACP
+permission test and the Notebook test to the same load and cleanup race; both passed alone and
+three times as files. The contract check and the same eight acceptances passed, and shell and
+interaction failed as before. The Data flow pass recorded Rho 273/274 and Plugins 141/141. The Sources pass recorded
 Rho 268/269, Plugins unchanged at 134/134: the MCP v2 test was cancelled at its 30 s limit and passed alone in 18.1 s. The contract
 check and the sources, ui:u2, agent-canvas, graph, agent-page, agent-ui, review and person-files
 acceptances passed; ui:u2 first failed counting the Overview's 3-row previews among the grid's

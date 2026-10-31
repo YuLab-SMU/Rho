@@ -1,4 +1,4 @@
-export type IconName = 'home' | 'project' | 'plugins' | 'sidebar' | 'context' | 'lock' | 'folder' | 'folder-plus' | 'plus' | 'chevron' | 'info' | 'close' | 'overview' | 'layout' | 'document' | 'table' | 'image' | 'file' | 'offline' | 'prompt' | 'refresh' | 'unlink' | 'enter' | 'check' | 'grid' | 'copy' | 'eye' | 'run' | 'search' | 'code' | 'spark' | 'chart' | 'back' | 'updown' | 'follow' | 'pause' | 'graph' | 'fit' | 'minus' | 'question' | 'download' | 'trash' | 'restore' | 'pencil' | 'globe' | 'arrow-up' | 'arrow-down' | 'list' | 'chat' | 'monitor' | 'link' | 'signal' | 'tool' | 'move' | 'braces' | 'workflow' | 'report' | 'book';
+export type IconName = 'home' | 'project' | 'plugins' | 'sidebar' | 'context' | 'lock' | 'folder' | 'folder-plus' | 'plus' | 'chevron' | 'info' | 'close' | 'overview' | 'layout' | 'document' | 'table' | 'image' | 'file' | 'offline' | 'prompt' | 'refresh' | 'unlink' | 'enter' | 'check' | 'grid' | 'copy' | 'eye' | 'run' | 'search' | 'code' | 'spark' | 'chart' | 'back' | 'updown' | 'follow' | 'pause' | 'graph' | 'fit' | 'minus' | 'question' | 'download' | 'trash' | 'restore' | 'pencil' | 'globe' | 'arrow-up' | 'arrow-down' | 'list' | 'chat' | 'monitor' | 'link' | 'signal' | 'tool' | 'move' | 'braces' | 'workflow' | 'report' | 'book' | 'server';
 export function Icon({ name, size = 20, stroke = 1.6 }: { name: IconName; size?: number; stroke?: number }) {
   const paths = {
     home: 'm3 10 9-7 9 7v10h-6v-7H9v7H3z',
@@ -8,6 +8,7 @@ export function Icon({ name, size = 20, stroke = 1.6 }: { name: IconName; size?:
     context: 'M5.5 5h13A2.5 2.5 0 0 1 21 7.5v9a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 16.5v-9A2.5 2.5 0 0 1 5.5 5zM14.5 5v14',
     lock: 'M7 11h10a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-6a2 2 0 0 1 2-2zM8 11V8a4 4 0 0 1 8 0v3',
     folder: 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z',
+    server: 'M5 4h14a1.5 1.5 0 0 1 1.5 1.5v3A1.5 1.5 0 0 1 19 10H5a1.5 1.5 0 0 1-1.5-1.5v-3A1.5 1.5 0 0 1 5 4zM5 14h14a1.5 1.5 0 0 1 1.5 1.5v3A1.5 1.5 0 0 1 19 20H5a1.5 1.5 0 0 1-1.5-1.5v-3A1.5 1.5 0 0 1 5 14zM7.5 7h.01M7.5 17h.01',
     'folder-plus': 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM12 10.5v5M9.5 13h5',
     plus: 'M12 4.5v15M4.5 12h15',
     braces: 'M8.5 4.5c-2 0-2.5 1-2.5 2.75v2C6 10.5 5.25 11.5 3.5 12c1.75.5 2.5 1.5 2.5 2.75v2c0 1.75.5 2.75 2.5 2.75M15.5 4.5c2 0 2.5 1 2.5 2.75v2c0 1.25.75 2.25 2.5 2.75-1.75.5-2.5 1.5-2.5 2.75v2c0 1.75-.5 2.75-2.5 2.75',

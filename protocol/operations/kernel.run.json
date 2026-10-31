@@ -22,6 +22,10 @@
           "python"
         ]
       },
+      "place": {
+        "pattern": "^[a-z][a-z0-9-]{0,31}$",
+        "type": "string"
+      },
       "purpose": {
         "maxLength": 200,
         "type": "string"
@@ -293,9 +297,20 @@
                 "enum": [
                   "stopped",
                   "exited",
+                  "disconnected",
                   "rho-closed",
                   "not-started"
                 ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "host": {
+            "anyOf": [
+              {
+                "type": "string"
               },
               {
                 "type": "null"
@@ -312,6 +327,41 @@
             "anyOf": [
               {
                 "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "place": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "destination": {
+                    "pattern": "^[A-Za-z0-9_.%+@:\\[\\]/][A-Za-z0-9_.%+@:\\[\\]/-]{0,254}$",
+                    "type": "string"
+                  },
+                  "folder": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "label": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "placeId": {
+                    "pattern": "^(?!local$)[a-z][a-z0-9-]{0,31}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "placeId",
+                  "label",
+                  "destination",
+                  "folder"
+                ],
+                "type": "object"
               },
               {
                 "type": "null"

@@ -503,6 +503,7 @@ function App() {
   const sessions = !!snapshot && snapshot.catalog.plugins.some(p => p.id === 'kernel') && canExplore(snapshot);
   const pageAdd = snapshot ? <PageAdd sources={sources} notebook={!sessions ? 'unavailable' : notebookOn(composition?.views) ? 'present' : 'absent'}
     variables={!sessions ? 'unavailable' : sessionViewOn('variables', composition?.views) ? 'present' : 'absent'} plots={!sessions ? 'unavailable' : sessionViewOn('plots', composition?.views) ? 'present' : 'absent'} flow={!sessions ? 'unavailable' : sessionViewOn('flow', composition?.views) ? 'present' : 'absent'}
+    servers={!sessions ? 'unavailable' : sessionViewOn('servers', composition?.views) ? 'present' : 'absent'}
     onNotebook={() => notebookOnPage(shownId)} onSessionView={kind => sessionViewOnPage(shownId, kind)} onFile={path => openIn(shownId, path)} onAll={row => showSources(row)} /> : null;
   const initials = project ? name(project).split(/[\s_.-]+/).filter(Boolean).slice(0, 2).map(w => [...w][0]!.toUpperCase()).join('') || 'P' : '';
   // The projects list has the application's own sidebar even while a project stays chosen.

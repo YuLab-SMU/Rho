@@ -1,0 +1,92 @@
+{
+  "method": "kernel.place.copy",
+  "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "projectId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "path": {
+        "maxLength": 1024,
+        "minLength": 1,
+        "type": "string"
+      },
+      "placeId": {
+        "pattern": "^(?!local$)[a-z][a-z0-9-]{0,31}$",
+        "type": "string"
+      }
+    },
+    "required": [
+      "projectId",
+      "placeId",
+      "path"
+    ],
+    "type": "object"
+  },
+  "outputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "copy": {
+        "additionalProperties": false,
+        "properties": {
+          "by": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "bytes": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "copiedAt": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "modifiedAt": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "path": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "placeId": {
+            "pattern": "^(?!local$)[a-z][a-z0-9-]{0,31}$",
+            "type": "string"
+          },
+          "sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "type": "string"
+          },
+          "to": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "placeId",
+          "path",
+          "to",
+          "bytes",
+          "modifiedAt",
+          "sha256",
+          "copiedAt",
+          "by"
+        ],
+        "type": "object"
+      }
+    },
+    "required": [
+      "copy"
+    ],
+    "type": "object"
+  },
+  "description": null
+}

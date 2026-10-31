@@ -19845,6 +19845,925 @@ export const ownerContracts: OwnerContractSnapshot = {
           },
           "requires": []
         },
+        "kernel.place.check": {
+          "effect": "native",
+          "inputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "placeId": {
+                "pattern": "^(?!local$)[a-z][a-z0-9-]{0,31}$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "placeId"
+            ],
+            "type": "object"
+          },
+          "outputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "check": {
+                "additionalProperties": false,
+                "properties": {
+                  "at": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "by": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "folder": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "host": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "jsonlite": {
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "matplotlib": {
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "ms": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "ok": {
+                    "type": "boolean"
+                  },
+                  "problem": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "python": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "r": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "system": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "at",
+                  "by",
+                  "ok",
+                  "ms",
+                  "system",
+                  "host",
+                  "folder",
+                  "r",
+                  "jsonlite",
+                  "python",
+                  "matplotlib",
+                  "problem"
+                ],
+                "type": "object"
+              },
+              "placeId": {
+                "pattern": "^(?!local$)[a-z][a-z0-9-]{0,31}$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "placeId",
+              "check"
+            ],
+            "type": "object"
+          },
+          "requires": []
+        },
+        "kernel.place.copy": {
+          "effect": "file",
+          "inputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "path": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "type": "string"
+              },
+              "placeId": {
+                "pattern": "^(?!local$)[a-z][a-z0-9-]{0,31}$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "placeId",
+              "path"
+            ],
+            "type": "object"
+          },
+          "outputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "copy": {
+                "additionalProperties": false,
+                "properties": {
+                  "by": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "bytes": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "copiedAt": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "modifiedAt": {
+                    "anyOf": [
+                      {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "path": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "placeId": {
+                    "pattern": "^(?!local$)[a-z][a-z0-9-]{0,31}$",
+                    "type": "string"
+                  },
+                  "sha256": {
+                    "pattern": "^[a-f0-9]{64}$",
+                    "type": "string"
+                  },
+                  "to": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "placeId",
+                  "path",
+                  "to",
+                  "bytes",
+                  "modifiedAt",
+                  "sha256",
+                  "copiedAt",
+                  "by"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "copy"
+            ],
+            "type": "object"
+          },
+          "requires": []
+        },
+        "kernel.place.list": {
+          "effect": "read",
+          "inputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "path": {
+                "maxLength": 1024,
+                "type": "string"
+              },
+              "placeId": {
+                "pattern": "^(?!local$)[a-z][a-z0-9-]{0,31}$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "placeId"
+            ],
+            "type": "object"
+          },
+          "outputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "cut": {
+                "type": "boolean"
+              },
+              "entries": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "bytes": {
+                      "minimum": 0,
+                      "type": "number"
+                    },
+                    "kind": {
+                      "enum": [
+                        "folder",
+                        "file",
+                        "link",
+                        "other"
+                      ]
+                    },
+                    "modifiedAt": {
+                      "anyOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "name": {
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "kind",
+                    "bytes",
+                    "modifiedAt"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "folder": {
+                "type": "string"
+              },
+              "omitted": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "path": {
+                "type": "string"
+              },
+              "placeId": {
+                "pattern": "^(?!local$)[a-z][a-z0-9-]{0,31}$",
+                "type": "string"
+              },
+              "readAt": {
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "placeId",
+              "path",
+              "readAt",
+              "folder",
+              "entries",
+              "omitted",
+              "cut"
+            ],
+            "type": "object"
+          },
+          "requires": []
+        },
+        "kernel.place.set": {
+          "effect": "metadata",
+          "inputSchema": {
+            "additionalProperties": false,
+            "minProperties": 1,
+            "properties": {
+              "place": {
+                "additionalProperties": false,
+                "properties": {
+                  "destination": {
+                    "pattern": "^[A-Za-z0-9_.%+@:\\[\\]/][A-Za-z0-9_.%+@:\\[\\]/-]{0,254}$",
+                    "type": "string"
+                  },
+                  "folder": {
+                    "maxLength": 1024,
+                    "pattern": "^(~|~/[^\\n\\u0000]*|/[^\\n\\u0000]*)$",
+                    "type": "string"
+                  },
+                  "label": {
+                    "maxLength": 80,
+                    "type": "string"
+                  },
+                  "placeId": {
+                    "pattern": "^(?!local$)[a-z][a-z0-9-]{0,31}$",
+                    "type": "string"
+                  },
+                  "setup": {
+                    "maxLength": 4096,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "placeId",
+                  "destination",
+                  "folder"
+                ],
+                "type": "object"
+              },
+              "remove": {
+                "pattern": "^(?!local$)[a-z][a-z0-9-]{0,31}$",
+                "type": "string"
+              },
+              "use": {
+                "additionalProperties": false,
+                "properties": {
+                  "python": {
+                    "pattern": "^[a-z][a-z0-9-]{0,31}$",
+                    "type": "string"
+                  },
+                  "r": {
+                    "pattern": "^[a-z][a-z0-9-]{0,31}$",
+                    "type": "string"
+                  }
+                },
+                "required": [],
+                "type": "object"
+              }
+            },
+            "required": [],
+            "type": "object"
+          },
+          "outputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "copies": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "by": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "bytes": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "copiedAt": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "modifiedAt": {
+                      "anyOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "path": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "placeId": {
+                      "pattern": "^(?!local$)[a-z][a-z0-9-]{0,31}$",
+                      "type": "string"
+                    },
+                    "sha256": {
+                      "pattern": "^[a-f0-9]{64}$",
+                      "type": "string"
+                    },
+                    "to": {
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "placeId",
+                    "path",
+                    "to",
+                    "bytes",
+                    "modifiedAt",
+                    "sha256",
+                    "copiedAt",
+                    "by"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "places": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "at": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "by": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "check": {
+                      "anyOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "at": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "by": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "folder": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "host": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "jsonlite": {
+                              "anyOf": [
+                                {
+                                  "type": "boolean"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "matplotlib": {
+                              "anyOf": [
+                                {
+                                  "type": "boolean"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "ms": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "ok": {
+                              "type": "boolean"
+                            },
+                            "problem": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "python": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "r": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "system": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "at",
+                            "by",
+                            "ok",
+                            "ms",
+                            "system",
+                            "host",
+                            "folder",
+                            "r",
+                            "jsonlite",
+                            "python",
+                            "matplotlib",
+                            "problem"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "destination": {
+                      "pattern": "^[A-Za-z0-9_.%+@:\\[\\]/][A-Za-z0-9_.%+@:\\[\\]/-]{0,254}$",
+                      "type": "string"
+                    },
+                    "folder": {
+                      "maxLength": 1024,
+                      "pattern": "^(~|~/[^\\n\\u0000]*|/[^\\n\\u0000]*)$",
+                      "type": "string"
+                    },
+                    "label": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "placeId": {
+                      "pattern": "^(?!local$)[a-z][a-z0-9-]{0,31}$",
+                      "type": "string"
+                    },
+                    "setup": {
+                      "maxLength": 4096,
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "placeId",
+                    "label",
+                    "destination",
+                    "folder",
+                    "setup",
+                    "by",
+                    "at",
+                    "check"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "use": {
+                "additionalProperties": false,
+                "properties": {
+                  "python": {
+                    "pattern": "^[a-z][a-z0-9-]{0,31}$",
+                    "type": "string"
+                  },
+                  "r": {
+                    "pattern": "^[a-z][a-z0-9-]{0,31}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "r",
+                  "python"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "places",
+              "use",
+              "copies"
+            ],
+            "type": "object"
+          },
+          "requires": []
+        },
+        "kernel.places": {
+          "effect": "read",
+          "inputSchema": {
+            "additionalProperties": false,
+            "properties": {},
+            "required": [],
+            "type": "object"
+          },
+          "outputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "copies": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "by": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "bytes": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "copiedAt": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "modifiedAt": {
+                      "anyOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "path": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "placeId": {
+                      "pattern": "^(?!local$)[a-z][a-z0-9-]{0,31}$",
+                      "type": "string"
+                    },
+                    "sha256": {
+                      "pattern": "^[a-f0-9]{64}$",
+                      "type": "string"
+                    },
+                    "to": {
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "placeId",
+                    "path",
+                    "to",
+                    "bytes",
+                    "modifiedAt",
+                    "sha256",
+                    "copiedAt",
+                    "by"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "places": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "at": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "by": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "check": {
+                      "anyOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "at": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "by": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "folder": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "host": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "jsonlite": {
+                              "anyOf": [
+                                {
+                                  "type": "boolean"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "matplotlib": {
+                              "anyOf": [
+                                {
+                                  "type": "boolean"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "ms": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "ok": {
+                              "type": "boolean"
+                            },
+                            "problem": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "python": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "r": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "system": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "at",
+                            "by",
+                            "ok",
+                            "ms",
+                            "system",
+                            "host",
+                            "folder",
+                            "r",
+                            "jsonlite",
+                            "python",
+                            "matplotlib",
+                            "problem"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "destination": {
+                      "pattern": "^[A-Za-z0-9_.%+@:\\[\\]/][A-Za-z0-9_.%+@:\\[\\]/-]{0,254}$",
+                      "type": "string"
+                    },
+                    "folder": {
+                      "maxLength": 1024,
+                      "pattern": "^(~|~/[^\\n\\u0000]*|/[^\\n\\u0000]*)$",
+                      "type": "string"
+                    },
+                    "label": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "placeId": {
+                      "pattern": "^(?!local$)[a-z][a-z0-9-]{0,31}$",
+                      "type": "string"
+                    },
+                    "setup": {
+                      "maxLength": 4096,
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "placeId",
+                    "label",
+                    "destination",
+                    "folder",
+                    "setup",
+                    "by",
+                    "at",
+                    "check"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "use": {
+                "additionalProperties": false,
+                "properties": {
+                  "python": {
+                    "pattern": "^[a-z][a-z0-9-]{0,31}$",
+                    "type": "string"
+                  },
+                  "r": {
+                    "pattern": "^[a-z][a-z0-9-]{0,31}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "r",
+                  "python"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "places",
+              "use",
+              "copies"
+            ],
+            "type": "object"
+          },
+          "requires": []
+        },
         "kernel.plot": {
           "effect": "read",
           "inputSchema": {
@@ -20171,9 +21090,20 @@ export const ownerContracts: OwnerContractSnapshot = {
                           "enum": [
                             "stopped",
                             "exited",
+                            "disconnected",
                             "rho-closed",
                             "not-started"
                           ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "host": {
+                      "anyOf": [
+                        {
+                          "type": "string"
                         },
                         {
                           "type": "null"
@@ -20190,6 +21120,41 @@ export const ownerContracts: OwnerContractSnapshot = {
                       "anyOf": [
                         {
                           "type": "integer"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "place": {
+                      "anyOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "destination": {
+                              "pattern": "^[A-Za-z0-9_.%+@:\\[\\]/][A-Za-z0-9_.%+@:\\[\\]/-]{0,254}$",
+                              "type": "string"
+                            },
+                            "folder": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "label": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "placeId": {
+                              "pattern": "^(?!local$)[a-z][a-z0-9-]{0,31}$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "placeId",
+                            "label",
+                            "destination",
+                            "folder"
+                          ],
+                          "type": "object"
                         },
                         {
                           "type": "null"
@@ -20360,6 +21325,10 @@ export const ownerContracts: OwnerContractSnapshot = {
                   "r",
                   "python"
                 ]
+              },
+              "place": {
+                "pattern": "^[a-z][a-z0-9-]{0,31}$",
+                "type": "string"
               },
               "purpose": {
                 "maxLength": 200,
@@ -20631,9 +21600,20 @@ export const ownerContracts: OwnerContractSnapshot = {
                         "enum": [
                           "stopped",
                           "exited",
+                          "disconnected",
                           "rho-closed",
                           "not-started"
                         ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "host": {
+                    "anyOf": [
+                      {
+                        "type": "string"
                       },
                       {
                         "type": "null"
@@ -20650,6 +21630,41 @@ export const ownerContracts: OwnerContractSnapshot = {
                     "anyOf": [
                       {
                         "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "place": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "destination": {
+                            "pattern": "^[A-Za-z0-9_.%+@:\\[\\]/][A-Za-z0-9_.%+@:\\[\\]/-]{0,254}$",
+                            "type": "string"
+                          },
+                          "folder": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "label": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "placeId": {
+                            "pattern": "^(?!local$)[a-z][a-z0-9-]{0,31}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "placeId",
+                          "label",
+                          "destination",
+                          "folder"
+                        ],
+                        "type": "object"
                       },
                       {
                         "type": "null"
@@ -20840,9 +21855,20 @@ export const ownerContracts: OwnerContractSnapshot = {
                         "enum": [
                           "stopped",
                           "exited",
+                          "disconnected",
                           "rho-closed",
                           "not-started"
                         ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "host": {
+                    "anyOf": [
+                      {
+                        "type": "string"
                       },
                       {
                         "type": "null"
@@ -20859,6 +21885,41 @@ export const ownerContracts: OwnerContractSnapshot = {
                     "anyOf": [
                       {
                         "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "place": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "destination": {
+                            "pattern": "^[A-Za-z0-9_.%+@:\\[\\]/][A-Za-z0-9_.%+@:\\[\\]/-]{0,254}$",
+                            "type": "string"
+                          },
+                          "folder": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "label": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "placeId": {
+                            "pattern": "^(?!local$)[a-z][a-z0-9-]{0,31}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "placeId",
+                          "label",
+                          "destination",
+                          "folder"
+                        ],
+                        "type": "object"
                       },
                       {
                         "type": "null"
@@ -21945,12 +23006,12 @@ export const ownerContracts: OwnerContractSnapshot = {
     },
     "kernel": {
       "package": "@rho-workspace/plugin-kernel",
-      "packageVersion": "0.1.1",
+      "packageVersion": "0.2.0",
       "entry": "./operations",
       "entryPath": "@rho-workspace/plugin-kernel/dist/operations.js",
-      "entrySha256": "1e385e736c769d742bd871ecf8e53d83acbbdadee4bcd1087b4ecef799a02c4e",
+      "entrySha256": "45b9a8315cfc8dae13be39227ffa853a9ac6ea946b0fb025ab1c2d8ee2db224e",
       "exports": {
-        "operationContracts": "7f3a4d271b0a8d786c6b9aad22d97ddc70bb14847c938620e7d42a1f380c0558"
+        "operationContracts": "78b99760bc775bd048d3ba42ce92f4bb8a20000693648eeda59be8a26c240db0"
       }
     },
     "entry-files": {

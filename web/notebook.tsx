@@ -8,6 +8,7 @@ import { highlight } from './languages.js';
 import { statements, unfinished } from '../src/statements.js';
 import { Icon } from './icons.js';
 import { useProcess } from './process-context.js';
+import { PlaceChip, usePlaces, whereOf } from './servers.js';
 import './notebook.css';
 
 // The project's live R and Python sessions, which the person shares with their Agent. Cells
@@ -177,14 +178,20 @@ function Mark({ session, edge, who }: { session: Session; edge: 'start' | 'end';
   const name = languageName[session.language];
   if (edge === 'start') {
     const by = who(session.startedBy).name;
-    return <li className="nb-mark"><span>{name} session started{session.version ? ' · ' + versionOf(session) : ''} · by {by === 'You' ? 'you' : by} at {at(session.startedAt)}</span></li>;
+    return <li className="nb-mark"><span>{name} session started{session.place ? ' ' + whereOf(session) : ''}{session.version ? ' · ' + versionOf(session) : ''} · by {by === 'You' ? 'you' : by} at {at(session.startedAt)}</span></li>;
   }
+  return <li className={'nb-mark ended' + (session.ending === 'stopped' ? '' : ' problem')}>
+    <span>{name} session ended at {at(session.endedAt!)} · {endedHow(session, who)}.</span>
+    {session.problem && session.ending !== 'stopped' && <small>{session.ending === 'disconnected' ? `Its process there${session.pid ? ` (${session.pid})` : ''} was not seen to end.` : session.problem}</small>}
+  </li>;
+}
+
+// How a session ended, as its marks say it.
+function endedHow(session: Session, who: (by: string) => Author) {
+  if (session.ending === 'disconnected') return `the connection to ${session.place?.label ?? 'its server'} was lost. Its values are out of reach`;
   const how = session.ending === 'stopped' ? `stopped by ${session.stop ? (who(session.stop.by).name === 'You' ? 'you' : who(session.stop.by).name) : 'request'}`
     : session.ending === 'rho-closed' ? 'Rho closed' : session.ending === 'not-started' ? 'it did not start' : 'its process ended';
-  return <li className={'nb-mark ended' + (session.ending === 'stopped' ? '' : ' problem')}>
-    <span>{name} session ended at {at(session.endedAt!)} · {how}. Values defined before this are gone.</span>
-    {session.problem && session.ending !== 'stopped' && <small>{session.problem}</small>}
-  </li>;
+  return how + '. Values defined before this are gone';
 }
 
 function SessionRow({ language, session, onInterrupt, onStop, asking }: { language: Language; session: Session | undefined; onInterrupt: () => void; onStop: (session: Session) => void; asking: string }) {
@@ -196,7 +203,7 @@ function SessionRow({ language, session, onInterrupt, onStop, asking }: { langua
   const busy = session.state === 'busy';
   return <div className={'nb-session ' + session.state}>
     <span className="nb-dot" aria-hidden="true" />
-    <div><strong>{session.version ? versionOf(session) : name}</strong><small>{session.state === 'starting' ? 'Starting…' : busy ? 'Running a cell' : 'Idle'} · {session.cells} {session.cells === 1 ? 'cell' : 'cells'}</small></div>
+    <div><strong>{session.version ? versionOf(session) : name}</strong><small>{[whereOf(session), session.state === 'starting' ? (session.place ? 'Connecting…' : 'Starting…') : busy ? 'Running a cell' : 'Idle', `${session.cells} ${session.cells === 1 ? 'cell' : 'cells'}`].filter(Boolean).join(' · ')}</small></div>
     <div className="nb-session-actions">
       {busy && <button className="secondary" disabled={asking.startsWith('interrupt:')} onClick={onInterrupt}>Interrupt</button>}
       <button className="text-button" disabled={asking === 'stop:' + session.sessionId} title={`End the ${name} session; its values are gone`} onClick={() => onStop(session)}>Stop</button>
@@ -214,7 +221,7 @@ function Variables({ sessions, onObject, pane = false, recent }: { sessions: Par
   const id = useId();
   return <section className={'nb-rail-section' + (pane ? ' nb-pane-section' : '')} aria-labelledby={id}>
     <header>{pane
-      ? <h2 id={id} className="nb-pane-state">{session ? <><span className={'nb-dot ' + session.state} aria-hidden="true" />{versionOf(session)} · {session.state === 'busy' ? 'running a cell' : session.state === 'starting' ? 'starting' : 'idle'} · {session.variables.length + session.variablesOmitted} {session.variables.length + session.variablesOmitted === 1 ? 'value' : 'values'}</> : 'Variables'}</h2>
+      ? <h2 id={id} className="nb-pane-state">{session ? <><span className={'nb-dot ' + session.state} aria-hidden="true" />{[versionOf(session), whereOf(session), session.state === 'busy' ? 'running a cell' : session.state === 'starting' ? 'starting' : 'idle', `${session.variables.length + session.variablesOmitted} ${session.variables.length + session.variablesOmitted === 1 ? 'value' : 'values'}`].filter(Boolean).join(' · ')}</> : 'Variables'}</h2>
       : <h2 id={id}>Variables</h2>}
       {live.length > 1 && <div className="nb-tabs" role="group" aria-label="Session">{live.map(l => <button key={l} aria-pressed={l === shown} onClick={() => setChosen(l)}>{languageName[l]}</button>)}</div>}
     </header>
@@ -252,8 +259,8 @@ function LanguageChip({ language, onLanguage }: { language: Language; onLanguage
     {languageName[language]}<Icon name="updown" size={10} stroke={2.2} /></button>;
 }
 
-function Composer({ language, setLanguage, draft, setDraft, busy, problem, note, onRun, onInterrupt, running, input, placeholder, small }: {
-  language: Language; setLanguage: (l: Language) => void; draft: string; setDraft: (t: string) => void; busy: boolean; problem: string; note?: string; placeholder: string; small?: boolean;
+function Composer({ language, setLanguage, draft, setDraft, busy, problem, note, onRun, onInterrupt, running, input, placeholder, small, place }: {
+  language: Language; setLanguage: (l: Language) => void; draft: string; setDraft: (t: string) => void; busy: boolean; problem: string; note?: string; placeholder: string; small?: boolean; place?: React.ReactNode;
   onRun: () => void; onInterrupt: () => void; running: boolean; input: React.RefObject<HTMLTextAreaElement | null>;
 }) {
   const id = useId(), lines = Math.max(small ? 1 : 2, Math.min(small ? 8 : 14, draft.split('\n').length));
@@ -261,6 +268,7 @@ function Composer({ language, setLanguage, draft, setDraft, busy, problem, note,
   return <form className="nb-composer" onSubmit={event => { event.preventDefault(); onRun(); }}>
     <div className="nb-compose-bar">
       <LanguageChip language={language} onLanguage={l => { setLanguage(l); input.current?.focus(); }} />
+      {place}
       <label htmlFor={id}>Runs in the {languageName[language]} session you share with the Agent</label>
     </div>
     {note && <p className="nb-compose-note">{note}</p>}
@@ -337,20 +345,20 @@ function ConsoleCell({ cell, author, who, client, projectId, now, plotsBeside, p
 }
 function ConsoleMark({ session, edge, who }: { session: Session; edge: 'start' | 'end'; who: (by: string) => Author }) {
   const name = languageName[session.language];
-  if (edge === 'start') { const by = who(session.startedBy).name; return <p className="nbc-mark">{name} session started{session.version ? ' · ' + versionOf(session) : ''} · by {by === 'You' ? 'you' : by} at {at(session.startedAt)}</p>; }
-  const how = session.ending === 'stopped' ? `stopped by ${session.stop ? (who(session.stop.by).name === 'You' ? 'you' : who(session.stop.by).name) : 'request'}` : session.ending === 'rho-closed' ? 'Rho closed' : session.ending === 'not-started' ? 'it did not start' : 'its process ended';
-  return <p className={'nbc-mark ended' + (session.ending === 'stopped' ? '' : ' problem')}>{name} session ended at {at(session.endedAt!)} · {how}. Values defined before this are gone.</p>;
+  if (edge === 'start') { const by = who(session.startedBy).name; return <p className="nbc-mark">{name} session started{session.place ? ' ' + whereOf(session) : ''}{session.version ? ' · ' + versionOf(session) : ''} · by {by === 'You' ? 'you' : by} at {at(session.startedAt)}</p>; }
+  return <p className={'nbc-mark ended' + (session.ending === 'stopped' ? '' : ' problem')}>{name} session ended at {at(session.endedAt!)} · {endedHow(session, who)}.</p>;
 }
 // The sessions above the console: their state, Interrupt while a cell runs, Stop, and Clear.
-function ConsoleBar({ sessions, asking, onInterrupt, onStop, onClear }: { sessions: Partial<Record<Language, Session>>; asking: string; onInterrupt: (language: Language) => void; onStop: (session: Session) => void; onClear?: () => void }) {
+function ConsoleBar({ sessions, asking, onInterrupt, onStop, onClear, place }: { sessions: Partial<Record<Language, Session>>; asking: string; onInterrupt: (language: Language) => void; onStop: (session: Session) => void; onClear?: () => void; place?: React.ReactNode }) {
   const live = languages.filter(l => sessions[l] && sessions[l]!.state !== 'ended');
   return <div className="nbc-bar">
     {!live.length && <span className="nbc-bar-session off"><span className="nb-dot" aria-hidden="true" />No live session · the first cell starts one</span>}
     {live.map(l => { const s = sessions[l]!; return <span key={l} className={'nbc-bar-session ' + s.state}>
-      <span className="nb-dot" aria-hidden="true" />{versionOf(s)} · {s.state === 'busy' ? 'running' : s.state}
+      <span className="nb-dot" aria-hidden="true" />{[versionOf(s), whereOf(s), s.state === 'busy' ? 'running' : s.state].filter(Boolean).join(' · ')}
       {s.state === 'busy' && <button className="text-button" disabled={asking.startsWith('interrupt:')} onClick={() => onInterrupt(l)}>Interrupt</button>}
       <button className="text-button nbc-stop" disabled={asking === 'stop:' + s.sessionId} title={`End the ${languageName[l]} session; its values are gone`} onClick={() => onStop(s)}>Stop</button>
     </span>; })}
+    {place}
     {onClear && <button className="text-button nbc-clear" title="Clear the console (Ctrl+L); the sessions keep their values" onClick={onClear}>Clear</button>}
   </div>;
 }
@@ -468,6 +476,7 @@ export function NotebookPage({ client, snapshot, onConversation, onObject, scope
   scope?: { principal: string | null; since: number | null; at: number | null } }) {
   const projectId = snapshot.project.id;
   const { read, off, problem, again } = useKernel(client, projectId, snapshot.cursor);
+  const { places, setPlaces } = usePlaces(client, projectId, snapshot.cursor);
   const who = useAuthors(snapshot);
   const cells = useMemo(() => {
     const all = read?.cells ?? [];
@@ -569,7 +578,7 @@ export function NotebookPage({ client, snapshot, onConversation, onObject, scope
   }
   async function stop(session: Session) {
     const name = languageName[session.language];
-    if (!window.confirm(`Stop the ${name} session? The values defined in it are gone; the next ${name} cell starts a new session.`)) return;
+    if (!window.confirm(`Stop the ${name} session${session.place ? ' on ' + session.place.label : ''}? The values defined in it are gone; the next ${name} cell starts a new session.`)) return;
     setAsking('stop:' + session.sessionId); setAskProblem('');
     try { await client.call('kernel.stop', { projectId, sessionId: session.sessionId }); void again(); }
     catch (error) { setAskProblem(failure(error)); }
@@ -582,8 +591,10 @@ export function NotebookPage({ client, snapshot, onConversation, onObject, scope
   if (off) return <p className="nb-empty-line">{problem}</p>;
   // The line to run waits for now during a replay.
   const composing = (scope?.at ?? null) === null;
+  // Where the language's next cell runs, when the project names any server.
+  const placeChip = <PlaceChip client={client} projectId={projectId} language={shownLanguage} session={latest[shownLanguage]} places={places} onChanged={setPlaces} />;
   const composer = (small: boolean) => composing && <Composer small={small} language={shownLanguage} setLanguage={setLanguage} draft={draft} setDraft={text => { setDraft(text); if (!text) setNote(''); }} busy={busy} problem={runProblem} note={note} onRun={() => void run(draft, shownLanguage)}
-    running={latest[shownLanguage]?.state === 'busy'} onInterrupt={() => void interrupt(shownLanguage)} input={input} placeholder={example(shownLanguage, latest[shownLanguage])} />;
+    running={latest[shownLanguage]?.state === 'busy'} onInterrupt={() => void interrupt(shownLanguage)} input={input} placeholder={example(shownLanguage, latest[shownLanguage])} place={placeChip} />;
   const nothing = scope?.at != null ? 'No cells by then.' : scope ? 'No cells in this conversation yet. What you run here runs in the sessions you share with the Agent.' : 'Nothing has run in the live sessions yet. What you run here runs in the sessions you share with the Agent.';
   // In a narrow view the cells take the whole view; the sessions and their values fold above them.
   const live = languages.filter(l => latest[l] && latest[l]!.state !== 'ended' && (!scope || cells.some(c => c.sessionId === latest[l]!.sessionId)));
@@ -601,7 +612,7 @@ export function NotebookPage({ client, snapshot, onConversation, onObject, scope
       if (!composing || window.getSelection()?.toString() || (event.target as HTMLElement).closest('button, a, textarea, summary, img')) return;
       input.current?.focus({ preventScroll: true });
     }}>
-      <ConsoleBar sessions={latest} asking={asking} onInterrupt={l => void interrupt(l)} onStop={session => void stop(session)} onClear={composing ? () => setCleared(rows.at(-1)?.at ?? Date.now()) : undefined} />
+      <ConsoleBar sessions={latest} asking={asking} onInterrupt={l => void interrupt(l)} onStop={session => void stop(session)} onClear={composing ? () => setCleared(rows.at(-1)?.at ?? Date.now()) : undefined} place={composing ? placeChip : undefined} />
       {problem && <p className="inline-error" role="alert">{problem}</p>}
       {askProblem && <p className="inline-error" role="alert">{askProblem}</p>}
       <div className="nbc-log" role="log" aria-label="Console">

@@ -5,7 +5,7 @@
 // value an accepted response carries. The service, the Node client and the browser
 // client are all written against these types; runtime validation stays with Ajv.
 //
-// Contract identity: apiVersion 2.0, schemaVersion 2, 120 operations.
+// Contract identity: apiVersion 2.0, schemaVersion 2, 125 operations.
 export interface RhoOperationError {
   kind:
     | 'invalid'
@@ -8141,6 +8141,169 @@ export interface KernelInterruptOutput {
   };
 }
 
+export interface KernelPlaceCheckInput {
+  projectId: string;
+  placeId: string;
+}
+
+export interface KernelPlaceCheckOutput {
+  check: {
+    at: string;
+    by: string;
+    folder: string | null;
+    host: string | null;
+    jsonlite: boolean | null;
+    matplotlib: boolean | null;
+    ms: number;
+    ok: boolean;
+    problem: string | null;
+    python: string | null;
+    r: string | null;
+    system: string | null;
+  };
+  placeId: string;
+}
+
+export interface KernelPlaceCopyInput {
+  projectId: string;
+  path: string;
+  placeId: string;
+}
+
+export interface KernelPlaceCopyOutput {
+  copy: {
+    by: string;
+    bytes: number;
+    copiedAt: string;
+    modifiedAt: string | null;
+    path: string;
+    placeId: string;
+    sha256: string;
+    to: string;
+  };
+}
+
+export interface KernelPlaceListInput {
+  projectId: string;
+  path?: string;
+  placeId: string;
+}
+
+export interface KernelPlaceListOutput {
+  cut: boolean;
+  entries: {
+    bytes: number;
+    kind: 'folder' | 'file' | 'link' | 'other';
+    modifiedAt: string | null;
+    name: string;
+  }[];
+  folder: string;
+  omitted: number;
+  path: string;
+  placeId: string;
+  readAt: string;
+}
+
+export interface KernelPlaceSetInput {
+  projectId: string;
+  place?: {
+    destination: string;
+    folder: string;
+    label?: string;
+    placeId: string;
+    setup?: string;
+  };
+  remove?: string;
+  use?: {
+    python?: string;
+    r?: string;
+  };
+}
+
+export interface KernelPlaceSetOutput {
+  copies: {
+    by: string;
+    bytes: number;
+    copiedAt: string;
+    modifiedAt: string | null;
+    path: string;
+    placeId: string;
+    sha256: string;
+    to: string;
+  }[];
+  places: {
+    at: string;
+    by: string;
+    check: {
+      at: string;
+      by: string;
+      folder: string | null;
+      host: string | null;
+      jsonlite: boolean | null;
+      matplotlib: boolean | null;
+      ms: number;
+      ok: boolean;
+      problem: string | null;
+      python: string | null;
+      r: string | null;
+      system: string | null;
+    } | null;
+    destination: string;
+    folder: string;
+    label: string;
+    placeId: string;
+    setup: string;
+  }[];
+  use: {
+    python: string;
+    r: string;
+  };
+}
+
+export interface KernelPlacesInput {
+  projectId: string;
+}
+
+export interface KernelPlacesOutput {
+  copies: {
+    by: string;
+    bytes: number;
+    copiedAt: string;
+    modifiedAt: string | null;
+    path: string;
+    placeId: string;
+    sha256: string;
+    to: string;
+  }[];
+  places: {
+    at: string;
+    by: string;
+    check: {
+      at: string;
+      by: string;
+      folder: string | null;
+      host: string | null;
+      jsonlite: boolean | null;
+      matplotlib: boolean | null;
+      ms: number;
+      ok: boolean;
+      problem: string | null;
+      python: string | null;
+      r: string | null;
+      system: string | null;
+    } | null;
+    destination: string;
+    folder: string;
+    label: string;
+    placeId: string;
+    setup: string;
+  }[];
+  use: {
+    python: string;
+    r: string;
+  };
+}
+
 export interface KernelPlotInput {
   projectId: string;
   cellId: string;
@@ -8201,9 +8364,16 @@ export interface KernelReadOutput {
   sessions: {
     cells: number;
     endedAt: string | null;
-    ending: ('stopped' | 'exited' | 'rho-closed' | 'not-started') | null;
+    ending: ('stopped' | 'exited' | 'disconnected' | 'rho-closed' | 'not-started') | null;
+    host?: string | null;
     language: 'r' | 'python';
     pid: number | null;
+    place?: {
+      destination: string;
+      folder: string;
+      label: string;
+      placeId: string;
+    } | null;
     problem: string | null;
     sessionId: string;
     startedAt: string;
@@ -8231,6 +8401,7 @@ export interface KernelRunInput {
   changeId: string;
   code: string;
   language: 'r' | 'python';
+  place?: string;
   purpose?: string;
   waitMs?: number;
 }
@@ -8275,9 +8446,16 @@ export interface KernelRunOutput {
   session: {
     cells: number;
     endedAt: string | null;
-    ending: ('stopped' | 'exited' | 'rho-closed' | 'not-started') | null;
+    ending: ('stopped' | 'exited' | 'disconnected' | 'rho-closed' | 'not-started') | null;
+    host?: string | null;
     language: 'r' | 'python';
     pid: number | null;
+    place?: {
+      destination: string;
+      folder: string;
+      label: string;
+      placeId: string;
+    } | null;
     problem: string | null;
     sessionId: string;
     startedAt: string;
@@ -8309,9 +8487,16 @@ export interface KernelStopOutput {
   session: {
     cells: number;
     endedAt: string | null;
-    ending: ('stopped' | 'exited' | 'rho-closed' | 'not-started') | null;
+    ending: ('stopped' | 'exited' | 'disconnected' | 'rho-closed' | 'not-started') | null;
+    host?: string | null;
     language: 'r' | 'python';
     pid: number | null;
+    place?: {
+      destination: string;
+      folder: string;
+      label: string;
+      placeId: string;
+    } | null;
     problem: string | null;
     sessionId: string;
     startedAt: string;
@@ -11084,6 +11269,11 @@ export interface SessionGrantInput {
     | 'interaction.selection.set'
     | 'kernel.inspect'
     | 'kernel.interrupt'
+    | 'kernel.place.check'
+    | 'kernel.place.copy'
+    | 'kernel.place.list'
+    | 'kernel.place.set'
+    | 'kernel.places'
     | 'kernel.plot'
     | 'kernel.read'
     | 'kernel.run'
@@ -12903,6 +13093,11 @@ export interface RhoOperations {
   "interaction.selection.set": { input: InteractionSelectionSetInput; output: InteractionSelectionSetOutput };
   "kernel.inspect": { input: KernelInspectInput; output: KernelInspectOutput };
   "kernel.interrupt": { input: KernelInterruptInput; output: KernelInterruptOutput };
+  "kernel.place.check": { input: KernelPlaceCheckInput; output: KernelPlaceCheckOutput };
+  "kernel.place.copy": { input: KernelPlaceCopyInput; output: KernelPlaceCopyOutput };
+  "kernel.place.list": { input: KernelPlaceListInput; output: KernelPlaceListOutput };
+  "kernel.place.set": { input: KernelPlaceSetInput; output: KernelPlaceSetOutput };
+  "kernel.places": { input: KernelPlacesInput; output: KernelPlacesOutput };
   "kernel.plot": { input: KernelPlotInput; output: KernelPlotOutput };
   "kernel.read": { input: KernelReadInput; output: KernelReadOutput };
   "kernel.run": { input: KernelRunInput; output: KernelRunOutput };
@@ -12958,5 +13153,5 @@ export type RhoInput<M extends RhoMethod> = RhoOperations[M]['input'];
 export type RhoOutput<M extends RhoMethod> = RhoOperations[M]['output'];
 
 /** The names a caller may pass to protocol.describe / protocol.validate. */
-export const rhoMethods = ["action.cancel","action.export","action.list","action.lookup","action.observe","action.output","action.retry","action.submit","agent.activity.capture","agent.activity.outputs","agent.activity.read","annotation.create","annotation.decide","annotation.list","annotation.read","annotation.reply","artifact.check","binding.activity","binding.activity.append","binding.close","binding.list","binding.open","capability.configure","capability.index","capability.list","capability.resolve","composition.apply","composition.put","composition.read","composition.undo","console.list","console.output","console.run","console.stop","context.create","context.read","conversation.configure","conversation.decide","conversation.delete","conversation.list","conversation.permission","conversation.read","conversation.restore","conversation.send","conversation.settings.check","conversation.settings.read","conversation.settings.update","conversation.start","conversation.stop","conversation.trash","data.compare","data.page","data.plot","document.abandonSave","document.change.read","document.edit","document.history","document.open","document.read","document.revert","document.save","document.undo","document.undoOwn","evidence.export","evidence.preview","feedback.read","feedback.status","feedback.submit","interaction.selection.read","interaction.selection.set","kernel.inspect","kernel.interrupt","kernel.plot","kernel.read","kernel.run","kernel.stop","media.describe","object.read","observation.snapshot","project.create","project.createWorkspace","project.doctor","project.entries","project.list","project.open","project.openFile","project.pick","project.runs","project.source.add","project.source.pick","project.work.read","protocol.describe","protocol.validate","requirements.check","requirements.prepare","resource.capture","resource.list","resource.read","resource.register","selection.set","session.browser.pair","session.browser.revoke","session.connect","session.grant","skill.list","skill.read","task.map.declare","task.map.present","task.map.read","task.map.respond","task.routing.put","view.close","view.observations.read","view.observe","view.protection.set","workspace.enhance","workspace.export","workspace.observe","workspace.restore","workspace.save"] as const satisfies readonly RhoMethod[];
+export const rhoMethods = ["action.cancel","action.export","action.list","action.lookup","action.observe","action.output","action.retry","action.submit","agent.activity.capture","agent.activity.outputs","agent.activity.read","annotation.create","annotation.decide","annotation.list","annotation.read","annotation.reply","artifact.check","binding.activity","binding.activity.append","binding.close","binding.list","binding.open","capability.configure","capability.index","capability.list","capability.resolve","composition.apply","composition.put","composition.read","composition.undo","console.list","console.output","console.run","console.stop","context.create","context.read","conversation.configure","conversation.decide","conversation.delete","conversation.list","conversation.permission","conversation.read","conversation.restore","conversation.send","conversation.settings.check","conversation.settings.read","conversation.settings.update","conversation.start","conversation.stop","conversation.trash","data.compare","data.page","data.plot","document.abandonSave","document.change.read","document.edit","document.history","document.open","document.read","document.revert","document.save","document.undo","document.undoOwn","evidence.export","evidence.preview","feedback.read","feedback.status","feedback.submit","interaction.selection.read","interaction.selection.set","kernel.inspect","kernel.interrupt","kernel.place.check","kernel.place.copy","kernel.place.list","kernel.place.set","kernel.places","kernel.plot","kernel.read","kernel.run","kernel.stop","media.describe","object.read","observation.snapshot","project.create","project.createWorkspace","project.doctor","project.entries","project.list","project.open","project.openFile","project.pick","project.runs","project.source.add","project.source.pick","project.work.read","protocol.describe","protocol.validate","requirements.check","requirements.prepare","resource.capture","resource.list","resource.read","resource.register","selection.set","session.browser.pair","session.browser.revoke","session.connect","session.grant","skill.list","skill.read","task.map.declare","task.map.present","task.map.read","task.map.respond","task.routing.put","view.close","view.observations.read","view.observe","view.protection.set","workspace.enhance","workspace.export","workspace.observe","workspace.restore","workspace.save"] as const satisfies readonly RhoMethod[];
 export type RhoInputFor<M extends RhoMethod> = RhoOperations[M]['input'];

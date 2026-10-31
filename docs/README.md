@@ -20,6 +20,7 @@ were withdrawn on 2026-10-25; Git keeps their history.
 | [An Agent's edit beside unsaved text](DOCUMENTS-EPISODE.md) | Claude Code's native edit while a person has unsaved text in Studio: the fork observed, the owner merge and Studio's follow, the Documents hook that sends the Agent to the shared buffer, real runs, checks and limits |
 | [Result review and retained evidence](REVIEW-EVIDENCE-EPISODE.md) | Immutable capture, version-bound human decisions, historical Graph, offline packages and observed trials |
 | [Code, Markdown and runs in a project](CODE-MARKDOWN-EPISODE.md) | Python, R and a Markdown report in the test project: what Rho showed, highlighting by language through the Documents editor, then Markdown rendering and legible Agent runs |
+| [Live sessions on a server](REMOTE-EPISODE.md) | R and Python run in a folder on a server reached with ssh: places, checks, the Servers view, copies of server files and a dropped connection; the episode on a disposable server, fixes and limits |
 | [Agent activity](AGENT-ACTIVITY.md) | Live Claude Code/dsh observations, errors, captured outputs, recovery and real-run evidence |
 | [Conversation episode](CONVERSATION-EPISODE.md) | Conversations with Claude Code started in Rho, who holds a session's input, limits, real runs and their reviews |
 | [Claude ACP episode](ACP-EPISODE.md) | Agent-owned ACP, real Westlake HPC multi-turn conversation, cancellation and recovery; legacy compatibility and limits |

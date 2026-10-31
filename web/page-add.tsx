@@ -10,10 +10,10 @@ import type { SourceItem, SourceRow } from './sources.js';
 // the rest are on its own page.
 export const pageAddLimits = { filesPerKind: 6 };
 const rows: SourceRow[] = ['results', 'data', 'code', 'reports', 'workflows', 'notes', 'references', 'environment'];
-export function PageAdd({ sources, notebook, variables = 'unavailable', plots = 'unavailable', flow = 'unavailable', onNotebook, onSessionView, onFile, onAll }: {
+export function PageAdd({ sources, notebook, variables = 'unavailable', plots = 'unavailable', flow = 'unavailable', servers = 'unavailable', onNotebook, onSessionView, onFile, onAll }: {
   sources: Record<SourceRow, SourceItem[]> | null; notebook: 'absent' | 'present' | 'unavailable';
-  variables?: 'absent' | 'present' | 'unavailable'; plots?: 'absent' | 'present' | 'unavailable'; flow?: 'absent' | 'present' | 'unavailable';
-  onNotebook: () => void; onSessionView?: (kind: 'variables' | 'plots' | 'flow') => void; onFile: (path: string) => void; onAll: (row: SourceRow) => void;
+  variables?: 'absent' | 'present' | 'unavailable'; plots?: 'absent' | 'present' | 'unavailable'; flow?: 'absent' | 'present' | 'unavailable'; servers?: 'absent' | 'present' | 'unavailable';
+  onNotebook: () => void; onSessionView?: (kind: 'variables' | 'plots' | 'flow' | 'servers') => void; onFile: (path: string) => void; onAll: (row: SourceRow) => void;
 }) {
   // A choice made from a menu closes it.
   const chose = (run: () => void) => (event: MouseEvent<HTMLButtonElement>) => { event.currentTarget.closest('details')?.removeAttribute('open'); run(); };
@@ -29,6 +29,9 @@ export function PageAdd({ sources, notebook, variables = 'unavailable', plots = 
     </button>}
     {flow !== 'unavailable' && onSessionView && <button className="page-add-notebook" onClick={chose(() => onSessionView('flow'))}>
       <Icon name="workflow" size={17} /><span><strong>Data flow</strong><small>{flow === 'present' ? 'On this page' : 'How each value was made: what each cell read and made'}</small></span>
+    </button>}
+    {servers !== 'unavailable' && onSessionView && <button className="page-add-notebook" onClick={chose(() => onSessionView('servers'))}>
+      <Icon name="server" size={17} /><span><strong>Servers</strong><small>{servers === 'present' ? 'On this page' : 'Run R and Python on a server you reach with ssh, and look at its files'}</small></span>
     </button>}
     {!sources ? <p className="page-add-note" role="status">Reading the project folders…</p>
       : rows.map(row => {

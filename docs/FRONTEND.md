@@ -163,6 +163,18 @@ inspect what happened. The application gives those actions direct places:
   who ran it and Show in the Notebook. It follows the kernel's records (below), not the code:
   60 values, 8 plots and 24 written files are drawn at most, and older ones are counted
   ([episode](SIMULATED-PROJECT-EPISODE.md#data-flow-html-pages-and-object-dependent-cases)).
+- **Servers** (`rho.servers`) shows where the live sessions run: this machine and each place, a
+  folder on a server ssh reaches. A place shows its ssh name and folder, what its last check saw
+  (system, R and Python there, the machine's name, who checked and how long it took), its live
+  sessions with the machine and process, and a session that lost its connection, with its process
+  there not seen to end. "New sessions R / Python" marks where each language's next session
+  starts. Add a server takes the ssh name, the folder, a name and setup lines, then checks it.
+  Files lists a folder there; opening a file copies it into `remote/<place>/` and opens the copy,
+  and a copy whose file has changed on the server says so. The Notebook's line has a chip beside
+  the language naming where its next cell runs; session marks, rows, the console bar, Variables
+  and Data flow name the place, and a file named in a server session's Data flow opens in Servers
+  at its folder there. Explore in R or Python from a copy loads its original on the server; a
+  file only on this machine is not sent there.
 - **HTML pages** (a knitted report, a saved widget, a page an Agent wrote) open as the page they
   make, with Page and Edit (Source) in the header over the same buffer as the editor. The page
   runs in a sandboxed frame of its own: its scripts run, it cannot reach Rho, and nothing loads
@@ -305,7 +317,7 @@ inspect what happened. The application gives those actions direct places:
   it, shows a layout of several groups one view at a time with all its tabs, as a phone
   does; the saved layout is unchanged. New workspace, under Studio in the sidebar and in
   the command palette, makes an empty page of the person's own (Workspace 2, 3, …). An
-  empty page offers the Notebook, Variables, Plots, Data flow and the project's files by kind; Add view
+  empty page offers the Notebook, Variables, Plots, Data flow, Servers and the project's files by kind; Add view
   in the Studio bar offers the same on any of the person's pages. A file opens in the view it has
   elsewhere in Studio, the Notebook in a pane right of what is there. Pages cannot yet be
   renamed or removed, and they count toward the 32 layouts a project keeps.
@@ -427,6 +439,8 @@ statement a script line runs (`statementAt`), and `web/entries/documents.tsx` se
 through the page's `runCode` shell service.
 `web/flow.tsx` draws Data flow from the same read, with `src/lineage.ts` (`lineage`, `lanes`,
 `related`) making its boxes and lanes from each cell's `defined`, `used` and `files`.
+`web/servers.tsx` draws Servers and the Notebook's place chip from `kernel.places`, and lists and
+copies a place's files; `showOnServer` takes a file from Data flow to it.
 The HTML page view is `html.reader` from Rho-plugins (HTML 0.1.0); Rho gives it `pageFrame`, the
 service's `/frame.html` (sandboxed, with its own policy and no network; the page's policy adds
 only `frame-src 'self'`), and `fileBytes`, a file snapshot's bytes (`readFile` in `web/previews.ts`).

@@ -440,6 +440,36 @@
       "bytes": 5956,
       "sha256": "63316d82629e0308a6e1fbf312a90bd604f048e5aa0143227804b81a280f015d"
     },
+    "kernel.place.check": {
+      "summary": "kernel.place.check",
+      "path": "operations/kernel.place.check.json",
+      "bytes": 3022,
+      "sha256": "00528608bab6ce68c35d0feb188792310541225f9aab02847d1d7471c33169a1"
+    },
+    "kernel.place.copy": {
+      "summary": "kernel.place.copy",
+      "path": "operations/kernel.place.copy.json",
+      "bytes": 1923,
+      "sha256": "7de3981be683edec03c68abc728b944934cbe363113418699d5c3656ca515126"
+    },
+    "kernel.place.list": {
+      "summary": "kernel.place.list",
+      "path": "operations/kernel.place.list.json",
+      "bytes": 2106,
+      "sha256": "a6576401df413a29fd23096cd90e1380805c693587399703b84baaa4119be4c9"
+    },
+    "kernel.place.set": {
+      "summary": "kernel.place.set",
+      "path": "operations/kernel.place.set.json",
+      "bytes": 8483,
+      "sha256": "c2794d58140515777942fb7172861fdb7b634acc2e3b5d091410a7b2f4090fcf"
+    },
+    "kernel.places": {
+      "summary": "kernel.places",
+      "path": "operations/kernel.places.json",
+      "bytes": 7136,
+      "sha256": "73961ce7e1ce3e3f33c58d8012b378b651892c513aa59b31ba3fb163b106e258"
+    },
     "kernel.plot": {
       "summary": "One plot a cell kept, as PNG bytes.",
       "path": "operations/kernel.plot.json",
@@ -449,20 +479,20 @@
     "kernel.read": {
       "summary": "The live sessions and their cells, oldest cell first: code, purpose, who ran it, what it printed, its plots and how it ended, and each session's variables. Reading never starts a session.",
       "path": "operations/kernel.read.json",
-      "bytes": 11260,
-      "sha256": "8c66a189b6a4c557e74b0d74331484ab3dbcc55a7527822965b6109774c5c6bb"
+      "bytes": 12636,
+      "sha256": "ac6e56ffef48cd07964fee7f4c725c0c347557d617ff8c8880a70e97a515e887"
     },
     "kernel.run": {
       "summary": "Run a cell of R or Python in the project's live session of that language, which the Agent and the person share: what one cell defines stays for the next. Starts the session when none is live. The same changeId from the same caller returns the same cell and never runs it twice. waitMs waits for the cell to end.",
       "path": "operations/kernel.run.json",
-      "bytes": 10707,
-      "sha256": "439eb48c163f5b1045736a1aac2d5b7636f8ea8669bbf8a4904e572f813a3b2f"
+      "bytes": 12087,
+      "sha256": "e11747a330c96cfc32296074f77cef38dc3f55115039e29b8b0574401c0c63cb"
     },
     "kernel.stop": {
       "summary": "Person at this machine only: end one live session. Its values are gone, the running cell ends with an error and waiting cells are not run. A session that has ended is returned unchanged.",
       "path": "operations/kernel.stop.json",
-      "bytes": 4905,
-      "sha256": "921079ceaaebb33c651bf27549f6064bee4bf6043ccad8251c0f604f0d28e448"
+      "bytes": 6189,
+      "sha256": "736edc582fa07126c90eb5dbd39121ce149d12c4764dc9cea4215a6c93b286a1"
     },
     "media.describe": {
       "summary": "media.describe",
@@ -629,8 +659,8 @@
     "session.grant": {
       "summary": "session.grant",
       "path": "operations/session.grant.json",
-      "bytes": 4372,
-      "sha256": "63f15b141456f65afa3b3a13677ec4545499ef1c33e8f92f55bedf3f716464d3"
+      "bytes": 4533,
+      "sha256": "283e67eaff3176a4848d47aa9a4eb4161be169c9e0df988f6471a0edeb164d09"
     },
     "skill.list": {
       "summary": "List the application and enabled provider Skills shipped in the selected package. Skills guide discovery but do not grant authorization.",

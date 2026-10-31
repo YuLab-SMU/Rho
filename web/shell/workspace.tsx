@@ -13,7 +13,8 @@ import { ActionForm } from './action-form.js';
 import { CommandPane } from '../console.js';
 import { FormSwitch, PlotsPane, SessionPane, VariablesPane, type NotebookForm, type Prepared } from '../notebook.js';
 import { FlowPane } from '../flow.js';
-import { addNotebook, addObject, canExplore, explorableTable, languageNames, loadTable, notebookComponent, notebookView, objectComponent, projectPath, scriptLanguage, scriptPrepared, sessionComponents, type Language } from '../explore.js';
+import { ServersPane, showOnServer } from '../servers.js';
+import { addNotebook, addObject, addSessionView, canExplore, explorableTable, languageNames, loadTable, notebookComponent, notebookView, objectComponent, projectPath, scriptLanguage, scriptPrepared, sessionComponents, type Language } from '../explore.js';
 import { ObjectView } from '../object-view.js';
 import { ExploreIn } from '../explore-in.js';
 import { useProcess } from '../process-context.js';
@@ -161,6 +162,14 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
     setLayoutProblem('');
     addObject(client, snapshot.project.id, layout.compositionId, language, name, stage.current?.clientWidth).then(id => { onPersonMoved?.(); setOpening(id); }, refusal);
   }
+  // A file a session on a server named is shown in the Servers view, in its folder there.
+  function openRemote(placeId: string, path: string) {
+    showOnServer(placeId, path);
+    const servers = layout.views.find(v => v.component === sessionComponents.servers)?.id;
+    if (servers) { show(servers); return; }
+    setLayoutProblem('');
+    addSessionView(client, snapshot.project.id, layout.compositionId, 'servers').then(id => { onPersonMoved?.(); setOpening(id); }, refusal);
+  }
   // A script's line run from its editor: the person's cell in the shared session, in the order the
   // lines were run. A page without the Notebook gets one under the script, as a console sits under
   // an editor; one in another pane comes forward in it, and the script keeps the keyboard.
@@ -280,7 +289,8 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
     if (view.component === 'rho.console') return <CommandPane client={client} snapshot={snapshot} />;
     if (view.component === sessionComponents.variables) return <VariablesPane client={client} snapshot={snapshot} onObject={openObject} />;
     if (view.component === sessionComponents.plots) return <PlotsPane client={client} snapshot={snapshot} />;
-    if (view.component === sessionComponents.flow) return <FlowPane client={client} snapshot={snapshot} onObject={openObject} onPath={shellAbove?.openPath} />;
+    if (view.component === sessionComponents.flow) return <FlowPane client={client} snapshot={snapshot} onObject={openObject} onPath={shellAbove?.openPath} onRemote={openRemote} />;
+    if (view.component === sessionComponents.servers) return <ServersPane client={client} snapshot={snapshot} onPath={shellAbove?.openPath} />;
     if (view.component === notebookComponent) {
       const form: NotebookForm = forms[id] ?? (view.props.form === 'console' ? 'console' : 'notebook');
       return <>{isVisible && createPortal(<FormSwitch form={form} onForm={f => chooseForm(id, f)} />, ownHeader(id), 'form-' + id)}<SessionPane form={form} beside={{ variables: layout.views.some(v => v.component === sessionComponents.variables), plots: layout.views.some(v => v.component === sessionComponents.plots) }} client={client} snapshot={snapshot} prepared={prepared} onTaken={() => setPrepared(null)} onConversation={onConversation} onObject={openObject} /></>;
