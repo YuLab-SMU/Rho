@@ -117,6 +117,14 @@ session (bix-51 7 of 7 in 5 cells, bix-18 4 of 5 in 4 cells) rather than explori
 cell. The default Agent grant had reached its 64-method limit, so the limit is now 96
 (`layeredGrantLimits.maxMethods`); a larger grant is still refused.
 
+The Notebook is also a view of any Studio page
+([episode](SIMULATED-PROJECT-EPISODE.md#exploring-a-finished-answer)). The person makes
+empty workspaces of their own and adds the Notebook or project files to them. Explore in R
+or Python on a table or script, from Studio, the answer board or the file page, opens it on
+their workspace beside the Notebook: a table loads as a new value in their own cell, a
+script waits in the line to run. A Studio stage under 640 px shows its views one at a time.
+Pages cannot yet be renamed or removed.
+
 ## Existing application
 
 - Projects opens selected folders and manages finite source folders. Sources counts
@@ -156,7 +164,9 @@ new CSS variable caused the application failure and was corrected. The second pa
 pass first failed 244/245 on another undeclared CSS variable, which was corrected;
 Rho 245/245 and Plugins 117/117. The Notebook pass first failed Rho 257/260: two
 checks still held the 64-method limit and the plugin count, and the Skill's verify
-command was not an application script. Corrected, it records Rho 261/261 and Plugins 132/132 in the [ledger](VERIFICATION.json), with the contract check and the
+command was not an application script; corrected, Rho 261/261 and Plugins 132/132. The
+exploring pass first failed Rho 263/264, the Studio shell importing a module outside its
+allowed set, and ui:u2 also matched the New workspace row; corrected, it records Rho 264/264 and Plugins 132/132 (unchanged) in the [ledger](VERIFICATION.json), with the contract check and the
 agent-canvas, graph, agent-page, agent-ui, review, ui:u2 and sources browser
 acceptances. Earlier passes: choices and Console Rho 260/260 and Plugins 125/125; figures and cost Rho 258/258; project notes Rho 249/249 and Plugins 120/120 (ui:u2 first
 failed until the notes stopped opening with every project); meaning layer Rho 253/253;
