@@ -2,15 +2,20 @@ import { useEffect, useId, useMemo, useState, useSyncExternalStore } from 'react
 import type { BrowserClient, WorkspaceSnapshot } from '../src/browser.js';
 import type { RhoOutput } from '../src/contract.generated.js';
 import { Icon } from './icons.js';
+import { AgentMarkdown } from './markdown.js';
 import { at, languageName, languages, latestSessions, useAuthors, useKernel, versionOf, type Session } from './notebook.js';
 import './servers.css';
 
-// Where the live sessions run: this machine, or a folder on a server the person reaches with
-// ssh. Each place says what a connection to it last saw (its system, its folder, R and Python
-// there), which sessions run there now, and where each language's next session starts. A place's
-// files are listed as the server has them, and a file is copied into the project to be looked at
-// in its own viewer; a copy says when the file on the server has changed since.
+// Where the live sessions run: this machine, or a folder on one of the person's servers, reached
+// through serverctl when serverctl manages it and with ssh otherwise. Each place says what a
+// connection to it last saw (its system, its folder, R and Python there), which sessions run there
+// now, and where each language's next session starts. A server serverctl manages shows the skills
+// bound to it, which say how that server is used and can be read here, as the Agent reads them. A
+// place's files are listed as the server has them, and a file is copied into the project to be
+// looked at in its own viewer; a copy says when the file on the server has changed since.
 type Places = RhoOutput<'kernel.places'>;
+type Servers = RhoOutput<'kernel.servers'>;
+type Skill = Servers['servers'][number]['skills'][number];
 type Place = Places['places'][number];
 type Check = NonNullable<Place['check']>;
 type Listing = RhoOutput<'kernel.place.list'>;
@@ -27,6 +32,16 @@ export function usePlaces(client: BrowserClient, projectId: string, cursor: numb
   useEffect(() => { void again(); }, [client, projectId, cursor]);
   return { places, problem, again, setPlaces };
 }
+// The servers serverctl manages and their skills, read when the view opens and when asked.
+function useServers(client: BrowserClient, projectId: string) {
+  const [servers, setServers] = useState<Servers | null>(null);
+  const again = () => client.call('kernel.servers', { projectId }).then(setServers, error => setServers({ tool: { program: 'serverctl', ok: false, problem: failure(error) }, servers: [], readAt: new Date().toISOString() }));
+  useEffect(() => { void again(); }, [client, projectId]);
+  return { servers, again };
+}
+// serverctl's problem, unless it is simply not installed here.
+const toolProblem = (servers: Servers | null) => servers && !servers.tool.ok && !/ was not found\.$/.test(servers.tool.problem ?? '') ? servers.tool.problem : null;
+
 // Where a session runs, as a phrase: "on Lab server", or nothing for this machine.
 export const whereOf = (session: Pick<Session, 'place'> | undefined) => session?.place ? 'on ' + session.place.label : '';
 
@@ -67,12 +82,14 @@ export function ServersPane({ client, snapshot, onPath }: { client: BrowserClien
   const [checking, setChecking] = useState<string[]>([]);
   const [problems, setProblems] = useState<Record<string, string>>({});
   const [browsing, setBrowsing] = useState<{ placeId: string; path: string; focus?: string } | null>(null);
+  const [reading, setReading] = useState<{ server: string; name: string } | null>(null);
+  const { servers, again: readServers } = useServers(client, projectId);
   const request = useAsked();
   useEffect(() => { if (request) setBrowsing({ placeId: request.placeId, path: request.path.replace(/\/?[^/]*$/, ''), focus: request.path.split('/').at(-1) }); }, [request?.at]);
   const id = useId();
   if (!places) return <div className="nb-pane"><p className="nb-empty-line">{problem || 'Reading where the sessions run…'}</p></div>;
 
-  const name = (by: string) => { const n = who(by).name; return n === 'You' ? 'you' : n; };
+  const name = (by: string) => { const n = who(by).name; return n === 'You' ? 'you' : n.replace(/^An /, 'an '); };
   const sessionsOn = (placeId: string) => languages.map(l => latest[l]).filter((s): s is Session => !!s && (s.place?.placeId ?? 'local') === placeId);
   const use = (language: Language, placeId: string) => client.call('kernel.place.set', { projectId, use: { [language]: placeId } }).then(setPlaces, error => setProblems(p => ({ ...p, [placeId]: failure(error) })));
   async function check(place: Place) {
@@ -93,8 +110,8 @@ export function ServersPane({ client, snapshot, onPath }: { client: BrowserClien
       <h2 id={id} className="nb-pane-state">Where code runs</h2>
       {form !== 'new' && <button className="secondary" onClick={() => setForm('new')}><Icon name="plus" size={13} stroke={2} />Add a server</button>}
     </header>
-    <p className="sv-lede">R and Python run on this machine or on a server you reach with ssh. Each language's next session starts where it is marked.</p>
-    {form === 'new' && <PlaceForm client={client} projectId={projectId} places={places.places} onDone={(next, added) => { setForm(null); if (next) setPlaces(next); if (added) void check(added); }} />}
+    <p className="sv-lede">R and Python run on this machine or on one of your servers. Each language's next session starts where it is marked.</p>
+    {form === 'new' && <PlaceForm client={client} projectId={projectId} places={places.places} servers={servers} onDone={(next, added) => { setForm(null); if (next) setPlaces(next); if (added) void check(added); }} />}
     <ul className="sv-places">
       <li className="sv-place">
         <div className="sv-place-head"><Icon name="monitor" size={16} /><strong>This machine</strong>{runsHere('local')}</div>
@@ -102,13 +119,16 @@ export function ServersPane({ client, snapshot, onPath }: { client: BrowserClien
       </li>
       {places.places.map(place => {
         const busy = checking.includes(place.placeId), lost = sessionsOn(place.placeId).filter(s => s.ending === 'disconnected');
+        const managed = place.via === 'serverctl' ? servers?.servers.find(s => s.server === place.destination) : undefined;
         return <li key={place.placeId} className={'sv-place' + (browsing?.placeId === place.placeId ? ' open' : '')}>
           {form !== 'new' && form?.placeId === place.placeId
-            ? <PlaceForm client={client} projectId={projectId} places={places.places} editing={place} onDone={(next, changed) => { setForm(null); if (next) setPlaces(next); if (changed) void check(changed); }} />
+            ? <PlaceForm client={client} projectId={projectId} places={places.places} servers={servers} editing={place} onDone={(next, changed) => { setForm(null); if (next) setPlaces(next); if (changed) void check(changed); }} />
             : <>
               <div className="sv-place-head"><Icon name="server" size={16} /><strong>{place.label}</strong>{runsHere(place.placeId)}</div>
-              <p className="sv-where"><code>{place.destination}</code><span>{place.check?.folder ?? place.folder}</span></p>
-              <CheckLine check={place.check} busy={busy} name={name} />
+              <p className="sv-where"><code>{place.destination}</code><span>{place.check?.folder ?? place.folder}</span>{place.via === 'serverctl' && <small>through serverctl</small>}</p>
+              {place.via === 'serverctl' && servers && (managed ? <SkillList server={managed.server} skills={managed.skills} reading={reading} onRead={setReading} />
+                : <p className="sv-skills-none">{toolProblem(servers) ?? `serverctl does not manage ${place.destination} now.`}</p>)}
+              <CheckLine check={place.check} busy={busy} name={name} skills={!!managed?.skills.length} />
               {place.setup && <details className="sv-setup"><summary>Before a session starts</summary><pre>{place.setup}</pre></details>}
               <Sessions sessions={sessionsOn(place.placeId).filter(s => s.state !== 'ended')} />
               {lost.map(s => <p key={s.sessionId} className="sv-lost"><Icon name="offline" size={13} />The {languageName[s.language]} session lost its connection at {at(s.endedAt!)}. Its process there{s.pid ? ` (${s.pid})` : ''} was not seen to end, and the cell it was running may have gone on.</p>)}
@@ -124,19 +144,52 @@ export function ServersPane({ client, snapshot, onPath }: { client: BrowserClien
         </li>;
       })}
     </ul>
-    {!places.places.length && form !== 'new' && <p className="nb-empty-line">No servers yet. Add one with its ssh name (a Host in your ssh config, or user@host) and the folder you work in there, or ask the Agent to set one up.</p>}
+    {!places.places.length && form !== 'new' && <p className="nb-empty-line">No servers yet. Add one of your servers and the folder you work in there, or ask the Agent to set one up.</p>}
+    {reading && <SkillReader key={reading.server + '/' + reading.name} client={client} projectId={projectId} server={reading.server} name={reading.name} onClose={() => { setReading(null); void readServers(); }} />}
     {browsing && places.places.some(p => p.placeId === browsing.placeId) && <Files key={browsing.placeId} client={client} projectId={projectId} place={places.places.find(p => p.placeId === browsing.placeId)!} start={browsing.path} focus={browsing.focus}
       copies={places.copies.filter(c => c.placeId === browsing.placeId)} onCopied={copy => setPlaces(now => now && { ...now, copies: [...now.copies.filter(c => c.to !== copy.to), copy] })} onPath={onPath} />}
   </div>;
 }
 
-function CheckLine({ check, busy, name }: { check: Check | null; busy: boolean; name: (by: string) => string }) {
+// The skills bound to a server in serverctl: how that server is used, for the person and the Agent.
+function SkillList({ server, skills, reading, onRead }: { server: string; skills: Skill[]; reading: { server: string; name: string } | null; onRead: (skill: { server: string; name: string } | null) => void }) {
+  if (!skills.length) return <p className="sv-skills-none">No skills are bound to {server} in serverctl.</p>;
+  return <div className="sv-skills" role="group" aria-label={`Skills for ${server}`}>
+    <small>How it is used</small>
+    {skills.map(skill => {
+      const open = reading?.server === server && reading.name === skill.name;
+      return <button key={skill.name} type="button" className={skill.status === 'ready' ? '' : 'problem'} aria-pressed={open} title={skill.problem ?? skill.description} onClick={() => onRead(open ? null : { server, name: skill.name })}>
+        <Icon name="book" size={12} />{skill.name}{skill.status !== 'ready' && ` · ${skill.status}`}</button>;
+    })}
+  </div>;
+}
+
+// One skill as its file reads now, without its header.
+function SkillReader({ client, projectId, server, name, onClose }: { client: BrowserClient; projectId: string; server: string; name: string; onClose: () => void }) {
+  const [skill, setSkill] = useState<RhoOutput<'kernel.server.skill'> | null>(null);
+  const [problem, setProblem] = useState('');
+  useEffect(() => { client.call('kernel.server.skill', { projectId, server, name }).then(setSkill, error => setProblem(failure(error))); }, [client, projectId, server, name]);
+  return <section className="sv-reader" aria-label={`${name}, a skill for ${server}`}>
+    <header>
+      <h3><Icon name="book" size={14} />{name}</h3>
+      <button className="text-button" onClick={onClose}>Close</button>
+    </header>
+    {problem ? <p className="inline-error" role="alert">{problem}</p> : !skill ? <p className="nb-empty-line">Reading the skill…</p> : <>
+      {skill.description && <p className="sv-reader-what">{skill.description}</p>}
+      <div className="sv-reader-body"><AgentMarkdown text={skill.text.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, '')} streaming={false} /></div>
+      <p className="nb-note">Bound to {server} in serverctl · <code>{skill.path}</code>. The Agent is asked to read it before working there.</p>
+    </>}
+  </section>;
+}
+
+function CheckLine({ check, busy, name, skills }: { check: Check | null; busy: boolean; name: (by: string) => string; skills: boolean }) {
   if (busy && !check) return <p className="sv-check">Connecting…</p>;
   if (!check) return <p className="sv-check">Not checked yet.</p>;
   const missing = [check.r && check.jsonlite === false && 'jsonlite for R', check.python && check.matplotlib === false && 'matplotlib for figures in Python'].filter(Boolean);
   return <div className={'sv-check' + (check.ok ? '' : ' problem')}>
     {check.ok ? <p>{[check.system, check.r?.replace(/^R version (\S+).*$/, 'R $1') ?? 'no R', check.python ?? 'no Python'].filter(Boolean).join(' · ')}{check.host && <span className="sv-host"> · {check.host}</span>}</p> : <p>{check.problem}</p>}
     {missing.length > 0 && <p className="sv-missing">Not installed there: {missing.join(', ')}.</p>}
+    {check.ok && skills && (!check.r || missing.length > 0) && <p className="sv-missing">The server's skills may say how to set up {check.r ? 'what is missing' : 'R'} there; setup lines run before each session.</p>}
     <small>{busy ? 'Checking again…' : `Checked by ${name(check.by)} at ${day(check.at)} · ${(check.ms / 1000).toFixed(1)} s`}</small>
   </div>;
 }
@@ -151,14 +204,16 @@ function Sessions({ sessions }: { sessions: Session[] }) {
 }
 
 // A place is named by the person here, or by the Agent through the same operation.
-function PlaceForm({ client, projectId, places, editing, onDone }: { client: BrowserClient; projectId: string; places: Place[]; editing?: Place; onDone: (places: Places | null, changed?: Place) => void }) {
+function PlaceForm({ client, projectId, places, servers, editing, onDone }: { client: BrowserClient; projectId: string; places: Place[]; servers: Servers | null; editing?: Place; onDone: (places: Places | null, changed?: Place) => void }) {
   const [label, setLabel] = useState(editing?.label ?? '');
   const [destination, setDestination] = useState(editing?.destination ?? '');
   const [folder, setFolder] = useState(editing?.folder ?? '~/');
   const [setup, setSetup] = useState(editing?.setup ?? '');
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState('');
+  const [reading, setReading] = useState<{ server: string; name: string } | null>(null);
   const id = useId();
+  const managed = servers?.servers.find(s => s.server.toLowerCase() === destination.trim().toLowerCase());
   // The place's id comes from its name, and stays when it is renamed.
   const placeId = editing?.placeId ?? (() => {
     const base = (label.trim() || destination.split(/[@:/]/).filter(Boolean).at(-1) || 'server').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^[^a-z]+|-+$/g, '').slice(0, 28) || 'server';
@@ -176,13 +231,21 @@ function PlaceForm({ client, projectId, places, editing, onDone }: { client: Bro
   }
   return <form className="sv-form" onSubmit={event => { event.preventDefault(); void save(); }}>
     <h3>{editing ? `Edit ${editing.label}` : 'Add a server'}</h3>
-    <label htmlFor={id + 'd'}>ssh name<small>A Host in your ssh config, user@host or ssh://user@host:port. ssh logs in with your own keys and agent; it never asks for a password here.</small></label>
+    {servers?.tool.ok && servers.servers.length > 0 && <div className="sv-managed" role="group" aria-label="Your servers in serverctl">
+      <small>Your servers in serverctl</small>
+      {servers.servers.map(s => <button key={s.server} type="button" aria-pressed={managed?.server === s.server} onClick={() => { setDestination(s.server); setReading(null); }}>
+        <strong>{s.server}</strong><span>{[s.system, s.skills.length ? `${s.skills.length} ${s.skills.length === 1 ? 'skill' : 'skills'}` : ''].filter(Boolean).join(' · ')}</span></button>)}
+    </div>}
+    {toolProblem(servers) && <p className="sv-skills-none">{toolProblem(servers)}</p>}
+    <label htmlFor={id + 'd'}>Server<small>{managed ? 'Reached through serverctl, which holds its login.' : 'One of your servers above, or an ssh name: a Host in your ssh config, user@host or ssh://user@host:port. ssh logs in with your own keys and agent; it never asks for a password here.'}</small></label>
     <input id={id + 'd'} value={destination} onChange={e => setDestination(e.target.value)} placeholder="lab-server or me@lab.example.org" autoComplete="off" spellCheck={false} required />
+    {managed && <SkillList server={managed.server} skills={managed.skills} reading={reading} onRead={setReading} />}
+    {reading && <SkillReader key={reading.server + '/' + reading.name} client={client} projectId={projectId} server={reading.server} name={reading.name} onClose={() => setReading(null)} />}
     <label htmlFor={id + 'f'}>Folder there<small>Where sessions run and paths start. ~ is your home there.</small></label>
     <input id={id + 'f'} value={folder} onChange={e => setFolder(e.target.value)} placeholder="~/projects/rnaseq" autoComplete="off" spellCheck={false} required />
     <label htmlFor={id + 'n'}>Name<small>How Rho names it.</small></label>
     <input id={id + 'n'} value={label} onChange={e => setLabel(e.target.value)} placeholder={destination || 'Lab server'} maxLength={80} />
-    <label htmlFor={id + 's'}>Before a session starts<small>Shell lines run in the folder first, as in your terminal there.</small></label>
+    <label htmlFor={id + 's'}>Before a session starts<small>Shell lines run in the folder first, as in your terminal there{managed?.skills.length ? '; the server\'s skills say what it needs' : ''}.</small></label>
     <textarea id={id + 's'} value={setup} onChange={e => setSetup(e.target.value)} rows={2} placeholder={'module load R/4.3\nconda activate rnaseq'} spellCheck={false} />
     {problem && <p className="inline-error" role="alert">{problem}</p>}
     <div className="sv-form-foot">

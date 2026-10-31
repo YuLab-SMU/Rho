@@ -228,11 +228,18 @@
             "setup": {
               "maxLength": 4096,
               "type": "string"
+            },
+            "via": {
+              "enum": [
+                "ssh",
+                "serverctl"
+              ]
             }
           },
           "required": [
             "placeId",
             "label",
+            "via",
             "destination",
             "folder",
             "setup",

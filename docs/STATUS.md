@@ -182,10 +182,23 @@ size, time and digest; the Notebook, Variables and Data flow name where a sessio
 disposable Linux server holding bix-46's data only, the analysis ran there (mexG −4.96, its
 plot shown here), a written file opened from Data flow, and a dropped network left the running
 cell unknown and ran nothing again. The episode fixed interrupt under dash, UTF-8 text from a
-login without a UTF-8 locale and Explore loading local paths on the server. A session that keeps
-running on a server after a drop, scheduler compute nodes and the real lab cluster were not
-exercised; an Agent asked in plain words used its own shell first and its trial waits on the
-person's choice.
+login without a UTF-8 locale and Explore loading local paths on the server.
+
+[Servers' own skills](REMOTE-EPISODE.md#servers-own-skills) (Notebook 0.3.0): how a server is
+used is now the server's own skill, not Rho's code. A server the person manages with serverctl
+is reached through `serverctl exec`, which holds its login, and `kernel.servers` lists those
+servers with the skills serverctl binds to each; `kernel.server.skill` reads one. The Servers
+view lists them when a server is added, shows each place's skills and reads one in place, and
+the Agent's instructions say to read and follow them. The kernel no longer filters one
+cluster's login notices. On a disposable server whose R is only on a module path, registered in a throwaway
+serverctl with a skill saying so, the person's check found no R, the skill's line found R 4.2.2,
+and the bix-46 cells ran there (mexG −4.96). An Agent with Rho's tools only (Claude Opus 5.5,
+no shell) asked in plain words read the server's skill, named a place with its setup line,
+wrote to the folder the skill names and reported mexG 0.0715 in 1 vs 98, as recomputed. Claude
+Code started in Rho loaded the person's own ssh-server-manager skill, ran its own shell and
+waits on the person's choice. The serverctl on this machine's path is older than its registry
+("schema 8 is newer than supported 5"), and Rho shows that. A session left running after a drop,
+scheduler compute nodes and the real lab cluster were not exercised.
 
 ## Existing application
 
@@ -229,7 +242,11 @@ checks still held the 64-method limit and the plugin count, and the Skill's veri
 command was not an application script; corrected, Rho 261/261 and Plugins 132/132. The
 exploring pass first failed Rho 263/264, the Studio shell importing a module outside its
 allowed set, and ui:u2 also matched the New workspace row; corrected, Rho 264/264 and Plugins 132/132.
-The remote sessions pass records Rho 272/274 and Plugins 144/144 in the [ledger](VERIFICATION.json):
+The servers' skills pass records Rho 271/274 and Plugins 145/145 in the [ledger](VERIFICATION.json):
+in three full runs (272, 272, 271) the MCP v2 test was cancelled at its 30 s limit each time,
+the Notebook test failed twice (the error read once: cleanup removing `.rho`, `ENOTEMPTY`), and
+the same cleanup failed the answer-decisions and an ACP permission test once each; each passed
+alone, the Notebook three times. The contract check passed. The remote sessions pass recorded Rho 272/274 and Plugins 144/144:
 the MCP v2 test was cancelled at its 30 s limit and a Codex restart test failed removing its
 `.rho/rho` folder in cleanup; both passed alone (20.8 s for MCP v2). An earlier full run lost an ACP
 permission test and the Notebook test to the same load and cleanup race; both passed alone and

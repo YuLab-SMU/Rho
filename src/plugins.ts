@@ -32,7 +32,7 @@ const entries = {
   kernel: () => import('@rho-workspace/plugin-kernel')
 };
 export type PluginId = keyof typeof entries;
-export const selectedPluginVersions: Record<keyof typeof entries, string> = { documents: '0.4.7', files: '0.5.0', r: '0.4.1', requirements: '0.4.0', tables: '0.5.0', media: '0.4.0', charts: '0.4.0', annotations: '0.5.2', agent: '0.4.19', console: '0.1.0', kernel: '0.2.0' };
+export const selectedPluginVersions: Record<keyof typeof entries, string> = { documents: '0.4.7', files: '0.5.0', r: '0.4.1', requirements: '0.4.0', tables: '0.5.0', media: '0.4.0', charts: '0.4.0', annotations: '0.5.2', agent: '0.4.19', console: '0.1.0', kernel: '0.3.0' };
 export const pluginIds = Object.keys(entries) as PluginId[];
 type Modules = { [K in PluginId]: Awaited<ReturnType<typeof entries[K]>> };
 export interface PluginConfig {

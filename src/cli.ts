@@ -15,7 +15,7 @@ function openBrowser(target: string) {
 const usage = `Verify a read-only evidence package:
   rho --verify-evidence PATH
 Start Rho:
-  rho --root PROJECTS_DIRECTORY --state-dir SERVICE_STATE [--core ABSOLUTE_CORE_BINARY] [--rscript ABSOLUTE_RSCRIPT] [--python PYTHON] [--ssh SSH] [--claude CLAUDE_CODE_BINARY] [--codex CODEX_BINARY] [--agent-backend claude-acp|codex-acp|claude-cli] [--port 0] [--limits JSON_FILE] [--plugins documents,files,...] [--open]
+  rho --root PROJECTS_DIRECTORY --state-dir SERVICE_STATE [--core ABSOLUTE_CORE_BINARY] [--rscript ABSOLUTE_RSCRIPT] [--python PYTHON] [--ssh SSH] [--serverctl SERVERCTL] [--claude CLAUDE_CODE_BINARY] [--codex CODEX_BINARY] [--agent-backend claude-acp|codex-acp|claude-cli] [--port 0] [--limits JSON_FILE] [--plugins documents,files,...] [--open]
 A narrower browser link (optional):
   rho --pair PRIVATE_CONNECTION_FILE [--root PROJECTS_RELATIVE_DIRECTORY] [--open]
 Give an Agent access to one project, and the command that adds it to Claude Code:
@@ -29,7 +29,7 @@ link, code or session credential; --pair makes a narrower, expiring link for one
 PRIVATE_CONNECTION_FILE is the connectionFile the running service printed; it and every
 connection file are credentials.
 `;
-const options = { 'verify-evidence': { type: 'string' }, acp: { type: 'string' }, 'acp-agent': { type: 'string' }, root: { type: 'string' }, 'state-dir': { type: 'string' }, core: { type: 'string' }, rscript: { type: 'string' }, python: { type: 'string' }, ssh: { type: 'string' }, claude: { type: 'string' }, codex: { type: 'string' }, 'agent-backend': { type: 'string' }, port: { type: 'string' }, limits: { type: 'string' }, plugins: { type: 'string' }, pair: { type: 'string' }, open: { type: 'boolean' },
+const options = { 'verify-evidence': { type: 'string' }, acp: { type: 'string' }, 'acp-agent': { type: 'string' }, root: { type: 'string' }, 'state-dir': { type: 'string' }, core: { type: 'string' }, rscript: { type: 'string' }, python: { type: 'string' }, ssh: { type: 'string' }, serverctl: { type: 'string' }, claude: { type: 'string' }, codex: { type: 'string' }, 'agent-backend': { type: 'string' }, port: { type: 'string' }, limits: { type: 'string' }, plugins: { type: 'string' }, pair: { type: 'string' }, open: { type: 'boolean' },
   grant: { type: 'string' }, project: { type: 'string' }, session: { type: 'string' }, mcp: { type: 'string' }, help: { type: 'boolean', short: 'h' } } as const;
 let parsed;
 try { parsed = parseArgs({ options }); }
@@ -84,7 +84,7 @@ if (values.acp) {
   const { RhoService } = await import('./server.js'), { runtime } = await import('./runtime.js');
   const agentBackend = values['agent-backend'] ?? process.env.RHO_AGENT_BACKEND ?? 'claude-acp';
   if (!['claude-acp', 'codex-acp', 'claude-cli'].includes(agentBackend)) throw new Error('Choose --agent-backend claude-acp, codex-acp or claude-cli.');
-  const service = await new RhoService({ ...limits, root: path.resolve(values.root), stateDir: path.resolve(values['state-dir']), ...await runtime(values.core, values.rscript), agentBackend: agentBackend as 'claude-acp' | 'codex-acp' | 'claude-cli', codex: values.codex ?? process.env.RHO_CODEX, claude: values.claude ?? process.env.RHO_CLAUDE ?? 'claude', python: values.python ?? process.env.RHO_PYTHON, ssh: values.ssh ?? process.env.RHO_SSH, port: Number(values.port ?? 0), ...(values.plugins !== undefined ? { plugins: values.plugins ? values.plugins.split(',') as PluginId[] : [] } : {}) }).start();
+  const service = await new RhoService({ ...limits, root: path.resolve(values.root), stateDir: path.resolve(values['state-dir']), ...await runtime(values.core, values.rscript), agentBackend: agentBackend as 'claude-acp' | 'codex-acp' | 'claude-cli', codex: values.codex ?? process.env.RHO_CODEX, claude: values.claude ?? process.env.RHO_CLAUDE ?? 'claude', python: values.python ?? process.env.RHO_PYTHON, ssh: values.ssh ?? process.env.RHO_SSH, serverctl: values.serverctl ?? process.env.RHO_SERVERCTL, port: Number(values.port ?? 0), ...(values.plugins !== undefined ? { plugins: values.plugins ? values.plugins.split(',') as PluginId[] : [] } : {}) }).start();
   // The narrow conclusion a person needs on one line: what was selected, where state
   // lives, and how to open it. It stays inside `ready` so a parser reading line one is
   // unaffected. Opening this url on this machine is the access; no link is minted.

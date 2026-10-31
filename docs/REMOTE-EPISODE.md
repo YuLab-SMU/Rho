@@ -2,7 +2,9 @@
 
 The request (2026-10-31): much of the computing happens on a remote server; add support for
 it and the components to work with it. This records what was built and the episode that
-checked it. Rho-plugins owns the sessions (Notebook 0.2.0); Rho owns the views.
+checked it. Rho-plugins owns the sessions (Notebook 0.2.0); Rho owns the views. A second
+request the same day moved how each server is used into the server's own skills; see
+[Servers' own skills](#servers-own-skills) (Notebook 0.3.0).
 
 ## What a person and an Agent can do now
 
@@ -153,3 +155,112 @@ the places without being told is not observed.
   and logins that fail before key exchange; the first is handled, the second shows as
   ssh's message.
 - No independent person has used these screens.
+
+## Servers' own skills
+
+The request (2026-10-31, later): strengthen the use of servers through their own skills
+instead of details written into Rho, with the components working with those skills.
+
+The person already keeps their servers in serverctl (ssh-server-manager): it holds each
+server's login in the system's vault and its connection settings, and binds skills to a server,
+such as `yulab-slurm-jobs` to YuLabServer. Its own rules forbid plain ssh to a server it
+manages. Before this pass the kernel reached every server with plain ssh, carried one cluster's
+module notices in a filter, and knew nothing of a server's skills; the person typed setup lines
+from memory.
+
+**What changed.**
+
+- A server serverctl manages is reached through `serverctl exec`, never with ssh beside it. A
+  place named without `via` goes through serverctl when serverctl manages a server of that name
+  (spelled as serverctl spells it), and with ssh otherwise; a place reached through serverctl
+  stays with it when it is changed on the same server, even while serverctl cannot be asked
+  (found reading the change: an edit then would have gone to plain ssh). Every command, the session's
+  included, is sent as words that serverctl quotes for the server's shell, with `--reuse 60`, so
+  checking, listing and interrupting share one connection. A session lasts at most serverctl's
+  limit for one command, set to 7 days. serverctl's audit log records each command Rho ran there.
+- `kernel.servers` reads serverctl's registry without connecting: each server's name, system and
+  tags, and the skills bound to it with serverctl's status. A server's address and account are not
+  passed on. `kernel.server.skill` reads one skill's `SKILL.md` (up to 256 KiB). serverctl resolves
+  a server's skills together and fails when one is missing or invalid; then none is read.
+- The Agent's instructions: read a server's skills before naming a place or running code there,
+  follow them (for example in the place's setup lines), and take them as guidance that grants
+  nothing.
+- The Servers view: Add a server lists the servers serverctl manages with their system and number
+  of skills; choosing one says it is reached through serverctl and shows its skills, and a skill
+  reads in place. A place card says "through serverctl" and shows its skills ("How it is used"). A
+  check that finds no R where the server has skills says they may say how to set it up.
+- The kernel's filter for one cluster's module notices in failure messages is gone; what ssh or
+  serverctl said last is shown.
+
+**Resources.** The same disposable Debian container, changed to stand for a cluster: R moved off
+the default path behind `/opt/lab/modules/R-4.2.sh` (as `module load` gives it), `~/rnaseq/data`
+made read-only. serverctl from its current source, with a throwaway registry, runtime folder and
+managed config (`SSM_DATA_DIR`, `SSM_RUNTIME_DIR`, `SSM_MANAGED_SSH_CONFIG`; the person's own
+registry and `~/.ssh` untouched). The container was imported from its test ssh config, and a skill
+`rho-remote-lab` was written for it and bound to it: R only after the module line, data
+read-only, results to `~/rnaseq/out`, keep to 2 cores. A Rho service from source took
+`--serverctl`; headless Chrome at 1440 × 900.
+
+**Run, as the person.**
+
+1. Servers → Add a server listed `rho-remote · 1 skill`. Choosing it said "Reached through
+   serverctl, which holds its login" and showed `rho-remote-lab`; pressing it read the skill in
+   the form.
+2. Added without setup lines: `Linux aarch64 · no R · Python 3.11.2`, 0.3 s, with the line about
+   the skills.
+3. Edit, the skill's line `. /opt/lab/modules/R-4.2.sh`, Save and check: `R 4.2.2`. New R sessions
+   on Lab server.
+4. Notebook: the bix-46 cells ran there through serverctl, the plot showed, mexG −4.964225 (1 vs
+   97), the CSV written to `out/`.
+5. A cell counting a second at a time; the container taken off the network. 45 s later
+   (serverctl's keepalives, 15 s × 2) the cell was unknown and the session disconnected, its
+   process there not seen to end. Back on the network no R was left there, and a check passed in
+   0.4 s.
+
+**Run, as an Agent.** In a fresh project with no places, the same plain question twice:
+"My server rho-remote has DESeq2 results in ~/rnaseq/data. What is the log2 fold change of mexG
+in res_1vs98.rds? Also save the genes with padj < 0.05 from that comparison as a CSV on the
+server."
+
+- Claude Code started in Rho (Claude Haiku 5.5): it loaded the person's own `ssh-server-manager`
+  skill and ran its own shell (`ls`, through the person's command hook); that command waits for
+  the person's choice, left unanswered. Whether it would reach Rho's places was not observed.
+- Claude Code with Rho's four tools only, no shell and no user settings (Claude Opus 5.5, as the
+  acceptance scripts run it): `kernel.servers`, then "I've found the server; now I'm reading its
+  lab skill", `kernel.server.skill`, `kernel.place.set` with `via: serverctl`, folder `~/rnaseq`
+  and setup `. /opt/lab/modules/R-4.2.sh`, a check, three cells there. It wrote
+  `out/res_1vs98_padj0.05.csv`, said it followed the skill (data read-only, results in `out`), and
+  answered mexG 0.0715 (padj 0.805) and 2,910 genes. Recomputed on the server: 0.0715286,
+  0.804655, 2,910 rows all below 0.05; `data/` unchanged. The place, its skill, the Agent's check
+  and its session showed in the Servers view.
+
+**The person's own registry,** read without connecting: serverctl on this machine's path (the copy
+`~/.claude/skills/ssh-server-manager` links to) answered "database schema 8 is newer than
+supported 5", and Rho shows that as it is. The current serverctl listed 13 servers;
+`yulab-slurm-jobs` is bound to YuLabServer and read in full. `yulab-server`, the cluster's manual,
+is a skill of the Agent but not bound to YuLabServer in serverctl, so Rho does not show it there.
+
+**Observed and changed.** The check line said "set these up" when R itself was missing; it now
+names R. "Named by An Agent" now reads "an Agent".
+
+**Checks.** Rho-plugins 145/145, with a stand-in serverctl that keeps a registry in a file and
+runs the words after `--` here: the servers and skills without addresses, a skill read by name,
+a place named without `via` going through serverctl, its check, a cell with the setup line,
+interrupt through serverctl, each command on a shared connection, a session at serverctl's
+limit, a missing skill withholding the server's skills, serverctl's own error, a place
+changed while serverctl cannot be asked staying with it, and serverctl missing. Rho: contracts
+regenerated and checked; 271 to 272 of 274 in three full runs, the failures load and cleanup
+races that pass alone (see [Status](STATUS.md)).
+
+**Limits and open questions.**
+
+- Only skills bound in serverctl are shown; a server reached with plain ssh has none here.
+  Whether a place should name skills itself was not needed in this episode.
+- A skill is guidance read by the Agent and the person; Rho reads nothing in it as settings.
+  Whether a server's skill should give the components something they apply themselves (setup,
+  a scheduler to start sessions on compute nodes) is open: it has not been needed yet, and on
+  YuLabServer sessions would still start on the login node.
+- Whether Claude Code started in Rho, with its own shell and the person's skills, uses the
+  places and reads a server's skill was not observed: its first command waits on the person.
+- The real cluster was not connected to.
+

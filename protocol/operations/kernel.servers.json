@@ -1,0 +1,136 @@
+{
+  "method": "kernel.servers",
+  "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "projectId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      }
+    },
+    "required": [
+      "projectId"
+    ],
+    "type": "object"
+  },
+  "outputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "readAt": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "servers": {
+        "items": {
+          "additionalProperties": false,
+          "properties": {
+            "server": {
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$",
+              "type": "string"
+            },
+            "skills": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "description": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "path": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "problem": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "status": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name",
+                  "description",
+                  "path",
+                  "status",
+                  "problem"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "system": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "tags": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "server",
+            "system",
+            "tags",
+            "skills"
+          ],
+          "type": "object"
+        },
+        "type": "array"
+      },
+      "tool": {
+        "additionalProperties": false,
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "problem": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "program": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "program",
+          "ok",
+          "problem"
+        ],
+        "type": "object"
+      }
+    },
+    "required": [
+      "tool",
+      "servers",
+      "readAt"
+    ],
+    "type": "object"
+  },
+  "description": null
+}

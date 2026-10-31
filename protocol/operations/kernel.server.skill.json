@@ -1,0 +1,69 @@
+{
+  "method": "kernel.server.skill",
+  "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "projectId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "name": {
+        "maxLength": 128,
+        "minLength": 1,
+        "type": "string"
+      },
+      "server": {
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$",
+        "type": "string"
+      }
+    },
+    "required": [
+      "projectId",
+      "server",
+      "name"
+    ],
+    "type": "object"
+  },
+  "outputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "bytes": {
+        "minimum": 0,
+        "type": "integer"
+      },
+      "description": {
+        "type": "string"
+      },
+      "name": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "path": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "readAt": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "server": {
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$",
+        "type": "string"
+      },
+      "text": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "server",
+      "name",
+      "description",
+      "path",
+      "text",
+      "bytes",
+      "readAt"
+    ],
+    "type": "object"
+  },
+  "description": null
+}

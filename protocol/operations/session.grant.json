@@ -82,6 +82,8 @@
             "kernel.plot",
             "kernel.read",
             "kernel.run",
+            "kernel.server.skill",
+            "kernel.servers",
             "kernel.stop",
             "media.describe",
             "object.read",

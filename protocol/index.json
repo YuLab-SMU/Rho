@@ -461,14 +461,14 @@
     "kernel.place.set": {
       "summary": "kernel.place.set",
       "path": "operations/kernel.place.set.json",
-      "bytes": 8483,
-      "sha256": "c2794d58140515777942fb7172861fdb7b634acc2e3b5d091410a7b2f4090fcf"
+      "bytes": 8744,
+      "sha256": "6e7dd90d7df3998fec1949510bfb21d539f6fdcc77bfcf7382b2c5ba5aa84f9e"
     },
     "kernel.places": {
       "summary": "kernel.places",
       "path": "operations/kernel.places.json",
-      "bytes": 7136,
-      "sha256": "73961ce7e1ce3e3f33c58d8012b378b651892c513aa59b31ba3fb163b106e258"
+      "bytes": 7282,
+      "sha256": "17a14240bda05aa7d07b3c38b9a2ef0659163c24116249982e10df672f1455b6"
     },
     "kernel.plot": {
       "summary": "One plot a cell kept, as PNG bytes.",
@@ -487,6 +487,18 @@
       "path": "operations/kernel.run.json",
       "bytes": 12087,
       "sha256": "e11747a330c96cfc32296074f77cef38dc3f55115039e29b8b0574401c0c63cb"
+    },
+    "kernel.server.skill": {
+      "summary": "kernel.server.skill",
+      "path": "operations/kernel.server.skill.json",
+      "bytes": 1305,
+      "sha256": "ac2b9402bfd746c6c19e7b377ceb816126bfa2a99864333c292fe38a7fabd283"
+    },
+    "kernel.servers": {
+      "summary": "kernel.servers",
+      "path": "operations/kernel.servers.json",
+      "bytes": 3110,
+      "sha256": "d48c7035d3127c5e3ec5f358cbed300d8829235a4ed2032acf59005f72c8730c"
     },
     "kernel.stop": {
       "summary": "Person at this machine only: end one live session. Its values are gone, the running cell ends with an error and waiting cells are not run. A session that has ended is returned unchanged.",
@@ -659,8 +671,8 @@
     "session.grant": {
       "summary": "session.grant",
       "path": "operations/session.grant.json",
-      "bytes": 4533,
-      "sha256": "283e67eaff3176a4848d47aa9a4eb4161be169c9e0df988f6471a0edeb164d09"
+      "bytes": 4598,
+      "sha256": "cf22ef520ade5242996e34f3cac6eb7232e5b73e56ce0b8a8f31993cc5724a76"
     },
     "skill.list": {
       "summary": "List the application and enabled provider Skills shipped in the selected package. Skills guide discovery but do not grant authorization.",

@@ -164,11 +164,16 @@ inspect what happened. The application gives those actions direct places:
   60 values, 8 plots and 24 written files are drawn at most, and older ones are counted
   ([episode](SIMULATED-PROJECT-EPISODE.md#data-flow-html-pages-and-object-dependent-cases)).
 - **Servers** (`rho.servers`) shows where the live sessions run: this machine and each place, a
-  folder on a server ssh reaches. A place shows its ssh name and folder, what its last check saw
+  folder on one of the person's servers, reached through serverctl when serverctl manages it and
+  with ssh otherwise. A place shows its server and folder, how it is reached, what its last check saw
   (system, R and Python there, the machine's name, who checked and how long it took), its live
   sessions with the machine and process, and a session that lost its connection, with its process
   there not seen to end. "New sessions R / Python" marks where each language's next session
-  starts. Add a server takes the ssh name, the folder, a name and setup lines, then checks it.
+  starts. Add a server lists the servers serverctl manages (system, number of skills) and takes
+  one of them or an ssh name, the folder, a name and setup lines, then checks it. A place on a
+  server serverctl manages shows the skills bound to it ("How it is used"); pressing one reads it
+  in place, without its header, with its file's path, in the form as on the card. A check that
+  finds no R where the server has skills says they may say how to set it up.
   Files lists a folder there; opening a file copies it into `remote/<place>/` and opens the copy,
   and a copy whose file has changed on the server says so. The Notebook's line has a chip beside
   the language naming where its next cell runs; session marks, rows, the console bar, Variables
@@ -439,8 +444,9 @@ statement a script line runs (`statementAt`), and `web/entries/documents.tsx` se
 through the page's `runCode` shell service.
 `web/flow.tsx` draws Data flow from the same read, with `src/lineage.ts` (`lineage`, `lanes`,
 `related`) making its boxes and lanes from each cell's `defined`, `used` and `files`.
-`web/servers.tsx` draws Servers and the Notebook's place chip from `kernel.places`, and lists and
-copies a place's files; `showOnServer` takes a file from Data flow to it.
+`web/servers.tsx` draws Servers and the Notebook's place chip from `kernel.places`, the servers
+and their skills from `kernel.servers` and `kernel.server.skill`, and lists and copies a place's
+files; `showOnServer` takes a file from Data flow to it.
 The HTML page view is `html.reader` from Rho-plugins (HTML 0.1.0); Rho gives it `pageFrame`, the
 service's `/frame.html` (sandboxed, with its own policy and no network; the page's policy adds
 only `frame-src 'self'`), and `fileBytes`, a file snapshot's bytes (`readFile` in `web/previews.ts`).

@@ -20206,6 +20206,12 @@ export const ownerContracts: OwnerContractSnapshot = {
                   "setup": {
                     "maxLength": 4096,
                     "type": "string"
+                  },
+                  "via": {
+                    "enum": [
+                      "ssh",
+                      "serverctl"
+                    ]
                   }
                 },
                 "required": [
@@ -20453,11 +20459,18 @@ export const ownerContracts: OwnerContractSnapshot = {
                     "setup": {
                       "maxLength": 4096,
                       "type": "string"
+                    },
+                    "via": {
+                      "enum": [
+                        "ssh",
+                        "serverctl"
+                      ]
                     }
                   },
                   "required": [
                     "placeId",
                     "label",
+                    "via",
                     "destination",
                     "folder",
                     "setup",
@@ -20720,11 +20733,18 @@ export const ownerContracts: OwnerContractSnapshot = {
                     "setup": {
                       "maxLength": 4096,
                       "type": "string"
+                    },
+                    "via": {
+                      "enum": [
+                        "ssh",
+                        "serverctl"
+                      ]
                     }
                   },
                   "required": [
                     "placeId",
                     "label",
+                    "via",
                     "destination",
                     "folder",
                     "setup",
@@ -21808,6 +21828,199 @@ export const ownerContracts: OwnerContractSnapshot = {
             "required": [
               "cell",
               "session"
+            ],
+            "type": "object"
+          },
+          "requires": []
+        },
+        "kernel.server.skill": {
+          "effect": "read",
+          "inputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              "server": {
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "server",
+              "name"
+            ],
+            "type": "object"
+          },
+          "outputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "bytes": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "description": {
+                "type": "string"
+              },
+              "name": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "path": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "readAt": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "server": {
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$",
+                "type": "string"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "server",
+              "name",
+              "description",
+              "path",
+              "text",
+              "bytes",
+              "readAt"
+            ],
+            "type": "object"
+          },
+          "requires": []
+        },
+        "kernel.servers": {
+          "effect": "read",
+          "inputSchema": {
+            "additionalProperties": false,
+            "properties": {},
+            "required": [],
+            "type": "object"
+          },
+          "outputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "readAt": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "servers": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "server": {
+                      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$",
+                      "type": "string"
+                    },
+                    "skills": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "description": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "path": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "problem": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "status": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "description",
+                          "path",
+                          "status",
+                          "problem"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "system": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "tags": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "server",
+                    "system",
+                    "tags",
+                    "skills"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "tool": {
+                "additionalProperties": false,
+                "properties": {
+                  "ok": {
+                    "type": "boolean"
+                  },
+                  "problem": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "program": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "program",
+                  "ok",
+                  "problem"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "tool",
+              "servers",
+              "readAt"
             ],
             "type": "object"
           },
@@ -23006,12 +23219,12 @@ export const ownerContracts: OwnerContractSnapshot = {
     },
     "kernel": {
       "package": "@rho-workspace/plugin-kernel",
-      "packageVersion": "0.2.0",
+      "packageVersion": "0.3.0",
       "entry": "./operations",
       "entryPath": "@rho-workspace/plugin-kernel/dist/operations.js",
-      "entrySha256": "45b9a8315cfc8dae13be39227ffa853a9ac6ea946b0fb025ab1c2d8ee2db224e",
+      "entrySha256": "a16f526ef5a4ff90f6ce20c2202c9e52a5540897685358277d2b1d5cd0906d38",
       "exports": {
-        "operationContracts": "78b99760bc775bd048d3ba42ce92f4bb8a20000693648eeda59be8a26c240db0"
+        "operationContracts": "bd4fee0813c46e823fc0604adbcbe738542e7782d1863504320133c04cd8c28d"
       }
     },
     "entry-files": {
