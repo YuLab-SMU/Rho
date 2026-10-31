@@ -22,7 +22,9 @@ last one.
 Rho owns application selection, assembly, windows, layout and shared interaction.
 `../Rho-core` owns managed execution and its resident Host/public CLI.
 `../Rho-plugins` owns actual functional components and optional CLI, Skills, MCP
-and UI entries. Read each owner's AGENTS.md before editing there. Keep the three
+and UI entries. `../Rho-paper` owns the research proposal and the paper: its claims,
+its scenario and its related-work judgments, with the sources it read and what they
+do not establish. Read each owner's AGENTS.md before editing there. Keep the four
 independent repositories and use documented public capabilities at selected
 versions. Component semantics and results stay with their source owner.
 

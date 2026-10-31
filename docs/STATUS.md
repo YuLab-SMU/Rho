@@ -9,7 +9,7 @@ The selected work is result review, retained historical evidence, macOS arm64
 [episode](REVIEW-EVIDENCE-EPISODE.md) records baseline, observations, fixes and limits.
 Native tools remain normal; Core is optional. No Core execution behavior changed.
 
-The [research method proposal](PAPER.md) centers on purpose-driven composition of
+The [research method proposal](https://github.com/YuLab-SMU/Rho-paper) centers on purpose-driven composition of
 shared scientific workspaces: obtaining and selecting materials, arranging related
 views and available operations, and carrying their meaning into Agent continuation.
 Plugins supply adaptable information, compute and environment capabilities. The
