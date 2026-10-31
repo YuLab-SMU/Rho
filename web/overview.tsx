@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from 'react';
+import type { Language } from './explore.js';
 import type { BrowserClient, CompositionSummary, ProjectSummary, WorkspaceSnapshot } from '../src/browser.js';
 import { regions, type Region } from '../src/shell-layout.js';
 import { executionWord, integrityWord, results, shortPath, type RunFacts } from '../src/execution-facts.js';
@@ -78,6 +79,8 @@ interface Props {
   notesText?: string;
   // The workspace the person shares with the Agent, where an opened file goes.
   workspace: () => string;
+  // A table or script on the board, opened in Studio with the Notebook beside it.
+  onExplore?: (path: string, language: Language) => void;
   onSection: (section: Section) => void; onAgent: (conversationId?: string) => void;
   onLayout: (id: string, view?: string) => void; onProjectChanged: (project: ProjectSummary) => void; onOpened: (id: string, view?: string) => void;
   category?: SourceRow; files?: ProjectFiles; sources?: Record<SourceRow, SourceItem[]> | null; onFile?: (row: SourceRow, item: SourceItem) => void;
@@ -86,7 +89,7 @@ interface Props {
   // The Console, at one message's commands.
   onConsole?: (turn?: string) => void;
 }
-export function ProjectOverview({ project, snapshot, client, section, notesText = '', workspace, onSection, onAgent, onLayout, onProjectChanged, onOpened, category, files, sources, onFile, linked = false, onPath, onNewConversation, onConsole }: Props) {
+export function ProjectOverview({ project, snapshot, client, section, notesText = '', workspace, onExplore, onSection, onAgent, onLayout, onProjectChanged, onOpened, category, files, sources, onFile, linked = false, onPath, onNewConversation, onConsole }: Props) {
   // A linked tab's Agent sessions with access are read only while their section is open.
   const [outsideOpen, setOutsideOpen] = useState(false);
   const { runs, problem: runsProblem, readAgain } = useRuns(client, project.id, snapshot.cursor);
@@ -208,7 +211,7 @@ export function ProjectOverview({ project, snapshot, client, section, notesText 
     </div>}
     {section === 'overview' && !emptyProject && settled && <>
       {snapshot.taskMap?.question && <div className="project-question"><Icon name="prompt" size={18} /><h2>{snapshot.taskMap.question}</h2></div>}
-      {files && !!snapshot.conversations?.length && <AnswerBoard client={client} snapshot={snapshot} files={files} notesText={notesText} onConversation={id => onAgent(id)} onPath={path => onPath?.(path)} onConsole={turn => onConsole ? onConsole(turn) : onSection('console')} onGraph={() => onSection('graph')} />}
+      {files && !!snapshot.conversations?.length && <AnswerBoard client={client} snapshot={snapshot} files={files} notesText={notesText} onConversation={id => onAgent(id)} onPath={path => onPath?.(path)} onExplore={onExplore} onConsole={turn => onConsole ? onConsole(turn) : onSection('console')} onGraph={() => onSection('graph')} />}
       <div className={'project-columns' + (side ? '' : ' single')}>
         <div className="project-primary">
           {files && boarded && <Suspense fallback={null}><WorkStrip client={client} snapshot={snapshot} files={files} onOpen={() => onSection('graph')} onConversations={() => onSection('agent')} /></Suspense>}

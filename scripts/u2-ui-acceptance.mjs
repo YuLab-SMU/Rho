@@ -101,7 +101,7 @@ try {
   });
   await page.goto(ready.openUrl);
   await page.locator('.project-row').filter({ hasText: 'U2 中文' }).click();
-  await page.locator('.nav-row').filter({ hasText: 'workspace' }).click();
+  await page.locator('.nav-row:not(.nav-new)').filter({ hasText: 'workspace' }).click();
   await page.locator('.cm-content:visible').waitFor();
   // The editor mounts before the buffer's first read arrives.
   await poll(text, t => t === 'base <- 1\n', 'the script buffer shown');
@@ -226,7 +226,7 @@ try {
   }
   await page.reload(); await page.getByRole('status').filter({ hasText: 'Connected' }).waitFor();
   if (await page.locator('.project-row').count()) await page.locator('.project-row').first().click();
-  await page.locator('.nav-row').filter({ hasText: 'workspace' }).click();
+  await page.locator('.nav-row:not(.nav-new)').filter({ hasText: 'workspace' }).click();
   await tab('Pinned'); await page.getByRole('alert').filter({ hasText: 'Version 1 is no longer available' }).waitFor();
   assert.equal(await page.locator('.cm-content:visible').count(), 0);
   await page.screenshot({ path: path.join(directory, 'exact-unavailable-1600.png'), fullPage: true });
@@ -241,7 +241,7 @@ try {
   assert.equal(await page.getByRole('heading', { name: 'This layout has reached its view limit', exact: true }).count(), 0);
   assert.ok(await page.locator('.cm-editor').count() <= 8);
   await page.screenshot({ path: path.join(directory, 'view-budget-1600.png'), fullPage: true });
-  await page.locator('.nav-row').filter({ hasText: 'workspace' }).click(); await tab('Editor-A');
+  await page.locator('.nav-row:not(.nav-new)').filter({ hasText: 'workspace' }).click(); await tab('Editor-A');
   report.checks.push('expired-pinned-version-unavailable-never-live-and-eight-heavy-view-budget-preserves-buffers');
   state = await current(); const confirmed = state.content;
   const saved = await agent.call('document.save', { documentId: d.id, expectedVersion: state.version, expectedRevision: state.revision, changeId: 'agent-save', expectedDiskDigest: state.diskDigest });
@@ -253,13 +253,13 @@ try {
   await page.reload();
   // Project/layout choice is local presentation; reopen if refresh returns Home.
   if (await page.locator('.project-row').count()) await page.locator('.project-row').first().click();
-  await page.locator('.nav-row').filter({ hasText: 'workspace' }).click();
+  await page.locator('.nav-row:not(.nav-new)').filter({ hasText: 'workspace' }).click();
   await tab('Editor-A'); await poll(text, t => t === confirmed, 'refresh acknowledged buffer');
   await context.setOffline(true); await page.waitForTimeout(300); await context.setOffline(false);
   await poll(text, t => t === confirmed, 'reconnected content');
   await stop(); await start();
   await page.reload(); if (await page.locator('.project-row').count()) await page.locator('.project-row').first().click();
-  await page.locator('.nav-row').filter({ hasText: 'workspace' }).click();
+  await page.locator('.nav-row:not(.nav-new)').filter({ hasText: 'workspace' }).click();
   await tab('Editor-A'); await poll(text, t => t === confirmed, 'service restart same session');
   report.checks.push('disk-conflict-preserves-buffer-refresh-disconnect-reconnect-service-restart-same-session');
   assert.deepEqual(errors, []); assert.deepEqual(consoleIssues, []);

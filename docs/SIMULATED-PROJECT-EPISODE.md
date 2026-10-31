@@ -967,6 +967,69 @@ permission requests; the watcher answered nothing.
 - **Plots** follow a cell's printed output rather than the line that drew them, and a
   later cell cannot draw over an earlier cell's plot.
 - **Python scripts** that use `__file__` need it set before they run in a session.
-- **Studio's Session view** is cramped while the side panels are open.
+- **Studio's Session view** was cramped while the side panels were open; see
+  [Exploring a finished answer](#exploring-a-finished-answer).
 - **A cell's own memory and time** are not bounded.
 - **No independent person** has used the Notebook.
+
+## Exploring a finished answer
+
+The person asked for the Notebook to sit beside Studio's other views as a component of its
+own, for pages they make themselves, and for a way to look into the Agent's results in the
+Notebook once it has finished. The disposable `nb-bix-51` project held the finished bix-51
+answer: `analysis.R`, `model_fit.csv` (3 rows), `model_results.csv` (8 rows) and the Agent's
+R cells.
+
+### What was built
+
+- **The Notebook is a Studio view** on any page. In a conversation's Studio it keeps that
+  conversation's part of the sessions, now with the person's cells since the conversation
+  began; on the person's own pages it shows the sessions whole. Its width, not the page,
+  decides whether the sessions sit beside the cells (840 px or more).
+- **New workspace** makes an empty page of the person's own. The empty page, and Add view
+  on any of their pages, offer the Notebook and the project's files by kind.
+- **Explore in R or Python** on table and script views, on the answer board's tables and on
+  the file page. A table loads as a new value in a cell of the person's; a script waits in
+  the Notebook's line ([what each does](FRONTEND.md)).
+
+### What the screens showed
+
+- **The table had no Explore.** A kept table's resource path is its copy under
+  `.rho/plugins/restored/…`; the file it was kept from is in its provenance
+  (`originalPath`). Explore now reads that project path, and says the file is read as it is
+  on disk now.
+- **Exploring inside the conversation's Studio was unreadable.** With the notes and the
+  Agent panel open, the Notebook view there was about 170 px wide. Explore from a
+  conversation's Studio now opens the person's workspace, as it does from the Overview; the
+  conversation's Studio stays the record of the Agent's work.
+- **Three panes on a 490 px stage** were each about 150 px wide. A stage narrower than
+  640 px now shows the views one at a time with all their tabs. The conversation's Studio
+  then showed `model_results.csv` at full width with Explore in its header.
+- **The Notebook did not scroll.** Its pane clipped 6979 px of cells and showed the oldest.
+  The view scrolls itself now and opens at the newest cell. Shown again after another tab,
+  it went back to the top, and at 390 px it stopped 285 px short of the end: the browser
+  moving the content was taken for the reader leaving the end. Only the reader's own wheel,
+  touch, keys or scroll bar decide that now, and growth, resizing and showing again keep the
+  newest cell in view. Measured: at the end at 1440, 760 and 390 px; a cell from another tab
+  while the reader was 3000 px up left them there.
+- **The narrow line to run** squeezed `source("analysis.R")` beside R, Python and Run; below
+  420 px the code takes its own line.
+- **Results.** From the board, Python loaded `model_fit` (3 × 6) beside the table on
+  Workspace 2; from the conversation's Studio, R loaded `model_results` and, the second
+  time, `model_results_2`, leaving the first. The script put `source("analysis.R")` in the
+  line with a note that running it writes its outputs again. Workspace pages listed in the
+  order they were made after they first showed 3, 2, 4.
+
+### Verification
+
+- `test/explore-code.test.mjs` runs the written code in R and in Python with pandas: a path
+  with quotes and spaces, a TSV and a script that reads `__file__`. `test/layout-commands`
+  covers placing a view beside another.
+- The flows above were run in a real browser at 1440, 760 and 390 px; the screenshots were
+  read.
+
+### Left open
+
+- Pages cannot be renamed or removed, and count toward the 32 layouts a project keeps.
+- Exploring the same table again makes another value rather than showing the first.
+- No independent person has used these flows.

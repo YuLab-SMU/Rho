@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { BrowserApiError, type BrowserClient, type WorkspaceSnapshot } from '../src/browser.js';
 import type { RhoOutput } from '../src/contract.generated.js';
 import { durationText } from '../src/conversation-presentation.js';
@@ -20,7 +20,8 @@ type Output = Cell['outputs'][number];
 type Language = Cell['language'];
 const languages: Language[] = ['r', 'python'];
 const languageName: Record<Language, string> = { r: 'R', python: 'Python' };
-export const notebookViewLimits = { cells: 300, codeLines: 14, outputLines: 12, railPlots: 12, cachedPlots: 64 };
+// A Notebook view at least this wide shows the sessions beside the cells.
+export const notebookViewLimits = { cells: 300, codeLines: 14, outputLines: 12, railPlots: 12, cachedPlots: 64, wideViewPx: 840 };
 const me = 'browser:local';
 const failure = (error: unknown) => error instanceof Error ? error.message : 'The live session could not be reached.';
 const versionOf = (session: Session) => session.version?.replace(/^R version (\S+).*$/, 'R $1') ?? languageName[session.language];
@@ -217,8 +218,8 @@ function example(language: Language, session: Session | undefined) {
   return table ? `${table.name}.describe()` : live.length ? 'dir()' : 'x = list(range(10))';
 }
 
-function Composer({ language, setLanguage, draft, setDraft, busy, problem, onRun, onInterrupt, running, input, placeholder, small }: {
-  language: Language; setLanguage: (l: Language) => void; draft: string; setDraft: (t: string) => void; busy: boolean; problem: string; placeholder: string; small?: boolean;
+function Composer({ language, setLanguage, draft, setDraft, busy, problem, note, onRun, onInterrupt, running, input, placeholder, small }: {
+  language: Language; setLanguage: (l: Language) => void; draft: string; setDraft: (t: string) => void; busy: boolean; problem: string; note?: string; placeholder: string; small?: boolean;
   onRun: () => void; onInterrupt: () => void; running: boolean; input: React.RefObject<HTMLTextAreaElement | null>;
 }) {
   const id = useId(), lines = Math.max(small ? 1 : 2, Math.min(small ? 8 : 14, draft.split('\n').length));
@@ -228,6 +229,7 @@ function Composer({ language, setLanguage, draft, setDraft, busy, problem, onRun
       <div className="nb-tabs" role="group" aria-label="Language">{languages.map(l => <button type="button" key={l} aria-pressed={l === language} onClick={() => { setLanguage(l); input.current?.focus(); }}>{languageName[l]}</button>)}</div>
       <label htmlFor={id}>Runs in the {languageName[language]} session you share with the Agent</label>
     </div>
+    {note && <p className="nb-compose-note">{note}</p>}
     <textarea id={id} ref={input} rows={lines} value={draft} spellCheck={false} autoComplete="off" autoCapitalize="off"
       placeholder={placeholder}
       onChange={event => setDraft(event.target.value)}
@@ -241,24 +243,53 @@ function Composer({ language, setLanguage, draft, setDraft, busy, problem, onRun
   </form>;
 }
 
-// The nearest box that scrolls the page, or the document itself.
+// The box that scrolls the cells: a Studio view scrolls itself; on the page, the nearest box that
+// scrolls, or the document itself.
 function scrollerOf(element: HTMLElement | null): Element {
+  const view = element?.closest('.nb-view');
+  if (view) return view;
   for (let at = element?.parentElement; at; at = at.parentElement) if (/(auto|scroll)/.test(getComputedStyle(at).overflowY) && at.scrollHeight > at.clientHeight) return at;
   return document.scrollingElement ?? document.documentElement;
 }
 
 type Row = { at: number; order: number; key: string } & ({ cell: Cell } | { session: Session; edge: 'start' | 'end' });
 
-// One conversation's part of the sessions, in its Studio: the sessions its Agent ran cells in,
-// with every cell run there (the person's too, since they share the values), up to the moment
-// the Studio shows.
-export function SessionPane({ client, snapshot }: { client: BrowserClient; snapshot: WorkspaceSnapshot }) {
+// The Notebook as a view of a Studio page. In a conversation's Studio it shows that
+// conversation's part of the sessions: the sessions its Agent ran cells in, with every cell
+// run there (the person's too, since they share the values), and the person's own cells since
+// the conversation began, up to the moment the Studio shows. On the person's own pages it shows
+// the sessions whole. A wide view has the sessions, values and plots beside the cells; a narrow
+// one folds them above.
+export interface Prepared { key: string; language: Language; code: string; note: string }
+export function SessionPane({ client, snapshot, prepared, onTaken, onConversation }: { client: BrowserClient; snapshot: WorkspaceSnapshot; prepared?: Prepared | null; onTaken?: () => void; onConversation?: (id: string) => void }) {
   const process = useProcess();
   const principal = snapshot.conversations?.find(c => c.conversationId === process?.conversationId)?.principal ?? null;
-  return <NotebookPage client={client} snapshot={snapshot} onConversation={() => {}} scope={{ principal, at: process?.at ?? null }} />;
+  const starts = process ? process.whole.turns.filter(t => t.conversationId === process.conversationId).map(t => t.start) : [];
+  const since = starts.length ? Math.min(...starts) : null;
+  const box = useRef<HTMLDivElement>(null);
+  const [wide, setWide] = useState(false), [shown, setShown] = useState(0);
+  // A view the shell hides or moves leaves the page and loses its scroll; each time it shows at
+  // a new size it counts, so a reader who was at the newest cell returns there.
+  useLayoutEffect(() => {
+    const element = box.current;
+    if (!element) return;
+    const observer = new ResizeObserver(([entry]) => {
+      const width = entry.contentRect.width;
+      if (!width) return;
+      setShown(n => n + 1); setWide(width >= notebookViewLimits.wideViewPx);
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+  return <div className="nb-view" ref={box}>
+    <NotebookPage client={client} snapshot={snapshot} onConversation={onConversation ?? (() => {})} compact={!wide} inView shown={shown} prepared={prepared} onTaken={onTaken}
+      scope={process ? { principal, since, at: process.at } : undefined} />
+  </div>;
 }
 
-export function NotebookPage({ client, snapshot, onConversation, scope }: { client: BrowserClient; snapshot: WorkspaceSnapshot; onConversation: (id: string) => void; scope?: { principal: string | null; at: number | null } }) {
+export function NotebookPage({ client, snapshot, onConversation, scope, compact = false, inView = false, shown = 0, prepared, onTaken }: {
+  client: BrowserClient; snapshot: WorkspaceSnapshot; onConversation: (id: string) => void; compact?: boolean; inView?: boolean; shown?: number; prepared?: Prepared | null; onTaken?: () => void;
+  scope?: { principal: string | null; since: number | null; at: number | null } }) {
   const projectId = snapshot.project.id;
   const { read, off, problem, again } = useKernel(client, projectId, snapshot.cursor);
   const who = useAuthors(snapshot);
@@ -266,8 +297,9 @@ export function NotebookPage({ client, snapshot, onConversation, scope }: { clie
     const all = read?.cells ?? [];
     if (!scope) return all;
     const theirs = new Set(all.filter(c => c.by === scope.principal).map(c => c.sessionId));
-    return all.filter(c => theirs.has(c.sessionId) && (scope.at === null || Date.parse(c.queuedAt) <= scope.at));
-  }, [read, scope?.principal, scope?.at]);
+    return all.filter(c => (theirs.has(c.sessionId) || (c.by === me && scope.since !== null && Date.parse(c.queuedAt) >= scope.since))
+      && (scope.at === null || Date.parse(c.queuedAt) <= scope.at));
+  }, [read, scope?.principal, scope?.since, scope?.at]);
   const latest = useMemo(() => {
     const out: Partial<Record<Language, Session>> = {};
     for (const s of read?.sessions ?? []) if (!out[s.language] || s.startedAt > out[s.language]!.startedAt) out[s.language] = s;
@@ -276,6 +308,7 @@ export function NotebookPage({ client, snapshot, onConversation, scope }: { clie
   const [language, setLanguage] = useState<Language | null>(null);
   const shownLanguage: Language = language ?? cells.at(-1)?.language ?? 'r';
   const [draft, setDraft] = useState('');
+  const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [runProblem, setRunProblem] = useState('');
   const [asking, setAsking] = useState('');
@@ -285,6 +318,12 @@ export function NotebookPage({ client, snapshot, onConversation, scope }: { clie
   const list = useRef<HTMLOListElement>(null);
   const page = useRef<HTMLDivElement>(null);
   const running = cells.some(c => c.state === 'running');
+  // Code another view puts here waits in the line for the person to check and run.
+  useEffect(() => {
+    if (!prepared) return;
+    setLanguage(prepared.language); setDraft(prepared.code); setNote(prepared.note); setRunProblem(''); onTaken?.();
+    requestAnimationFrame(() => { input.current?.focus(); input.current?.scrollIntoView({ block: 'nearest' }); });
+  }, [prepared?.key]);
   const [now, setNow] = useState(Date.now());
   useEffect(() => { if (!running) return; const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, [running]);
 
@@ -305,15 +344,31 @@ export function NotebookPage({ client, snapshot, onConversation, scope }: { clie
   const last = cells.at(-1);
   const tail = last ? `${cells.length}:${last.state}:${last.outputs.length}:${last.kept}` : '';
   const atEnd = useRef(true);
+  // Only the reader's own moves (wheel, touch, keys, the scroll bar) decide whether they are at the
+  // end; the browser keeping their place as content grows, or a view taken off the page, does not.
   useEffect(() => {
     const scroller = scrollerOf(page.current);
-    const track = () => { atEnd.current = scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 160; };
     const target = scroller === document.scrollingElement ? window : scroller;
+    let input = 0;
+    const moved = () => { input = Date.now(); };
+    const track = () => { if (Date.now() - input < 1000 && scroller.isConnected && scroller.clientHeight) atEnd.current = scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 160; };
+    const events = ['wheel', 'touchmove', 'keydown', 'pointerdown'] as const;
+    for (const name of events) target.addEventListener(name, moved, { passive: true });
     target.addEventListener('scroll', track, { passive: true });
-    return () => target.removeEventListener('scroll', track);
+    return () => { for (const name of events) target.removeEventListener(name, moved); target.removeEventListener('scroll', track); };
   }, [!!read]);
-  // The person's own cell sits above the composer, which stays at the foot of the page.
-  useEffect(() => { if (tail && atEnd.current) requestAnimationFrame(() => { const scroller = scrollerOf(page.current); scroller.scrollTo({ top: scroller.scrollHeight }); }); }, [tail]);
+  // The person's own cell sits above the composer, which stays at the foot of the page. A view
+  // shown again returns to the newest cell when the reader had been there.
+  useEffect(() => { if (tail && atEnd.current) requestAnimationFrame(() => { const scroller = scrollerOf(page.current); scroller.scrollTo({ top: scroller.scrollHeight }); }); }, [tail, shown, compact]);
+  // Output that grows after it is drawn (highlighted code, a plot read later) keeps the newest
+  // cell in view for a reader who was there.
+  useEffect(() => {
+    const element = page.current;
+    if (!element) return;
+    const observer = new ResizeObserver(() => { if (atEnd.current && element.isConnected) { const scroller = scrollerOf(element); scroller.scrollTo({ top: scroller.scrollHeight }); } });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [!!read, compact]);
 
   async function run(code: string, lang: Language) {
     if (!code.trim() || busy) return;
@@ -321,7 +376,7 @@ export function NotebookPage({ client, snapshot, onConversation, scope }: { clie
     setBusy(true); setRunProblem('');
     try {
       await client.call('kernel.run', { projectId, language: lang, code, changeId: pending.current.changeId });
-      pending.current = null; setDraft(''); atEnd.current = true; void again();
+      pending.current = null; setDraft(''); setNote(''); atEnd.current = true; void again();
     } catch (error) { setRunProblem(failure(error)); }
     finally { setBusy(false); }
   }
@@ -348,9 +403,14 @@ export function NotebookPage({ client, snapshot, onConversation, scope }: { clie
   const show = (cellId: string) => document.getElementById('cell-' + cellId)?.scrollIntoView({ block: 'start', behavior: 'smooth' });
 
   if (off) return <p className="nb-empty-line">{problem}</p>;
-  // In a Studio the cells take the whole view; the sessions and their values fold above them.
-  const live = languages.filter(l => latest[l] && latest[l]!.state !== 'ended' && cells.some(c => c.sessionId === latest[l]!.sessionId));
-  if (scope) return <div className="nb-page compact" ref={page}>
+  // The line to run waits for now during a replay.
+  const composing = (scope?.at ?? null) === null;
+  const composer = (small: boolean) => composing && <Composer small={small} language={shownLanguage} setLanguage={setLanguage} draft={draft} setDraft={text => { setDraft(text); if (!text) setNote(''); }} busy={busy} problem={runProblem} note={note} onRun={() => void run(draft, shownLanguage)}
+    running={latest[shownLanguage]?.state === 'busy'} onInterrupt={() => void interrupt(shownLanguage)} input={input} placeholder={example(shownLanguage, latest[shownLanguage])} />;
+  const nothing = scope?.at != null ? 'No cells by then.' : scope ? 'No cells in this conversation yet. What you run here runs in the sessions you share with the Agent.' : 'Nothing has run in the live sessions yet. What you run here runs in the sessions you share with the Agent.';
+  // In a narrow view the cells take the whole view; the sessions and their values fold above them.
+  const live = languages.filter(l => latest[l] && latest[l]!.state !== 'ended' && (!scope || cells.some(c => c.sessionId === latest[l]!.sessionId)));
+  if (compact) return <div className="nb-page compact" ref={page}>
     <div className="nb-main">
       {problem && <p className="inline-error" role="alert">{problem}</p>}
       {live.length > 0 && <details className="nb-strip">
@@ -358,19 +418,18 @@ export function NotebookPage({ client, snapshot, onConversation, scope }: { clie
         <Variables sessions={Object.fromEntries(live.map(l => [l, latest[l]]))} />
       </details>}
       {!read ? <p className="nb-empty-line">Reading the live sessions…</p>
-        : !cells.length ? <p className="nb-empty-line">No cells by then.</p>
+        : !cells.length ? <p className="nb-empty-line">{nothing}</p>
         : <ol className="nb-cells" ref={list}>{rows.map(row => 'cell' in row
           ? <CellView key={row.key} cell={row.cell} author={who(row.cell.by)} who={who} client={client} projectId={projectId} now={now} onEdit={edit} onRunAgain={cell => void run(cell.code, cell.language)} onConversation={onConversation} />
           : <Mark key={row.key} session={row.session} edge={row.edge} who={who} />)}</ol>}
-      {scope.at === null && <Composer small language={shownLanguage} setLanguage={setLanguage} draft={draft} setDraft={setDraft} busy={busy} problem={runProblem} onRun={() => void run(draft, shownLanguage)}
-        running={latest[shownLanguage]?.state === 'busy'} onInterrupt={() => void interrupt(shownLanguage)} input={input} placeholder={example(shownLanguage, latest[shownLanguage])} />}
+      {composer(true)}
     </div>
   </div>;
-  return <div className="nb-page" ref={page}>
+  return <div className={'nb-page' + (inView ? ' in-view' : '')} ref={page}>
     <div className="nb-main">
       {problem && <p className="inline-error" role="alert">{problem}</p>}
       {!read ? <p className="nb-empty-line">Reading the live sessions…</p>
-        : !cells.length ? <div className="nb-empty">
+        : !cells.length ? inView ? <p className="nb-empty-line">{nothing}</p> : <div className="nb-empty">
           <h2>Nothing has run here yet</h2>
           <p>When the Agent runs R or Python in this project's live sessions, each cell shows here with its purpose, its code, what it printed, its plots and the values it left. Your own cells run in the same sessions, so you can look at what the Agent made.</p>
         </div>
@@ -378,8 +437,7 @@ export function NotebookPage({ client, snapshot, onConversation, scope }: { clie
           ? <CellView key={row.key} cell={row.cell} author={who(row.cell.by)} who={who} client={client} projectId={projectId} now={now} onEdit={edit} onRunAgain={cell => void run(cell.code, cell.language)} onConversation={onConversation} />
           : <Mark key={row.key} session={row.session} edge={row.edge} who={who} />)}</ol>}
       {read && read.omitted > 0 && <p className="nb-note">{read.omitted} earlier {read.omitted === 1 ? 'cell is' : 'cells are'} kept but not shown.</p>}
-      <Composer language={shownLanguage} setLanguage={setLanguage} draft={draft} setDraft={setDraft} busy={busy} problem={runProblem} onRun={() => void run(draft, shownLanguage)}
-        running={latest[shownLanguage]?.state === 'busy'} onInterrupt={() => void interrupt(shownLanguage)} input={input} placeholder={example(shownLanguage, latest[shownLanguage])} />
+      {composer(false)}
     </div>
     <aside className="nb-rail" aria-label="Live sessions">
       <section className="nb-rail-section" aria-labelledby="nb-sessions">

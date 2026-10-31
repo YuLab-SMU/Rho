@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import type { BrowserClient, CompositionSummary, WorkspaceSnapshot } from '../../src/browser.js';
-import { closeView, dockView, groupNode, groupOf, moveTab, moveView, placeView, regions, resizeSplit, selectionScope, splitView, tabGroups, viewOrder, type LayoutNode, type LayoutTree, type Region } from '../../src/shell-layout.js';
+import { addBeside, closeView, dockView, groupNode, groupOf, moveTab, moveView, placeView, regions, resizeSplit, selectionScope, splitView, tabGroups, viewOrder, type LayoutNode, type LayoutTree, type Region } from '../../src/shell-layout.js';
 import type { Command, CommandGroup } from '../commands.js';
 import { Icon } from '../icons.js';
 import { registry } from '../registry.js';
@@ -11,7 +11,9 @@ import { AgentColumn, Bar, Digest, Evidence, Interruption, waiting } from './lay
 import { openRun, runFirstLine, RunView, SourceLine } from './facts.js';
 import { ActionForm } from './action-form.js';
 import { CommandPane } from '../console.js';
-import { SessionPane } from '../notebook.js';
+import { SessionPane, type Prepared } from '../notebook.js';
+import { canExplore, explorableTable, languageNames, loadTable, notebookComponent, notebookView, projectPath, scriptLanguage, scriptPrepared, type Language } from '../explore.js';
+import { ExploreIn } from '../explore-in.js';
 import { useProcess } from '../process-context.js';
 import { ProcessFrame } from './process-views.js';
 import { boundResource } from '../executions.js';
@@ -19,10 +21,11 @@ import { Slot, Split, TabGroup, place, unplace, useTabOverflow, type DropTarget,
 import './shell.css';
 
 type Tabs = Extract<Region, { kind: 'tabs' }>;
+export const workspaceLimits = { minSplitPx: 640 };
 // The workspace shell: the owner's composition tree drawn as
 // splits and tab groups, owner views mounted within the rendering budget, and a slot for
 // what Rho adds above the work. It decides nothing about attention; useLive does.
-export function Workspace({ composition: recorded, snapshot, client, onAbout, contextTarget, principalId, onShowContext, feedbackContextActive, openView, onCommands, agentTarget, onShowAgent, presence, onPersonMoved, bar = true, attention = true, following = false, arrange = true }: { following?: boolean; arrange?: boolean; bar?: boolean; attention?: boolean; presence?: { viewId: string; label: string; verb: string; live: boolean } | null; onPersonMoved?: () => void; onCommands?: (group: CommandGroup | null) => void; composition: CompositionSummary; snapshot: WorkspaceSnapshot; client: BrowserClient; onAbout: (pluginId: string) => void; contextTarget: HTMLElement | null; principalId?: string; onShowContext: () => void; feedbackContextActive: boolean; mapChipTarget?: HTMLElement | null; openView?: string; agentTarget?: HTMLElement | null; onShowAgent?: () => void }) {
+export function Workspace({ composition: recorded, snapshot, client, onAbout, contextTarget, principalId, onShowContext, feedbackContextActive, openView, onCommands, agentTarget, onShowAgent, presence, onPersonMoved, onConversation, onExplore, empty, prepared: given, onPrepare, bar = true, attention = true, following = false, arrange = true }: { onConversation?: (id: string) => void; onExplore?: (path: string, language: Language) => void; empty?: ReactNode; prepared?: Prepared | null; onPrepare?: (prepared: Prepared | null) => void; following?: boolean; arrange?: boolean; bar?: boolean; attention?: boolean; presence?: { viewId: string; label: string; verb: string; live: boolean } | null; onPersonMoved?: () => void; onCommands?: (group: CommandGroup | null) => void; composition: CompositionSummary; snapshot: WorkspaceSnapshot; client: BrowserClient; onAbout: (pluginId: string) => void; contextTarget: HTMLElement | null; principalId?: string; onShowContext: () => void; feedbackContextActive: boolean; mapChipTarget?: HTMLElement | null; openView?: string; agentTarget?: HTMLElement | null; onShowAgent?: () => void }) {
   // A conversation's Studio: its files' views show their versions, and a replay arranges nothing.
   const process = useProcess();
   const live = useLive(snapshot, recorded, client, principalId, !!process), layout = live.layout;
@@ -35,8 +38,18 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
   const root = useMemo(() => regions(layout), [layout]);
   const order = useMemo(() => viewOrder(root), [root]);
   const byId = useMemo(() => new Map(layout.views.map(v => [v.id, v])), [layout]);
-  const [narrow, setNarrow] = useState(() => matchMedia('(max-width: 767px)').matches);
-  useEffect(() => { const q = matchMedia('(max-width: 767px)'), change = () => setNarrow(q.matches); q.addEventListener('change', change); return () => q.removeEventListener('change', change); }, []);
+  const [narrowWindow, setNarrowWindow] = useState(() => matchMedia('(max-width: 767px)').matches);
+  useEffect(() => { const q = matchMedia('(max-width: 767px)'), change = () => setNarrowWindow(q.matches); q.addEventListener('change', change); return () => q.removeEventListener('change', change); }, []);
+  // Views side by side need room: on a stage narrower than this, as when the notes and the Agent
+  // panel are open beside it, they show one at a time, as on a phone. The saved layout is kept.
+  const stage = useRef<HTMLDivElement>(null), [tight, setTight] = useState(false);
+  useLayoutEffect(() => {
+    const element = stage.current;
+    if (!element) return;
+    const observer = new ResizeObserver(([entry]) => { if (entry.contentRect.width) setTight(entry.contentRect.width < workspaceLimits.minSplitPx); });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
   // Which view each tab group shows, and which view has the person's (or the Agent's) focus.
   const [selected, setSelected] = useState<Record<string, string>>({});
   const [focus, setFocus] = useState(order[0] ?? '');
@@ -66,6 +79,7 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
   useEffect(() => { if (openView && brought.current !== openView && byId.has(openView)) { brought.current = openView; if (following) bring(openView); else show(openView); } }, [openView, byId]);
   const focused = order.includes(focus) ? focus : order[0] ?? '';
   const groups = root ? tabGroups(root) : [];
+  const narrow = narrowWindow || (tight && groups.length > 1);
   const visible = narrow ? (focused ? [focused] : []) : groups.map(shown);
   // Divider positions the person set in this tab, until the owner's layout changes.
   const [weights, setWeights] = useState<{ version: number; values: Record<string, number[]> }>({ version: layout.version, values: {} });
@@ -86,10 +100,10 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
   const newId = (kind: string) => `${kind}-${crypto.randomUUID().slice(0, 8)}`;
   const refusal = (error: unknown) => setLayoutProblem(error instanceof Error ? error.message : 'The layout change was not accepted.');
   async function writeLayout(next: LayoutTree | null) {
-    if (!next) return;
+    if (!next) return false;
     setLayoutProblem('');
-    try { remember(await client.call('composition.apply', { projectId: snapshot.project.id, compositionId: latest.current.compositionId, expectedVersion: latest.current.version, changeId: 'layout-' + crypto.randomUUID(), operations: [{ op: 'replace', rootId: next.rootId, nodes: next.nodes }] } as never, AbortSignal.timeout(30000)) as never); }
-    catch (error) { refusal(error); }
+    try { remember(await client.call('composition.apply', { projectId: snapshot.project.id, compositionId: latest.current.compositionId, expectedVersion: latest.current.version, changeId: 'layout-' + crypto.randomUUID(), operations: [{ op: 'replace', rootId: next.rootId, nodes: next.nodes }] } as never, AbortSignal.timeout(30000)) as never); return true; }
+    catch (error) { refusal(error); return false; }
   }
   async function undoLayout() {
     setLayoutProblem('');
@@ -105,6 +119,33 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
     const id = newId('view');
     try { await client.call('composition.apply', { projectId: snapshot.project.id, compositionId: latest.current.compositionId, expectedVersion: latest.current.version, changeId: 'layout-beside-' + crypto.randomUUID(), operations: [{ op: 'insert', parentId: parent.id, index: parent.children!.indexOf(viewId) + 1, node: { id, kind: 'view', ...beside } }] } as never, AbortSignal.timeout(30000)).then(result => remember(result as never)); show(id); }
     catch (error) { refusal(error); }
+  }
+  // Exploring a file in the Notebook: the page's Notebook comes forward, or one opens in a pane
+  // beside the file, in the same one conditional layout write as any arrangement. A table then
+  // loads into a new value at once; a script waits in the Notebook's line for the person to run.
+  // A conversation's Studio is the record of the Agent's work: what is explored from it opens on
+  // the person's workspace instead, through onExplore, the way it does from the Overview.
+  // Code waiting for the Notebook's line is the application's when it keeps it across pages.
+  const [kept, setKept] = useState<Prepared | null>(null), [exploring, setExploring] = useState(false);
+  const prepared = onPrepare ? given ?? null : kept, setPrepared = onPrepare ?? setKept;
+  const exploreOn = canExplore(snapshot) && (process ? !!onExplore : !!tree);
+  async function explore(viewId: string, path: string, language: Language, script: { dirty: boolean } | null) {
+    if (process) { onExplore?.(path, language); return; }
+    setLayoutProblem(''); setExploring(true);
+    try {
+      let notebook = layout.views.find(v => v.component === notebookComponent)?.id;
+      if (!notebook) {
+        const view = byId.get(viewId), now = treeNow(), id = 'notebook';
+        const ready = view && now && placeView(now, view, newId), next = ready && addBeside(ready, notebookView(id) as never, viewId, 'right', newId);
+        if (!allowed('composition.apply') || !next) { setLayoutProblem('The Notebook could not be placed beside this view.'); return; }
+        if (!(await writeLayout(next))) return;
+        notebook = id;
+      }
+      if (script) setPrepared(scriptPrepared(path, language, script.dirty));
+      else await loadTable(client, snapshot.project.id, path, language);
+      onPersonMoved?.(); show(notebook);
+    } catch (error) { refusal(error); }
+    finally { setExploring(false); }
   }
   // A divider is written back once the person stops moving it.
   const resizing = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -186,12 +227,19 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
     const view = byId.get(id)!, isVisible = visible.includes(id);
     if (view.component === 'rho.action') return <ActionForm view={view} snapshot={snapshot} client={client} live={live} />;
     if (view.component === 'rho.console') return <CommandPane client={client} snapshot={snapshot} />;
-    if (view.component === 'rho.notebook') return <SessionPane client={client} snapshot={snapshot} />;
+    if (view.component === notebookComponent) return <SessionPane client={client} snapshot={snapshot} prepared={prepared} onTaken={() => setPrepared(null)} onConversation={onConversation} />;
     if (view.component === 'rho.execution') {
       const operationId = String(view.props.operationId ?? id);
       return <RunView snapshot={snapshot} client={client} operationId={operationId} runs={live.runs} readRuns={live.readRuns} firstLine={runFirstLine(live, operationId)} opener={ref => () => openRef(ref)} onOpenRun={other => openRun(live, other)} chain />;
     }
     const resource = boundResource(view, snapshot.resources);
+    // A table, or a script, is explored from its own header.
+    const document = (view.bindings as Record<string, { kind?: string; documentId?: string }> | undefined)?.document;
+    const script = document?.kind === 'live-document' ? snapshot.documents.find(d => d.id === document.documentId) : undefined, scriptIn = scriptLanguage(script?.path);
+    const table = resource?.kind === 'table' && explorableTable(projectPath(resource)) ? projectPath(resource) : null;
+    const explorer = exploreOn && isVisible && (table || (script && scriptIn)) ? createPortal(table
+      ? <ExploreIn languages={['r', 'python']} busy={exploring} title={l => `${process ? 'Open it on your workspace with the Notebook beside it, and load ' : 'Load '}${table.split('/').at(-1)} as it is on disk now into the ${languageNames[l]} session as a new value${process ? '' : ', with the Notebook beside it'}`} onExplore={l => void explore(id, table, l, null)} />
+      : <ExploreIn languages={[scriptIn!]} busy={exploring} title={l => `${process ? 'Open it on your workspace with the Notebook beside it, and put ' : 'Put '}a line that runs ${script!.path.split('/').at(-1)} into the ${languageNames[l]} Notebook's line, for you to check and run`} onExplore={l => void explore(id, script!.path, l, { dirty: script!.dirty })} />, ownHeader(id), 'explore-' + id) : null;
     const annotations = snapshot.catalog.plugins.find(p => p.id === 'annotations');
     const Question = resource?.kind === 'table' && annotations?.projectEnabled && annotations.dependenciesSatisfied && annotations.state === 'available' ? registry.entries.find(e => e.component === 'rho.feedback')?.TableQuestion : undefined;
     const owner = <OwnerView active={isVisible} params={{
@@ -201,9 +249,9 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
       renderAllowed: rights.current.has(id), onAbout, onRequestFeedback: requestFeedback,
       onOpenBeside: tree && allowed('composition.apply') && tree.nodes.some(n => n.id === id) ? beside => void openBeside(id, beside) : undefined,
     }} />;
-    if (process) return <ProcessFrame view={view} process={process} client={client} snapshot={snapshot}>{owner}</ProcessFrame>;
-    if (!resource) return owner;
-    return <><SourceLine live={live} snapshot={snapshot} resource={resource} viewId={id} onOpenRef={openRef}>
+    if (process) return <>{explorer}<ProcessFrame view={view} process={process} client={client} snapshot={snapshot}>{owner}</ProcessFrame></>;
+    if (!resource) return <>{explorer}{owner}</>;
+    return <>{explorer}<SourceLine live={live} snapshot={snapshot} resource={resource} viewId={id} onOpenRef={openRef}>
       {Question && <Question key={resource.id + resource.version + id} projectId={snapshot.project.id} viewId={id} resource={resource} snapshot={snapshot} client={client} principalId={principalId} headerTarget={ownHeader(id)} selectionScope={selectionScope(view)} onOpenResource={openRef} requestFeedback={requestFeedback ? () => requestFeedback(id) : undefined} />}
     </SourceLine>{owner}</>;
   };
@@ -259,9 +307,9 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
     <Interruption live={live} items={unhidden} onHide={key => setHidden(h => [...h, key])} />
     {layoutProblem && <div className="shell-interruption problem" data-rho-layer="transient" data-rho-interruption="" role="alert"><span className="shell-interruption-text">{layoutProblem}</span><button className="shell-quiet" onClick={() => setLayoutProblem('')}>Dismiss</button></div>}
     <Digest live={live} />
-    <div className="shell-stage" onPointerDownCapture={event => live.hold((event.target as HTMLElement).closest<HTMLElement>('[data-owner-view]')?.dataset.ownerView ?? focused)} onKeyDownCapture={event => { live.hold(focused); if (!event.metaKey && !event.ctrlKey && event.key.length === 1) onPersonMoved?.(); }} onCompositionStartCapture={() => live.hold(focused)}>
+    <div ref={stage} className="shell-stage" onPointerDownCapture={event => live.hold((event.target as HTMLElement).closest<HTMLElement>('[data-owner-view]')?.dataset.ownerView ?? focused)} onKeyDownCapture={event => { live.hold(focused); if (!event.metaKey && !event.ctrlKey && event.key.length === 1) onPersonMoved?.(); }} onCompositionStartCapture={() => live.hold(focused)}>
       {contextTarget && feedbackContextActive && feedbackSource && feedbackAllowed && feedbackEntry && snapshot.feedback?.draftDocumentId && createPortal(feedbackLimit ? <section className="unavailable" role="status"><h3>Close a view before opening feedback</h3><p>Existing views and input are kept within this layout's view limit.</p></section> : <feedbackEntry.View key={[snapshot.project.id, snapshot.feedback.taskId, feedbackSource, principalId].join(':')} viewId={'feedback:' + feedbackSource} view={{ id: 'feedback:' + feedbackSource, component: feedbackEntry.component, version: feedbackEntry.componentVersion, props: { title: 'Your question', taskId: snapshot.feedback.taskId, sourceSelectionScope: byId.get(feedbackSource) ? selectionScope(byId.get(feedbackSource)!) : { kind: 'shared', id: feedbackSource } }, bindings: { draft: { kind: 'live-document', documentId: snapshot.feedback.draftDocumentId } } }} projectId={snapshot.project.id} snapshot={snapshot} client={client} active principalId={principalId} contextTarget={null} feedbackConfiguration={{ ...snapshot.feedback, draftDocumentId: snapshot.feedback.draftDocumentId }} />, contextTarget)}
-      {!root ? <div className="empty"><h2>No views in this layout</h2><p>The saved layout is empty. No view is created automatically.</p></div>
+      {!root ? empty ?? <div className="empty"><h2>No views in this layout</h2><p>The saved layout is empty. No view is created automatically.</p></div>
         : narrow ? <section className="shell-group">
           <div className="shell-tabbar"><div ref={narrowList} className="shell-tabs" role="tablist" aria-label="Views" onKeyDown={moveNarrow}>
             {order.map((id, i) => <button key={id} id={tabId + i} role="tab" aria-selected={id === focused} aria-controls={tabId + 'panel'} tabIndex={id === focused ? 0 : -1} onClick={() => { if (id !== focused) onPersonMoved?.(); show(id); }}><span className="shell-tab-name">{title(byId.get(id)!)}</span></button>)}

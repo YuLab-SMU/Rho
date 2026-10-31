@@ -29,6 +29,7 @@ button.board-live { min-height: 0; padding: 0; font-size: inherit; }
 .board-item.role-primary { padding: 14px; }
 .board-item > header { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .board-item-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }
+.board-item-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 4px 10px; min-width: 0; }
 .board-ask-button { flex: none; min-height: 0; padding: 2px 6px; font-size: 12px; color: var(--color-muted); }
 .board-item:hover .board-ask-button, .board-ask-button[aria-expanded="true"] { color: var(--color-accent); }
 .board-item.asking { border-color: var(--color-hairline-strong); }

@@ -231,6 +231,15 @@ export function moveTab(tree: LayoutTree, viewId: string, target: string, before
   return tidy(next);
 }
 export type Side = 'left' | 'right' | 'top' | 'bottom';
+// Adds a view in a pane of its own beside the tab group that holds another view, or beside the
+// last group when none is named; an empty layout takes it as its one tab.
+export function addBeside(tree: LayoutTree, view: ViewDescription, nextTo: string | null, side: Side, newId: (kind: string) => string): LayoutTree | null {
+  if (tree.nodes.some(n => n.id === view.id)) return null;
+  const anchor = nextTo && parentOf(tree.nodes, nextTo) ? nextTo : leaves(tree.nodes, owners(tree).at(-1) ?? tree.rootId)[0] ?? null;
+  const placed = placeView(tree, view, newId);
+  if (!placed || !anchor) return placed;
+  return dockView(placed, view.id, tabOwner(placed.nodes, anchor), side, newId) ?? placed;
+}
 // Shows a view in a pane of its own on one side of a tab group, sharing that group's space.
 // Beside a neighbour along the same axis it joins that split instead of nesting another.
 export function dockView(tree: LayoutTree, viewId: string, target: string, side: Side, newId: (kind: string) => string): LayoutTree | null {

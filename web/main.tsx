@@ -11,6 +11,9 @@ import { useAgentNow, type AgentNow } from './agent-now.js';
 import { NotesPanel, useProjectNotes } from './project-notes.js';
 import { compositionName, defaultWorkspace, fileKey, openInWorkspace, processComposition, processConversation } from './canvas.js';
 import { Icon } from './icons.js';
+import { addNotebook, canExplore, createWorkspace, loadTable, notebookOn, scriptLanguage, scriptPrepared, type Language } from './explore.js';
+import { PageAdd } from './page-add.js';
+import type { Prepared } from './notebook.js';
 import { CommandPalette, type Command, type CommandGroup } from './commands.js';
 import { PluginCatalog, PluginNavigation } from './plugins.js';
 import { pluginPresentation } from '../src/plugin-presentation.js';
@@ -113,6 +116,8 @@ function App() {
   }
   // The layout commands the workspace offers for its focused view.
   const [layoutCommands, setLayoutCommands] = useState<CommandGroup | null>(null);
+  // Code waiting for a Notebook's line, kept while the person moves to the page it opens on.
+  const [prepared, setPrepared] = useState<Prepared | null>(null);
   // A view may place its own section (for example Changes) at the top of the context panel.
   const [contextSlot, setContextSlot] = useState<HTMLDivElement | null>(null);
   const [reconnect, setReconnect] = useState(0), [commands, setCommands] = useState(false), [confirming, setConfirming] = useState(false);
@@ -263,6 +268,33 @@ function App() {
     openInWorkspace(client, snapshot, workspace, path).then(placed => placed ? layout(placed.compositionId, placed.viewId) : setNotice(path + ' · Rho has no viewer for this kind of file yet.'),
       error => setNotice(path + ' · ' + (error instanceof Error ? error.message : 'It could not be opened.')));
   }
+  useEffect(() => setPrepared(null), [project?.id]);
+  // The person's own pages can be made and arranged when this tab may write layouts.
+  const arrangeable = !!snapshot?.catalog.operations.some(o => o.method === 'composition.apply' && o.authorized && o.state === 'available');
+  // A Studio page of the person's own, empty until they add a view to it.
+  function newWorkspace() {
+    if (!snapshot) return;
+    createWorkspace(client!, snapshot.project.id, snapshot.compositions.map(c => c.compositionId))
+      .then(id => layout(id), error => setNotice('A new workspace could not be made. ' + (error instanceof Error ? error.message : '')));
+  }
+  // The Notebook on a page of the person's own: beside what is there, or brought forward.
+  function notebookOnPage(page: string) {
+    if (!snapshot) return;
+    addNotebook(client!, snapshot.project.id, page, null).then(id => layout(page, id), error => setNotice('The Notebook could not be added. ' + (error instanceof Error ? error.message : '')));
+  }
+  // A table or a script explored from where it is shown: it opens on the person's workspace with
+  // the Notebook beside it. A table loads into the session as a new value; a script waits in the
+  // Notebook's line for the person to check and run.
+  function exploreFile(path: string, language: Language) {
+    if (!snapshot) return;
+    const page = sharedWorkspace(), now = snapshot, projectId = now.project.id;
+    openInWorkspace(client!, now, page, path).then(async placed => {
+      const notebook = await addNotebook(client!, projectId, page, placed?.viewId ?? null);
+      if (scriptLanguage(path)) setPrepared(scriptPrepared(path, language, !!now.documents.find(d => d.path === path)?.dirty));
+      else await loadTable(client!, projectId, path, language);
+      layout(page, notebook);
+    }).catch(error => setNotice(path + ' · ' + (error instanceof Error ? error.message : 'It could not be explored.')));
+  }
   // A project file a view links to: in Studio it opens in the workspace on screen, elsewhere in place.
   function openLinked(path: string) {
     const here = studioOpen ? composition?.compositionId ?? compositionId : '';
@@ -389,6 +421,7 @@ function App() {
       ...(narrow ? [{ id: 'navigation', label: 'Show navigation', icon: 'sidebar', run: () => setNavigation(true) }] satisfies Command[]
         : projectVisible ? [{ id: 'navigation', label: (navigation ? 'Hide ' : 'Show ') + sidebarName.toLowerCase(), icon: 'sidebar', run: () => setNavigation(v => !v) }] satisfies Command[] : []),
       { id: 'context', label: (context && !feedbackContext ? 'Hide' : 'Show') + ' context & access', icon: 'context', run: () => { setFeedbackContext(false); setContext(v => feedbackContext || !v); } },
+      ...(project && snapshot && arrangeable ? [{ id: 'new-workspace', label: 'New workspace', icon: 'plus', meta: 'Studio', run: newWorkspace }] satisfies Command[] : []),
     ] },
     // After navigation, so the default choice is never a change to the layout.
     ...(screen === 'project' && composition && layoutCommands ? [layoutCommands] : []),
@@ -445,6 +478,9 @@ function App() {
   const shell = useMemo(() => shellServices(client, () => shellNow.current, path => linked.current(path), (id, anchor) => reviewNavigation.current(id,anchor)), [client]);
   const fileOnScreen = section === 'file' && shownFile ? sources?.[shownFile.row].find(item => item.key === shownFile.key) : undefined;
   const here = screen === 'plugins' ? 'plugins' : screen !== 'project' ? '' : studioOpen ? 'studio:' + (composition?.compositionId ?? compositionId) : section === 'sources' ? 'sources:' + category : section === 'file' && shownFile ? 'file:' + shownFile.row + ':' + shownFile.key : section === 'documents' ? 'files' : section;
+  const openConversation = (id: string) => { setSelectedConversation(id); setAgentOpen(true); setContext(false); };
+  const pageAdd = snapshot ? <PageAdd sources={sources} notebook={!snapshot.catalog.plugins.some(p => p.id === 'kernel') || !canExplore(snapshot) ? 'unavailable' : notebookOn(composition?.views) ? 'present' : 'absent'}
+    onNotebook={() => notebookOnPage(shownId)} onFile={path => openIn(shownId, path)} onAll={row => showSources(row)} /> : null;
   const initials = project ? name(project).split(/[\s_.-]+/).filter(Boolean).slice(0, 2).map(w => [...w][0]!.toUpperCase()).join('') || 'P' : '';
   // The projects list has the application's own sidebar even while a project stays chosen.
   const inProject = !!project && screen !== 'home';
@@ -462,7 +498,7 @@ function App() {
       : <ProjectNavigation project={project} snapshot={snapshot} current={here} sources={sources} partial={files.truncated}
           agent={{ running: !!agentNow?.running, waiting: !!agentNow?.waiting, conversations: snapshot?.conversations?.length ?? 0 }} adding={addingSource}
           sessions={shownConversations().map(c => ({ id: processComposition(c.conversationId), title: sessionTitle(c), running: !!agentNow?.running && agentNow.conversationId === c.conversationId, when: c.lastAt }))}
-          onOverview={pick(showOverview)} onStudio={pick(studio)} onLayout={id => pick(() => processConversation(id) ? showProcess(id) : layout(id))()}
+          onOverview={pick(showOverview)} onStudio={pick(studio)} onNewLayout={arrangeable ? pick(newWorkspace) : undefined} onLayout={id => pick(() => processConversation(id) ? showProcess(id) : layout(id))()}
           onSection={next => pick(() => next === 'graph' ? showGraph() : showSection(next))()} onSources={next => pick(() => showSources(next))()} onFile={(row, item) => pick(() => showFile(row, item))()} onAddSource={() => void addSource()} />}
     </> : <>
       <button className="brand" onClick={goHome} aria-label="Rho home"><span className="brand-mark">ρ</span><strong>Rho</strong></button>
@@ -539,18 +575,21 @@ function App() {
                   {shownProcess && <div ref={setStepsSlot} className="steps-slot" />}
                   {/* Following brings forward what the Agent is on in its conversation's Studio. */}
                   {agentNow?.running && !(followingHere && shownProcess === agentNow.conversationId) && <button className="follow-toggle" aria-pressed="false" title={'Show what ' + agentNow.agent + ' is working on as it works'} onClick={() => follow(agentNow.conversationId, true)}><Icon name="follow" size={15} />Follow {agentNow.agent}</button>}
+                  {!shownProcess && arrangeable && <details className="view-menu add-menu"><summary title="Add a view to this workspace"><Icon name="plus" size={15} /><span>Add view</span></summary><div>{pageAdd}</div></details>}
                   {!link && <button className="notes-toggle" aria-pressed={notesOpen} title={notesOpen ? 'Hide the project notes' : 'Show the project notes'} onClick={() => showNotes(!notesOpen)}><Icon name="document" size={15} /><span>Notes</span></button>}
                   {(composition || shownProcess) && layoutCommands && <details className="view-menu"><summary title="Arrange views"><Icon name="layout" size={15} /><span>Arrange views</span></summary><div>{layoutCommands.commands.map(c => <button key={c.id} onClick={e => { c.run(); e.currentTarget.closest('details')?.removeAttribute('open'); }}><Icon name={c.icon} size={15} />{c.label}</button>)}</div></details>}
                 </div>
                 {shownProcess ? <Suspense fallback={<Loading text="Opening the conversation's Studio…" />}><ProcessStudio key={snapshot.project.id + shownProcess} client={client!} snapshot={snapshot} files={files} conversationId={shownProcess} notesText={notes.text}
                     at={replay.at} playing={replay.playing} speed={replay.speed} onAt={at => setReplay(r => ({ ...r, at: at === null ? null : Math.floor(at / 1000) * 1000 + 999 }))} onPlaying={playing => setReplay(r => ({ ...r, playing }))} onSpeed={speed => setReplay(r => ({ ...r, speed }))}
                     stepsTarget={stepsSlot} agentNow={agentNow} following={followingHere}
-                    workspace={{ onAbout: about, contextTarget: context ? contextSlot : null, principalId: connection.principalId, feedbackContextActive: feedbackContext, onShowContext: () => { setFeedbackContext(true); setContext(true); setAgentOpen(false); }, onCommands: setLayoutCommands, agentTarget: agentOpen ? agentSlot : null, onShowAgent: () => setAgentOpen(true), onPersonMoved: () => setFollowing(false), attention: false }} /></Suspense>
+                    workspace={{ onAbout: about, contextTarget: context ? contextSlot : null, principalId: connection.principalId, feedbackContextActive: feedbackContext, onShowContext: () => { setFeedbackContext(true); setContext(true); setAgentOpen(false); }, onCommands: setLayoutCommands, agentTarget: agentOpen ? agentSlot : null, onShowAgent: () => setAgentOpen(true), onPersonMoved: () => setFollowing(false), attention: false, onConversation: openConversation, onExplore: exploreFile, prepared, onPrepare: setPrepared }} /></Suspense>
                 : composition ? <Suspense fallback={<Loading text="Opening workspace…" />}><Workspace key={snapshot.project.id + composition.compositionId} composition={composition} snapshot={snapshot} client={client!} onAbout={about} contextTarget={context ? contextSlot : null} principalId={connection.principalId} feedbackContextActive={feedbackContext} onShowContext={() => { setFeedbackContext(true); setContext(true); setAgentOpen(false); }} openView={openView} onCommands={setLayoutCommands} agentTarget={agentOpen ? agentSlot : null} onShowAgent={() => setAgentOpen(true)}
-                    presence={presence} onPersonMoved={() => setFollowing(false)} attention={false} following={followingHere && openFollowed} /></Suspense>
+                    presence={presence} onPersonMoved={() => setFollowing(false)} attention={false} following={followingHere && openFollowed}
+                    onConversation={openConversation} prepared={prepared} onPrepare={setPrepared}
+                    empty={arrangeable ? <div className="studio-empty page-empty"><span className="empty-symbol"><Icon name="layout" size={26} stroke={1.5} /></span><h2>This workspace is empty</h2><p>Put the Notebook here to work in the live R and Python sessions, or a project file to look at it beside them.</p>{pageAdd}</div> : undefined} /></Suspense>
                   : <StudioEmpty root={project.root} agent={agentNow} following={followingHere} onAgent={() => { setAgentOpen(true); setContext(false); }} onFiles={() => showSources('data')} />}
                 </div>
-              </div> : section === 'file' && shownFile ? (fileOnScreen ? <Suspense fallback={<Loading text="Opening file…" />}><FilePreview client={client!} snapshot={snapshot} item={fileOnScreen} items={sources![shownFile.row]} kind={sourceLabels[shownFile.row]} principalId={connection.principalId} workspace={sharedWorkspace}
+              </div> : section === 'file' && shownFile ? (fileOnScreen ? <Suspense fallback={<Loading text="Opening file…" />}><FilePreview client={client!} snapshot={snapshot} item={fileOnScreen} items={sources![shownFile.row]} kind={sourceLabels[shownFile.row]} principalId={connection.principalId} workspace={sharedWorkspace} onExplore={canExplore(snapshot) ? exploreFile : undefined}
                   onMove={item => showFile(shownFile.row, item)} onStudio={layout} onList={() => showSources(shownFile.row)} onAbout={about} /></Suspense>
                 : !sources ? <Loading text="Reading the project folders…" />
                 : <div className="studio-empty"><span className="empty-symbol"><Icon name="file" size={26} stroke={1.5} /></span><h2>This file is no longer in the project</h2><p>{shownFile.key.replace(/^\w+:/, '')} was not found when the folders were last read. It may have been moved or removed.</p><div className="empty-actions"><button onClick={() => showSources(shownFile.row)}>All {sourceLabels[shownFile.row].toLowerCase()}</button></div></div>)
@@ -558,10 +597,10 @@ function App() {
               : section === 'console' ? <section className="project-page console-section" aria-labelledby="console-title"><header className="page-heading"><div><h1 id="console-title">Console</h1></div></header>
                   <Suspense fallback={<Loading text="Opening the Console…" />}><ConsolePage client={client!} snapshot={snapshot} files={files} focusTurn={consoleTurn} onPath={showPath} onConversation={id => { setSelectedConversation(id); setAgentOpen(true); setContext(false); }} /></Suspense></section>
               : section === 'notebook' ? <section className="project-page notebook-section" aria-labelledby="notebook-title"><header className="page-heading"><div><h1 id="notebook-title">Notebook</h1><p>Live R and Python sessions you share with the Agent</p></div></header>
-                  <Suspense fallback={<Loading text="Opening the Notebook…" />}><NotebookPage client={client!} snapshot={snapshot} onConversation={id => { setSelectedConversation(id); setAgentOpen(true); setContext(false); }} /></Suspense></section>
+                  <Suspense fallback={<Loading text="Opening the Notebook…" />}><NotebookPage client={client!} snapshot={snapshot} onConversation={openConversation} /></Suspense></section>
               : section === 'graph' ? <Suspense fallback={<Loading text="Opening the graph…" />}><WorkGraph initialResource={graphResource} client={client!} snapshot={snapshot} files={files} agentNow={agentNow} following={following} principalId={connection.principalId} notesText={notes.text}
                   onFollow={() => follow()} onStopFollowing={() => setFollowing(false)} onStudio={layout} workspace={sharedWorkspace} onAbout={about} onAgent={id => { if (id) setSelectedConversation(id); setAgentOpen(true); setContext(false); }} /></Suspense>
-              : <Suspense fallback={<Loading text="Opening project…" />}><ProjectOverview key={project.id} section={section} notesText={notes.text} workspace={sharedWorkspace} category={category} files={files} sources={sources} onFile={showFile} linked={!!link} onPath={showPath} onNewConversation={() => talk()} onSection={showSection} onConsole={showConsole} onAgent={id => { if (id) setSelectedConversation(id); setAgentOpen(true); }} client={client!} onProjectChanged={next => { setProject(next); setProjects(list => list.map(p => p.id === next.id ? next : p)); }} project={project} snapshot={snapshot} onLayout={layout} onOpened={(id, view) => { layout(id, view); reread(); }} /></Suspense>}
+              : <Suspense fallback={<Loading text="Opening project…" />}><ProjectOverview key={project.id} section={section} notesText={notes.text} workspace={sharedWorkspace} onExplore={exploreFile} category={category} files={files} sources={sources} onFile={showFile} linked={!!link} onPath={showPath} onNewConversation={() => talk()} onSection={showSection} onConsole={showConsole} onAgent={id => { if (id) setSelectedConversation(id); setAgentOpen(true); }} client={client!} onProjectChanged={next => { setProject(next); setProjects(list => list.map(p => p.id === next.id ? next : p)); }} project={project} snapshot={snapshot} onLayout={layout} onOpened={(id, view) => { layout(id, view); reread(); }} /></Suspense>}
           </main>
           {projectVisible && agentOpen && !narrow && <SidePanel label="Agent panel">{agentContents}</SidePanel>}
           {context && !narrow && <aside id="project-context" className="context-drawer inspector-pane" aria-label={feedbackContext ? 'Your question' : 'Context and access'}><div className="drawer-heading"><h2>{feedbackContext ? 'Your question' : 'Connection & access'}</h2><button className="icon-button" aria-label="Close context" onClick={() => { setContext(false); contextTrigger.current?.focus(); }}><Icon name="close" size={18} /></button></div>{contextSections}</aside>}

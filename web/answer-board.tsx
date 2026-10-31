@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { canExplore, explorableTable, languageNames, type Language } from './explore.js';
+import { ExploreIn } from './explore-in.js';
 import type { BrowserClient, WorkspaceSnapshot } from '../src/browser.js';
 import type { RhoOutput } from '../src/contract.generated.js';
 import { buildWorkGraph, foldVersions, type GraphNode, type WorkGraph } from '../src/work-graph.js';
@@ -131,7 +133,7 @@ function Said({ text }: { text: string }) {
   return <>{text.split('`').map((part, i) => i % 2 ? <code key={i}>{part}</code> : part)}</>;
 }
 
-function Item({ client, snapshot, item, onPath, said, span, ask, holds }: { client: BrowserClient; snapshot: WorkspaceSnapshot; item: BoardItem; onPath: (path: string) => void; said?: string; span?: number; ask?: { open: boolean; toggle: () => void; box: React.ReactNode };
+function Item({ client, snapshot, item, onPath, onExplore, said, span, ask, holds }: { client: BrowserClient; snapshot: WorkspaceSnapshot; item: BoardItem; onPath: (path: string) => void; onExplore?: (path: string, language: Language) => void; said?: string; span?: number; ask?: { open: boolean; toggle: () => void; box: React.ReactNode };
   // What the file holds: the notes' words, else a model's sentence, else facts read from it.
   holds?: Holds }) {
   const { node, role } = item;
@@ -143,7 +145,8 @@ function Item({ client, snapshot, item, onPath, said, span, ask, holds }: { clie
   if (role === 'run') return <div className="board-item role-run"><Run node={node} /><small className="board-why"><Said text={item.why} /></small></div>;
   return <article className={'board-item role-' + role + (span ? ' span-' + span : '') + (ask?.open ? ' asking' : '')}>
     <header><div className="board-item-title"><button className="board-name" title={'Show ' + node.path} onClick={() => onPath(node.path!)}><Icon name={pathIcon(node.path!)} size={15} stroke={1.7} /><strong>{node.title}</strong></button>
-      {ask && <button className="text-button board-ask-button" aria-expanded={ask.open} onClick={ask.toggle}>Ask</button>}</div>
+      <span className="board-item-actions">{ask && <button className="text-button board-ask-button" aria-expanded={ask.open} onClick={ask.toggle}>Ask</button>}
+      {onExplore && explorableTable(node.path) && canExplore(snapshot) && <ExploreIn languages={['r', 'python']} title={l => `Open ${node.title} in Studio with the Notebook beside it, loaded into the ${languageNames[l]} session as a new value`} onExplore={l => onExplore(node.path!, l)} />}</span></div>
       {holds && <HoldsText className="board-holds" holds={holds} />}
       {item.why !== said && <small className="board-why"><Said text={item.why} /></small>}</header>
     {ask?.open && ask.box}
@@ -201,8 +204,8 @@ function FollowUp({ id, node, running, at, onOpen }: { id: string; node?: GraphN
   </li>;
 }
 
-export function AnswerBoard({ client, snapshot, files, notesText = '', onConversation, onPath, onConsole, onGraph, onAsked }: {
-  client: BrowserClient; snapshot: WorkspaceSnapshot; files: ProjectFiles; notesText?: string;
+export function AnswerBoard({ client, snapshot, files, notesText = '', onConversation, onPath, onExplore, onConsole, onGraph, onAsked }: {
+  client: BrowserClient; snapshot: WorkspaceSnapshot; files: ProjectFiles; notesText?: string; onExplore?: (path: string, language: Language) => void;
   onConversation: (conversationId: string) => void; onPath: (path: string) => void; onConsole: (turn?: string) => void; onGraph: () => void;
   // After a question is sent: show the conversation where the Agent answers it.
   onAsked?: (conversationId: string) => void;
@@ -306,8 +309,8 @@ export function AnswerBoard({ client, snapshot, files, notesText = '', onConvers
       {/* How the results came about, said once when it is the same for all of them. */}
       <p className="board-results-why"><strong>Results</strong>{said && <> · <Said text={said} /></>}</p>
       <div className={'board-results beside-' + Math.min(supporting.length, 2)}>
-        {primary && <Item client={client} snapshot={snapshot} item={primary} onPath={onPath} said={said} holds={holds(primary)} ask={shown.running ? undefined : askFor(primary)} />}
-        {supporting.map((item, i) => <Item key={item.node.id} client={client} snapshot={snapshot} item={item} onPath={onPath} said={said} holds={holds(item)} span={i >= supporting.length - tail ? 6 / tail : undefined} ask={shown.running ? undefined : askFor(item)} />)}
+        {primary && <Item client={client} snapshot={snapshot} item={primary} onPath={onPath} onExplore={onExplore} said={said} holds={holds(primary)} ask={shown.running ? undefined : askFor(primary)} />}
+        {supporting.map((item, i) => <Item key={item.node.id} client={client} snapshot={snapshot} item={item} onPath={onPath} onExplore={onExplore} said={said} holds={holds(item)} span={i >= supporting.length - tail ? 6 / tail : undefined} ask={shown.running ? undefined : askFor(item)} />)}
       </div>
       {more('supporting')}
     </div>}

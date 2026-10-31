@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { explorableTable, languageNames, scriptLanguage, type Language } from './explore.js';
+import { ExploreIn } from './explore-in.js';
 import type { BrowserClient, ViewDescription, WorkspaceSnapshot } from '../src/browser.js';
 import type { SourceItem } from './sources.js';
 import { openInWorkspace, viewFor } from './canvas.js';
@@ -23,9 +25,9 @@ function ownsKeys(target: EventTarget | null) {
   return !!element?.closest('input, textarea, select, [contenteditable=""], [contenteditable=true], [data-owner-body], [role=tablist], [role=menu], dialog[open]');
 }
 
-export function FilePreview({ client, snapshot, item, items, kind, principalId, workspace, onMove, onStudio, onList, onAbout }: {
+export function FilePreview({ client, snapshot, item, items, kind, principalId, workspace, onExplore, onMove, onStudio, onList, onAbout }: {
   client: BrowserClient; snapshot: WorkspaceSnapshot; item: SourceItem; items: SourceItem[]; kind: string; principalId?: string;
-  workspace: () => string; onMove: (item: SourceItem) => void; onStudio: (compositionId: string, viewId: string) => void; onList: () => void; onAbout: (pluginId: string) => void;
+  workspace: () => string; onExplore?: (path: string, language: Language) => void; onMove: (item: SourceItem) => void; onStudio: (compositionId: string, viewId: string) => void; onList: () => void; onAbout: (pluginId: string) => void;
 }) {
   const [shown, setShown] = useState<Shown>(null), [header, setHeader] = useState<HTMLDivElement | null>(null);
   const [placing, setPlacing] = useState(false), [placeProblem, setPlaceProblem] = useState('');
@@ -75,6 +77,8 @@ export function FilePreview({ client, snapshot, item, items, kind, principalId, 
         <button className="preview-position" title={'All ' + kind.toLowerCase()} onClick={onList}>{index >= 0 ? `${index + 1} of ${items.length}` : items.length + ' files'}</button>
         <button className="icon-button" aria-label={next ? 'Next: ' + next.name : 'Next file'} title="Next (→)" aria-keyshortcuts="ArrowRight" disabled={!next} onClick={() => next && onMove(next)}><Icon name="chevron" size={16} /></button>
       </div>
+      {onExplore && (explorableTable(item.path) || scriptLanguage(item.path)) && <ExploreIn languages={explorableTable(item.path) ? ['r', 'python'] : [scriptLanguage(item.path)!]}
+        title={l => explorableTable(item.path) ? `Open ${item.name} in Studio with the Notebook beside it, loaded into the ${languageNames[l]} session as a new value` : `Open ${item.name} in Studio with the Notebook beside it, and a line that runs it waiting there for you`} onExplore={l => onExplore(item.path, l)} />}
       <button className="preview-studio" aria-label={placing ? 'Opening in Studio' : 'Open in Studio'} title="Open in Studio" disabled={placing} onClick={() => void studio()}><Icon name="layout" size={15} /><span>{placing ? 'Opening…' : 'Open in Studio'}</span></button>
     </header>
     {placeProblem && <p className="canvas-note" role="alert">{placeProblem}</p>}

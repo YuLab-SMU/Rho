@@ -886,3 +886,29 @@ dialog.review-overlay{border:1px solid var(--border);color:inherit;margin:auto;w
 .review-result strong { max-width: 100%; overflow: hidden; font-size: 13.5px; font-weight: 550; text-overflow: ellipsis; white-space: nowrap; }
 .rho-review .review-version { align-self: flex-start; display: flex; flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 8px; margin-top: 14px; color: var(--color-meta); font-size: 12.5px; font-weight: 400; text-align: left; }
 .rho-review .review-version select { min-width: 220px; padding: 5px 8px; border: 1px solid var(--color-control-border); border-radius: 8px; background: var(--color-surface); color: var(--color-ink); font: inherit; }
+
+/* Explore in the Notebook: a short phrase with one button per language that can read the file. */
+.explore-in { display: inline-flex; align-items: center; gap: 2px; color: var(--color-meta); font-size: 12px; white-space: nowrap; }
+.explore-in > svg { margin-right: 3px; }
+.explore-in-label { margin-right: 4px; }
+.explore-in button { min-height: 26px; padding: 2px 9px; border: 1px solid var(--color-hairline-strong); border-radius: 999px; background: var(--color-surface); color: var(--color-accent-strong); font-size: 12px; font-weight: 600; }
+.explore-in button + button { margin-left: 4px; }
+.explore-in button:hover:not(:disabled) { border-color: var(--color-accent); background: var(--color-hover); }
+
+/* Adding to a page of the person's own: the Notebook first, then files by kind. */
+.page-add { display: flex; flex-direction: column; gap: 10px; min-width: 280px; max-height: min(70vh, 560px); overflow-y: auto; text-align: left; }
+.page-add button { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 32px; padding: 5px 8px; border: 0; border-radius: 6px; background: transparent; color: var(--color-ink); font-size: 13px; font-weight: 400; text-align: left; }
+.page-add button:hover { background: var(--color-hover); }
+.page-add button > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.page-add button > small { flex: 0 1 auto; max-width: 40%; margin-left: auto; overflow: hidden; color: var(--color-meta); font-size: 11.5px; text-overflow: ellipsis; white-space: nowrap; }
+.page-add button.page-add-notebook { align-items: flex-start; padding: 9px 10px; border: 1px solid var(--color-hairline-strong); }
+.page-add-notebook > svg { margin-top: 2px; color: var(--color-accent-strong); }
+.page-add-notebook > span { display: flex; flex-direction: column; gap: 1px; white-space: normal; }
+.page-add-notebook small { color: var(--color-meta); font-size: 12px; }
+.page-add-kind { display: flex; flex-direction: column; }
+.page-add-kind h3 { padding: 0 8px 3px; color: var(--color-meta); font-size: 11.5px; font-weight: 650; letter-spacing: .3px; text-transform: uppercase; }
+.page-add button.page-add-all { color: var(--color-accent-strong); font-size: 12px; font-weight: 600; }
+.page-add-note { padding: 0 8px; color: var(--color-meta); font-size: 12px; }
+.page-empty .page-add { width: min(560px, 100%); max-height: none; margin-top: 8px; }
+.nav-new { color: var(--color-meta); }
+.nav-new:hover { color: var(--color-accent-strong); }

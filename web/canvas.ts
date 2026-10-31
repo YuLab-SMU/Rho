@@ -8,7 +8,8 @@ import { capturable } from './sources.js';
 // person has open, in the same saved layout either of them can arrange.
 export const defaultWorkspace = 'workspace';
 const names: Record<string, string> = { workspace: 'Workspace', 'agent-canvas': 'Agent canvas', 'observed-outputs': 'Observed outputs' };
-export function compositionName(id: string) { return names[id] ?? id; }
+// The person's own pages after the first are numbered (see createWorkspace).
+export function compositionName(id: string) { return names[id] ?? (/^workspace-(\d+)$/.exec(id) ? 'Workspace ' + id.slice('workspace-'.length) : id); }
 // Each conversation started in Rho has its own Studio layout, derived from its work until the
 // person arranges it; it is saved under this name only then.
 export const processComposition = (conversationId: string) => 'conversation-' + conversationId;
@@ -29,6 +30,9 @@ const agentGroup = 'canvas-';
 const markdownReader = 'markdown.reader';
 const sideOf = (node: Node): Side | null => node.kind !== 'view' ? null : node.component === 'rho.editor' || node.component === markdownReader ? 'code' : node.component === 'rho.table' || node.component === 'rho.media' ? 'data' : null;
 
+// Files no Studio view reads; anything else that is text opens in the editor.
+const unviewable = /\.(png|jpe?g|svg|gif|pdf|tiff?|webp|xlsx?|rds|rda|rdata|parquet|feather|h5|h5ad|bam|zip|gz)$/i;
+export const studioViewable = (path: string) => capturable(path) || !unviewable.test(path);
 const allowed = (snapshot: WorkspaceSnapshot, method: string) => snapshot.catalog.operations.some(o => o.method === method && o.authorized && o.state === 'available');
 const component = (snapshot: WorkspaceSnapshot, id: string) => snapshot.catalog.components.find(c => c.id === id);
 export const canCapture = (snapshot: WorkspaceSnapshot) => allowed(snapshot, 'agent.activity.capture') && !!component(snapshot, 'rho.table') && !!component(snapshot, 'rho.media');
@@ -51,7 +55,7 @@ export async function viewFor(client: BrowserClient, snapshot: WorkspaceSnapshot
     const binding = Object.keys(owner.bindings)[0] ?? 'data';
     return { side: 'data', node: { id: fileKey(path) + resource.version.slice(0, 12), kind: 'view', component: owner.id, version: owner.version, props: { title }, bindings: { [binding]: { id: resource.id, version: resource.version } } } };
   }
-  if (/\.(png|jpe?g|svg|gif|pdf|tiff?|webp|xlsx?|rds|rda|rdata|parquet|feather|h5|h5ad|bam|zip|gz)$/i.test(path)) return null;
+  if (unviewable.test(path)) return null;
   // Markdown reads as formatted text, from the same buffer the editor shows under Source.
   const editor = (/\.(md|markdown)$/i.test(path) ? component(snapshot, markdownReader) : undefined) ?? component(snapshot, 'rho.editor');
   if (!editor) return null;

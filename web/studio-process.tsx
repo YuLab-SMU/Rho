@@ -212,7 +212,7 @@ export function ProcessStudio({ client, snapshot, files, conversationId, notesTe
     };
     const views = shown.flatMap(file => { const n = node(file); return n ? [{ role: file.role, node: n, figure: n.component === 'rho.media' }] : []; });
     const commands: LayoutNode | null = Number.isFinite(firstRun) ? { id: studioIds.console, kind: 'view', component: 'rho.console', version: '1', props: { title: 'Commands' }, bindings: {} } : null;
-    const session: LayoutNode | null = Number.isFinite(firstCellShown) ? { id: studioIds.session, kind: 'view', component: 'rho.notebook', version: '1', props: { title: 'Session' }, bindings: {} } : null;
+    const session: LayoutNode | null = Number.isFinite(firstCellShown) ? { id: studioIds.session, kind: 'view', component: 'rho.notebook', version: '1', props: { title: 'Notebook' }, bindings: {} } : null;
     const derived = studioTree(views, commands, session);
     const saved = snapshot.compositions.find(c => c.compositionId === compositionId) as CompositionSummary | undefined;
     if (!saved?.rootId || !saved.nodes?.length) return derived;

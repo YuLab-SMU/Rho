@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { closeView, dockView, groupNode, moveTab, moveView, placeView, regions, resizeSplit, splitView } from '../dist/shell-layout.js';
+import { addBeside, closeView, dockView, groupNode, moveTab, moveView, placeView, regions, resizeSplit, splitView } from '../dist/shell-layout.js';
 
 // Layout commands change the owner tree only, and the shell draws the result through the
 // same reading as any other composition. Each case states what the person sees afterwards.
@@ -108,4 +108,21 @@ test('dropping a tab on a side of a group gives it a pane there', () => {
   // Moving the last view of one pane beside another closes the emptied pane.
   const moved = dockView(right, 'c', 'root', 'left', id);
   assert.deepEqual(drawn(moved).children.map(c => c.views), [['c'], ['a', 'b']]);
+});
+
+test('a view added beside another gets its own pane next to that view\'s group', () => {
+  const notebook = { id: 'nb', component: 'rho.notebook', version: '1', props: { title: 'Notebook' }, bindings: {} };
+  // An empty page takes it as its one tab.
+  const empty = { rootId: 'root', nodes: [{ id: 'root', kind: 'group', children: [] }] };
+  assert.deepEqual(drawn(addBeside(empty, notebook, null, 'right', id)), { kind: 'tabs', id: 'root', views: ['nb'] });
+  // Beside a table that shares its tabs: the table's group keeps its views, the Notebook sits right of it.
+  const right = addBeside(tabs('a', 'table'), notebook, 'table', 'right', id);
+  const top = drawn(right);
+  assert.equal(top.kind, 'split'); assert.deepEqual(top.children.map(c => c.views), [['a', 'table'], ['nb']]);
+  // In a split, it joins beside the named view's pane without nesting another split.
+  const three = addBeside(splitView(tabs('a', 'b'), 'b', 'horizontal', id), notebook, 'a', 'right', id);
+  assert.deepEqual(drawn(three).children.map(c => c.views), [['a'], ['nb'], ['b']]);
+  // Without a named view it goes beside the last group; a view already there is not added twice.
+  assert.deepEqual(drawn(addBeside(splitView(tabs('a', 'b'), 'b', 'horizontal', id), notebook, null, 'right', id)).children.map(c => c.views), [['a'], ['b'], ['nb']]);
+  assert.equal(addBeside(right, notebook, 'a', 'right', id), null);
 });

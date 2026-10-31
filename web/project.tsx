@@ -28,10 +28,10 @@ export interface AgentBadge { running: boolean; waiting: boolean; conversations:
 export interface SessionRow { id: string; title: string; running: boolean; when: string }
 // How many sessions Studio lists before the rest are reached from the Agent's place.
 export const sessionRows = 8;
-export function ProjectNavigation({ project, snapshot, current, sources, partial, agent, sessions, onOverview, onStudio, onLayout, onSection, onSources, onFile, onAddSource, adding }: {
+export function ProjectNavigation({ project, snapshot, current, sources, partial, agent, sessions, onOverview, onStudio, onLayout, onNewLayout, onSection, onSources, onFile, onAddSource, adding }: {
   project: ProjectSummary; snapshot: WorkspaceSnapshot | null; current: string; sessions: SessionRow[];
   sources: Record<SourceRow, SourceItem[]> | null; partial: boolean; agent: AgentBadge; adding: boolean;
-  onOverview: () => void; onStudio: () => void; onLayout: (id: string) => void; onSection: (section: Section) => void;
+  onOverview: () => void; onStudio: () => void; onLayout: (id: string) => void; onNewLayout?: () => void; onSection: (section: Section) => void;
   onSources: (row: SourceRow) => void; onFile: (row: SourceRow, item: SourceItem) => void; onAddSource: () => void;
 }) {
   // Which kinds are unfolded is remembered per project for this tab; the kind of the file on
@@ -47,7 +47,9 @@ export function ProjectNavigation({ project, snapshot, current, sources, partial
   }
   // Under Studio: each session's own Studio, newest first and named by its section of the notes,
   // then the workspaces the person arranged.
-  const layouts = (snapshot?.compositions ?? []).filter(c => !processConversation(c.compositionId));
+  // The person's workspaces in the order they were made: the first, then by number.
+  const made = (id: string) => id === 'workspace' ? 1 : /^workspace-(\d+)$/.test(id) ? Number(id.slice('workspace-'.length)) : Infinity;
+  const layouts = (snapshot?.compositions ?? []).filter(c => !processConversation(c.compositionId)).sort((a, b) => made(a.compositionId) - made(b.compositionId) || a.compositionId.localeCompare(b.compositionId));
   const shownSessions = sessions.filter((s, i) => i < sessionRows || current === 'studio:' + s.id);
   // A row is named by its place; the count beside it is a glance, repeated in its tooltip.
   const count = (value: number | null | undefined, noun: string) => value === null || value === undefined ? undefined
@@ -62,8 +64,9 @@ export function ProjectNavigation({ project, snapshot, current, sources, partial
         {shownSessions.map(s => { const at = when(s.when); return <button key={s.id} className="nav-row nav-sub-row nav-session" title={s.title + (at.full ? '\n' + at.full : '')} aria-current={current === 'studio:' + s.id ? 'page' : undefined} onClick={() => onLayout(s.id)}>{s.running ? <span className="pulse-dot" aria-label="Working" /> : null}<span className="nav-row-name">{s.title}</span></button>; })}
         {sessions.length > shownSessions.length && <button className="nav-row nav-sub-row nav-more" onClick={() => onSection('agent')}><span className="nav-row-name">All {sessions.length} sessions</span></button>}
       </div>}
-      {layouts.length > 0 && <div role="group" aria-label="Workspaces" className="nav-sub">
+      {(layouts.length > 0 || onNewLayout) && <div role="group" aria-label="Workspaces" className="nav-sub">
         {layouts.map(c => <button key={c.compositionId} className="nav-row nav-sub-row" aria-current={current === 'studio:' + c.compositionId ? 'page' : undefined} onClick={() => onLayout(c.compositionId)}><span className="nav-row-name">{compositionName(c.compositionId)}</span><span className="nav-row-count" title={views(c)}>{c.views.length}</span></button>)}
+        {onNewLayout && <button className="nav-row nav-sub-row nav-new" onClick={onNewLayout}><Icon name="plus" size={13} stroke={2} /><span className="nav-row-name">New workspace</span></button>}
       </div>}
       {row('graph', 'Graph', 'graph', () => onSection('graph'))}
       {row('console', 'Console', 'prompt', () => onSection('console'))}

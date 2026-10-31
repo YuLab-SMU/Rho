@@ -83,8 +83,28 @@ inspect what happened. The application gives those actions direct places:
   Interrupt and Stop (Stop asks first), its variables with type, size and summary, and
   the latest plots. The person's cell stays at the foot, with R or Python, a hint from
   what the session holds and ⌘/Ctrl+Enter. Below 820 px the sessions move above the cells.
-  A conversation's Studio has a Session view of the sessions its Agent ran cells in,
-  cut at the moment shown ([episode](SIMULATED-PROJECT-EPISODE.md#the-notebook)).
+  The same Notebook is a view of any Studio page. A view at least 840 px wide has the
+  sessions beside the cells; a narrower one folds them into one line above, and below
+  420 px the code takes its own line above R or Python and Run. A conversation's Studio
+  has a Notebook view of the sessions its Agent ran cells in, with the person's cells
+  since the conversation began, cut at the moment shown; on the person's own pages it
+  shows the sessions whole. The view scrolls itself and stays at the newest cell while
+  the reader is there, also when it is shown again or resized. Only the reader's own
+  wheel, touch, keys or scroll bar take it off the end
+  ([episode](SIMULATED-PROJECT-EPISODE.md#the-notebook)).
+- **Explore in R or Python** sits in the header of a table view (`.csv`, `.tsv`, also
+  gzipped) and of an R or Python script, on the answer board's tables and on the file
+  page. A table opens on the person's workspace with the page's Notebook beside it, or
+  a Notebook placed in a pane right of the table, and loads into the session of that
+  language as a new value named from the file (`model_fit`, then `model_fit_2`; a value
+  the session has is never replaced). The cell is the person's, named for what it loads.
+  A script opens the same way with a line that runs it (`source()` in R, `exec` with
+  `__file__` in Python) waiting in the Notebook to check and run, since running it again
+  writes its outputs again. On the person's own page this happens in place; from a
+  conversation's Studio, the Overview or the file page it opens the person's workspace.
+  The file is read as it is on disk now, by its project path, also when the view shows an
+  older kept version. Files of added source folders are outside the sessions' folder and
+  have no Explore ([episode](SIMULATED-PROJECT-EPISODE.md#exploring-a-finished-answer)).
 - **Files** opens documents, browses the project's folder and the source folders it
   works in, and filters the current folder. A source folder is named as the person
   named it and opens one level at a time, the same way any other folder does.
@@ -199,6 +219,14 @@ inspect what happened. The application gives those actions direct places:
   tinted area shows where it lands. Each drop is one conditional write of the saved
   layout, the same the commands and the Agent use, and Undo reverses it. Below 768 px
   nothing drags ([episode](AGENT-CANVAS-EPISODE.md#arranging-views-the-person-drags-the-agent-writes)).
+  A stage narrower than 640 px, as when the notes and the Agent panel are open beside
+  it, shows a layout of several groups one view at a time with all its tabs, as a phone
+  does; the saved layout is unchanged. New workspace, under Studio in the sidebar and in
+  the command palette, makes an empty page of the person's own (Workspace 2, 3, …). An
+  empty page offers the Notebook and the project's files by kind; Add view in the Studio
+  bar offers the same on any of the person's pages. A file opens in the view it has
+  elsewhere in Studio, the Notebook in a pane right of what is there. Pages cannot yet be
+  renamed or removed, and they count toward the 32 layouts a project keeps.
 - **The Agent panel** opens beside any page from the Agent button at the right end
   of the topbar, or from Continue on the Agent page. Its one header is the
   conversation's title, New conversation and Close; the title opens the recent
@@ -299,8 +327,11 @@ the same graph: `answerBoard` gives each file and command of a message a role,
 about, and `src/asking.ts` writes and reads back what a question was asked about.
 `web/answer-board.tsx` draws the board and records decisions (`conversation.decide`);
 `web/console.tsx` draws the Console from the same graph and `console.list`.
-`web/notebook.tsx` draws the Notebook from `kernel.read` and the Studio's Session view
-(`SessionPane`) from the same, scoped to the conversation's principal and moment.
+`web/notebook.tsx` draws the Notebook from `kernel.read` and its Studio view
+(`SessionPane`) from the same, scoped to the conversation's principal, its start and the
+moment shown inside a conversation's Studio. `web/explore.ts` places the Notebook
+(`addBeside` in `src/shell-layout.ts`), loads a table and makes the person's pages;
+`src/explore-code.ts` writes the code; `web/page-add.tsx` lists what a page can add.
 A conversation's Studio (`web/studio-process.tsx`) reads its record, builds the graph
 whole and as cut at the moment shown (`turnsAt` in `src/replay.ts`), takes each file's
 role and kept versions from the whole record (`studioFiles` in `src/studio-layout.ts`)
