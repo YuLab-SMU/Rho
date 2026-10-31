@@ -1268,3 +1268,84 @@ console feel different, and the Notebook should take either form and switch betw
 - **Completion** (Tab) is not there, and help (`?lm`) was not tried.
 - **Plot numbers** count all plots of the live sessions; the Plots view counts its 24 newest.
 - No independent person has used either form.
+
+## Toolbars
+
+The person tried the four panes and the two forms and found the components' toolbars ugly. The
+same `quad` project and service were used: Workspace 4 (script, Notebook, Variables, Plots) and a
+new Workspace 6 with `notes.md`, `explore.py`, a figure (`output/ozone-by-month.png`, drawn for
+this) and `airquality.csv`.
+
+### What the screens showed first
+
+- **Five rows before the code.** At 1440 × 900 the topbar, the Studio bar (Add view, Notes,
+  Arrange views), a row holding only Activity at its right end, the tabs and a second row of the
+  script's controls came before line 1 of the script, at y 253.
+- **Four kinds of control in one header.** "Explore in" with a round R chip, a bordered Run,
+  bordered Save and Review selected text that were disabled, and a native checkbox for Highlight
+  changes. In the 661 px group they took a row of their own under the tabs.
+- **Three kinds of switch.** Notebook | Console as one grey well; the Markdown view's Read | Edit
+  bordered with a divider; the figure's Fit | 100% in a small bordered box. In the Studio bar
+  Notes had a border and its neighbours none.
+
+### What was built
+
+- **One form for a view's header controls**, whichever component puts them there, on a Studio
+  group, a file's page and atop the notes, as described in [Frontend](FRONTEND.md). Rho sets it
+  for buttons, groups of pressed buttons and a labelled checkbox; components keep their markup.
+- **Documents 0.4.9** shows Save while the buffer has unsaved edits, Review selected text with a
+  selection (as Ask the Agent already did) and Highlight changes while Agent or disk edits remain.
+- **Explore in R** is one button when a file has one language.
+- **The Studio bar** takes what the Activity row held on the person's own page (the Agent's latest
+  object, held updates, Activity); its controls are one kind, tinted while their panel is open.
+
+### What the screens showed after
+
+- **Workspace 4.** Activity sits beside Add view; the script's header reads "Explore in R ▷ Run"
+  on the tab row; line 1 is at y 181. Run first came out grey: the CSS minifier had turned the
+  list `button, label:has(…)` into `:is(…)`, whose specificity outranked Run's rule. The rules
+  are now separate.
+- **Selecting text** brought Review selected text and Ask the Agent about this, which pushed the
+  controls to a second row and the editor down while the person was selecting. The tabs now give
+  way down to 160 px; their scrollbar then added 10 px, so a scrolled tab list fades at its edge
+  instead (the list already marked `data-overflow`). The header stays 42 px high.
+- **Typing** brought Save; saving took it away.
+- **A slip in the check.** Shift+End selected to the end of the document, not of the line, and
+  the ` #` typed next replaced lines 9–18 of `analysis.R` in the shared buffer. Nothing was saved.
+  Two ⌘Z (own undo) gave text equal to the file; the owner keeps a buffer dirty after its text
+  returns, so Save wrote the same bytes (SHA-256 unchanged) to make it clean again. Later
+  selections used Shift+↓ and typed nothing.
+- **Workspace 6.** Read | Edit, Fit | 100%, R | Python and Notebook | Console are one kind of
+  switch; the table's header reads "Explore in R Python · Ask about selected rows".
+- **Highlight changes.** A line appended to `explore.py` on disk did not reach the open clean
+  buffer within seven seconds, so the switch was seen in the U2 acceptance instead: an Agent edit
+  showed "▎Highlight changes", the bar in the Agent's colour like the edited line's mark;
+  unticked, the marks went, and ticked, they came back. The file was put back as it was.
+- **The Agent's object in a narrow bar.** At 1280 px with the notes open the bar read "Worksp…"
+  and "Agent not… versi…". With an object there, its state now goes below 900 px of bar and the
+  controls' names below 760 px: "Workspace · Agent notes.R" and icons. Activity names itself in a
+  tooltip when only its icon shows.
+- **390 px.** The controls' own row drew its line only under the controls (pushed right in a
+  column); it now spans the group. Nothing overflows sideways.
+
+### Verification
+
+- Plugins 134/134. Rho 268/269: the MCP v2 test was cancelled at its 30 s limit in the full run
+  and passed alone in 19.6 s. The contract check and the person-files (now waiting for Save to
+  go once saved), ui:u2 (run twice), agent-canvas, sources, graph, agent-page, agent-ui and
+  review acceptances passed.
+- The shell acceptance (focus kept in the editor at 390) and the interaction acceptance (a
+  sidebar row matching `/^workspace/`) failed, and failed the same way on a build of the commit
+  before this change.
+- The screens above were read at 1440, 760 and 390 px.
+
+### Left open
+
+- **Those two acceptances** fail before and after this change and were not fixed here.
+- **Selection actions** sit in the header, away from the selection; with less than 160 px for
+  the tabs the controls still take a second row.
+- **Save** stays after text returns to the file's, as long as the owner calls the buffer dirty.
+  Whether a person's own edits keep a Save control at all is not settled.
+- **Bars inside views** (the table's row count and Filter, the Plots navigation, the Variables
+  line, the console's bar) were not changed.
+- No independent person has looked at these screens.

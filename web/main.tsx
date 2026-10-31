@@ -106,6 +106,8 @@ function App() {
   // a write and the version kept from it land together. The steps of the work sit in the Studio bar.
   const [replay, setReplay] = useState<{ at: number | null; playing: boolean; speed: number }>({ at: null, playing: false, speed: 1 });
   const [stepsSlot, setStepsSlot] = useState<HTMLDivElement | null>(null);
+  // A person's workspace reports the Agent's latest object and its Activity in this bar, not a row of its own.
+  const [barSlot, setBarSlot] = useState<HTMLSpanElement | null>(null);
   // The project's notes sit beside every Studio layout; hiding them is remembered in this browser.
   // Below 768 px they take the whole page, so there they open only when asked, and a window that
   // narrows closes them without changing what a wide window shows.
@@ -590,6 +592,7 @@ function App() {
                   {/* Which Studio this is; the sidebar lists the sessions and workspaces under Studio. */}
                   <h2 className="studio-title" title={shownProcess ? shownTitle : undefined}>{shownProcess ? <>{agentNow?.running && agentNow.conversationId === shownProcess ? <span className="pulse-dot" aria-hidden="true" /> : <Icon name="chat" size={15} />}<span>{shownTitle}</span></> : <><Icon name="layout" size={15} /><span>{compositionName(shownId)}</span></>}</h2>
                   {shownProcess && <div ref={setStepsSlot} className="steps-slot" />}
+                  {!shownProcess && composition && <span ref={setBarSlot} className="bar-slot" />}
                   {/* Following brings forward what the Agent is on in its conversation's Studio. */}
                   {agentNow?.running && !(followingHere && shownProcess === agentNow.conversationId) && <button className="follow-toggle" aria-pressed="false" title={'Show what ' + agentNow.agent + ' is working on as it works'} onClick={() => follow(agentNow.conversationId, true)}><Icon name="follow" size={15} />Follow {agentNow.agent}</button>}
                   {!shownProcess && arrangeable && <details className="view-menu add-menu"><summary title="Add a view to this workspace"><Icon name="plus" size={15} /><span>Add view</span></summary><div>{pageAdd}</div></details>}
@@ -600,7 +603,7 @@ function App() {
                     at={replay.at} playing={replay.playing} speed={replay.speed} onAt={at => setReplay(r => ({ ...r, at: at === null ? null : Math.floor(at / 1000) * 1000 + 999 }))} onPlaying={playing => setReplay(r => ({ ...r, playing }))} onSpeed={speed => setReplay(r => ({ ...r, speed }))}
                     stepsTarget={stepsSlot} agentNow={agentNow} following={followingHere}
                     workspace={{ onAbout: about, contextTarget: context ? contextSlot : null, principalId: connection.principalId, feedbackContextActive: feedbackContext, onShowContext: () => { setFeedbackContext(true); setContext(true); setAgentOpen(false); }, onCommands: setLayoutCommands, agentTarget: agentOpen ? agentSlot : null, onShowAgent: () => setAgentOpen(true), onPersonMoved: () => setFollowing(false), attention: false, onConversation: openConversation, onExplore: exploreFile, onObject: openObject, prepared, onPrepare: setPrepared }} /></Suspense>
-                : composition ? <Suspense fallback={<Loading text="Opening workspace…" />}><Workspace key={snapshot.project.id + composition.compositionId} composition={composition} snapshot={snapshot} client={client!} onAbout={about} contextTarget={context ? contextSlot : null} principalId={connection.principalId} feedbackContextActive={feedbackContext} onShowContext={() => { setFeedbackContext(true); setContext(true); setAgentOpen(false); }} openView={openView} onCommands={setLayoutCommands} agentTarget={agentOpen ? agentSlot : null} onShowAgent={() => setAgentOpen(true)}
+                : composition ? <Suspense fallback={<Loading text="Opening workspace…" />}><Workspace key={snapshot.project.id + composition.compositionId} composition={composition} snapshot={snapshot} client={client!} onAbout={about} contextTarget={context ? contextSlot : null} principalId={connection.principalId} feedbackContextActive={feedbackContext} onShowContext={() => { setFeedbackContext(true); setContext(true); setAgentOpen(false); }} openView={openView} onCommands={setLayoutCommands} agentTarget={agentOpen ? agentSlot : null} onShowAgent={() => setAgentOpen(true)} barTarget={barSlot}
                     presence={presence} onPersonMoved={() => setFollowing(false)} attention={false} following={followingHere && openFollowed}
                     onConversation={openConversation} prepared={prepared} onPrepare={setPrepared}
                     empty={arrangeable ? <div className="studio-empty page-empty"><span className="empty-symbol"><Icon name="layout" size={26} stroke={1.5} /></span><h2>This workspace is empty</h2><p>Put the Notebook here to work in the live R and Python sessions, or a project file to look at it beside them.</p>{pageAdd}</div> : undefined} /></Suspense>

@@ -2,16 +2,16 @@
   "schemaVersion": 1,
   "checks": {
     "rho-tests": {
-      "command": "RHO_CORE_BINARY=<selected unchanged binary> node --test --test-concurrency=1 test/*.test.mjs",
-      "checkedAt": "2026-10-31T08:40:28+00:00",
-      "exitCode": 0,
+      "command": "RHO_CORE_BINARY=<selected unchanged binary> npm test (npm run build && node --test test/*.test.mjs)",
+      "checkedAt": "2026-10-31T09:15:04+00:00",
+      "exitCode": 1,
       "tests": 269,
-      "passing": 269,
-      "passed": true
+      "passing": 268,
+      "passed": false
     },
     "plugin-tests": {
-      "command": "node --test --test-concurrency=1 test/*.test.mjs",
-      "checkedAt": "2026-10-31T08:17:24+00:00",
+      "command": "RHO_CORE_BINARY=<selected unchanged binary> npm test (node --test test/*.test.mjs)",
+      "checkedAt": "2026-10-31T09:14:02+00:00",
       "exitCode": 0,
       "tests": 134,
       "passing": 134,

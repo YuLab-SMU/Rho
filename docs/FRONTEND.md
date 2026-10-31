@@ -280,6 +280,19 @@ inspect what happened. The application gives those actions direct places:
   in the Studio bar offers the same on any of the person's pages. A file opens in the view it has
   elsewhere in Studio, the Notebook in a pane right of what is there. Pages cannot yet be
   renamed or removed, and they count toward the 32 layouts a project keeps.
+- **View headers** give each view's controls one form, whichever component puts them there,
+  also on a file's page and atop the notes: words and an icon on no ground until pointed at,
+  the view's main action (Run) in the accent, a choice of forms (Notebook or Console, Read or
+  Edit, Fit or 100%, R or Python) as one well with the chosen one raised, and Highlight changes
+  as its words beside a bar in the Agent's colour. A control is there while it can act: Save
+  while the text has unsaved edits, Review selected text and Ask the Agent with a selection, the
+  highlight while Agent or disk edits remain (Documents 0.4.9). A file with one language has one
+  Explore in R or Python button. The tabs give way to the controls down to 160 px, scrolling and
+  fading at the edge, so a control that comes with a selection does not move the view; below
+  that the controls take a row of their own. On the person's own page the Studio bar holds the
+  Agent's latest object, held updates and Activity beside Add view, Notes and Arrange views; as
+  it narrows, the object's state goes first, then the controls' names
+  ([episode](SIMULATED-PROJECT-EPISODE.md#toolbars)).
 - **The Agent panel** opens beside any page from the Agent button at the right end
   of the topbar, or from Continue on the Agent page. Its one header is the
   conversation's title, New conversation and Close; the title opens the recent

@@ -148,6 +148,13 @@ sessions, switched in its header: the notebook, and a console with one transcrip
 output, Enter that runs finished code and continues unfinished code, history, Esc and Clear. A
 Studio view saves its form with the page; one placed by running a script's line starts as a console.
 
+[Toolbars](SIMULATED-PROJECT-EPISODE.md#toolbars) take one form whichever component puts a
+control in a view's header: quiet words and icons, Run in the accent, one kind of switch, and a
+control only while it can act (Documents 0.4.9: Save with unsaved edits, Review with a selection,
+Highlight changes while Agent or disk edits remain). The Activity row joined the Studio bar, so
+the code starts 72 px higher at 1440 × 900, and tabs scroll before a selection's controls can move
+the view.
+
 ## Existing application
 
 - Projects opens selected folders and manages finite source folders. Sources counts
@@ -190,10 +197,13 @@ checks still held the 64-method limit and the plugin count, and the Skill's veri
 command was not an application script; corrected, Rho 261/261 and Plugins 132/132. The
 exploring pass first failed Rho 263/264, the Studio shell importing a module outside its
 allowed set, and ui:u2 also matched the New workspace row; corrected, Rho 264/264 and Plugins 132/132.
-The two-forms pass records Rho 269/269 in the [ledger](VERIFICATION.json), Plugins unchanged
-at 134/134, with the contract check and the agent-canvas, graph, agent-page, agent-ui, review,
-ui:u2 and sources browser acceptances; graph first failed waiting 30 s for a table preview after
-the suite and passed when run again alone on the same build. Earlier passes: four panes Rho
+The toolbar pass records Rho 268/269 and Plugins 134/134 in the [ledger](VERIFICATION.json): the
+MCP v2 test was cancelled at its 30 s limit in the full run and passed alone in 19.6 s. The
+contract check and the person-files, ui:u2, agent-canvas, sources, graph, agent-page, agent-ui and
+review acceptances passed. The shell acceptance (editor focus at 390 px) and the interaction
+acceptance (a `/^workspace/` sidebar row) failed the same way on a build of the commit before it,
+and remain open. Earlier passes: two forms Rho 269/269 with the seven acceptances (graph passed
+when run again alone); four panes Rho
 268/268 and Plugins 134/134, both suites run again after the R runner's reading fix; value view Rho 265/265 and Plugins 134/134; choices and Console Rho 260/260 and Plugins 125/125; figures and cost Rho 258/258; project notes Rho 249/249 and Plugins 120/120 (ui:u2 first
 failed until the notes stopped opening with every project); meaning layer Rho 253/253;
 descriptions Rho 257/257 and Plugins 122/122, each with the same seven acceptances.

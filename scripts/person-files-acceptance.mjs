@@ -114,7 +114,8 @@ try {
     await page.waitForTimeout(50);
   }
   await operator.call('document.save', { projectId: p.id, documentId, expectedVersion: shared.version, expectedRevision: shared.revision, expectedDiskDigest: shared.diskDigest, changeId: 'collaborator-save' });
-  await page.waitForFunction(() => document.querySelector('[aria-label="Save document"]')?.disabled === true);
+  // Saved text has nothing to save: the button goes until the text differs again.
+  await page.waitForFunction(() => !document.querySelector('[aria-label="Save document"]'));
   check('another writer saving the same text version updates the tab through the owner revision');
 
   await fs.writeFile(disk, 'External writer preserved.\n');

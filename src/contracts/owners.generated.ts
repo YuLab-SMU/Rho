@@ -21718,7 +21718,7 @@ export const ownerContracts: OwnerContractSnapshot = {
   "provenance": {
     "documents": {
       "package": "@rho-workspace/plugin-documents",
-      "packageVersion": "0.4.8",
+      "packageVersion": "0.4.9",
       "entry": "./operations",
       "entryPath": "@rho-workspace/plugin-documents/dist/operations.js",
       "entrySha256": "a9b90047c1684ebd8369d899f86604c40a9cbe1beae37759042d22c090dae449",

@@ -194,7 +194,11 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .studio-with-notes { flex: 1; min-height: 0; display: flex; }
 .studio-main { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; container-type: inline-size; }
 /* A narrow Studio keeps its title and steps readable; the controls keep their icons and names in tooltips. */
-@container (max-width: 640px) { .studio-bar .notes-toggle > span, .studio-bar .view-menu summary > span { display: none; } }
+@container (max-width: 640px) { .studio-bar .notes-toggle > span, .studio-bar .view-menu summary > span, .studio-bar .shell-evidence-toggle > span { display: none; } }
+/* With the Agent's latest object in the bar, its state goes first and then the controls' names,
+   so the workspace's name and the object's stay readable. */
+@container (max-width: 900px) { .studio-bar .shell-agent-state { display: none; } }
+@container (max-width: 760px) { .studio-bar:has(.shell-agent) :is(.notes-toggle, .view-menu > summary, .shell-evidence-toggle) > span { display: none; } }
 .studio-bar { display: flex; align-items: center; gap: 10px; padding: 8px 14px; min-height: 52px; border-bottom: 1px solid var(--color-hairline); background: var(--color-surface); }
 .studio-title { display: flex; align-items: center; gap: 8px; flex: 0 1 auto; min-width: 56px; margin: 0; font-size: 14px; font-weight: 650; color: var(--color-ink); }
 .studio-title > span:not(.pulse-dot) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -203,8 +207,14 @@ dd { margin: 0; overflow-wrap: anywhere; }
    the title, also in the breadcrumb and the sidebar, shortens first. */
 .studio-bar > .steps-slot { flex: 0 0 auto; max-width: 45%; }
 .studio-bar > :is(.studio-title, .steps-slot):not(:has(+ .steps-slot)) { margin-right: auto; }
-.notes-toggle { flex: none; min-height: 32px; padding: 4px 11px; border-radius: 8px; font-size: 12.5px; gap: 6px; }
-.notes-toggle[aria-pressed=true] { border-color: var(--color-accent); background: var(--color-accent-soft); color: var(--color-accent-strong); }
+/* The bar's controls are one kind: an icon and words on no ground, tinted while their panel is open. */
+.studio-bar :is(.notes-toggle, .view-menu > summary, .shell-bar button) { flex: none; min-height: 30px; padding: 4px 9px; gap: 6px; border: 0; border-radius: 7px; background: transparent; color: var(--color-ink); font-size: 12.5px; font-weight: 500; }
+.studio-bar :is(.notes-toggle, .view-menu > summary, .shell-bar button):hover { background: var(--color-hover); }
+.studio-bar :is(.notes-toggle[aria-pressed=true], .view-menu[open] > summary, .shell-evidence-toggle[aria-expanded=true]) { background: var(--color-accent-soft); color: var(--color-accent-strong); }
+/* A person's workspace reports here what its own row used to: the Agent's latest object, held updates, Activity. */
+.bar-slot { display: contents; }
+.studio-bar .shell-bar { flex: 1 1 auto; min-width: 0; min-height: 0; padding: 0; gap: 2px; border: 0; font-size: 12.5px; }
+.studio-bar .shell-bar .shell-agent { max-width: 60%; }
 .follow-toggle { flex: none; min-height: 32px; padding: 4px 12px; border-radius: 999px; font-size: 12.5px; gap: 7px; }
 .follow-toggle.on { border-color: var(--color-accent); background: var(--color-accent-soft); color: var(--color-accent-strong); }
 .canvas-note { display: flex; align-items: center; gap: 12px; padding: 8px 16px; background: var(--color-well); border-bottom: 1px solid var(--color-hairline); color: var(--color-muted); font-size: 12.5px; }
@@ -332,6 +342,25 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .preview-name small { color: var(--color-meta); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .preview-owner-header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .preview-owner-header:empty { display: none; }
+/* Whoever puts a control in a view's header, in a Studio group, on a file's page or atop the
+   notes, it takes one form: words (and an icon) on no ground until pointed at; the view's main
+   action in the accent; a choice among forms as one well with the chosen form raised; a switch
+   as its words beside a mark that fills while on. */
+:is(.shell-header-slot, .preview-owner-header, .notes-modes) { gap: 2px; }
+/* Separate rules: a list with :has() is minified into :is(), whose specificity would outrank the rules below. */
+:is(.shell-header-slot, .preview-owner-header, .notes-modes) button { display: inline-flex; align-items: center; gap: 5px; min-height: 28px; padding: 4px 8px; border: 0; border-radius: 6px; background: transparent; color: var(--color-muted); font-size: 12.5px; font-weight: 500; white-space: nowrap; box-shadow: none; }
+:is(.shell-header-slot, .preview-owner-header, .notes-modes) button:hover:not(:disabled) { background: var(--color-hover); color: var(--color-ink); }
+:is(.shell-header-slot, .preview-owner-header, .notes-modes) label:has(> input[type=checkbox]) { display: inline-flex; align-items: center; gap: 5px; min-height: 28px; padding: 4px 8px; border-radius: 6px; color: var(--color-muted); font-size: 12.5px; font-weight: 500; white-space: nowrap; cursor: pointer; }
+:is(.shell-header-slot, .preview-owner-header, .notes-modes) label:has(> input[type=checkbox]):hover { background: var(--color-hover); color: var(--color-ink); }
+:is(.shell-header-slot, .preview-owner-header, .notes-modes) button.run-line { color: var(--color-accent-strong); font-weight: 600; }
+:is(.shell-header-slot, .preview-owner-header, .notes-modes) [role=group]:has(> button[aria-pressed]) { display: inline-flex; flex: none; gap: 0; margin: 0 2px; padding: 2px; border: 0; border-radius: 8px; background: var(--color-well); overflow: visible; }
+:is(.shell-header-slot, .preview-owner-header, .notes-modes) [role=group] > button[aria-pressed] { min-height: 24px; padding: 2px 10px; border: 0; border-radius: 6px; background: none; color: var(--color-muted); font-size: 12px; font-weight: 600; box-shadow: none; }
+:is(.shell-header-slot, .preview-owner-header, .notes-modes) [role=group] > button[aria-pressed=true] { background: var(--color-surface); color: var(--color-ink); box-shadow: 0 1px 2px rgb(0 0 0 / 10%); }
+:is(.shell-header-slot, .preview-owner-header, .notes-modes) label > input[type=checkbox] { appearance: none; flex: none; width: 3px; min-width: 3px; height: 14px; min-height: 0; margin: 0 2px 0 0; padding: 0; border: 0; border-radius: 2px; background: var(--color-hairline-strong); cursor: pointer; }
+:is(.shell-header-slot, .preview-owner-header, .notes-modes) label > input[type=checkbox]:checked { background: var(--agent); }
+:is(.shell-header-slot, .preview-owner-header, .notes-modes) label:has(> input[type=checkbox]:checked) { color: var(--color-ink); }
+:is(.shell-header-slot, .preview-owner-header, .notes-modes) label > input[type=checkbox]:focus-visible { outline: none; }
+:is(.shell-header-slot, .preview-owner-header, .notes-modes) label:has(> input[type=checkbox]:focus-visible) { outline: 2px solid var(--color-accent); outline-offset: 1px; }
 .preview-nav { display: flex; align-items: center; gap: 2px; padding: 2px; border: 1px solid var(--color-hairline); border-radius: 9px; }
 .preview-nav .icon-button { width: 30px; height: 30px; min-height: 30px; }
 .preview-nav .icon-button:disabled { opacity: .35; }
@@ -888,12 +917,13 @@ dialog.review-overlay{border:1px solid var(--border);color:inherit;margin:auto;w
 .rho-review .review-version select { min-width: 220px; padding: 5px 8px; border: 1px solid var(--color-control-border); border-radius: 8px; background: var(--color-surface); color: var(--color-ink); font: inherit; }
 
 /* Explore in the Notebook: a short phrase with one button per language that can read the file. */
-.explore-in { display: inline-flex; align-items: center; gap: 2px; color: var(--color-meta); font-size: 12px; white-space: nowrap; }
-.explore-in > svg { margin-right: 3px; }
-.explore-in-label { margin-right: 4px; }
-.explore-in button { min-height: 26px; padding: 2px 9px; border: 1px solid var(--color-hairline-strong); border-radius: 999px; background: var(--color-surface); color: var(--color-accent-strong); font-size: 12px; font-weight: 600; }
-.explore-in button + button { margin-left: 4px; }
-.explore-in button:hover:not(:disabled) { border-color: var(--color-accent); background: var(--color-hover); }
+.explore-in { display: inline-flex; align-items: center; gap: 0; color: var(--color-muted); font-size: 12.5px; font-weight: 500; white-space: nowrap; }
+span.explore-in > svg { margin: 0 5px 0 8px; }
+.explore-in-label { margin-right: 1px; }
+.explore-in button.explore-in-language { min-height: 28px; padding: 4px 6px; border: 0; border-radius: 6px; background: transparent; color: var(--color-accent-strong); font-size: 12.5px; font-weight: 600; }
+.explore-in button.explore-in-language:hover:not(:disabled) { background: var(--color-hover); }
+button.explore-in-one { gap: 5px; min-height: 28px; padding: 4px 8px; border: 0; border-radius: 6px; background: transparent; }
+button.explore-in-one:hover:not(:disabled) { background: var(--color-hover); color: var(--color-ink); }
 
 /* Adding to a page of the person's own: the Notebook first, then files by kind. */
 .page-add { display: flex; flex-direction: column; gap: 10px; min-width: 280px; max-height: min(70vh, 560px); overflow-y: auto; text-align: left; }

@@ -68,7 +68,7 @@ export function Bar({ live, evidence, onEvidence, held, attention = true }: { li
     {held > 0 && <span className="shell-held" role="status">{held} updates</span>}
     {attention && <button className="shell-follow" aria-pressed={following} title="Follow the Agent's current view. Your input stops following." onClick={() => act({ kind: following ? 'unfollow' : 'follow' })}><Icon name="eye" size={14} />{following ? 'Following Agent' : 'Follow Agent'}</button>}
     {attention && <button className="shell-quiet" onClick={() => act({ kind: screen.attention === 'away' ? 'return' : 'leave' })}>{screen.attention === 'away' ? 'Return' : 'Step away'}</button>}
-    <button className="shell-quiet shell-evidence-toggle" aria-expanded={evidence} onClick={onEvidence}>Activity</button>
+    <button className="shell-quiet shell-evidence-toggle" aria-expanded={evidence} title="Activity: the calls recorded for this workspace" onClick={onEvidence}><Icon name="list" size={15} /><span>Activity</span></button>
   </div>;
 }
 
