@@ -19165,6 +19165,434 @@ export const ownerContracts: OwnerContractSnapshot = {
     },
     "kernel": {
       "operationContracts": {
+        "kernel.inspect": {
+          "effect": "read",
+          "inputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "language": {
+                "enum": [
+                  "r",
+                  "python"
+                ]
+              },
+              "limit": {
+                "maximum": 200,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "name": {
+                "maxLength": 256,
+                "minLength": 1,
+                "type": "string"
+              },
+              "offset": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "path": {
+                "items": {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "maxItems": 16,
+                "type": "array"
+              },
+              "sort": {
+                "additionalProperties": false,
+                "properties": {
+                  "column": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "descending": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "column",
+                  "descending"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "language",
+              "name"
+            ],
+            "type": "object"
+          },
+          "outputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "afterCell": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "object": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "bytes": {
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      "children": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "items": {
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "expression": {
+                                  "type": "string"
+                                },
+                                "index": {
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "name": {
+                                  "type": "string"
+                                },
+                                "size": {
+                                  "type": "string"
+                                },
+                                "summary": {
+                                  "type": "string"
+                                },
+                                "type": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "index",
+                                "name",
+                                "type",
+                                "size",
+                                "summary",
+                                "expression"
+                              ],
+                              "type": "object"
+                            },
+                            "type": "array"
+                          },
+                          "offset": {
+                            "minimum": 0,
+                            "type": "integer"
+                          },
+                          "total": {
+                            "minimum": 0,
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "total",
+                          "offset",
+                          "items"
+                        ],
+                        "type": "object"
+                      },
+                      "expression": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "facts": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "label": {
+                              "type": "string"
+                            },
+                            "value": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "label",
+                            "value"
+                          ],
+                          "type": "object"
+                        },
+                        "type": "array"
+                      },
+                      "kind": {
+                        "enum": [
+                          "table",
+                          "model",
+                          "vector",
+                          "list",
+                          "function",
+                          "value",
+                          "other"
+                        ]
+                      },
+                      "name": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "size": {
+                        "type": "string"
+                      },
+                      "table": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "columns": {
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "missing": {
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "name": {
+                                  "type": "string"
+                                },
+                                "numeric": {
+                                  "type": "boolean"
+                                },
+                                "summary": {
+                                  "type": "string"
+                                },
+                                "type": {
+                                  "type": "string"
+                                },
+                                "values": {
+                                  "items": {
+                                    "type": "string"
+                                  },
+                                  "type": "array"
+                                }
+                              },
+                              "required": [
+                                "name",
+                                "type",
+                                "numeric",
+                                "missing",
+                                "summary",
+                                "values"
+                              ],
+                              "type": "object"
+                            },
+                            "type": "array"
+                          },
+                          "columnsTotal": {
+                            "minimum": 0,
+                            "type": "integer"
+                          },
+                          "offset": {
+                            "minimum": 0,
+                            "type": "integer"
+                          },
+                          "rowLabels": {
+                            "items": {
+                              "type": "string"
+                            },
+                            "type": "array"
+                          },
+                          "rows": {
+                            "minimum": 0,
+                            "type": "integer"
+                          },
+                          "sort": {
+                            "anyOf": [
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "column": {
+                                    "minimum": 0,
+                                    "type": "integer"
+                                  },
+                                  "descending": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "required": [
+                                  "column",
+                                  "descending"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "sortRefused": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "rows",
+                          "columnsTotal",
+                          "offset",
+                          "rowLabels",
+                          "columns"
+                        ],
+                        "type": "object"
+                      },
+                      "text": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "cut": {
+                            "type": "boolean"
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "text": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "label",
+                          "text",
+                          "cut"
+                        ],
+                        "type": "object"
+                      },
+                      "trail": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "index": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "name": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "index",
+                            "name"
+                          ],
+                          "type": "object"
+                        },
+                        "type": "array"
+                      },
+                      "type": {
+                        "type": "string"
+                      },
+                      "values": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "items": {
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "name": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "value": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "name",
+                                "value"
+                              ],
+                              "type": "object"
+                            },
+                            "type": "array"
+                          },
+                          "offset": {
+                            "minimum": 0,
+                            "type": "integer"
+                          },
+                          "total": {
+                            "minimum": 0,
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "total",
+                          "offset",
+                          "items"
+                        ],
+                        "type": "object"
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "expression",
+                      "trail",
+                      "kind",
+                      "type",
+                      "size",
+                      "bytes",
+                      "facts"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "problem": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "readAt": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "sessionId": {
+                "anyOf": [
+                  {
+                    "pattern": "^s-[a-f0-9]{16}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "state": {
+                "enum": [
+                  "shown",
+                  "busy",
+                  "none",
+                  "missing",
+                  "timeout",
+                  "failed",
+                  "ended"
+                ]
+              }
+            },
+            "required": [
+              "state",
+              "sessionId",
+              "afterCell",
+              "readAt",
+              "problem",
+              "object"
+            ],
+            "type": "object"
+          },
+          "requires": []
+        },
         "kernel.interrupt": {
           "effect": "native",
           "inputSchema": {
@@ -19207,6 +19635,13 @@ export const ownerContracts: OwnerContractSnapshot = {
                   },
                   "cut": {
                     "type": "boolean"
+                  },
+                  "defined": {
+                    "items": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "type": "array"
                   },
                   "endedAt": {
                     "anyOf": [
@@ -19315,6 +19750,13 @@ export const ownerContracts: OwnerContractSnapshot = {
                   "queuedAt": {
                     "minLength": 1,
                     "type": "string"
+                  },
+                  "removed": {
+                    "items": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "type": "array"
                   },
                   "sessionId": {
                     "pattern": "^s-[a-f0-9]{16}$",
@@ -19467,6 +19909,13 @@ export const ownerContracts: OwnerContractSnapshot = {
                     "cut": {
                       "type": "boolean"
                     },
+                    "defined": {
+                      "items": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
                     "endedAt": {
                       "anyOf": [
                         {
@@ -19574,6 +20023,13 @@ export const ownerContracts: OwnerContractSnapshot = {
                     "queuedAt": {
                       "minLength": 1,
                       "type": "string"
+                    },
+                    "removed": {
+                      "items": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "type": "array"
                     },
                     "sessionId": {
                       "pattern": "^s-[a-f0-9]{16}$",
@@ -19890,6 +20346,13 @@ export const ownerContracts: OwnerContractSnapshot = {
                   "cut": {
                     "type": "boolean"
                   },
+                  "defined": {
+                    "items": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
                   "endedAt": {
                     "anyOf": [
                       {
@@ -19997,6 +20460,13 @@ export const ownerContracts: OwnerContractSnapshot = {
                   "queuedAt": {
                     "minLength": 1,
                     "type": "string"
+                  },
+                  "removed": {
+                    "items": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "type": "array"
                   },
                   "sessionId": {
                     "pattern": "^s-[a-f0-9]{16}$",
@@ -21388,9 +21858,9 @@ export const ownerContracts: OwnerContractSnapshot = {
       "packageVersion": "0.1.0",
       "entry": "./operations",
       "entryPath": "@rho-workspace/plugin-kernel/dist/operations.js",
-      "entrySha256": "ebd291a8b4ba0b30daa7c959983b0fea1c33ca9101d70d6d16b5495c88fe7489",
+      "entrySha256": "1e385e736c769d742bd871ecf8e53d83acbbdadee4bcd1087b4ecef799a02c4e",
       "exports": {
-        "operationContracts": "7c591049a5f0da2f019f1b11e9d2630191d66e10ae484f6244c04198e7f118da"
+        "operationContracts": "1929a68515f6e7518a9f7676eb603edb3e2463505d8fc11eacc6785613ff0587"
       }
     },
     "entry-files": {

@@ -26,6 +26,7 @@ export function title(view: ViewDescription) {
 export function viewIcon(view: ViewDescription, snapshot: WorkspaceSnapshot): IconName {
   if (view.component === 'rho.console') return 'prompt';
   if (view.component === 'rho.notebook') return 'code';
+  if (view.component === 'rho.object') return 'braces';
   if (view.component === 'rho.execution' || view.component === 'rho.action') return 'layout';
   if (view.component === 'rho.media') return 'image';
   const [, first] = bindings(view)[0] ?? [];

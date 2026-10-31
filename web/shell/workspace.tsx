@@ -12,7 +12,8 @@ import { openRun, runFirstLine, RunView, SourceLine } from './facts.js';
 import { ActionForm } from './action-form.js';
 import { CommandPane } from '../console.js';
 import { SessionPane, type Prepared } from '../notebook.js';
-import { canExplore, explorableTable, languageNames, loadTable, notebookComponent, notebookView, projectPath, scriptLanguage, scriptPrepared, type Language } from '../explore.js';
+import { addNotebook, addObject, canExplore, explorableTable, languageNames, loadTable, notebookComponent, notebookView, objectComponent, projectPath, scriptLanguage, scriptPrepared, type Language } from '../explore.js';
+import { ObjectView } from '../object-view.js';
 import { ExploreIn } from '../explore-in.js';
 import { useProcess } from '../process-context.js';
 import { ProcessFrame } from './process-views.js';
@@ -25,7 +26,7 @@ export const workspaceLimits = { minSplitPx: 640 };
 // The workspace shell: the owner's composition tree drawn as
 // splits and tab groups, owner views mounted within the rendering budget, and a slot for
 // what Rho adds above the work. It decides nothing about attention; useLive does.
-export function Workspace({ composition: recorded, snapshot, client, onAbout, contextTarget, principalId, onShowContext, feedbackContextActive, openView, onCommands, agentTarget, onShowAgent, presence, onPersonMoved, onConversation, onExplore, empty, prepared: given, onPrepare, bar = true, attention = true, following = false, arrange = true }: { onConversation?: (id: string) => void; onExplore?: (path: string, language: Language) => void; empty?: ReactNode; prepared?: Prepared | null; onPrepare?: (prepared: Prepared | null) => void; following?: boolean; arrange?: boolean; bar?: boolean; attention?: boolean; presence?: { viewId: string; label: string; verb: string; live: boolean } | null; onPersonMoved?: () => void; onCommands?: (group: CommandGroup | null) => void; composition: CompositionSummary; snapshot: WorkspaceSnapshot; client: BrowserClient; onAbout: (pluginId: string) => void; contextTarget: HTMLElement | null; principalId?: string; onShowContext: () => void; feedbackContextActive: boolean; mapChipTarget?: HTMLElement | null; openView?: string; agentTarget?: HTMLElement | null; onShowAgent?: () => void }) {
+export function Workspace({ composition: recorded, snapshot, client, onAbout, contextTarget, principalId, onShowContext, feedbackContextActive, openView, onCommands, agentTarget, onShowAgent, presence, onPersonMoved, onConversation, onExplore, onObject, empty, prepared: given, onPrepare, bar = true, attention = true, following = false, arrange = true }: { onConversation?: (id: string) => void; onExplore?: (path: string, language: Language) => void; onObject?: (language: Language, name: string) => void; empty?: ReactNode; prepared?: Prepared | null; onPrepare?: (prepared: Prepared | null) => void; following?: boolean; arrange?: boolean; bar?: boolean; attention?: boolean; presence?: { viewId: string; label: string; verb: string; live: boolean } | null; onPersonMoved?: () => void; onCommands?: (group: CommandGroup | null) => void; composition: CompositionSummary; snapshot: WorkspaceSnapshot; client: BrowserClient; onAbout: (pluginId: string) => void; contextTarget: HTMLElement | null; principalId?: string; onShowContext: () => void; feedbackContextActive: boolean; mapChipTarget?: HTMLElement | null; openView?: string; agentTarget?: HTMLElement | null; onShowAgent?: () => void }) {
   // A conversation's Studio: its files' views show their versions, and a replay arranges nothing.
   const process = useProcess();
   const live = useLive(snapshot, recorded, client, principalId, !!process), layout = live.layout;
@@ -147,6 +148,23 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
     } catch (error) { refusal(error); }
     finally { setExploring(false); }
   }
+  // A value of a live session opens as a view of its own on the person's page, beside the
+  // Notebook; from a conversation's Studio it opens on the person's workspace, through onObject.
+  // A new view is shown once the page's layout has it.
+  const [opening, setOpening] = useState<string | null>(null);
+  useEffect(() => { if (opening && byId.has(opening)) { setOpening(null); show(opening); } }, [opening, byId]);
+  function openObject(language: Language, name: string) {
+    if (process) { onObject?.(language, name); return; }
+    setLayoutProblem('');
+    addObject(client, snapshot.project.id, layout.compositionId, language, name, stage.current?.clientWidth).then(id => { onPersonMoved?.(); setOpening(id); }, refusal);
+  }
+  // What reaches a value waits in the Notebook's line, for the person to build on and run.
+  function useInNotebook(language: Language, expression: string, name: string) {
+    setPrepared({ key: crypto.randomUUID(), language, code: expression, note: `From the ${name} view. Build on it, then press Run.` });
+    const notebook = layout.views.find(v => v.component === notebookComponent)?.id;
+    if (notebook) { show(notebook); return; }
+    if (!process) addNotebook(client, snapshot.project.id, layout.compositionId, null).then(id => show(id), refusal);
+  }
   // A divider is written back once the person stops moving it.
   const resizing = useRef<ReturnType<typeof setTimeout>>(undefined);
   function resized(splitId: string, values: number[]) {
@@ -227,7 +245,11 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
     const view = byId.get(id)!, isVisible = visible.includes(id);
     if (view.component === 'rho.action') return <ActionForm view={view} snapshot={snapshot} client={client} live={live} />;
     if (view.component === 'rho.console') return <CommandPane client={client} snapshot={snapshot} />;
-    if (view.component === notebookComponent) return <SessionPane client={client} snapshot={snapshot} prepared={prepared} onTaken={() => setPrepared(null)} onConversation={onConversation} />;
+    if (view.component === notebookComponent) return <SessionPane client={client} snapshot={snapshot} prepared={prepared} onTaken={() => setPrepared(null)} onConversation={onConversation} onObject={openObject} />;
+    if (view.component === objectComponent) {
+      const language = view.props.language === 'python' ? 'python' : 'r', name = String(view.props.name ?? title(view));
+      return <ObjectView client={client} snapshot={snapshot} language={language} name={name} onUse={expression => useInNotebook(language, expression, name)} />;
+    }
     if (view.component === 'rho.execution') {
       const operationId = String(view.props.operationId ?? id);
       return <RunView snapshot={snapshot} client={client} operationId={operationId} runs={live.runs} readRuns={live.readRuns} firstLine={runFirstLine(live, operationId)} opener={ref => () => openRef(ref)} onOpenRun={other => openRun(live, other)} chain />;

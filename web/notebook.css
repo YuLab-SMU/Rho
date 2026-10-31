@@ -96,6 +96,16 @@
 .nb-vars li { display: grid; grid-template-columns: minmax(0, auto) minmax(0, 1fr); column-gap: 8px; padding: 6px 2px; border-top: 1px solid var(--color-divider); }
 .nb-vars li:first-child { border-top: 0; }
 .nb-var-name { overflow: hidden; font: 600 12.5px var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }
+button.nb-var-name { min-height: 0; padding: 0; border: 0; background: none; color: var(--color-accent-strong); text-align: left; }
+button.nb-var-name:hover { text-decoration: underline; background: none; }
+/* The values a cell made or changed, each opening as it is now. */
+.nb-values { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; padding-left: 12px; color: var(--color-meta); font-size: 12px; }
+.nb-values > span + .nb-value { margin-left: 2px; }
+.nb-values > .nb-value + span { margin-left: 8px; }
+.nb-value { min-height: 0; padding: 1px 7px; border: 1px solid var(--color-hairline-strong); border-radius: 999px; background: var(--color-surface); color: var(--color-accent-strong); font: 600 12px var(--font-mono); }
+button.nb-value:hover { border-color: var(--color-accent); background: var(--color-hover); }
+code.nb-value { border-color: transparent; background: var(--color-well); color: var(--color-ink); font-weight: 500; }
+.nb-value.gone { color: var(--color-meta); text-decoration: line-through; }
 .nb-var-type { overflow: hidden; color: var(--color-meta); font-size: 12px; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
 .nb-var-summary { grid-column: 1 / -1; overflow: hidden; color: var(--color-muted); font: 11.5px/1.4 var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }
 .nb-thumbs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }

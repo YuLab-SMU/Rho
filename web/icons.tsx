@@ -1,4 +1,4 @@
-export type IconName = 'home' | 'project' | 'plugins' | 'sidebar' | 'context' | 'lock' | 'folder' | 'folder-plus' | 'plus' | 'chevron' | 'info' | 'close' | 'overview' | 'layout' | 'document' | 'table' | 'image' | 'file' | 'offline' | 'prompt' | 'refresh' | 'unlink' | 'enter' | 'check' | 'grid' | 'copy' | 'eye' | 'run' | 'search' | 'code' | 'spark' | 'chart' | 'back' | 'updown' | 'follow' | 'pause' | 'graph' | 'fit' | 'minus' | 'question' | 'download' | 'trash' | 'restore' | 'pencil' | 'globe' | 'arrow-up' | 'arrow-down' | 'list' | 'chat' | 'monitor' | 'link' | 'signal' | 'tool' | 'move';
+export type IconName = 'home' | 'project' | 'plugins' | 'sidebar' | 'context' | 'lock' | 'folder' | 'folder-plus' | 'plus' | 'chevron' | 'info' | 'close' | 'overview' | 'layout' | 'document' | 'table' | 'image' | 'file' | 'offline' | 'prompt' | 'refresh' | 'unlink' | 'enter' | 'check' | 'grid' | 'copy' | 'eye' | 'run' | 'search' | 'code' | 'spark' | 'chart' | 'back' | 'updown' | 'follow' | 'pause' | 'graph' | 'fit' | 'minus' | 'question' | 'download' | 'trash' | 'restore' | 'pencil' | 'globe' | 'arrow-up' | 'arrow-down' | 'list' | 'chat' | 'monitor' | 'link' | 'signal' | 'tool' | 'move' | 'braces';
 export function Icon({ name, size = 20, stroke = 1.6 }: { name: IconName; size?: number; stroke?: number }) {
   const paths = {
     home: 'm3 10 9-7 9 7v10h-6v-7H9v7H3z',
@@ -10,6 +10,7 @@ export function Icon({ name, size = 20, stroke = 1.6 }: { name: IconName; size?:
     folder: 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z',
     'folder-plus': 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM12 10.5v5M9.5 13h5',
     plus: 'M12 4.5v15M4.5 12h15',
+    braces: 'M8.5 4.5c-2 0-2.5 1-2.5 2.75v2C6 10.5 5.25 11.5 3.5 12c1.75.5 2.5 1.5 2.5 2.75v2c0 1.75.5 2.75 2.5 2.75M15.5 4.5c2 0 2.5 1 2.5 2.75v2c0 1.25.75 2.25 2.5 2.75-1.75.5-2.5 1.5-2.5 2.75v2c0 1.75-.5 2.75-2.5 2.75',
     chevron: 'M9 5.25 15.75 12 9 18.75',
     info: 'M12 2.4a9.6 9.6 0 1 0 0 19.2 9.6 9.6 0 1 0 0-19.2zM12 10.8v5.8M12 7.5v.2',
     close: 'm6 6 12 12M6 18 18 6',

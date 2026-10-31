@@ -46,6 +46,13 @@
           "cut": {
             "type": "boolean"
           },
+          "defined": {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array"
+          },
           "endedAt": {
             "anyOf": [
               {
@@ -153,6 +160,13 @@
           "queuedAt": {
             "minLength": 1,
             "type": "string"
+          },
+          "removed": {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array"
           },
           "sessionId": {
             "pattern": "^s-[a-f0-9]{16}$",

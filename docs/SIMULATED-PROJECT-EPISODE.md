@@ -1033,3 +1033,79 @@ R cells.
 - Pages cannot be renamed or removed, and count toward the 32 layouts a project keeps.
 - Exploring the same table again makes another value rather than showing the first.
 - No independent person has used these flows.
+
+## Looking at values
+
+The person asked for an object viewer: in interactive computing the things computed are
+values of many kinds, not only files, and the interface should have a component for them.
+The same disposable `nb-bix-51` project ran `source("analysis.R")` in R (a data frame `dat`
+of 80 × 16, three `glm` fits, coefficient tables), a list holding two fits and a table, a
+one-way count `table(dat$sex)`, and in Python a pandas frame, a scikit-learn
+`LogisticRegression` and a dict.
+
+### What was built
+
+- **`kernel.inspect`** in Notebook (`plugins/kernel`): the R and Python sessions describe
+  one value by kind, with facts, a page of it and the code that reaches each part. It
+  never starts a session, answers `busy` while a cell runs and changes nothing
+  ([limits](HEADLESS.md#live-r-and-python-sessions-notebook)). Each cell names the values
+  it made, changed and removed.
+- **The value view** (`rho.object`) in Rho, opened from the Notebook's variables and from
+  the names under each cell ([what it shows](FRONTEND.md)).
+
+### What the screens showed
+
+- **A value beside the Notebook was unreadable.** Workspace 2 already had three panes;
+  splitting the Notebook's pane left it and `dat` about 180 px each at 1440 px. A value now
+  opens in a pane of its own only when both keep 360 px, and otherwise as a tab of the
+  pane next to the Notebook; `dat` then had 363 px. It opened as a tab without being
+  shown, because the layout reached the view after the request to show it; it is now shown
+  once the layout has it.
+- **The coefficients hid the p-values.** Each column's type and range (`numeric`,
+  `-0.6132 – 1.531`) widened `fit_full`'s table, and R padded every value to the
+  column's precision (`1.53100`). Result tables (coefficients, counts) now show their
+  column names alone and R writes each coefficient at its own precision. The table still
+  ran 11 px past a 363 px view: the view's narrower padding sat in a container query on the
+  view itself, which never applies. With the padding and cell spacing reduced, all four
+  columns fit at 363, 744 and 374 px wide.
+- **`table(dat$sex)` was printed text.** A one-way table is now read as its named counts
+  (Female 31, Male 49, Total 80); a two-way table keeps its rows and columns rather than
+  becoming R's long form; three or more ways stay printed.
+- **Names from an ended session opened another value.** After a restart the Notebook still
+  listed the old cells, and their `dat` opened the new session's `dat` with "after cell 2"
+  of that session. Names under a cell are links only while the cell's session is live.
+- **Use in Notebook** put `fit_full$data` in the line, with R chosen and a note, and was
+  offered for a value that had been removed; it is now offered only while the value is
+  there.
+- **Results.** Sorting `dat` by age (twice, descending) kept the original row numbers
+  (62, 75, 20 …) and the next page showed rows 51–80. `parts › models › age` reached
+  `parts$models$age`. While `Sys.sleep(6)` ran, `dat` stayed dimmed with "A cell is
+  running. This is dat as it was after cell 2"; after `rm(dat)` the view said it is not in
+  the session and kept the reading from after cell 3 (80 × 17). `clf` showed its non-default
+  settings (C 0.5, max_iter 500), intercept and coefficients; the dict showed its keys
+  as parts. From the Notebook page `fit_age` opened beside the Notebook on Workspace 3;
+  from the conversation's Studio `answers` opened there too.
+- **Readings.** Value views stay mounted behind other tabs, and each re-read its value after
+  every cell: seven open values would make seven readings, and a cell waits for a reading
+  in progress (seen in the code, not measured before the change). A view now reads only
+  while it is shown: with seven values as hidden tabs a cell caused no reading, and showing
+  `clf` read it once.
+
+### Verification
+
+- `test/kernel.test.mjs` in Plugins reads R and Python values: no session, a sorted table,
+  a model, nested parts and their code, a missing part, one- and two-way counts, a reading
+  that is interrupted while the session goes on, a busy session, a removed value, a cell
+  that waits for a reading, and pandas, NumPy and object attributes.
+  `test/notebook.test.mjs` has the person and the Agent read the same value through Rho;
+  `test/layout-commands` covers adding a view with room or as a tab.
+- The flows above were run in a real browser at 1440, 760 and 390 px; the screenshots were
+  read.
+
+### Left open
+
+- Every value opened adds a tab; values are closed one by one.
+- A value whose printing is slow stalls the reading until it is interrupted (10 s); in
+  Python a slow `repr` also delays the end of each cell that lists it as a variable.
+- Arrays of three or more dimensions and other kinds are shown as printed.
+- No independent person has used the view.

@@ -923,12 +923,19 @@ live Python session per project, in the project folder, shared by the person and
 their Agent. `kernel.run` queues a cell in its language's session and starts the
 session when none is live; `waitMs` waits up to `maxWaitMs` for it to end.
 `kernel.read` returns the sessions, their variables and the cells, and never starts
-a session. `kernel.plot` returns one kept plot as PNG bytes. `kernel.interrupt` names
+a session. `kernel.inspect` returns one value of a live session as its session
+describes it: its kind (table, model, vector, list, function, value or other), class,
+size and facts, a page of its rows, elements or parts, the code that reaches it and
+each part (`path` names parts by position), and the cell it was read after. A table
+sorts by a column on request; a model gives its fit and coefficients. It answers
+`none` without a live session, `busy` while a cell runs or waits, `missing`, `timeout`,
+`failed` or `ended`, and never starts, waits for or changes a session; a cell asked
+for during a reading waits for it. `kernel.plot` returns one kept plot as PNG bytes. `kernel.interrupt` names
 a cell: a running cell is stopped with SIGINT and its session and values stay; a
 waiting cell is not run; an ended cell is returned unchanged. `kernel.stop` names a
 session and ends it (SIGTERM, then SIGKILL after `stopGraceMs`); its running cell
 ends with an error and its waiting cells are not run. Agent grants receive run, read,
-plot and interrupt; `kernel.stop` accepts only the local browser principal. These
+inspect, plot and interrupt; `kernel.stop` accepts only the local browser principal. These
 operations do not wait in the project's request queue (only their activity record
 does), so a run waiting for a long cell holds no read and no interrupt.
 
@@ -940,7 +947,8 @@ warnings and error in the order printed, plots, and how they ended: `done`,
 reaches Rho as it is printed; each answer about a cell follows a numbered mark on
 standard output, so it lands after the text printed before it. After each cell the
 session lists its variables (type, size, one-line summary; Python leaves out modules
-and imported classes and functions). State lives in `.rho/plugins/kernel/` in the
+and imported classes and functions), and the cell names the values it made or changed
+(`defined`) and, when neither list was cut, removed (`removed`). State lives in `.rho/plugins/kernel/` in the
 project. Variables live only in their process: when Rho closes, its sessions end,
 and the next start records each as `rho-closed`, a running cell as `unknown` and a
 waiting one as `not-run`. Nothing runs again. Rho-started sessions are told to run
@@ -955,6 +963,9 @@ exploratory code there and to keep the code results rest on in scripts.
 | Plots | `maxPlots` 8 per cell, `maxPlotBytes` 4 MiB each | Keep the first plots; a larger file is dropped with a note in the cell. |
 | Cell records | `maxCells` 500 | The oldest ended cell and its plots make room. |
 | Variables listed | `maxVariables` 200 | List the first, count the rest (`variablesOmitted`). |
+| A value read | `inspectRows` 50 (up to 200 asked), `inspectColumns` 50, `inspectChildren` 200, `inspectCellChars` 120, `inspectTextBytes` 16 KiB | Return the page; count the rest (`columnsTotal`, `total`); cut text is marked `cut`. |
+| Sorting a table | `inspectSortRows` 1,000,000 rows | Return the rows unsorted with the reason (`sortRefused`). |
+| Reading time | `inspectTimeoutMs` 10 s, then `inspectGiveUpMs` 5 s | Interrupt the reading (SIGINT), answer `timeout`; the session and its values stay. |
 | Waiting for a cell | `maxWaitMs` 10 min | Return the cell as it stands; read it later. |
 | Start | `startTimeoutMs` 30 s | Kill the process; waiting cells are not run, with what it printed. |
 | Stop | `stopGraceMs` 3000 | SIGKILL the process group. |

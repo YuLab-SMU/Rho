@@ -125,6 +125,16 @@ their workspace beside the Notebook: a table loads as a new value in their own c
 script waits in the line to run. A Studio stage under 640 px shows its views one at a time.
 Pages cannot yet be renamed or removed.
 
+Values of the live sessions have a view of their own
+([episode](SIMULATED-PROJECT-EPISODE.md#looking-at-values)). Notebook's `kernel.inspect`
+reads one value as its session describes it, without starting, waiting for or changing a
+session; each cell names the values it made, changed and removed. From the Notebook's
+variables or a cell's names the value opens beside the Notebook, or as a tab next to it
+when a split would leave either under 360 px: a table pages, sorts and gives each column's
+type and summary; a model its fit and coefficients; a list its parts, each opening in place
+with the code that reaches it, which Use in Notebook puts in the line. While a cell runs or
+after the value is gone, the last reading stays, dimmed, with the cell it was read after.
+
 ## Existing application
 
 - Projects opens selected folders and manages finite source folders. Sources counts
@@ -166,7 +176,8 @@ Rho 245/245 and Plugins 117/117. The Notebook pass first failed Rho 257/260: two
 checks still held the 64-method limit and the plugin count, and the Skill's verify
 command was not an application script; corrected, Rho 261/261 and Plugins 132/132. The
 exploring pass first failed Rho 263/264, the Studio shell importing a module outside its
-allowed set, and ui:u2 also matched the New workspace row; corrected, it records Rho 264/264 and Plugins 132/132 (unchanged) in the [ledger](VERIFICATION.json), with the contract check and the
+allowed set, and ui:u2 also matched the New workspace row; corrected, Rho 264/264 and Plugins 132/132.
+The value view pass records Rho 265/265 and Plugins 134/134 in the [ledger](VERIFICATION.json), with the contract check and the
 agent-canvas, graph, agent-page, agent-ui, review, ui:u2 and sources browser
 acceptances. Earlier passes: choices and Console Rho 260/260 and Plugins 125/125; figures and cost Rho 258/258; project notes Rho 249/249 and Plugins 120/120 (ui:u2 first
 failed until the notes stopped opening with every project); meaning layer Rho 253/253;

@@ -21,7 +21,7 @@ test('the person and their Agent share a live session; only the person ends it',
   const grant = path.join(root, 'agent.json');
   const connection = await service.agentConnection(p.id, 'notebook', grant, undefined, undefined, 'layered-business');
   assert.ok(connection.methods.length <= layeredGrantLimits.maxMethods);
-  for (const method of ['kernel.run', 'kernel.read', 'kernel.plot', 'kernel.interrupt']) assert.ok(connection.methods.includes(method), method);
+  for (const method of ['kernel.run', 'kernel.read', 'kernel.inspect', 'kernel.plot', 'kernel.interrupt']) assert.ok(connection.methods.includes(method), method);
   assert.ok(!connection.methods.includes('kernel.stop'));
   await assert.rejects(service.agentConnection(p.id, 'notebook-stop', path.join(root, 'stop.json'), ['kernel.stop']), /operator-only|Unknown/);
 
@@ -33,6 +33,10 @@ test('the person and their Agent share a live session; only the person ends it',
   assert.equal(mine.cell.by, 'browser:local');
   assert.equal(mine.cell.sessionId, made.cell.sessionId, 'the person runs in the Agent\'s session');
   assert.equal(mine.cell.outputs[0].text, '42\n');
+  // Both read the same value as the session holds it.
+  const seen = await call('kernel.inspect', { language: 'python', name: 'shared' });
+  assert.equal(seen.state, 'shown'); assert.equal(seen.object.values.items[0].value, '41');
+  assert.equal((await agent.call('kernel.inspect', { projectId: p.id, language: 'python', name: 'shared' })).object.kind, 'value');
   const again = await agent.call('kernel.run', { projectId: p.id, language: 'python', code: 'shared = 41', purpose: 'Define a value', changeId: 'a1' });
   assert.equal(again.cell.cellId, made.cell.cellId, 'a repeated request names the same cell');
 

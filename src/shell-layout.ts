@@ -240,6 +240,30 @@ export function addBeside(tree: LayoutTree, view: ViewDescription, nextTo: strin
   if (!placed || !anchor) return placed;
   return dockView(placed, view.id, tabOwner(placed.nodes, anchor), side, newId) ?? placed;
 }
+// The part of the stage's width a view's pane has, from the weights of the side-by-side splits.
+export function paneShare(tree: LayoutTree, viewId: string) {
+  let share = 1;
+  for (let at = tabOwner(tree.nodes, viewId), holder = parentOf(tree.nodes, at); holder; at = holder.id, holder = parentOf(tree.nodes, at)) {
+    if (!isSplit(holder) || holder.presentation!.axis !== 'horizontal') continue;
+    const weights = holder.presentation!.weights ?? holder.children!.map(() => 1), total = weights.reduce((a, b) => a + b, 0);
+    share *= (weights[holder.children!.indexOf(at)] ?? 1) / (total || 1);
+  }
+  return share;
+}
+// Adds a view in a pane of its own to the right of another view's pane when, on a stage `width`
+// pixels wide, both keep at least `room` pixels; otherwise as the last tab of the pane next to
+// it, so that neither is squeezed. Without a width, or with no pane next to it, it goes beside.
+export function addWithRoom(tree: LayoutTree, view: ViewDescription, nextTo: string, width: number | undefined, room: number, newId: (kind: string) => string): LayoutTree | null {
+  const pane = tabOwner(tree.nodes, nextTo), holder = parentOf(tree.nodes, pane);
+  if (width && holder && paneShare(tree, nextTo) * width < 2 * room) {
+    const at = holder.children!.indexOf(pane);
+    let next: string | undefined = holder.children![at + 1] ?? holder.children![at - 1];
+    for (let node = tree.nodes.find(n => n.id === next); node && isSplit(node); node = tree.nodes.find(n => n.id === next)) next = node.children?.[0];
+    const placed = next ? placeView(tree, view, newId) : null;
+    if (placed) return moveTab(placed, view.id, next!, null, newId) ?? placed;
+  }
+  return addBeside(tree, view, nextTo, 'right', newId);
+}
 // Shows a view in a pane of its own on one side of a tab group, sharing that group's space.
 // Beside a neighbour along the same axis it joins that split instead of nesting another.
 export function dockView(tree: LayoutTree, viewId: string, target: string, side: Side, newId: (kind: string) => string): LayoutTree | null {

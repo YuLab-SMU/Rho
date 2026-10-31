@@ -1,5 +1,5 @@
 import { BrowserApiError, type BrowserClient, type WorkspaceSnapshot } from '../src/browser.js';
-import { addBeside, type LayoutNode, type LayoutTree } from '../src/shell-layout.js';
+import { addBeside, addWithRoom, type LayoutNode, type LayoutTree } from '../src/shell-layout.js';
 import { loadCode, sourceCode, valueName, type Language } from '../src/explore-code.js';
 
 // Looking into a result in the live sessions the person shares with the Agent. A table loads
@@ -51,6 +51,53 @@ export async function addNotebook(client: BrowserClient, projectId: string, comp
     try {
       await client.call('composition.apply', { projectId, compositionId, expectedVersion: current?.version ?? 0, changeId: 'notebook-' + crypto.randomUUID(), operations: [{ op: 'replace', rootId: next.rootId, nodes: next.nodes }] } as never);
       return notebookOn(next.nodes)!;
+    } catch (error) {
+      if (attempt === 0 && error instanceof BrowserApiError && error.error.kind === 'stale') continue;
+      throw error;
+    }
+  }
+}
+
+// A value of a live session as a view: one per value on a page. A page's values share one group
+// of tabs. The first goes in a pane beside the Notebook when the Notebook's pane, on a stage
+// `width` pixels wide, leaves both at least minViewPx; otherwise it joins the tab group next to
+// the Notebook's, so that neither is squeezed. Without a width it goes beside the Notebook.
+export const objectComponent = 'rho.object';
+export const objectLimits = { minViewPx: 360 };
+export function objectViewId(language: Language, name: string) {
+  const safe = [...name].map(c => /[A-Za-z0-9_-]/.test(c) ? c : '.').join('').slice(0, 96);
+  let hash = 0;
+  for (const c of name) hash = (hash * 31 + c.codePointAt(0)!) >>> 0;
+  return 'object-' + language + '-' + safe + (safe === name ? '' : '-' + hash.toString(36));
+}
+export const objectView = (language: Language, name: string): LayoutNode => ({ id: objectViewId(language, name), kind: 'view', component: objectComponent, version: '1', props: { title: name, language, name }, bindings: {} });
+export function withObject(tree: LayoutTree | null, language: Language, name: string, width?: number): LayoutTree | null {
+  const view = objectView(language, name);
+  if (!tree) return { rootId: 'root', nodes: [{ id: 'root', kind: 'group', children: [view.id] }, view] };
+  if (tree.nodes.some(n => n.id === view.id)) return null;
+  const sibling = tree.nodes.find(n => n.kind === 'view' && n.component === objectComponent);
+  const holder = sibling && tree.nodes.find(n => n.kind === 'group' && n.children?.includes(sibling.id) && (n.presentation as { mode?: string } | undefined)?.mode !== 'split');
+  if (holder) {
+    const nodes = structuredClone(tree.nodes), group = nodes.find(n => n.id === holder.id)!;
+    group.children = [...group.children!, view.id];
+    return { rootId: tree.rootId, nodes: [...nodes, view] };
+  }
+  const notebook = notebookOn(tree.nodes);
+  return notebook ? addWithRoom(tree, view as never, notebook, width, objectLimits.minViewPx, newId) : addBeside(tree, view as never, null, 'right', newId);
+}
+export async function addObject(client: BrowserClient, projectId: string, compositionId: string, language: Language, name: string, width?: number): Promise<string> {
+  const id = objectViewId(language, name);
+  for (let attempt = 0; ; attempt++) {
+    const current = await client.call('composition.read', { projectId, compositionId }).catch(error => {
+      if (error instanceof BrowserApiError && error.error.kind === 'not_found') return null;
+      throw error;
+    }) as { version: number; rootId?: string; nodes?: unknown[] } | null;
+    if ((current?.nodes as LayoutNode[] | undefined)?.some(n => n.id === id)) return id;
+    const next = withObject(current?.rootId && current.nodes?.length ? { rootId: current.rootId, nodes: current.nodes as LayoutNode[] } : null, language, name, width);
+    if (!next) return id;
+    try {
+      await client.call('composition.apply', { projectId, compositionId, expectedVersion: current?.version ?? 0, changeId: 'object-' + crypto.randomUUID(), operations: [{ op: 'replace', rootId: next.rootId, nodes: next.nodes }] } as never);
+      return id;
     } catch (error) {
       if (attempt === 0 && error instanceof BrowserApiError && error.error.kind === 'stale') continue;
       throw error;

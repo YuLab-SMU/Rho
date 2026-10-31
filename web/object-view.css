@@ -1,0 +1,78 @@
+/* A value of a live session: where in it, what it is and when it was read, then its facts and a page of it. */
+.ov { display: flex; flex-direction: column; gap: 12px; flex: 1; min-height: 0; overflow-y: auto; padding: 12px 14px 16px; container-type: inline-size; }
+.ov.stale .ov-section, .ov.stale .ov-facts, .ov.stale .ov-value { opacity: .62; }
+.ov-head { display: flex; flex-direction: column; gap: 4px; }
+.ov-trail { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px; min-width: 0; font-size: 16px; font-weight: 650; }
+.ov-trail > span { display: inline-flex; align-items: baseline; gap: 2px; min-width: 0; }
+.ov-crumb { min-height: 0; padding: 0 2px; border: 0; background: none; color: var(--color-accent-strong); font: inherit; overflow-wrap: anywhere; text-align: left; }
+.ov-crumb:hover:not(:disabled) { text-decoration: underline; background: none; }
+.ov-crumb:disabled { color: var(--color-ink); opacity: 1; cursor: default; }
+.ov-sep { padding: 0 3px; color: var(--color-meta); font-weight: 400; }
+.ov-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; color: var(--color-meta); font-size: 12px; }
+.ov-meta > svg { margin-right: -6px; }
+.ov-meta > span:first-of-type { color: var(--color-ink); font-weight: 600; }
+.ov-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: 2px; }
+.ov-expression { max-width: 100%; overflow: hidden; padding: 2px 7px; border-radius: 6px; background: var(--color-well); color: var(--color-ink); font: 12px var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }
+.ov-actions button { min-height: 28px; padding: 3px 11px; font-size: 12.5px; }
+.ov-note { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: 0; padding: 7px 10px; border-radius: 8px; background: var(--color-amber-soft); color: var(--color-amber-text); font-size: 12.5px; }
+.ov-note.problem { background: color-mix(in srgb, var(--color-failed) 8%, var(--color-surface)); color: var(--color-failed-strong); }
+.ov-note .text-button { min-height: 0; padding: 0; color: inherit; font-weight: 600; text-decoration: underline; }
+.ov-empty { color: var(--color-meta); font-size: 13px; }
+
+/* Facts: short label over value, as many to a row as fit. */
+.ov-facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr)); gap: 8px 16px; margin: 0; }
+.ov-facts > div { min-width: 0; }
+.ov-facts dt { color: var(--color-meta); font-size: 11.5px; }
+.ov-facts dd { margin: 0; overflow-wrap: anywhere; color: var(--color-ink); font-size: 13.5px; font-variant-numeric: tabular-nums; }
+.ov-value { margin: 4px 0; font: 22px/1.3 var(--font-mono); overflow-wrap: anywhere; }
+
+.ov-section { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.ov-section > h3 { color: var(--color-meta); font-size: 11.5px; font-weight: 650; letter-spacing: .3px; text-transform: uppercase; }
+.ov-small { color: var(--color-meta); font-size: 12px; }
+
+/* The table scrolls both ways inside its own box; its header and row labels stay in sight. */
+.ov-table-scroll { width: fit-content; max-width: 100%; max-height: min(62vh, 640px); overflow: auto; border: 1px solid var(--color-hairline); border-radius: 8px; }
+.ov-table { border-collapse: separate; border-spacing: 0; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.ov-table th, .ov-table td { padding: 5px 10px; border-bottom: 1px solid var(--color-divider); text-align: left; white-space: nowrap; vertical-align: top; }
+.ov-table .num { text-align: right; }
+.ov-table thead th { position: sticky; top: 0; z-index: 2; background: var(--color-surface); border-bottom-color: var(--color-hairline-strong); font-weight: 400; }
+.ov-table thead th.num .ov-col { justify-content: flex-end; margin-left: auto; }
+.ov-table td { color: var(--color-ink); font-family: var(--font-mono); }
+.ov-rowlabel { position: sticky; left: 0; z-index: 1; background: var(--color-surface); color: var(--color-meta); font-weight: 400; font-size: 12px; }
+.ov-table thead .ov-rowlabel { z-index: 3; }
+.ov-col { display: flex; align-items: center; gap: 4px; min-height: 0; padding: 0; border: 0; background: none; color: var(--color-ink); font-family: inherit; font-size: 12.5px; font-weight: 600; }
+.ov-col:hover { color: var(--color-accent-strong); background: none; }
+.ov-col-name { font-weight: 600; }
+.ov-col-meta { display: block; color: var(--color-meta); font-size: 11px; font-weight: 400; }
+.ov-table tbody tr:hover td, .ov-table tbody tr:hover th { background: var(--color-hover); }
+
+.ov-pager { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; color: var(--color-meta); font-size: 12px; }
+.ov-pager .text-button { min-height: 0; padding: 2px 0; color: var(--color-accent-strong); font-size: 12px; font-weight: 600; }
+.ov-pager .text-button:disabled { color: var(--color-meta); opacity: .5; }
+
+.ov-values { display: grid; grid-template-columns: repeat(auto-fill, minmax(6.5rem, 1fr)); gap: 4px; margin: 0; padding: 0; list-style: none; }
+.ov-values.named { grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr)); }
+.ov-values li { display: flex; flex-direction: column; min-width: 0; padding: 4px 8px; border-radius: 6px; background: var(--color-well); }
+.ov-value-name { overflow: hidden; color: var(--color-meta); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.ov-value-text { overflow-wrap: anywhere; font: 12.5px var(--font-mono); }
+
+.ov-parts { display: flex; flex-direction: column; margin: 0; padding: 0; border: 1px solid var(--color-hairline); border-radius: 8px; list-style: none; }
+.ov-parts li + li { border-top: 1px solid var(--color-divider); }
+.ov-part { display: grid; grid-template-columns: minmax(6rem, auto) auto minmax(0, 1fr) auto; align-items: baseline; gap: 4px 12px; width: 100%; min-height: 0; padding: 7px 10px; border: 0; border-radius: 0; background: none; color: var(--color-ink); font-size: 13px; font-weight: 400; text-align: left; }
+.ov-part:hover { background: var(--color-hover); }
+.ov-part-name { font: 600 12.5px var(--font-mono); overflow-wrap: anywhere; }
+.ov-part-type { color: var(--color-meta); font-size: 12px; white-space: nowrap; }
+.ov-part-summary { overflow: hidden; color: var(--color-muted); font: 12px var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }
+.ov-part > svg { align-self: center; color: var(--color-meta); }
+
+.ov-fold > summary { padding: 3px 0; color: var(--color-meta); font-size: 12px; font-weight: 650; letter-spacing: .3px; text-transform: uppercase; cursor: pointer; }
+.ov-fold[open] > summary { margin-bottom: 6px; }
+.ov-text { margin: 0; max-height: 26em; overflow: auto; padding: 9px 12px; border-radius: 8px; background: var(--color-well); font: 12.5px/1.45 var(--font-mono); white-space: pre; }
+
+@container (max-width: 520px) {
+  .ov-table th, .ov-table td { padding-inline: 6px; }
+  .ov-part { grid-template-columns: minmax(0, 1fr) auto; }
+  .ov-part-type { grid-column: 1; grid-row: 2; }
+  .ov-part-summary { grid-column: 1 / -1; grid-row: 3; }
+  .ov-part > svg { grid-column: 2; grid-row: 1; }
+}

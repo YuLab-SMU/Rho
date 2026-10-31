@@ -422,6 +422,7 @@ export const descriptions = {
   'console.stop': 'Person at this machine only: ask a running Console command and the processes it started to stop; they are killed after a short grace period.',
   'kernel.run': 'Run a cell of R or Python in the project\'s live session of that language, which the Agent and the person share: what one cell defines stays for the next. Starts the session when none is live. The same changeId from the same caller returns the same cell and never runs it twice. waitMs waits for the cell to end.',
   'kernel.read': 'The live sessions and their cells, oldest cell first: code, purpose, who ran it, what it printed, its plots and how it ended, and each session\'s variables. Reading never starts a session.',
+  'kernel.inspect': 'One value of a live session, as its session describes it: what kind of thing it is (a table, a model, a vector, a list, a function or a value), short facts, and one page of its rows, elements or parts, each part with the code that reaches it. Never starts a session or waits for a cell: while a cell runs or waits the answer is busy. A reading that takes too long is interrupted.',
   'kernel.plot': 'One plot a cell kept, as PNG bytes.',
   'kernel.interrupt': 'Interrupt one cell: a running cell stops and its session and values stay; a waiting cell is not run. A cell that has ended is returned unchanged.',
   'kernel.stop': 'Person at this machine only: end one live session. Its values are gone, the running cell ends with an error and waiting cells are not run. A session that has ended is returned unchanged.',

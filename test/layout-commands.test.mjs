@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { addBeside, closeView, dockView, groupNode, moveTab, moveView, placeView, regions, resizeSplit, splitView } from '../dist/shell-layout.js';
+import { addBeside, addWithRoom, closeView, dockView, groupNode, moveTab, moveView, paneShare, placeView, regions, resizeSplit, splitView } from '../dist/shell-layout.js';
 
 // Layout commands change the owner tree only, and the shell draws the result through the
 // same reading as any other composition. Each case states what the person sees afterwards.
@@ -125,4 +125,24 @@ test('a view added beside another gets its own pane next to that view\'s group',
   // Without a named view it goes beside the last group; a view already there is not added twice.
   assert.deepEqual(drawn(addBeside(splitView(tabs('a', 'b'), 'b', 'horizontal', id), notebook, null, 'right', id)).children.map(c => c.views), [['a'], ['b'], ['nb']]);
   assert.equal(addBeside(right, notebook, 'a', 'right', id), null);
+});
+
+test('a view added beside another keeps room for both, or joins the pane next to it', () => {
+  // Three panes side by side, weighted 0.5, 0.5 and 1: the middle one has a quarter of the stage.
+  const three = splitView(splitView(tabs('a', 'b', 'c'), 'b', 'horizontal', id), 'c', 'horizontal', id);
+  const panes = () => drawn(three).children.map(c => c.views);
+  assert.deepEqual(panes(), [['a'], ['c'], ['b']]);
+  assert.equal(paneShare(three, 'c'), 0.25);
+  assert.equal(paneShare(tabs('a'), 'a'), 1);
+  // On a stage 1200 px wide, the 300 px pane of c cannot give two views 360 px each: the new
+  // view becomes the last tab of the pane after it, and the panes stay three.
+  const joined = drawn(addWithRoom(three, view('v'), 'c', 1200, 360, id));
+  assert.deepEqual(joined.children.map(c => c.views), [['a'], ['c'], ['b', 'v']]);
+  // The last pane has none after it, so the new view joins the one before.
+  assert.deepEqual(drawn(addWithRoom(three, view('v'), 'b', 1200, 360, id)).children.map(c => c.views), [['a'], ['c', 'v'], ['b']]);
+  // On a stage wide enough, or without a width, it opens in a pane of its own to the right.
+  assert.deepEqual(drawn(addWithRoom(three, view('v'), 'c', 3200, 360, id)).children.map(c => c.views), [['a'], ['c'], ['v'], ['b']]);
+  assert.deepEqual(drawn(addWithRoom(three, view('v'), 'c', undefined, 360, id)).children.map(c => c.views), [['a'], ['c'], ['v'], ['b']]);
+  // A view alone on the page has no pane to join: it splits the page whatever its width.
+  assert.deepEqual(drawn(addWithRoom(tabs('a'), view('v'), 'a', 500, 360, id)).children.map(c => c.views), [['a'], ['v']]);
 });

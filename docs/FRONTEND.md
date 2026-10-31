@@ -105,6 +105,24 @@ inspect what happened. The application gives those actions direct places:
   The file is read as it is on disk now, by its project path, also when the view shows an
   older kept version. Files of added source folders are outside the sessions' folder and
   have no Explore ([episode](SIMULATED-PROJECT-EPISODE.md#exploring-a-finished-answer)).
+- **Values** of the live sessions open as views of their own (`rho.object`). A variable's
+  name in the Notebook, and each name a cell made or changed (listed under the cell while
+  its session is live; removed names are struck through), opens it. On the person's page
+  it opens there: in a pane right of the Notebook when both keep 360 px, otherwise as a
+  tab of the pane next to the Notebook's, and later values join its tabs. From the
+  Notebook page or a conversation's Studio it opens on the person's workspace. The view
+  says where in the value it is (a trail of parts back to the name), its kind, class and
+  size, the session and the cell it was read after, and the code that reaches it, which
+  Use in Notebook puts in the Notebook's line. A table shows its facts and a page of 50
+  rows with each column's type and summary; a column name sorts by it, again the other
+  way, a third time back. A model shows its formula, fit statistics and coefficients,
+  then its printed summary and its parts, folded; a vector its facts, counts when categorical,
+  and values; a list its parts, each opening in place; a function its code; anything
+  else as printed. The view reads the value again when the sessions change while it is
+  shown, and when it is shown again; hidden behind another tab it reads nothing. While a cell
+  runs, or after the value or its session is gone, the last reading stays, dimmed, with
+  what it is and when it was read
+  ([episode](SIMULATED-PROJECT-EPISODE.md#looking-at-values)).
 - **Files** opens documents, browses the project's folder and the source folders it
   works in, and filters the current folder. A source folder is named as the person
   named it and opens one level at a time, the same way any other folder does.
@@ -327,10 +345,12 @@ the same graph: `answerBoard` gives each file and command of a message a role,
 about, and `src/asking.ts` writes and reads back what a question was asked about.
 `web/answer-board.tsx` draws the board and records decisions (`conversation.decide`);
 `web/console.tsx` draws the Console from the same graph and `console.list`.
+`web/object-view.tsx` draws a value from `kernel.inspect`.
 `web/notebook.tsx` draws the Notebook from `kernel.read` and its Studio view
 (`SessionPane`) from the same, scoped to the conversation's principal, its start and the
 moment shown inside a conversation's Studio. `web/explore.ts` places the Notebook
-(`addBeside` in `src/shell-layout.ts`), loads a table and makes the person's pages;
+(`addBeside` in `src/shell-layout.ts`) and values (`addWithRoom`), loads a table and
+makes the person's pages;
 `src/explore-code.ts` writes the code; `web/page-add.tsx` lists what a page can add.
 A conversation's Studio (`web/studio-process.tsx`) reads its record, builds the graph
 whole and as cut at the moment shown (`turnsAt` in `src/replay.ts`), takes each file's

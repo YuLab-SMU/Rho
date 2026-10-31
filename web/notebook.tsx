@@ -124,9 +124,9 @@ function Ending({ cell, now }: { cell: Cell; now: number }) {
   return <span className="nb-ending failed">Outcome unknown</span>;
 }
 
-function CellView({ cell, author, who, client, projectId, now, onEdit, onRunAgain, onConversation }: {
+function CellView({ cell, author, who, client, projectId, now, onEdit, onRunAgain, onConversation, onObject }: {
   cell: Cell; author: Author; who: (by: string) => Author; client: BrowserClient; projectId: string; now: number;
-  onEdit: (cell: Cell) => void; onRunAgain: (cell: Cell) => void; onConversation: (id: string) => void;
+  onEdit: (cell: Cell) => void; onRunAgain: (cell: Cell) => void; onConversation: (id: string) => void; onObject?: (language: Language, name: string) => void;
 }) {
   const settled = !['queued', 'running'].includes(cell.state);
   const interrupted = cell.interrupt ? `Interrupted by ${who(cell.interrupt.by).name === 'You' ? 'you' : who(cell.interrupt.by).name} at ${at(cell.interrupt.at)}.` : null;
@@ -142,6 +142,12 @@ function CellView({ cell, author, who, client, projectId, now, onEdit, onRunAgai
       </header>
       <Code code={cell.code} language={cell.language} />
       <Outputs cell={cell} client={client} projectId={projectId} />
+      {settled && ((cell.defined?.length ?? 0) > 0 || (cell.removed?.length ?? 0) > 0) && <p className="nb-values">
+        {(cell.defined?.length ?? 0) > 0 && <><span>Made or changed</span>{cell.defined!.map(name => onObject
+          ? <button key={name} className="nb-value" title={'Look at ' + name} onClick={() => onObject(cell.language, name)}>{name}</button>
+          : <code key={name} className="nb-value">{name}</code>)}</>}
+        {(cell.removed?.length ?? 0) > 0 && <><span>Removed</span>{cell.removed!.map(name => <code key={name} className="nb-value gone">{name}</code>)}</>}
+      </p>}
       {(interrupted || (cell.problem && cell.state !== 'interrupted')) && <p className="nb-problem">{interrupted ?? cell.problem}</p>}
       {settled && <div className="nb-actions">
         <button className="text-button" onClick={() => onEdit(cell)}><Icon name="pencil" size={13} />Edit and run</button>
@@ -183,7 +189,7 @@ function SessionRow({ language, session, onInterrupt, onStop, asking }: { langua
   </div>;
 }
 
-function Variables({ sessions }: { sessions: Partial<Record<Language, Session>> }) {
+function Variables({ sessions, onObject }: { sessions: Partial<Record<Language, Session>>; onObject?: (language: Language, name: string) => void }) {
   const live = languages.filter(l => sessions[l] && sessions[l]!.state !== 'ended');
   const [chosen, setChosen] = useState<Language | null>(null);
   const shown = chosen && live.includes(chosen) ? chosen : live[live.length - 1] ?? null;
@@ -195,7 +201,7 @@ function Variables({ sessions }: { sessions: Partial<Record<Language, Session>> 
     {!session ? <p className="nb-empty-line">No live session.</p>
       : !session.variables.length ? <p className="nb-empty-line">Nothing defined in {languageName[session.language]} yet.</p>
       : <ul className="nb-vars">{session.variables.map(v => <li key={v.name} title={v.summary}>
-          <span className="nb-var-name">{v.name}</span><span className="nb-var-type">{v.type}{v.size ? ' · ' + v.size : ''}</span>
+          {onObject ? <button className="nb-var-name" title={'Look at ' + v.name} onClick={() => onObject(session.language, v.name)}>{v.name}</button> : <span className="nb-var-name">{v.name}</span>}<span className="nb-var-type">{v.type}{v.size ? ' · ' + v.size : ''}</span>
           {v.summary && <span className="nb-var-summary">{v.summary}</span>}
         </li>)}</ul>}
     {session && session.variablesOmitted > 0 && <p className="nb-note">{session.variablesOmitted} more not listed.</p>}
@@ -261,7 +267,7 @@ type Row = { at: number; order: number; key: string } & ({ cell: Cell } | { sess
 // the sessions whole. A wide view has the sessions, values and plots beside the cells; a narrow
 // one folds them above.
 export interface Prepared { key: string; language: Language; code: string; note: string }
-export function SessionPane({ client, snapshot, prepared, onTaken, onConversation }: { client: BrowserClient; snapshot: WorkspaceSnapshot; prepared?: Prepared | null; onTaken?: () => void; onConversation?: (id: string) => void }) {
+export function SessionPane({ client, snapshot, prepared, onTaken, onConversation, onObject }: { client: BrowserClient; snapshot: WorkspaceSnapshot; prepared?: Prepared | null; onTaken?: () => void; onConversation?: (id: string) => void; onObject?: (language: Language, name: string) => void }) {
   const process = useProcess();
   const principal = snapshot.conversations?.find(c => c.conversationId === process?.conversationId)?.principal ?? null;
   const starts = process ? process.whole.turns.filter(t => t.conversationId === process.conversationId).map(t => t.start) : [];
@@ -282,13 +288,13 @@ export function SessionPane({ client, snapshot, prepared, onTaken, onConversatio
     return () => observer.disconnect();
   }, []);
   return <div className="nb-view" ref={box}>
-    <NotebookPage client={client} snapshot={snapshot} onConversation={onConversation ?? (() => {})} compact={!wide} inView shown={shown} prepared={prepared} onTaken={onTaken}
+    <NotebookPage client={client} snapshot={snapshot} onConversation={onConversation ?? (() => {})} compact={!wide} inView shown={shown} prepared={prepared} onTaken={onTaken} onObject={onObject}
       scope={process ? { principal, since, at: process.at } : undefined} />
   </div>;
 }
 
-export function NotebookPage({ client, snapshot, onConversation, scope, compact = false, inView = false, shown = 0, prepared, onTaken }: {
-  client: BrowserClient; snapshot: WorkspaceSnapshot; onConversation: (id: string) => void; compact?: boolean; inView?: boolean; shown?: number; prepared?: Prepared | null; onTaken?: () => void;
+export function NotebookPage({ client, snapshot, onConversation, onObject, scope, compact = false, inView = false, shown = 0, prepared, onTaken }: {
+  client: BrowserClient; snapshot: WorkspaceSnapshot; onConversation: (id: string) => void; onObject?: (language: Language, name: string) => void; compact?: boolean; inView?: boolean; shown?: number; prepared?: Prepared | null; onTaken?: () => void;
   scope?: { principal: string | null; since: number | null; at: number | null } }) {
   const projectId = snapshot.project.id;
   const { read, off, problem, again } = useKernel(client, projectId, snapshot.cursor);
@@ -410,17 +416,20 @@ export function NotebookPage({ client, snapshot, onConversation, scope, compact 
   const nothing = scope?.at != null ? 'No cells by then.' : scope ? 'No cells in this conversation yet. What you run here runs in the sessions you share with the Agent.' : 'Nothing has run in the live sessions yet. What you run here runs in the sessions you share with the Agent.';
   // In a narrow view the cells take the whole view; the sessions and their values fold above them.
   const live = languages.filter(l => latest[l] && latest[l]!.state !== 'ended' && (!scope || cells.some(c => c.sessionId === latest[l]!.sessionId)));
+  // A value named in a cell opens while that cell's session is live; with an ended session its
+  // values are gone, and the same name in a newer session is another value.
+  const current = new Set(languages.map(l => latest[l]).filter(session => session && session.state !== 'ended').map(session => session!.sessionId));
   if (compact) return <div className="nb-page compact" ref={page}>
     <div className="nb-main">
       {problem && <p className="inline-error" role="alert">{problem}</p>}
       {live.length > 0 && <details className="nb-strip">
         <summary>{live.map(l => <span key={l} className={'nb-strip-session ' + latest[l]!.state}><span className="nb-dot" aria-hidden="true" />{versionOf(latest[l]!)} · {latest[l]!.state === 'busy' ? 'running' : latest[l]!.state} · {latest[l]!.variables.length} {latest[l]!.variables.length === 1 ? 'value' : 'values'}</span>)}</summary>
-        <Variables sessions={Object.fromEntries(live.map(l => [l, latest[l]]))} />
+        <Variables sessions={Object.fromEntries(live.map(l => [l, latest[l]]))} onObject={onObject} />
       </details>}
       {!read ? <p className="nb-empty-line">Reading the live sessions…</p>
         : !cells.length ? <p className="nb-empty-line">{nothing}</p>
         : <ol className="nb-cells" ref={list}>{rows.map(row => 'cell' in row
-          ? <CellView key={row.key} cell={row.cell} author={who(row.cell.by)} who={who} client={client} projectId={projectId} now={now} onEdit={edit} onRunAgain={cell => void run(cell.code, cell.language)} onConversation={onConversation} />
+          ? <CellView key={row.key} cell={row.cell} author={who(row.cell.by)} who={who} client={client} projectId={projectId} now={now} onEdit={edit} onRunAgain={cell => void run(cell.code, cell.language)} onConversation={onConversation} onObject={current.has(row.cell.sessionId) ? onObject : undefined} />
           : <Mark key={row.key} session={row.session} edge={row.edge} who={who} />)}</ol>}
       {composer(true)}
     </div>
@@ -434,7 +443,7 @@ export function NotebookPage({ client, snapshot, onConversation, scope, compact 
           <p>When the Agent runs R or Python in this project's live sessions, each cell shows here with its purpose, its code, what it printed, its plots and the values it left. Your own cells run in the same sessions, so you can look at what the Agent made.</p>
         </div>
         : <ol className="nb-cells" ref={list}>{rows.map(row => 'cell' in row
-          ? <CellView key={row.key} cell={row.cell} author={who(row.cell.by)} who={who} client={client} projectId={projectId} now={now} onEdit={edit} onRunAgain={cell => void run(cell.code, cell.language)} onConversation={onConversation} />
+          ? <CellView key={row.key} cell={row.cell} author={who(row.cell.by)} who={who} client={client} projectId={projectId} now={now} onEdit={edit} onRunAgain={cell => void run(cell.code, cell.language)} onConversation={onConversation} onObject={current.has(row.cell.sessionId) ? onObject : undefined} />
           : <Mark key={row.key} session={row.session} edge={row.edge} who={who} />)}</ol>}
       {read && read.omitted > 0 && <p className="nb-note">{read.omitted} earlier {read.omitted === 1 ? 'cell is' : 'cells are'} kept but not shown.</p>}
       {composer(false)}
@@ -445,7 +454,7 @@ export function NotebookPage({ client, snapshot, onConversation, scope, compact 
         {languages.map(l => <SessionRow key={l} language={l} session={latest[l]} asking={asking} onInterrupt={() => void interrupt(l)} onStop={session => void stop(session)} />)}
         {askProblem && <p className="inline-error" role="alert">{askProblem}</p>}
       </section>
-      <Variables sessions={latest} />
+      <Variables sessions={latest} onObject={onObject} />
       {plots.length > 0 && <section className="nb-rail-section" aria-labelledby="nb-plots">
         <header><h2 id="nb-plots">Plots</h2></header>
         <div className="nb-thumbs">{plots.map(({ cell, output }) => <RailPlot key={cell.cellId + ':' + output.plot} client={client} projectId={projectId} cell={cell} output={output} onShow={() => show(cell.cellId)} />)}</div>

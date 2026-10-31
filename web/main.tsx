@@ -11,7 +11,7 @@ import { useAgentNow, type AgentNow } from './agent-now.js';
 import { NotesPanel, useProjectNotes } from './project-notes.js';
 import { compositionName, defaultWorkspace, fileKey, openInWorkspace, processComposition, processConversation } from './canvas.js';
 import { Icon } from './icons.js';
-import { addNotebook, canExplore, createWorkspace, loadTable, notebookOn, scriptLanguage, scriptPrepared, type Language } from './explore.js';
+import { addNotebook, addObject, canExplore, createWorkspace, loadTable, notebookOn, scriptLanguage, scriptPrepared, type Language } from './explore.js';
 import { PageAdd } from './page-add.js';
 import type { Prepared } from './notebook.js';
 import { CommandPalette, type Command, type CommandGroup } from './commands.js';
@@ -294,6 +294,14 @@ function App() {
       else await loadTable(client!, projectId, path, language);
       layout(page, notebook);
     }).catch(error => setNotice(path + ' · ' + (error instanceof Error ? error.message : 'It could not be explored.')));
+  }
+  // A value of a live session, looked at from the Notebook page or a conversation's Studio: it opens
+  // on the person's workspace beside the Notebook.
+  function openObject(language: Language, name: string) {
+    if (!snapshot) return;
+    const page = sharedWorkspace(), projectId = snapshot.project.id;
+    addNotebook(client!, projectId, page, null).then(() => addObject(client!, projectId, page, language, name, document.getElementById('main')?.clientWidth)).then(id => layout(page, id),
+      error => setNotice(name + ' · ' + (error instanceof Error ? error.message : 'It could not be opened.')));
   }
   // A project file a view links to: in Studio it opens in the workspace on screen, elsewhere in place.
   function openLinked(path: string) {
@@ -582,7 +590,7 @@ function App() {
                 {shownProcess ? <Suspense fallback={<Loading text="Opening the conversation's Studio…" />}><ProcessStudio key={snapshot.project.id + shownProcess} client={client!} snapshot={snapshot} files={files} conversationId={shownProcess} notesText={notes.text}
                     at={replay.at} playing={replay.playing} speed={replay.speed} onAt={at => setReplay(r => ({ ...r, at: at === null ? null : Math.floor(at / 1000) * 1000 + 999 }))} onPlaying={playing => setReplay(r => ({ ...r, playing }))} onSpeed={speed => setReplay(r => ({ ...r, speed }))}
                     stepsTarget={stepsSlot} agentNow={agentNow} following={followingHere}
-                    workspace={{ onAbout: about, contextTarget: context ? contextSlot : null, principalId: connection.principalId, feedbackContextActive: feedbackContext, onShowContext: () => { setFeedbackContext(true); setContext(true); setAgentOpen(false); }, onCommands: setLayoutCommands, agentTarget: agentOpen ? agentSlot : null, onShowAgent: () => setAgentOpen(true), onPersonMoved: () => setFollowing(false), attention: false, onConversation: openConversation, onExplore: exploreFile, prepared, onPrepare: setPrepared }} /></Suspense>
+                    workspace={{ onAbout: about, contextTarget: context ? contextSlot : null, principalId: connection.principalId, feedbackContextActive: feedbackContext, onShowContext: () => { setFeedbackContext(true); setContext(true); setAgentOpen(false); }, onCommands: setLayoutCommands, agentTarget: agentOpen ? agentSlot : null, onShowAgent: () => setAgentOpen(true), onPersonMoved: () => setFollowing(false), attention: false, onConversation: openConversation, onExplore: exploreFile, onObject: openObject, prepared, onPrepare: setPrepared }} /></Suspense>
                 : composition ? <Suspense fallback={<Loading text="Opening workspace…" />}><Workspace key={snapshot.project.id + composition.compositionId} composition={composition} snapshot={snapshot} client={client!} onAbout={about} contextTarget={context ? contextSlot : null} principalId={connection.principalId} feedbackContextActive={feedbackContext} onShowContext={() => { setFeedbackContext(true); setContext(true); setAgentOpen(false); }} openView={openView} onCommands={setLayoutCommands} agentTarget={agentOpen ? agentSlot : null} onShowAgent={() => setAgentOpen(true)}
                     presence={presence} onPersonMoved={() => setFollowing(false)} attention={false} following={followingHere && openFollowed}
                     onConversation={openConversation} prepared={prepared} onPrepare={setPrepared}
@@ -597,7 +605,7 @@ function App() {
               : section === 'console' ? <section className="project-page console-section" aria-labelledby="console-title"><header className="page-heading"><div><h1 id="console-title">Console</h1></div></header>
                   <Suspense fallback={<Loading text="Opening the Console…" />}><ConsolePage client={client!} snapshot={snapshot} files={files} focusTurn={consoleTurn} onPath={showPath} onConversation={id => { setSelectedConversation(id); setAgentOpen(true); setContext(false); }} /></Suspense></section>
               : section === 'notebook' ? <section className="project-page notebook-section" aria-labelledby="notebook-title"><header className="page-heading"><div><h1 id="notebook-title">Notebook</h1><p>Live R and Python sessions you share with the Agent</p></div></header>
-                  <Suspense fallback={<Loading text="Opening the Notebook…" />}><NotebookPage client={client!} snapshot={snapshot} onConversation={openConversation} /></Suspense></section>
+                  <Suspense fallback={<Loading text="Opening the Notebook…" />}><NotebookPage client={client!} snapshot={snapshot} onConversation={openConversation} onObject={openObject} /></Suspense></section>
               : section === 'graph' ? <Suspense fallback={<Loading text="Opening the graph…" />}><WorkGraph initialResource={graphResource} client={client!} snapshot={snapshot} files={files} agentNow={agentNow} following={following} principalId={connection.principalId} notesText={notes.text}
                   onFollow={() => follow()} onStopFollowing={() => setFollowing(false)} onStudio={layout} workspace={sharedWorkspace} onAbout={about} onAgent={id => { if (id) setSelectedConversation(id); setAgentOpen(true); setContext(false); }} /></Suspense>
               : <Suspense fallback={<Loading text="Opening project…" />}><ProjectOverview key={project.id} section={section} notesText={notes.text} workspace={sharedWorkspace} onExplore={exploreFile} category={category} files={files} sources={sources} onFile={showFile} linked={!!link} onPath={showPath} onNewConversation={() => talk()} onSection={showSection} onConsole={showConsole} onAgent={id => { if (id) setSelectedConversation(id); setAgentOpen(true); }} client={client!} onProjectChanged={next => { setProject(next); setProjects(list => list.map(p => p.id === next.id ? next : p)); }} project={project} snapshot={snapshot} onLayout={layout} onOpened={(id, view) => { layout(id, view); reread(); }} /></Suspense>}

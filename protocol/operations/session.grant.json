@@ -72,6 +72,7 @@
             "feedback.submit",
             "interaction.selection.read",
             "interaction.selection.set",
+            "kernel.inspect",
             "kernel.interrupt",
             "kernel.plot",
             "kernel.read",
