@@ -89,7 +89,29 @@ export function useProjectFiles(client: BrowserClient, projectId: string | undef
 // The kinds the sidebar lists, and the files of one kind in the order every place shows
 // them: the project's own top level, then by folder, then by name. A registered result is listed as its newest retained
 // version; a file snapshot taken only to show a file is not a result.
-export type SourceRow = 'data' | 'code' | 'results' | 'notes';
+// Every project lists data, code, results and notes. A project that holds workflows, reports,
+// references or the description of its environment lists those too, each file in one row.
+// The rows sort files for a person looking for them; kindOf still says what a file is.
+export type SourceRow = 'data' | 'code' | 'results' | 'notes' | 'workflows' | 'reports' | 'references' | 'environment';
+export const baseRows: SourceRow[] = ['data', 'code', 'results', 'notes'];
+export const sourceRowOrder: SourceRow[] = ['data', 'code', 'workflows', 'results', 'reports', 'notes', 'references', 'environment'];
+const environmentNames = new Set(['renv.lock', 'description', 'environment.yml', 'environment.yaml', 'pyproject.toml', 'setup.py', 'setup.cfg', 'pipfile', 'pipfile.lock', 'poetry.lock', 'uv.lock', 'conda-lock.yml', 'dockerfile', 'containerfile', 'apptainer.def', 'singularity.def', 'install.r', 'project.toml', 'manifest.toml']);
+const workflowNames = new Set(['snakefile', 'makefile', 'gnumakefile', 'justfile', '_targets.r', 'nextflow.config', 'dvc.yaml']);
+const referenceFolders = new Set(['refs', 'references', 'literature', 'papers', 'reading', 'bibliography']);
+const stem = (path: string) => path.toLowerCase().replace(/\.[^./]+$/, '');
+// A report's source, by its path without extension, so its rendered page joins it.
+export const literateSources = (files: Array<{ path: string }>) => new Set(files.filter(f => /\.(rmd|qmd|rnw)$/i.test(f.path)).map(f => stem(f.path)));
+export function rowOf(file: { path: string; category: SourceKind | null }, literate: Set<string>): SourceRow | null {
+  const segments = file.path.toLowerCase().split('/'), name = segments.at(-1)!, ext = name.includes('.') ? name.split('.').at(-1)! : '';
+  // What rendering a report wrote beside it (report_files/: its scripts, styles and figures) is
+  // part of that report, not something a person looks for.
+  if (segments.slice(0, -1).some((folder, i) => folder.endsWith('_files') && literate.has([...segments.slice(0, i), folder.slice(0, -'_files'.length)].join('/')))) return null;
+  if (environmentNames.has(name) || /^requirements([-_.][^/]*)?\.txt$/.test(name) || ext === 'rproj') return 'environment';
+  if (workflowNames.has(name) || ['smk', 'nf', 'wdl', 'cwl'].includes(ext)) return 'workflows';
+  if (['rmd', 'qmd', 'rnw'].includes(ext) || (['html', 'pdf', 'docx'].includes(ext) && literate.has(stem(file.path)))) return 'reports';
+  if (['bib', 'ris', 'nbib', 'enw'].includes(ext) || (ext === 'pdf' && segments.slice(0, -1).some(folder => referenceFolders.has(folder)))) return 'references';
+  return file.category === 'figures' || file.category === 'results' ? 'results' : file.category;
+}
 export interface ResourceRef { id: string; version: string; kind: string; path: string }
 export interface SourceItem { key: string; path: string; name: string; folder: string; bytes: number | null; category: SourceKind | null; resource?: ResourceRef }
 interface ResourceLike { id: string; version: string; kind: string; path: string; bytes?: number; provenance?: unknown }
@@ -117,8 +139,9 @@ export function sourceItems(row: SourceRow, files: ProjectFile[], resources: Res
   for (const resource of newest.values()) items.set(resource.path, {
     key: 'result:' + resource.path, path: resource.path, name: lastSegment(resource.path), folder: folderName(resource.path, project), bytes: resource.bytes ?? null,
     category: resource.kind === 'media' ? 'figures' : 'results', resource: { id: resource.id, version: resource.version, kind: resource.kind, path: resource.path } });
+  const literate = literateSources(files);
   for (const file of files) {
-    const match = row === 'results' ? file.category === 'figures' || file.category === 'results' : file.category === row;
+    const match = rowOf(file, literate) === row;
     if (match && !items.has(file.path)) items.set(file.path, { key: 'file:' + file.path, path: file.path, name: file.name, folder: folderName(file.path, project), bytes: file.bytes, category: file.category });
   }
   // Files at the top of the project come first, then each folder by name.

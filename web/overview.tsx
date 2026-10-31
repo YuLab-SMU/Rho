@@ -271,7 +271,8 @@ export function ProjectOverview({ project, snapshot, client, section, notesText 
   </section>;
 }
 
-const sourceEmpty: Record<SourceRow, string> = { data: 'No data files in this project yet.', code: 'No scripts in this project yet.', results: 'No results or figures yet.', notes: 'No notes in this project yet.' };
+const sourceEmpty: Record<SourceRow, string> = { data: 'No data files in this project yet.', code: 'No scripts in this project yet.', results: 'No results or figures yet.', notes: 'No notes in this project yet.',
+  workflows: 'No workflow files in this project now.', reports: 'No reports in this project now.', references: 'No references in this project now.', environment: 'No environment files in this project now.' };
 // One kind of project file, wherever it sits, in the order the sidebar lists them. Choosing
 // one shows it in place; a registered result is shown as its exact version.
 function SourceList({ category, files, items, artifacts, onFile }: {

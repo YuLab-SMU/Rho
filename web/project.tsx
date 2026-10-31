@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { Fragment, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import type { ProjectSummary, ResourceSummary, WorkspaceSnapshot, CompositionSummary } from '../src/browser.js';
 import { compositionName, processConversation } from './canvas.js';
 import { Icon, type IconName } from './icons.js';
@@ -19,7 +19,8 @@ export function availability(resource: ResourceSummary) {
 }
 export function views(composition: CompositionSummary) { return composition.views.length + (composition.views.length === 1 ? ' view' : ' views'); }
 
-import type { SourceItem, SourceRow } from './sources.js';
+import { baseRows, sourceRowOrder, type SourceItem, type SourceRow } from './sources.js';
+import type { LiveSession, LiveValues, ValueLanguage } from './session-values.js';
 export type { SourceRow } from './sources.js';
 export interface AgentBadge { running: boolean; waiting: boolean; conversations: number }
 // The project's places: what it is about, where the work is laid out, the Agent, what ran,
@@ -28,19 +29,21 @@ export interface AgentBadge { running: boolean; waiting: boolean; conversations:
 export interface SessionRow { id: string; title: string; running: boolean; when: string }
 // How many sessions Studio lists before the rest are reached from the Agent's place.
 export const sessionRows = 8;
-export function ProjectNavigation({ project, snapshot, current, sources, partial, agent, sessions, onOverview, onStudio, onLayout, onNewLayout, onSection, onSources, onFile, onAddSource, adding }: {
+export function ProjectNavigation({ project, snapshot, current, sources, partial, agent, sessions, values, onOverview, onStudio, onLayout, onNewLayout, onSection, onSources, onFile, onValue, onAddSource, adding }: {
   project: ProjectSummary; snapshot: WorkspaceSnapshot | null; current: string; sessions: SessionRow[];
   sources: Record<SourceRow, SourceItem[]> | null; partial: boolean; agent: AgentBadge; adding: boolean;
+  // The live sessions' values, or null where this tab cannot read the sessions.
+  values: LiveValues | null;
   onOverview: () => void; onStudio: () => void; onLayout: (id: string) => void; onNewLayout?: () => void; onSection: (section: Section) => void;
-  onSources: (row: SourceRow) => void; onFile: (row: SourceRow, item: SourceItem) => void; onAddSource: () => void;
+  onSources: (row: SourceRow) => void; onFile: (row: SourceRow, item: SourceItem) => void; onValue: (language: ValueLanguage, name: string) => void; onAddSource: () => void;
 }) {
   // Which kinds are unfolded is remembered per project for this tab; the kind of the file on
   // screen is always unfolded, so the person sees where they are.
   const openKey = 'rho.sources.open.v1:' + project.id;
-  const [unfolded, setUnfolded] = useState<SourceRow[]>(() => { try { return JSON.parse(sessionStorage.getItem(openKey) ?? '[]'); } catch { return []; } });
+  const [unfolded, setUnfolded] = useState<string[]>(() => { try { return JSON.parse(sessionStorage.getItem(openKey) ?? '[]'); } catch { return []; } });
   useEffect(() => { try { setUnfolded(JSON.parse(sessionStorage.getItem(openKey) ?? '[]')); } catch { setUnfolded([]); } }, [openKey]);
   const shownRow = current.startsWith('file:') ? current.split(':')[1] as SourceRow : null;
-  function fold(row: SourceRow) {
+  function fold(row: string) {
     const next = unfolded.includes(row) ? unfolded.filter(r => r !== row) : [...unfolded, row];
     setUnfolded(next);
     try { sessionStorage.setItem(openKey, JSON.stringify(next)); } catch { /* the choice lasts for this page only */ }
@@ -80,14 +83,19 @@ export function ProjectNavigation({ project, snapshot, current, sources, partial
     <div className="nav-sources">
       <div className="nav-heading"><span className="section-label" id="nav-sources">Sources</span><button className="icon-button nav-add" aria-label="Add source folder" disabled={adding} onClick={onAddSource}><Icon name="plus" size={15} /></button></div>
       <div role="group" aria-labelledby="nav-sources" className="nav-group">
-        {sourceRows.map(([kind, label, icon, noun]) => {
+        {sourceRowOrder.map(kind => {
+          const [label, icon, noun] = sourceRows[kind];
           const items = sources?.[kind] ?? null, open = unfolded.includes(kind) || shownRow === kind, extra = count(items?.length, noun);
-          return <div key={kind} className={'nav-source' + (open ? ' open' : '')}>
+          // A kind beyond the four every project has is listed while the project holds some.
+          if (!baseRows.includes(kind) && !items?.length) return null;
+          // The live values sit between the code that makes them and the results kept from them.
+          const variables = kind === 'results' && values && <ValuesRow key="variables" values={values} open={unfolded.includes('variables')} onFold={() => fold('variables')} onValue={onValue} onNotebook={() => onSection('notebook')} />;
+          return <Fragment key={kind}>{variables}<div className={'nav-source' + (open ? ' open' : '')}>
             <button className="nav-row" title={extra?.title} aria-expanded={open} aria-controls={'nav-files-' + kind} aria-current={current === 'sources:' + kind ? 'page' : undefined} onClick={() => fold(kind)}>
               <Icon name={icon} size={18} /><span className="nav-row-name">{label}</span>{extra?.node}<span className="nav-twisty" aria-hidden="true"><Icon name="chevron" size={12} stroke={2} /></span>
             </button>
             {open && <SourceFiles id={'nav-files-' + kind} kind={kind} label={label} items={items} partial={partial} current={current} onFile={item => onFile(kind, item)} onAll={() => onSources(kind)} />}
-          </div>;
+          </div></Fragment>;
         })}
         {row('files', 'Files', 'folder', () => onSection('files'))}
       </div>
@@ -95,11 +103,15 @@ export function ProjectNavigation({ project, snapshot, current, sources, partial
   </nav>;
 }
 
-export const sourceLabels: Record<SourceRow, string> = { data: 'Data', code: 'Code', results: 'Results & figures', notes: 'Notes' };
-const sourceRows: Array<[SourceRow, string, IconName, string]> = [['data', sourceLabels.data, 'table', 'data file'], ['code', sourceLabels.code, 'code', 'script'], ['results', sourceLabels.results, 'chart', 'result'], ['notes', sourceLabels.notes, 'document', 'note']];
+export const sourceLabels: Record<SourceRow, string> = { data: 'Data', code: 'Code', results: 'Results & figures', notes: 'Notes', workflows: 'Workflows', reports: 'Reports', references: 'References', environment: 'Environment' };
+const sourceRows: Record<SourceRow, [string, IconName, string]> = {
+  data: [sourceLabels.data, 'table', 'data file'], code: [sourceLabels.code, 'code', 'script'], workflows: [sourceLabels.workflows, 'workflow', 'workflow file'],
+  results: [sourceLabels.results, 'chart', 'result'], reports: [sourceLabels.reports, 'report', 'report file'], notes: [sourceLabels.notes, 'document', 'note'],
+  references: [sourceLabels.references, 'book', 'reference file'], environment: [sourceLabels.environment, 'tool', 'environment file'],
+};
 // The sidebar holds this many files of a kind; the rest are on the kind's own page.
 export const sidebarFiles = 40;
-export const fileIcon = (item: SourceItem): IconName => item.category === 'figures' ? 'image' : item.category === 'code' ? 'code' : item.category === 'notes' ? 'document' : 'table';
+export const fileIcon = (item: SourceItem): IconName => item.category === 'figures' ? 'image' : item.category === 'code' ? 'code' : item.category === 'notes' ? 'document' : item.category ? 'table' : 'file';
 // The files of one kind, by folder. Choosing one shows it in place; Up and Down move along
 // the list and show each file in turn.
 function SourceFiles({ id, kind, label, items, partial, current, onFile, onAll }: {
@@ -128,4 +140,36 @@ function SourceFiles({ id, kind, label, items, partial, current, onFile, onAll }
     </li>)}
     {items.length > shown.length && <li><button className="nav-more" onClick={onAll}>All {items.length} files</button></li>}
   </ul>;
+}
+
+// The live sessions' values as one more place in Sources: each session, then its values by
+// name with their type. A value opens in Studio beside the Notebook. Nothing is listed for a
+// session that ended; its values are gone with it.
+const sessionName = (s: LiveSession) => s.version?.replace(/^R version (\S+).*$/, 'R $1').replace(/^Python (\S+).*$/, 'Python $1') ?? (s.language === 'r' ? 'R' : 'Python');
+function ValuesRow({ values, open, onFold, onValue, onNotebook }: { values: LiveValues; open: boolean; onFold: () => void; onValue: (language: ValueLanguage, name: string) => void; onNotebook: () => void }) {
+  const total = values.sessions.reduce((n, s) => n + s.variables.length + (s.variablesOmitted ?? 0), 0);
+  const busy = values.sessions.some(s => s.state === 'busy');
+  const title = !values.read ? undefined : values.sessions.length ? `${total} value${total === 1 ? '' : 's'} in the live ${values.sessions.map(s => s.language === 'r' ? 'R' : 'Python').join(' and ')} session${values.sessions.length === 1 ? '' : 's'}` : 'No live session';
+  return <div className={'nav-source' + (open ? ' open' : '')}>
+    <button className="nav-row" title={title} aria-expanded={open} aria-controls="nav-values" onClick={onFold}>
+      <Icon name="list" size={18} /><span className="nav-row-name">Variables</span>
+      {busy && <span className="pulse-dot" aria-label="Running" />}
+      {values.sessions.length > 0 && <span className="nav-row-count" aria-hidden="true">{total}</span>}
+      <span className="nav-twisty" aria-hidden="true"><Icon name="chevron" size={12} stroke={2} /></span>
+    </button>
+    {open && (!values.read ? <p id="nav-values" className="nav-files-note" role="status">Reading the live sessions…</p>
+      : values.problem && !values.sessions.length ? <p id="nav-values" className="nav-files-note" role="alert">{values.problem}</p>
+      : !values.sessions.length ? <div id="nav-values" className="nav-files-note">No live session. Values show here once R or Python runs a cell.<button className="nav-more" onClick={onNotebook}>Open the Notebook</button></div>
+      : <ul id="nav-values" className="nav-files nav-values" aria-label="Variables">
+        {values.sessions.map(s => <Fragment key={s.language}>
+          <li><span className="nav-folder">{sessionName(s)}{s.state === 'busy' ? ' · running' : ''}</span></li>
+          {s.variables.length ? s.variables.slice(0, sidebarFiles).map(v => <li key={s.language + ':' + v.name}>
+            <button className="nav-file nav-value" title={`${v.name} · ${v.type}${v.size ? ' · ' + v.size : ''}${v.summary ? '\n' + v.summary : ''}`} onClick={() => onValue(s.language, v.name)}>
+              <span>{v.name}</span><small>{v.type}</small>
+            </button>
+          </li>) : <li><span className="nav-files-note nav-values-none">No values yet</span></li>}
+          {s.variables.length > sidebarFiles || s.variablesOmitted ? <li><button className="nav-more" onClick={onNotebook}>All {s.variables.length + (s.variablesOmitted ?? 0)} in the Notebook</button></li> : null}
+        </Fragment>)}
+      </ul>)}
+  </div>;
 }

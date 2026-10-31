@@ -155,6 +155,11 @@ Highlight changes while Agent or disk edits remain). The Activity row joined the
 the code starts 72 px higher at 1440 × 900, and tabs scroll before a selection's controls can move
 the view.
 
+[Sources follow the project](SIMULATED-PROJECT-EPISODE.md#sources-that-follow-the-project):
+Variables lists the live sessions' values between Code and Results, each opening in Studio, and
+Workflows, Reports, References and Environment appear when the project holds such files. The
+Notebook's language switch is the small chip each cell carries, in its input as at the console.
+
 ## Existing application
 
 - Projects opens selected folders and manages finite source folders. Sources counts
@@ -197,12 +202,13 @@ checks still held the 64-method limit and the plugin count, and the Skill's veri
 command was not an application script; corrected, Rho 261/261 and Plugins 132/132. The
 exploring pass first failed Rho 263/264, the Studio shell importing a module outside its
 allowed set, and ui:u2 also matched the New workspace row; corrected, Rho 264/264 and Plugins 132/132.
-The toolbar pass records Rho 268/269 and Plugins 134/134 in the [ledger](VERIFICATION.json): the
-MCP v2 test was cancelled at its 30 s limit in the full run and passed alone in 19.6 s. The
-contract check and the person-files, ui:u2, agent-canvas, sources, graph, agent-page, agent-ui and
-review acceptances passed. The shell acceptance (editor focus at 390 px) and the interaction
-acceptance (a `/^workspace/` sidebar row) failed the same way on a build of the commit before it,
-and remain open. Earlier passes: two forms Rho 269/269 with the seven acceptances (graph passed
+The Sources pass records Rho 268/269 in the [ledger](VERIFICATION.json), Plugins unchanged at
+134/134: the MCP v2 test was cancelled at its 30 s limit and passed alone in 18.1 s. The contract
+check and the sources, ui:u2, agent-canvas, graph, agent-page, agent-ui, review and person-files
+acceptances passed; ui:u2 first failed counting the Overview's 3-row previews among the grid's
+reads, and now counts from the Table tab. The shell acceptance (editor focus at 390 px) and the
+interaction acceptance (a `/^workspace/` sidebar row) failed before the toolbar pass and remain
+open. Earlier passes: toolbars Rho 268/269 and Plugins 134/134 with the same acceptances; two forms Rho 269/269 with the seven acceptances (graph passed
 when run again alone); four panes Rho
 268/268 and Plugins 134/134, both suites run again after the R runner's reading fix; value view Rho 265/265 and Plugins 134/134; choices and Console Rho 260/260 and Plugins 125/125; figures and cost Rho 258/258; project notes Rho 249/249 and Plugins 120/120 (ui:u2 first
 failed until the notes stopped opening with every project); meaning layer Rho 253/253;

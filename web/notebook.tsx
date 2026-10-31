@@ -244,6 +244,14 @@ function example(language: Language, session: Session | undefined) {
   return table ? `${table.name}.describe()` : live.length ? 'dir()' : 'x = list(range(10))';
 }
 
+// Which session a cell goes to, as the chip each cell carries: pressing it switches to the other.
+function LanguageChip({ language, onLanguage }: { language: Language; onLanguage: (language: Language) => void }) {
+  const other: Language = language === 'r' ? 'python' : 'r';
+  return <button type="button" className={'nb-lang-switch ' + language} aria-label={`${languageName[language]}. Switch to ${languageName[other]}`}
+    title={`Runs in the ${languageName[language]} session you share with the Agent. Switch to ${languageName[other]}`} onClick={() => onLanguage(other)}>
+    {languageName[language]}<Icon name="updown" size={10} stroke={2.2} /></button>;
+}
+
 function Composer({ language, setLanguage, draft, setDraft, busy, problem, note, onRun, onInterrupt, running, input, placeholder, small }: {
   language: Language; setLanguage: (l: Language) => void; draft: string; setDraft: (t: string) => void; busy: boolean; problem: string; note?: string; placeholder: string; small?: boolean;
   onRun: () => void; onInterrupt: () => void; running: boolean; input: React.RefObject<HTMLTextAreaElement | null>;
@@ -252,7 +260,7 @@ function Composer({ language, setLanguage, draft, setDraft, busy, problem, note,
   const mac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
   return <form className="nb-composer" onSubmit={event => { event.preventDefault(); onRun(); }}>
     <div className="nb-compose-bar">
-      <div className="nb-tabs" role="group" aria-label="Language">{languages.map(l => <button type="button" key={l} aria-pressed={l === language} onClick={() => { setLanguage(l); input.current?.focus(); }}>{languageName[l]}</button>)}</div>
+      <LanguageChip language={language} onLanguage={l => { setLanguage(l); input.current?.focus(); }} />
       <label htmlFor={id}>Runs in the {languageName[language]} session you share with the Agent</label>
     </div>
     {note && <p className="nb-compose-note">{note}</p>}
@@ -399,7 +407,7 @@ function ConsolePrompt({ language, setLanguage, draft, setDraft, note, problem, 
   return <div className={'nbc-prompt-row ' + language}>
     {note && <p className="nbc-quiet">{note}</p>}
     <div className="nbc-prompt-line">
-      <button type="button" className={'nbc-lang ' + language} title={`Runs in the ${languageName[language]} session you share with the Agent. Switch to ${languageName[language === 'r' ? 'python' : 'r']}`} onClick={() => { setLanguage(language === 'r' ? 'python' : 'r'); input.current?.focus(); }}>{languageName[language]}</button>
+      <LanguageChip language={language} onLanguage={l => { setLanguage(l); input.current?.focus(); }} />
       <pre className="nbc-prompt" aria-hidden="true">{[first, ...Array(lines - 1).fill(rest)].join('\n')}</pre>
       <textarea ref={input} rows={lines} value={draft} spellCheck={false} autoComplete="off" autoCapitalize="off" aria-label={`${languageName[language]} prompt`}
         onChange={event => { setBack(null); setDraft(event.target.value); }} onKeyDown={keys} />

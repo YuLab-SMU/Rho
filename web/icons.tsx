@@ -1,4 +1,4 @@
-export type IconName = 'home' | 'project' | 'plugins' | 'sidebar' | 'context' | 'lock' | 'folder' | 'folder-plus' | 'plus' | 'chevron' | 'info' | 'close' | 'overview' | 'layout' | 'document' | 'table' | 'image' | 'file' | 'offline' | 'prompt' | 'refresh' | 'unlink' | 'enter' | 'check' | 'grid' | 'copy' | 'eye' | 'run' | 'search' | 'code' | 'spark' | 'chart' | 'back' | 'updown' | 'follow' | 'pause' | 'graph' | 'fit' | 'minus' | 'question' | 'download' | 'trash' | 'restore' | 'pencil' | 'globe' | 'arrow-up' | 'arrow-down' | 'list' | 'chat' | 'monitor' | 'link' | 'signal' | 'tool' | 'move' | 'braces';
+export type IconName = 'home' | 'project' | 'plugins' | 'sidebar' | 'context' | 'lock' | 'folder' | 'folder-plus' | 'plus' | 'chevron' | 'info' | 'close' | 'overview' | 'layout' | 'document' | 'table' | 'image' | 'file' | 'offline' | 'prompt' | 'refresh' | 'unlink' | 'enter' | 'check' | 'grid' | 'copy' | 'eye' | 'run' | 'search' | 'code' | 'spark' | 'chart' | 'back' | 'updown' | 'follow' | 'pause' | 'graph' | 'fit' | 'minus' | 'question' | 'download' | 'trash' | 'restore' | 'pencil' | 'globe' | 'arrow-up' | 'arrow-down' | 'list' | 'chat' | 'monitor' | 'link' | 'signal' | 'tool' | 'move' | 'braces' | 'workflow' | 'report' | 'book';
 export function Icon({ name, size = 20, stroke = 1.6 }: { name: IconName; size?: number; stroke?: number }) {
   const paths = {
     home: 'm3 10 9-7 9 7v10h-6v-7H9v7H3z',
@@ -56,6 +56,9 @@ export function Icon({ name, size = 20, stroke = 1.6 }: { name: IconName; size?:
     signal: 'M3 9.3a12.75 12.75 0 0 1 18 0M6.3 12.9a7.95 7.95 0 0 1 11.4 0M9.6 16.5a3.3 3.3 0 0 1 4.8 0M12 19.75h.01',
     tool: 'M14.7 6.3a4 4 0 0 0-5.1 5.1L4 17l3 3 5.6-5.6a4 4 0 0 0 5.1-5.1l-2.6 2.6-2.4-.6-.6-2.4z',
     move: 'M4.5 12h15M13.5 6l6 6-6 6',
+    workflow: 'M4 4.5h6v5H4zM14 14.5h6v5h-6zM7 9.5V13a2.5 2.5 0 0 0 2.5 2.5H14',
+    report: 'M6 3.5h8l4 4v13H6zM14 3.5v4h4M9.5 17v-2.5M12 17v-5M14.5 17v-3.5',
+    book: 'M5 5.5A2 2 0 0 1 7 3.5h12v14H7a2 2 0 0 0-2 2zM5 19.5v-14M19 17.5v3H7M9 7.5h6',
   };
   return <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth={stroke} strokeLinejoin="round" strokeLinecap="round"><path d={paths[name]} /></svg>;
 }

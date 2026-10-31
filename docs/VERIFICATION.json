@@ -3,7 +3,7 @@
   "checks": {
     "rho-tests": {
       "command": "RHO_CORE_BINARY=<selected unchanged binary> npm test (npm run build && node --test test/*.test.mjs)",
-      "checkedAt": "2026-10-31T09:15:04+00:00",
+      "checkedAt": "2026-10-31T09:47:35+00:00",
       "exitCode": 1,
       "tests": 269,
       "passing": 268,

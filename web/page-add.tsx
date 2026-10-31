@@ -9,7 +9,7 @@ import type { SourceItem, SourceRow } from './sources.js';
 // kind, each opening in the view it has elsewhere in Studio. A kind lists its first few files;
 // the rest are on its own page.
 export const pageAddLimits = { filesPerKind: 6 };
-const rows: SourceRow[] = ['results', 'data', 'code', 'notes'];
+const rows: SourceRow[] = ['results', 'data', 'code', 'reports', 'workflows', 'notes', 'references', 'environment'];
 export function PageAdd({ sources, notebook, variables = 'unavailable', plots = 'unavailable', onNotebook, onSessionView, onFile, onAll }: {
   sources: Record<SourceRow, SourceItem[]> | null; notebook: 'absent' | 'present' | 'unavailable';
   variables?: 'absent' | 'present' | 'unavailable'; plots?: 'absent' | 'present' | 'unavailable';

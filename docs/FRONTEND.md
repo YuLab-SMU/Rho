@@ -48,7 +48,16 @@ inspect what happened. The application gives those actions direct places:
   or browse its files — rather than empty sections, leading with whichever one the
   project's listing says has something behind it.
 - **Sources** counts the project's Data, Code, Results & figures and Notes from one
-  bounded walk of its folders, by file name. Each kind unfolds in the sidebar into
+  bounded walk of its folders, by file name. A project that holds them also lists
+  Workflows (`Makefile`, `Snakefile`, `.smk`, `.nf`, `.wdl`, `_targets.R`…), Reports (`.Rmd`,
+  `.qmd`, `.Rnw` and the page rendered beside one, whose `_files` folder is left out),
+  References (`.bib`, `.ris`, PDFs in a `refs` or `literature` folder) and Environment
+  (`renv.lock`, `requirements.txt`, `environment.yml`, `pyproject.toml`, `Dockerfile`…); each file
+  is in one row, while the Graph and the board keep calling a file by what it is. Variables,
+  between Code and Results, lists what the live R and Python sessions hold, by session, each
+  name with its type, read again (at most once a second) as cells run; a name opens the value
+  in Studio beside the Notebook, and with no live session the row says so and offers the
+  Notebook ([episode](SIMULATED-PROJECT-EPISODE.md#sources-that-follow-the-project)). Each kind unfolds in the sidebar into
   its files across the project and its source folders: the top level first, then by
   folder, at most 40 there with the rest on the kind's page. Choosing one shows it
   in place in its own view, without writing a layout: a CSV or image as a snapshot
@@ -104,7 +113,7 @@ inspect what happened. The application gives those actions direct places:
   open bracket or string, a trailing operator, a Python block before its empty line);
   Shift+Enter adds a line, ⌘/Ctrl+Enter runs whatever is there, ↑/↓ bring back what the person
   ran, a closing bracket on an empty line steps back, Esc interrupts, and the R/Python chip
-  switches language. A click in the transcript puts the keyboard in the prompt. A Studio view
+  switches language: the small chip each cell carries, also in the notebook form's input. A click in the transcript puts the keyboard in the prompt. A Studio view
   saves its form with the page (`props.form`); the Notebook page keeps it in the browser. A
   Notebook placed under a script by running one of its lines starts as a console
   ([episode](SIMULATED-PROJECT-EPISODE.md#two-forms-of-the-notebook)).

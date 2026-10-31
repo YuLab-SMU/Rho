@@ -1349,3 +1349,59 @@ this) and `airquality.csv`.
 - **Bars inside views** (the table's row count and Filter, the Plots navigation, the Variables
   line, the console's bar) were not changed.
 - No independent person has looked at these screens.
+
+## Sources that follow the project
+
+The person found the R | Python switch in the Notebook's input too large, and asked Sources to
+give the interactive sessions' variables a place and to add the categories a project needs on
+top of the existing ones. The same `quad` project and service were used.
+
+### What was built
+
+- **One language chip** for the notebook form's input and the console's prompt: the small chip
+  each cell carries, with a mark that it switches; pressing it changes the session and keeps the
+  keyboard in the code.
+- **Variables in Sources**, between Code and Results: the live sessions' values by session, each
+  name with its type, from a one-cell `kernel.read` at most once a second as the project's
+  records change. A name opens the value in Studio. It is listed where the tab may read sessions.
+- **Rows the project calls for.** Workflows, Reports, References and Environment are listed while
+  the project holds such files, as described in [Frontend](FRONTEND.md); every file is in one row.
+  The sorting is for Sources only (`rowOf` in `web/sources.ts`); `kindOf` is unchanged for the
+  Graph, the board and the meaning layer.
+
+### What the screens showed
+
+- **The chip.** The input's switch had been a two-button well about 150 × 40 px beside the code.
+  The chip reads "R ⇅" in R's colour; pressed, "Python ⇅", the example became `dir()` and the
+  keyboard stayed in the code. The Notebook page and the console prompt show the same chip.
+- **Variables.** "Variables 8" unfolded to R 4.5.2 (`aq` data.frame, `by_month`, `complete`,
+  `fit` lm, `i`, `k`, `sq` function) and Python 3.13.1 (`v` int); the Variables view, showing R,
+  said 7 values. Choosing `fit` brought its tab forward on Workspace 4.
+- **A project that grows.** A Quarto report (`report.qmd`, rendered by Quarto 1.8.27 into
+  `report.html`), `refs/references.bib`, `requirements.txt` and a `Makefile` that renders the
+  report were added. After a reload Sources read Data 1, Code 2, Workflows 1, Variables 8,
+  Results & figures 1, Reports 2, Notes 1, References 1, Environment 1. Rendering also wrote
+  `report_files/` (8 scripts, 4 style sheets, a font), which would have counted as Code; a
+  report's `_files` folder is now left out of the rows. Add view lists the new kinds.
+- **390 px.** In the sidebar drawer the values read as at 1440 px; nothing overflows sideways.
+
+### Verification
+
+- Rho 268/269: the MCP v2 test was cancelled at its 30 s limit and passed alone in 18.1 s. The
+  contract check and the sources, agent-canvas, graph, agent-page, agent-ui, review and
+  person-files acceptances passed.
+- ui:u2 failed three times on its check that table reads come in 200-row blocks. The extra reads
+  were the Overview's 3-row previews of `results.csv` and `plain.csv`, sent 233 ms after the
+  project opened, before the test's first click at 338 ms; on the build without these changes it
+  passed and made no 3-row reads. The check now counts the grid's reads from its Table tab on;
+  ui:u2 then passed twice.
+- The screens above were read at 1440 and 390 px.
+
+### Left open
+
+- **The rows come from file names.** The Agent does not yet name a category for its project,
+  for instance from what its notes say a file is.
+- **A value's summary** is in its tooltip; a session with more than 40 values sends the rest to
+  the Notebook.
+- **The shell and interaction acceptances** were not run again; they failed before this pass.
+- No independent person has used Sources this way.

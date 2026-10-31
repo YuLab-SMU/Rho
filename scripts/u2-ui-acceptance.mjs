@@ -172,6 +172,9 @@ try {
   await page.getByRole('button', { name: 'Close context', exact: true }).click();
   report.checks.push('conflict-stops-auto-submit-copy-retained-no-rebase-pinned-content-readonly-no-live-changes');
 
+  // The Overview's cards may already have read a table's first rows (previewLimits.rows) while the
+  // project opened, depending on how fast its folders were read; the grid's own reads start here.
+  const gridReads = requests.length;
   await tab('Table'); await page.locator('.ag-row[row-index="0"] [col-id="id"]').waitFor();
   assert.match(await page.getByRole('toolbar', { name: 'Table', exact: true }).innerText(), /1,400 rows/);
   const keyCell = page.locator('.ag-row[row-index="0"] [col-id="id"]');
@@ -201,8 +204,8 @@ try {
     await page.locator('.ag-grid-viewport').evaluate((root, top) => { const e = [root, ...root.querySelectorAll('*')].find(e => /auto|scroll/.test(getComputedStyle(e).overflowY) && e.scrollHeight > 40000); if (e) e.scrollTop = top; }, (offset + 20) * rowHeight);
     await poll(() => Promise.resolve(requests), rs => rs.some(r => r.offset === offset), 'block ' + offset);
   }
-  assert.ok(requests.every(r => r.limit === 200));
-  assert.ok(requests.filter(r => r.sort).every(r => r.sort.column === 'score'));
+  assert.ok(requests.slice(gridReads).every(r => r.limit === 200));
+  assert.ok(requests.slice(gridReads).filter(r => r.sort).every(r => r.sort.column === 'score'));
   await tab('Unkeyed'); await page.getByText("Rows have no key, so they can't be selected for Claude Code.", { exact: true }).waitFor();
   assert.equal(await page.locator('.ag-row input[type="checkbox"]').count(), 0);
   report.checks.push('table-200-row-blocks-sort-typed-filter-stable-key-selection-through-cache-and-unkeyed-readable');

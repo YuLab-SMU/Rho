@@ -6,7 +6,8 @@ import { Home, projectHue, projectName as name, trapTab } from './home.js';
 import { AgentRequest } from './agents.js';
 import { AgentConversation } from './conversation.js';
 import { ProjectNavigation, sourceLabels, type Section, type SourceRow } from './project.js';
-import { sourceItems, useProjectFiles, type SourceItem } from './sources.js';
+import { sourceItems, sourceRowOrder, useProjectFiles, type SourceItem } from './sources.js';
+import { useLiveValues } from './session-values.js';
 import { useAgentNow, type AgentNow } from './agent-now.js';
 import { NotesPanel, useProjectNotes } from './project-notes.js';
 import { compositionName, defaultWorkspace, fileKey, openInWorkspace, processComposition, processConversation } from './canvas.js';
@@ -387,6 +388,9 @@ function App() {
   // Another Studio starts at now.
   useEffect(() => { setReplay(r => ({ ...r, at: null, playing: false })); }, [shownProcess]);
   const files = useProjectFiles(client, project && screen !== 'home' ? project.id : undefined, snapshot?.cursor);
+  // The live sessions' values have a place in Sources wherever this tab may read the sessions.
+  const readsValues = !!snapshot?.catalog.operations.some(o => o.method === 'kernel.read' && o.state === 'available' && o.authorized);
+  const values = useLiveValues(client, project && screen !== 'home' ? project.id : undefined, snapshot?.cursor, readsValues);
   const agentNow = useAgentNow(client, project && snapshot?.project.id === project.id ? snapshot : null);
   // The notes are opened when they are needed: for the titles of the project's sessions, or to be
   // shown beside Studio. A project with neither reads nothing more as it opens.
@@ -486,7 +490,7 @@ function App() {
     </>}
   </>;
   // Each kind's files, from the last walk; results also list registered results.
-  const sources = useMemo(() => project && files.readAt ? Object.fromEntries((['data', 'code', 'results', 'notes'] as const).map(row => [row, sourceItems(row, files.files, snapshot?.resources ?? [], project, snapshot?.operations)])) as Record<SourceRow, SourceItem[]> : null,
+  const sources = useMemo(() => project && files.readAt ? Object.fromEntries(sourceRowOrder.map(row => [row, sourceItems(row, files.files, snapshot?.resources ?? [], project, snapshot?.operations)])) as Record<SourceRow, SourceItem[]> : null,
     [files.files, files.readAt, snapshot?.resources, snapshot?.operations, project?.id, project?.root, project?.sources]);
   const linked = useRef(openLinked); linked.current = openLinked;
   const shellNow = useRef({ snapshot, files: files.files }); shellNow.current = { snapshot, files: files.files };
@@ -518,7 +522,7 @@ function App() {
           agent={{ running: !!agentNow?.running, waiting: !!agentNow?.waiting, conversations: snapshot?.conversations?.length ?? 0 }} adding={addingSource}
           sessions={shownConversations().map(c => ({ id: processComposition(c.conversationId), title: sessionTitle(c), running: !!agentNow?.running && agentNow.conversationId === c.conversationId, when: c.lastAt }))}
           onOverview={pick(showOverview)} onStudio={pick(studio)} onNewLayout={arrangeable ? pick(newWorkspace) : undefined} onLayout={id => pick(() => processConversation(id) ? showProcess(id) : layout(id))()}
-          onSection={next => pick(() => next === 'graph' ? showGraph() : showSection(next))()} onSources={next => pick(() => showSources(next))()} onFile={(row, item) => pick(() => showFile(row, item))()} onAddSource={() => void addSource()} />}
+          onSection={next => pick(() => next === 'graph' ? showGraph() : showSection(next))()} onSources={next => pick(() => showSources(next))()} onFile={(row, item) => pick(() => showFile(row, item))()} values={readsValues ? values : null} onValue={(language, valueName) => pick(() => openObject(language, valueName))()} onAddSource={() => void addSource()} />}
     </> : <>
       <button className="brand" onClick={goHome} aria-label="Rho home"><span className="brand-mark">ρ</span><strong>Rho</strong></button>
       <button className="project-switcher" onClick={pick(goHome)}><Icon name="folder" size={18} /><span>Your projects</span><Icon name="chevron" size={13} /></button>
