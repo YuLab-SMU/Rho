@@ -240,6 +240,29 @@ export function addBeside(tree: LayoutTree, view: ViewDescription, nextTo: strin
   if (!placed || !anchor) return placed;
   return dockView(placed, view.id, tabOwner(placed.nodes, anchor), side, newId) ?? placed;
 }
+// Adds a view in a pane along one side of the whole page, as long or as wide as the page: beside
+// views stacked one above another, a column of its own. It takes `share` of the page; an empty
+// page takes it as its one tab.
+export function addAtEdge(tree: LayoutTree, view: ViewDescription, side: Side, newId: (kind: string) => string, share = 0.4): LayoutTree | null {
+  if (tree.nodes.some(n => n.id === view.id)) return null;
+  const placed = placeView(tree, view, newId);
+  if (!placed || leaves(placed.nodes, placed.rootId).length < 2) return placed;
+  const next = copy(placed);
+  detach(next, view.id);
+  const axis: Axis = side === 'left' || side === 'right' ? 'horizontal' : 'vertical', after = side === 'right' || side === 'bottom';
+  const pane: LayoutNode = { id: newId('group'), kind: 'group', children: [view.id] }, root = next.nodes.find(n => n.id === next.rootId)!;
+  next.nodes.push(pane);
+  if (isSplit(root) && root.presentation!.axis === axis) {
+    const weights = [...(root.presentation!.weights ?? root.children!.map(() => 1))], weight = weights.reduce((a, b) => a + b, 0) * share / (1 - share);
+    if (after) { root.children!.push(pane.id); weights.push(weight); } else { root.children!.unshift(pane.id); weights.unshift(weight); }
+    root.presentation = { ...root.presentation, weights };
+  } else {
+    const split: LayoutNode = { id: newId('split'), kind: 'group', children: after ? [next.rootId, pane.id] : [pane.id, next.rootId], presentation: { mode: 'split', axis, weights: after ? [1 - share, share] : [share, 1 - share] } };
+    next.nodes.push(split);
+    next.rootId = split.id;
+  }
+  return tidy(next);
+}
 // The part of the stage's width a view's pane has, from the weights of the side-by-side splits.
 export function paneShare(tree: LayoutTree, viewId: string) {
   let share = 1;

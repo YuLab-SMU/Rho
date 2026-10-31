@@ -36,10 +36,24 @@ function useAuthors(snapshot: WorkspaceSnapshot) {
   }, [snapshot.conversations]);
 }
 
+// Views of one page read the sessions together: a read already on its way is shared.
+const reading = new WeakMap<BrowserClient, Map<string, Promise<Read>>>();
+function readSessions(client: BrowserClient, projectId: string) {
+  const mine = reading.get(client) ?? new Map<string, Promise<Read>>();
+  reading.set(client, mine);
+  let pending = mine.get(projectId);
+  if (!pending) {
+    pending = client.call('kernel.read', { projectId, limit: notebookViewLimits.cells });
+    mine.set(projectId, pending);
+    const done = () => { if (mine.get(projectId) === pending) mine.delete(projectId); };
+    pending.then(done, done);
+  }
+  return pending;
+}
 function useKernel(client: BrowserClient, projectId: string, cursor: number) {
   const [read, setRead] = useState<Read | null>(null);
   const [state, setState] = useState({ off: false, problem: '' });
-  const again = () => client.call('kernel.read', { projectId, limit: notebookViewLimits.cells }).then(value => { setRead(value); setState({ off: false, problem: '' }); },
+  const again = () => readSessions(client, projectId).then(value => { setRead(value); setState({ off: false, problem: '' }); },
     error => setState({ off: error instanceof BrowserApiError && ['unavailable', 'unauthorized'].includes(error.error.kind), problem: failure(error) }));
   useEffect(() => { void again(); }, [client, projectId, cursor]);
   return { read, ...state, again };
@@ -189,16 +203,21 @@ function SessionRow({ language, session, onInterrupt, onStop, asking }: { langua
   </div>;
 }
 
-function Variables({ sessions, onObject }: { sessions: Partial<Record<Language, Session>>; onObject?: (language: Language, name: string) => void }) {
+// The session shown is the person's choice, else the one the newest cell ran in.
+function Variables({ sessions, onObject, pane = false, recent }: { sessions: Partial<Record<Language, Session>>; onObject?: (language: Language, name: string) => void; pane?: boolean; recent?: Language }) {
   const live = languages.filter(l => sessions[l] && sessions[l]!.state !== 'ended');
   const [chosen, setChosen] = useState<Language | null>(null);
-  const shown = chosen && live.includes(chosen) ? chosen : live[live.length - 1] ?? null;
+  useEffect(() => setChosen(null), [recent]);
+  const shown = chosen && live.includes(chosen) ? chosen : recent && live.includes(recent) ? recent : live[live.length - 1] ?? null;
   const session = shown ? sessions[shown] : undefined;
-  return <section className="nb-rail-section" aria-labelledby="nb-variables">
-    <header><h2 id="nb-variables">Variables</h2>
+  const id = useId();
+  return <section className={'nb-rail-section' + (pane ? ' nb-pane-section' : '')} aria-labelledby={id}>
+    <header>{pane
+      ? <h2 id={id} className="nb-pane-state">{session ? <><span className={'nb-dot ' + session.state} aria-hidden="true" />{versionOf(session)} · {session.state === 'busy' ? 'running a cell' : session.state === 'starting' ? 'starting' : 'idle'} · {session.variables.length + session.variablesOmitted} {session.variables.length + session.variablesOmitted === 1 ? 'value' : 'values'}</> : 'Variables'}</h2>
+      : <h2 id={id}>Variables</h2>}
       {live.length > 1 && <div className="nb-tabs" role="group" aria-label="Session">{live.map(l => <button key={l} aria-pressed={l === shown} onClick={() => setChosen(l)}>{languageName[l]}</button>)}</div>}
     </header>
-    {!session ? <p className="nb-empty-line">No live session.</p>
+    {!session ? <p className="nb-empty-line">{pane ? 'No live session. Values show here once a cell runs in R or Python, from the Notebook or a script\'s line.' : 'No live session.'}</p>
       : !session.variables.length ? <p className="nb-empty-line">Nothing defined in {languageName[session.language]} yet.</p>
       : <ul className="nb-vars">{session.variables.map(v => <li key={v.name} title={v.summary}>
           {onObject ? <button className="nb-var-name" title={'Look at ' + v.name} onClick={() => onObject(session.language, v.name)}>{v.name}</button> : <span className="nb-var-name">{v.name}</span>}<span className="nb-var-type">{v.type}{v.size ? ' · ' + v.size : ''}</span>
@@ -267,7 +286,9 @@ type Row = { at: number; order: number; key: string } & ({ cell: Cell } | { sess
 // the sessions whole. A wide view has the sessions, values and plots beside the cells; a narrow
 // one folds them above.
 export interface Prepared { key: string; language: Language; code: string; note: string }
-export function SessionPane({ client, snapshot, prepared, onTaken, onConversation, onObject }: { client: BrowserClient; snapshot: WorkspaceSnapshot; prepared?: Prepared | null; onTaken?: () => void; onConversation?: (id: string) => void; onObject?: (language: Language, name: string) => void }) {
+// The variables and plots leave its side when the page shows them in views of their own.
+export interface Beside { variables?: boolean; plots?: boolean }
+export function SessionPane({ client, snapshot, prepared, onTaken, onConversation, onObject, beside }: { client: BrowserClient; snapshot: WorkspaceSnapshot; prepared?: Prepared | null; onTaken?: () => void; onConversation?: (id: string) => void; onObject?: (language: Language, name: string) => void; beside?: Beside }) {
   const process = useProcess();
   const principal = snapshot.conversations?.find(c => c.conversationId === process?.conversationId)?.principal ?? null;
   const starts = process ? process.whole.turns.filter(t => t.conversationId === process.conversationId).map(t => t.start) : [];
@@ -288,13 +309,13 @@ export function SessionPane({ client, snapshot, prepared, onTaken, onConversatio
     return () => observer.disconnect();
   }, []);
   return <div className="nb-view" ref={box}>
-    <NotebookPage client={client} snapshot={snapshot} onConversation={onConversation ?? (() => {})} compact={!wide} inView shown={shown} prepared={prepared} onTaken={onTaken} onObject={onObject}
+    <NotebookPage client={client} snapshot={snapshot} onConversation={onConversation ?? (() => {})} compact={!wide} inView shown={shown} prepared={prepared} onTaken={onTaken} onObject={onObject} beside={beside}
       scope={process ? { principal, since, at: process.at } : undefined} />
   </div>;
 }
 
-export function NotebookPage({ client, snapshot, onConversation, onObject, scope, compact = false, inView = false, shown = 0, prepared, onTaken }: {
-  client: BrowserClient; snapshot: WorkspaceSnapshot; onConversation: (id: string) => void; onObject?: (language: Language, name: string) => void; compact?: boolean; inView?: boolean; shown?: number; prepared?: Prepared | null; onTaken?: () => void;
+export function NotebookPage({ client, snapshot, onConversation, onObject, scope, compact = false, inView = false, shown = 0, prepared, onTaken, beside = {} }: {
+  client: BrowserClient; snapshot: WorkspaceSnapshot; onConversation: (id: string) => void; onObject?: (language: Language, name: string) => void; compact?: boolean; inView?: boolean; shown?: number; prepared?: Prepared | null; onTaken?: () => void; beside?: Beside;
   scope?: { principal: string | null; since: number | null; at: number | null } }) {
   const projectId = snapshot.project.id;
   const { read, off, problem, again } = useKernel(client, projectId, snapshot.cursor);
@@ -422,7 +443,7 @@ export function NotebookPage({ client, snapshot, onConversation, onObject, scope
   if (compact) return <div className="nb-page compact" ref={page}>
     <div className="nb-main">
       {problem && <p className="inline-error" role="alert">{problem}</p>}
-      {live.length > 0 && <details className="nb-strip">
+      {live.length > 0 && !beside.variables && <details className="nb-strip">
         <summary>{live.map(l => <span key={l} className={'nb-strip-session ' + latest[l]!.state}><span className="nb-dot" aria-hidden="true" />{versionOf(latest[l]!)} · {latest[l]!.state === 'busy' ? 'running' : latest[l]!.state} · {latest[l]!.variables.length} {latest[l]!.variables.length === 1 ? 'value' : 'values'}</span>)}</summary>
         <Variables sessions={Object.fromEntries(live.map(l => [l, latest[l]]))} onObject={onObject} />
       </details>}
@@ -454,11 +475,83 @@ export function NotebookPage({ client, snapshot, onConversation, onObject, scope
         {languages.map(l => <SessionRow key={l} language={l} session={latest[l]} asking={asking} onInterrupt={() => void interrupt(l)} onStop={session => void stop(session)} />)}
         {askProblem && <p className="inline-error" role="alert">{askProblem}</p>}
       </section>
-      <Variables sessions={latest} onObject={onObject} />
-      {plots.length > 0 && <section className="nb-rail-section" aria-labelledby="nb-plots">
+      {!beside.variables && <Variables sessions={latest} onObject={onObject} />}
+      {plots.length > 0 && !beside.plots && <section className="nb-rail-section" aria-labelledby="nb-plots">
         <header><h2 id="nb-plots">Plots</h2></header>
         <div className="nb-thumbs">{plots.map(({ cell, output }) => <RailPlot key={cell.cellId + ':' + output.plot} client={client} projectId={projectId} cell={cell} output={output} onShow={() => show(cell.cellId)} />)}</div>
       </section>}
     </aside>
   </div>;
+}
+
+// The newest session of each language.
+function latestSessions(read: Read | null) {
+  const out: Partial<Record<Language, Session>> = {};
+  for (const s of read?.sessions ?? []) if (!out[s.language] || s.startedAt > out[s.language]!.startedAt) out[s.language] = s;
+  return out;
+}
+
+// The live sessions' variables as a view of their own, beside a script and the Notebook: each
+// with its type, size and summary, read again after every cell. A name opens the value.
+export function VariablesPane({ client, snapshot, onObject }: { client: BrowserClient; snapshot: WorkspaceSnapshot; onObject?: (language: Language, name: string) => void }) {
+  const { read, off, problem } = useKernel(client, snapshot.project.id, snapshot.cursor);
+  const latest = useMemo(() => latestSessions(read), [read]);
+  return <div className="nb-pane">
+    {off || (problem && !read) ? <p className="nb-empty-line">{problem}</p>
+      : !read ? <p className="nb-empty-line">Reading the live sessions…</p>
+      : <Variables pane sessions={latest} onObject={onObject} recent={read.cells.at(-1)?.language} />}
+  </div>;
+}
+
+// The plots the live sessions drew, as a view of their own: the newest at the size of the view,
+// the ones before it to step back through. A new plot comes forward as it is drawn. Plots of an
+// ended session stay with their cells in the Notebook.
+export const plotsPaneLimits = { plots: 24 };
+export function PlotsPane({ client, snapshot }: { client: BrowserClient; snapshot: WorkspaceSnapshot }) {
+  const projectId = snapshot.project.id;
+  const { read, off, problem } = useKernel(client, projectId, snapshot.cursor);
+  const who = useAuthors(snapshot);
+  const all = useMemo(() => {
+    const live = new Set((read?.sessions ?? []).filter(s => s.state !== 'ended').map(s => s.sessionId));
+    return (read?.cells ?? []).filter(cell => live.has(cell.sessionId)).flatMap(cell => cell.outputs.filter(o => o.kind === 'plot').map(output => ({ key: cell.cellId + ':' + output.plot, cell, output })));
+  }, [read]);
+  const plots = all.slice(-plotsPaneLimits.plots);
+  const newest = plots.at(-1)?.key ?? '';
+  const [chosen, setChosen] = useState<string | null>(null);
+  useEffect(() => setChosen(null), [newest]);
+  const index = Math.max(0, chosen ? plots.findIndex(p => p.key === chosen) : plots.length - 1), shown = plots[index];
+  const strip = useRef<HTMLDivElement>(null);
+  useEffect(() => { strip.current?.querySelector('[aria-current="true"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' }); }, [shown?.key]);
+  if (off || (problem && !read)) return <div className="nb-pane"><p className="nb-empty-line">{problem}</p></div>;
+  if (!read) return <div className="nb-pane"><p className="nb-empty-line">Reading the live sessions…</p></div>;
+  if (!shown) return <div className="nb-pane"><p className="nb-empty-line">No plots in the live sessions yet. What R and Python draw shows here, the newest first.</p></div>;
+  // A cell is named by its purpose, else by its code's first line.
+  const label = (cell: Cell) => cell.purpose ?? (cell.code.split('\n').find(line => line.trim())?.trim() || `${languageName[cell.language]} cell ${cell.number}`);
+  const step = (by: number) => setChosen(plots[Math.min(plots.length - 1, Math.max(0, index + by))]!.key);
+  const cell = document.getElementById('cell-' + shown.cell.cellId) ? shown.cell.cellId : null;
+  return <div className="nb-pane nb-plots" onKeyDown={event => { if (event.key === 'ArrowLeft') step(-1); else if (event.key === 'ArrowRight') step(1); }}>
+    <header className="nb-plots-head">
+      <div className="nb-plots-nav">
+        <button className="text-button" disabled={index === 0} aria-label="Previous plot" onClick={() => step(-1)}><Icon name="back" size={14} /></button>
+        <span>{index + 1} of {plots.length}</span>
+        <button className="text-button nb-next" disabled={index === plots.length - 1} aria-label="Next plot" onClick={() => step(1)}><Icon name="back" size={14} /></button>
+      </div>
+      <p className="nb-plots-from" title={label(shown.cell)}><span className={'nb-lang ' + shown.cell.language}>{languageName[shown.cell.language]}</span> {shown.cell.number} · {label(shown.cell)} · {who(shown.cell.by).name} · {at(shown.cell.queuedAt)}</p>
+      {cell && <button className="text-button" onClick={() => document.getElementById('cell-' + cell)?.scrollIntoView({ block: 'start', behavior: 'smooth' })}>Show the cell</button>}
+    </header>
+    <PlotFit client={client} projectId={projectId} cell={shown.cell} output={shown.output} label={`Plot drawn by ${label(shown.cell)}`} />
+    {plots.length > 1 && <div className="nb-plots-strip" ref={strip} role="group" aria-label="Plots">
+      {plots.map((plot, i) => <PlotThumb key={plot.key} client={client} projectId={projectId} cell={plot.cell} output={plot.output} current={i === index} label={label(plot.cell)} onShow={() => setChosen(plot.key)} />)}
+    </div>}
+    {all.length > plots.length && <p className="nb-note">The {plotsPaneLimits.plots} newest plots are here; earlier ones stay with their cells in the Notebook.</p>}
+  </div>;
+}
+function PlotFit({ client, projectId, cell, output, label }: { client: BrowserClient; projectId: string; cell: Cell; output: Output; label: string }) {
+  const { src, problem } = usePlot(client, projectId, cell.cellId, output.plot!);
+  if (problem) return <p className="nb-note">This plot could not be read. {problem}</p>;
+  return <figure className="nb-plots-fit">{src ? <img src={src} alt={label} /> : <span className="nb-plot-wait" aria-label="Reading the plot" />}</figure>;
+}
+function PlotThumb({ client, projectId, cell, output, current, label, onShow }: { client: BrowserClient; projectId: string; cell: Cell; output: Output; current: boolean; label: string; onShow: () => void }) {
+  const { src } = usePlot(client, projectId, cell.cellId, output.plot!);
+  return <button className="nb-plots-thumb" aria-current={current} title={label} onClick={onShow}>{src ? <img src={src} alt={label} /> : <span className="nb-plot-wait" />}</button>;
 }

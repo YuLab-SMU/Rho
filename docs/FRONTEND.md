@@ -105,6 +105,25 @@ inspect what happened. The application gives those actions direct places:
   The file is read as it is on disk now, by its project path, also when the view shows an
   older kept version. Files of added source folders are outside the sessions' folder and
   have no Explore ([episode](SIMULATED-PROJECT-EPISODE.md#exploring-a-finished-answer)).
+- **A script's lines** run in the live session of their language from the editor of an R
+  or Python script on the person's own page: ⌘/Ctrl+Enter, or Run in the script's header,
+  sends the selection, or the whole statement the cursor is in (a call over several lines,
+  a pipe, a function, a Python block with its decorators and `else`/`except` parts), as the
+  person's cell named for the script and its lines (`analysis.R · lines 12–13`). The cursor
+  goes on to the next statement; a blank or comment line runs nothing. The text runs as it
+  is in the editor, saved or not. A page without the Notebook gets one under the script; one
+  in another pane comes forward there, and the script keeps the keyboard. Lines run in the
+  order they were sent ([episode](SIMULATED-PROJECT-EPISODE.md#script-console-variables-and-plots)).
+- **Variables** and **Plots** are views of the live sessions of their own (`rho.variables`,
+  `rho.plots`), added from Add view or an empty page. Either takes a column along the page's
+  right side, the other above or below it there, so a script with its Notebook under it and
+  these two make the four panes of a script, a console, an environment and plots. Variables
+  shows the session the newest cell ran in (or the one chosen), its state and each value's
+  type, size and summary; a name opens the value. Plots shows the newest plot of the live
+  sessions at the size of the view with the cell that drew it, steps back through the 24
+  newest (arrows, or the strip below), and brings a new one forward as it is drawn. Plots of
+  an ended session stay with their cells in the Notebook. With these views on the page, the
+  Notebook leaves its own variables and plots out.
 - **Values** of the live sessions open as views of their own (`rho.object`). A variable's
   name in the Notebook, and each name a cell made or changed (listed under the cell while
   its session is live; removed names are struck through), opens it. On the person's page
@@ -241,8 +260,8 @@ inspect what happened. The application gives those actions direct places:
   it, shows a layout of several groups one view at a time with all its tabs, as a phone
   does; the saved layout is unchanged. New workspace, under Studio in the sidebar and in
   the command palette, makes an empty page of the person's own (Workspace 2, 3, …). An
-  empty page offers the Notebook and the project's files by kind; Add view in the Studio
-  bar offers the same on any of the person's pages. A file opens in the view it has
+  empty page offers the Notebook, Variables, Plots and the project's files by kind; Add view
+  in the Studio bar offers the same on any of the person's pages. A file opens in the view it has
   elsewhere in Studio, the Notebook in a pane right of what is there. Pages cannot yet be
   renamed or removed, and they count toward the 32 layouts a project keeps.
 - **The Agent panel** opens beside any page from the Agent button at the right end
@@ -345,11 +364,14 @@ the same graph: `answerBoard` gives each file and command of a message a role,
 about, and `src/asking.ts` writes and reads back what a question was asked about.
 `web/answer-board.tsx` draws the board and records decisions (`conversation.decide`);
 `web/console.tsx` draws the Console from the same graph and `console.list`.
-`web/object-view.tsx` draws a value from `kernel.inspect`.
-`web/notebook.tsx` draws the Notebook from `kernel.read` and its Studio view
+`web/object-view.tsx` draws a value from `kernel.inspect`. `src/statements.ts` finds the
+statement a script line runs (`statementAt`), and `web/entries/documents.tsx` sends it
+through the page's `runCode` shell service.
+`web/notebook.tsx` draws the Notebook, Variables and Plots from one shared `kernel.read`, and the Notebook's Studio view
 (`SessionPane`) from the same, scoped to the conversation's principal, its start and the
 moment shown inside a conversation's Studio. `web/explore.ts` places the Notebook
-(`addBeside` in `src/shell-layout.ts`) and values (`addWithRoom`), loads a table and
+(`addBeside` in `src/shell-layout.ts`), values (`addWithRoom`) and Variables and Plots
+(`addAtEdge`), loads a table and
 makes the person's pages;
 `src/explore-code.ts` writes the code; `web/page-add.tsx` lists what a page can add.
 A conversation's Studio (`web/studio-process.tsx`) reads its record, builds the graph

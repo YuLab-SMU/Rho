@@ -1,5 +1,5 @@
 import { BrowserApiError, type BrowserClient, type WorkspaceSnapshot } from '../src/browser.js';
-import { addBeside, addWithRoom, type LayoutNode, type LayoutTree } from '../src/shell-layout.js';
+import { addAtEdge, addBeside, addWithRoom, type LayoutNode, type LayoutTree } from '../src/shell-layout.js';
 import { loadCode, sourceCode, valueName, type Language } from '../src/explore-code.js';
 
 // Looking into a result in the live sessions the person shares with the Agent. A table loads
@@ -36,27 +36,48 @@ export function withNotebook(tree: LayoutTree | null, beside: string | null, id?
   return addBeside(tree, view as never, beside, 'right', newId);
 }
 
-// Puts the Notebook on a saved page beside a view, unless the page has one, with one
-// conditional write; a newer layout from another tab is read once and the Notebook placed on it.
-export async function addNotebook(client: BrowserClient, projectId: string, compositionId: string, beside: string | null): Promise<string> {
+// Puts a view on a saved page, unless the page has one, with one conditional write; a newer
+// layout from another tab is read once and the view placed on it.
+async function addToPage(client: BrowserClient, projectId: string, compositionId: string, there: (nodes: unknown[] | undefined) => string | null, place: (tree: LayoutTree | null) => LayoutTree | null, change: string): Promise<string> {
   for (let attempt = 0; ; attempt++) {
     const current = await client.call('composition.read', { projectId, compositionId }).catch(error => {
       if (error instanceof BrowserApiError && error.error.kind === 'not_found') return null;
       throw error;
     }) as { version: number; rootId?: string; nodes?: unknown[] } | null;
-    const there = notebookOn(current?.nodes);
-    if (there) return there;
-    const next = withNotebook(current?.rootId && current.nodes?.length ? { rootId: current.rootId, nodes: current.nodes as LayoutNode[] } : null, beside);
-    if (!next) throw new Error('The Notebook could not be placed on this page.');
+    const found = there(current?.nodes);
+    if (found) return found;
+    const next = place(current?.rootId && current.nodes?.length ? { rootId: current.rootId, nodes: current.nodes as LayoutNode[] } : null);
+    if (!next) throw new Error('The view could not be placed on this page.');
     try {
-      await client.call('composition.apply', { projectId, compositionId, expectedVersion: current?.version ?? 0, changeId: 'notebook-' + crypto.randomUUID(), operations: [{ op: 'replace', rootId: next.rootId, nodes: next.nodes }] } as never);
-      return notebookOn(next.nodes)!;
+      await client.call('composition.apply', { projectId, compositionId, expectedVersion: current?.version ?? 0, changeId: change + '-' + crypto.randomUUID(), operations: [{ op: 'replace', rootId: next.rootId, nodes: next.nodes }] } as never);
+      return there(next.nodes)!;
     } catch (error) {
       if (attempt === 0 && error instanceof BrowserApiError && error.error.kind === 'stale') continue;
       throw error;
     }
   }
 }
+// The Notebook beside a view, unless the page has one.
+export const addNotebook = (client: BrowserClient, projectId: string, compositionId: string, beside: string | null) =>
+  addToPage(client, projectId, compositionId, notebookOn, tree => withNotebook(tree, beside), 'notebook');
+
+// The sessions' variables and plots as views of their own, one of each per page. Added to a page,
+// either takes a column along the page's right side, beside a script and its console, and the
+// other goes above or below it there.
+export type SessionView = 'variables' | 'plots';
+export const sessionComponents: Record<SessionView, string> = { variables: 'rho.variables', plots: 'rho.plots' };
+const sessionTitles: Record<SessionView, string> = { variables: 'Variables', plots: 'Plots' };
+export const sessionView = (kind: SessionView): LayoutNode => ({ id: kind, kind: 'view', component: sessionComponents[kind], version: '1', props: { title: sessionTitles[kind] }, bindings: {} });
+export const sessionViewOn = (kind: SessionView, nodes: unknown[] | undefined) => (nodes as LayoutNode[] | undefined)?.find(n => n.kind !== 'group' && n.component === sessionComponents[kind])?.id ?? null;
+export function withSessionView(tree: LayoutTree | null, kind: SessionView): LayoutTree | null {
+  const view = sessionView(kind);
+  if (!tree) return { rootId: 'root', nodes: [{ id: 'root', kind: 'group', children: [view.id] }, view] };
+  if (sessionViewOn(kind, tree.nodes)) return null;
+  const other = sessionViewOn(kind === 'variables' ? 'plots' : 'variables', tree.nodes);
+  return other ? addBeside(tree, view as never, other, kind === 'variables' ? 'top' : 'bottom', newId) : addAtEdge(tree, view as never, 'right', newId);
+}
+export const addSessionView = (client: BrowserClient, projectId: string, compositionId: string, kind: SessionView) =>
+  addToPage(client, projectId, compositionId, nodes => sessionViewOn(kind, nodes), tree => withSessionView(tree, kind), kind);
 
 // A value of a live session as a view: one per value on a page. A page's values share one group
 // of tabs. The first goes in a pane beside the Notebook when the Notebook's pane, on a stage

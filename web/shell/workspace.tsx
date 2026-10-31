@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import type { BrowserClient, CompositionSummary, WorkspaceSnapshot } from '../../src/browser.js';
 import { addBeside, closeView, dockView, groupNode, groupOf, moveTab, moveView, placeView, regions, resizeSplit, selectionScope, splitView, tabGroups, viewOrder, type LayoutNode, type LayoutTree, type Region } from '../../src/shell-layout.js';
@@ -11,12 +11,14 @@ import { AgentColumn, Bar, Digest, Evidence, Interruption, waiting } from './lay
 import { openRun, runFirstLine, RunView, SourceLine } from './facts.js';
 import { ActionForm } from './action-form.js';
 import { CommandPane } from '../console.js';
-import { SessionPane, type Prepared } from '../notebook.js';
-import { addNotebook, addObject, canExplore, explorableTable, languageNames, loadTable, notebookComponent, notebookView, objectComponent, projectPath, scriptLanguage, scriptPrepared, type Language } from '../explore.js';
+import { PlotsPane, SessionPane, VariablesPane, type Prepared } from '../notebook.js';
+import { addNotebook, addObject, canExplore, explorableTable, languageNames, loadTable, notebookComponent, notebookView, objectComponent, projectPath, scriptLanguage, scriptPrepared, sessionComponents, type Language } from '../explore.js';
 import { ObjectView } from '../object-view.js';
 import { ExploreIn } from '../explore-in.js';
 import { useProcess } from '../process-context.js';
 import { ProcessFrame } from './process-views.js';
+import { ShellContext } from '../shell-services.js';
+import type { ShellServices } from '../../src/ui-contract.js';
 import { boundResource } from '../executions.js';
 import { Slot, Split, TabGroup, place, unplace, useTabOverflow, type DropTarget, type TabDrag, type TabRender } from './regions.js';
 import './shell.css';
@@ -158,6 +160,28 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
     setLayoutProblem('');
     addObject(client, snapshot.project.id, layout.compositionId, language, name, stage.current?.clientWidth).then(id => { onPersonMoved?.(); setOpening(id); }, refusal);
   }
+  // A script's line run from its editor: the person's cell in the shared session, in the order the
+  // lines were run. A page without the Notebook gets one under the script, as a console sits under
+  // an editor; one in another pane comes forward in it, and the script keeps the keyboard.
+  const runs = useRef<Promise<unknown>>(Promise.resolve());
+  const runFromScript = useRef<NonNullable<ShellServices['runCode']>>(async () => {});
+  runFromScript.current = async ({ viewId, language, code, purpose }) => {
+    setLayoutProblem('');
+    const notebook = layout.views.find(v => v.component === notebookComponent)?.id;
+    if (!notebook) {
+      const view = byId.get(viewId), now = treeNow(), ready = view && now && placeView(now, view, newId);
+      const next = ready && addBeside(ready, notebookView('notebook') as never, viewId, 'bottom', newId);
+      if (allowed('composition.apply') && next) await writeLayout(next);
+    } else {
+      const group = groupOf(root, notebook);
+      if (group && group.id !== groupOf(root, viewId)?.id) setSelected(s => ({ ...s, [group.id]: notebook }));
+    }
+    const sent = runs.current.then(() => client.call('kernel.run', { projectId: snapshot.project.id, language, code, purpose, changeId: 'script-' + crypto.randomUUID() }));
+    runs.current = sent.catch(() => {});
+    await sent.catch(refusal);
+  };
+  const shellAbove = useContext(ShellContext), runnable = !process && !!tree && canExplore(snapshot);
+  const shellHere = useMemo<ShellServices | undefined>(() => runnable ? { ...shellAbove, runCode: run => runFromScript.current(run) } : shellAbove, [shellAbove, runnable]);
   // What reaches a value waits in the Notebook's line, for the person to build on and run.
   function useInNotebook(language: Language, expression: string, name: string) {
     setPrepared({ key: crypto.randomUUID(), language, code: expression, note: `From the ${name} view. Build on it, then press Run.` });
@@ -245,7 +269,9 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
     const view = byId.get(id)!, isVisible = visible.includes(id);
     if (view.component === 'rho.action') return <ActionForm view={view} snapshot={snapshot} client={client} live={live} />;
     if (view.component === 'rho.console') return <CommandPane client={client} snapshot={snapshot} />;
-    if (view.component === notebookComponent) return <SessionPane client={client} snapshot={snapshot} prepared={prepared} onTaken={() => setPrepared(null)} onConversation={onConversation} onObject={openObject} />;
+    if (view.component === sessionComponents.variables) return <VariablesPane client={client} snapshot={snapshot} onObject={openObject} />;
+    if (view.component === sessionComponents.plots) return <PlotsPane client={client} snapshot={snapshot} />;
+    if (view.component === notebookComponent) return <SessionPane beside={{ variables: layout.views.some(v => v.component === sessionComponents.variables), plots: layout.views.some(v => v.component === sessionComponents.plots) }} client={client} snapshot={snapshot} prepared={prepared} onTaken={() => setPrepared(null)} onConversation={onConversation} onObject={openObject} />;
     if (view.component === objectComponent) {
       const language = view.props.language === 'python' ? 'python' : 'r', name = String(view.props.name ?? title(view));
       return <ObjectView client={client} snapshot={snapshot} language={language} name={name} onUse={expression => useInNotebook(language, expression, name)} />;
@@ -323,7 +349,7 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
   }
   const focusObject = live.screen?.views.find(v => v.id === focused)?.object ?? null;
   const toggleEvidence = () => { setEvidence(v => !v); onShowAgent?.(); live.act({ kind: 'reveal', target: evidence ? null : live.screen?.agent?.object ?? 'workspace' }); };
-  return <section className="workspace shell" aria-label="Layout">
+  return <ShellContext.Provider value={shellHere}><section className="workspace shell" aria-label="Layout">
     {bar && <Bar live={live} evidence={evidence} held={items.length - unhidden.length} onEvidence={toggleEvidence} attention={attention} />}
     {agentTarget && createPortal(<AgentColumn live={live} agents={snapshot.agents} contexts={snapshot.contexts} prepare={prepareQuestion} principalId={principalId} evidence={evidence} onEvidence={toggleEvidence} focusObject={focusObject} />, agentTarget)}
     <Interruption live={live} items={unhidden} onHide={key => setHidden(h => [...h, key])} />
@@ -342,5 +368,5 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
         : draw(root)}
       {[...seen.current].filter(id => byId.has(id)).map(id => createPortal(body(id), container(id), id))}
     </div>
-  </section>;
+  </section></ShellContext.Provider>;
 }

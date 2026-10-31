@@ -11,7 +11,7 @@ import { useAgentNow, type AgentNow } from './agent-now.js';
 import { NotesPanel, useProjectNotes } from './project-notes.js';
 import { compositionName, defaultWorkspace, fileKey, openInWorkspace, processComposition, processConversation } from './canvas.js';
 import { Icon } from './icons.js';
-import { addNotebook, addObject, canExplore, createWorkspace, loadTable, notebookOn, scriptLanguage, scriptPrepared, type Language } from './explore.js';
+import { addNotebook, addObject, addSessionView, canExplore, createWorkspace, loadTable, notebookOn, scriptLanguage, scriptPrepared, sessionViewOn, type Language, type SessionView } from './explore.js';
 import { PageAdd } from './page-add.js';
 import type { Prepared } from './notebook.js';
 import { CommandPalette, type Command, type CommandGroup } from './commands.js';
@@ -282,6 +282,11 @@ function App() {
     if (!snapshot) return;
     addNotebook(client!, snapshot.project.id, page, null).then(id => layout(page, id), error => setNotice('The Notebook could not be added. ' + (error instanceof Error ? error.message : '')));
   }
+  // The sessions' variables or plots on a page of the person's own, or brought forward.
+  function sessionViewOnPage(page: string, kind: SessionView) {
+    if (!snapshot) return;
+    addSessionView(client!, snapshot.project.id, page, kind).then(id => layout(page, id), error => setNotice(`The ${kind === 'plots' ? 'Plots' : 'Variables'} view could not be added. ` + (error instanceof Error ? error.message : '')));
+  }
   // A table or a script explored from where it is shown: it opens on the person's workspace with
   // the Notebook beside it. A table loads into the session as a new value; a script waits in the
   // Notebook's line for the person to check and run.
@@ -487,8 +492,10 @@ function App() {
   const fileOnScreen = section === 'file' && shownFile ? sources?.[shownFile.row].find(item => item.key === shownFile.key) : undefined;
   const here = screen === 'plugins' ? 'plugins' : screen !== 'project' ? '' : studioOpen ? 'studio:' + (composition?.compositionId ?? compositionId) : section === 'sources' ? 'sources:' + category : section === 'file' && shownFile ? 'file:' + shownFile.row + ':' + shownFile.key : section === 'documents' ? 'files' : section;
   const openConversation = (id: string) => { setSelectedConversation(id); setAgentOpen(true); setContext(false); };
-  const pageAdd = snapshot ? <PageAdd sources={sources} notebook={!snapshot.catalog.plugins.some(p => p.id === 'kernel') || !canExplore(snapshot) ? 'unavailable' : notebookOn(composition?.views) ? 'present' : 'absent'}
-    onNotebook={() => notebookOnPage(shownId)} onFile={path => openIn(shownId, path)} onAll={row => showSources(row)} /> : null;
+  const sessions = !!snapshot && snapshot.catalog.plugins.some(p => p.id === 'kernel') && canExplore(snapshot);
+  const pageAdd = snapshot ? <PageAdd sources={sources} notebook={!sessions ? 'unavailable' : notebookOn(composition?.views) ? 'present' : 'absent'}
+    variables={!sessions ? 'unavailable' : sessionViewOn('variables', composition?.views) ? 'present' : 'absent'} plots={!sessions ? 'unavailable' : sessionViewOn('plots', composition?.views) ? 'present' : 'absent'}
+    onNotebook={() => notebookOnPage(shownId)} onSessionView={kind => sessionViewOnPage(shownId, kind)} onFile={path => openIn(shownId, path)} onAll={row => showSources(row)} /> : null;
   const initials = project ? name(project).split(/[\s_.-]+/).filter(Boolean).slice(0, 2).map(w => [...w][0]!.toUpperCase()).join('') || 'P' : '';
   // The projects list has the application's own sidebar even while a project stays chosen.
   const inProject = !!project && screen !== 'home';

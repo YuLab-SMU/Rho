@@ -948,7 +948,11 @@ reaches Rho as it is printed; each answer about a cell follows a numbered mark o
 standard output, so it lands after the text printed before it. After each cell the
 session lists its variables (type, size, one-line summary; Python leaves out modules
 and imported classes and functions), and the cell names the values it made or changed
-(`defined`) and, when neither list was cut, removed (`removed`). State lives in `.rho/plugins/kernel/` in the
+(`defined`) and, when neither list was cut, removed (`removed`). R draws on one device
+that stays open for the session, as the console's does: a later cell can draw over an
+earlier cell's plot and reports the plot it changed, and each page a cell starts is kept
+(a sourced script with two plots has both). Python closes its figures after each cell.
+State lives in `.rho/plugins/kernel/` in the
 project. Variables live only in their process: when Rho closes, its sessions end,
 and the next start records each as `rho-closed`, a running cell as `unknown` and a
 waiting one as `not-run`. Nothing runs again. Rho-started sessions are told to run

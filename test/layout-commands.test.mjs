@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { addBeside, addWithRoom, closeView, dockView, groupNode, moveTab, moveView, paneShare, placeView, regions, resizeSplit, splitView } from '../dist/shell-layout.js';
+import { addAtEdge, addBeside, addWithRoom, closeView, dockView, groupNode, moveTab, moveView, paneShare, placeView, regions, resizeSplit, splitView } from '../dist/shell-layout.js';
 
 // Layout commands change the owner tree only, and the shell draws the result through the
 // same reading as any other composition. Each case states what the person sees afterwards.
@@ -145,4 +145,22 @@ test('a view added beside another keeps room for both, or joins the pane next to
   assert.deepEqual(drawn(addWithRoom(three, view('v'), 'c', undefined, 360, id)).children.map(c => c.views), [['a'], ['c'], ['v'], ['b']]);
   // A view alone on the page has no pane to join: it splits the page whatever its width.
   assert.deepEqual(drawn(addWithRoom(tabs('a'), view('v'), 'a', 500, 360, id)).children.map(c => c.views), [['a'], ['v']]);
+});
+
+test('a script, its console under it, and the sessions\' variables and plots in a column on the right', () => {
+  // A script line run with no Notebook on the page puts the Notebook under the script.
+  const console = addBeside(tabs('script'), view('notebook'), 'script', 'bottom', id);
+  // The variables take the page's whole right side, not a pane beside the last group.
+  const variables = addAtEdge(console, view('variables'), 'right', id);
+  const four = addBeside(variables, view('plots'), 'variables', 'bottom', id);
+  const top = drawn(four);
+  assert.equal(top.kind, 'split'); assert.equal(top.axis, 'horizontal'); assert.deepEqual(top.weights, [0.6, 0.4]);
+  assert.deepEqual(top.children.map(c => [c.axis, c.children.map(g => g.views)]), [['vertical', [['script'], ['notebook']]], ['vertical', [['variables'], ['plots']]]]);
+  // Beside panes already side by side it joins them, keeping its share of the page.
+  const row = drawn(addAtEdge(splitView(tabs('a', 'b'), 'b', 'horizontal', id), view('v'), 'right', id));
+  assert.deepEqual(row.children.map(c => c.views), [['a'], ['b'], ['v']]);
+  assert.ok(Math.abs(row.weights[2] / row.weights.reduce((x, y) => x + y, 0) - 0.4) < 1e-9);
+  // An empty page takes it as its one tab; a view already there is not added twice.
+  assert.deepEqual(drawn(addAtEdge({ rootId: 'root', nodes: [{ id: 'root', kind: 'group', children: [] }] }, view('v'), 'right', id)), { kind: 'tabs', id: 'root', views: ['v'] });
+  assert.equal(addAtEdge(four, view('plots'), 'right', id), null);
 });

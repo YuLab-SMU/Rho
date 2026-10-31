@@ -4,20 +4,28 @@ import { Icon } from './icons.js';
 import { fileIcon, sourceLabels } from './project.js';
 import type { SourceItem, SourceRow } from './sources.js';
 
-// What a person puts on a Studio page of their own: the Notebook, and the project's files by
+// What a person puts on a Studio page of their own: the Notebook, the sessions' variables and
+// plots, and the project's files by
 // kind, each opening in the view it has elsewhere in Studio. A kind lists its first few files;
 // the rest are on its own page.
 export const pageAddLimits = { filesPerKind: 6 };
 const rows: SourceRow[] = ['results', 'data', 'code', 'notes'];
-export function PageAdd({ sources, notebook, onNotebook, onFile, onAll }: {
+export function PageAdd({ sources, notebook, variables = 'unavailable', plots = 'unavailable', onNotebook, onSessionView, onFile, onAll }: {
   sources: Record<SourceRow, SourceItem[]> | null; notebook: 'absent' | 'present' | 'unavailable';
-  onNotebook: () => void; onFile: (path: string) => void; onAll: (row: SourceRow) => void;
+  variables?: 'absent' | 'present' | 'unavailable'; plots?: 'absent' | 'present' | 'unavailable';
+  onNotebook: () => void; onSessionView?: (kind: 'variables' | 'plots') => void; onFile: (path: string) => void; onAll: (row: SourceRow) => void;
 }) {
   // A choice made from a menu closes it.
   const chose = (run: () => void) => (event: MouseEvent<HTMLButtonElement>) => { event.currentTarget.closest('details')?.removeAttribute('open'); run(); };
   return <div className="page-add">
     {notebook !== 'unavailable' && <button className="page-add-notebook" onClick={chose(onNotebook)}>
       <Icon name="code" size={17} /><span><strong>Notebook</strong><small>{notebook === 'present' ? 'On this page' : 'Live R and Python sessions you share with the Agent'}</small></span>
+    </button>}
+    {variables !== 'unavailable' && onSessionView && <button className="page-add-notebook" onClick={chose(() => onSessionView('variables'))}>
+      <Icon name="list" size={17} /><span><strong>Variables</strong><small>{variables === 'present' ? 'On this page' : 'What the live sessions hold, each value a click away'}</small></span>
+    </button>}
+    {plots !== 'unavailable' && onSessionView && <button className="page-add-notebook" onClick={chose(() => onSessionView('plots'))}>
+      <Icon name="chart" size={17} /><span><strong>Plots</strong><small>{plots === 'present' ? 'On this page' : 'What the live sessions draw, the newest first'}</small></span>
     </button>}
     {!sources ? <p className="page-add-note" role="status">Reading the project folders…</p>
       : rows.map(row => {

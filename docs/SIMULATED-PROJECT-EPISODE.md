@@ -1109,3 +1109,103 @@ one-way count `table(dat$sex)`, and in Python a pandas frame, a scikit-learn
   Python a slow `repr` also delays the end of each cell that lists it as a variable.
 - Arrays of three or more dimensions and other kinds are shown as printed.
 - No independent person has used the view.
+
+## Script, console, variables and plots
+
+The person asked whether Rho's components already make the classic four panes of interactive
+exploration: a script, the console it runs in, the session's variables and its plots. A
+disposable `quad` project held R's `airquality` data as `data/airquality.csv` and a 19-line
+`analysis.R` (read, `str` and `summary`, complete cases, an `lm` fit, a scatter plot with a
+fitted line drawn by a second call, a monthly mean and a barplot). Rho ran from source on a
+disposable root with the debug Core and the system Rscript; a headless Chrome took the
+screenshots at 1440 × 900, 760 and 390 px.
+
+### What the first try showed
+
+- **The panes could be arranged.** The script and the Notebook opened side by side on a new
+  workspace; dragging the Notebook's tab to the script's lower edge put it under the script,
+  and a value dragged right of the script made a third pane.
+- **The script could not run a line.** ⌘+Enter in `analysis.R` did nothing. The only way from
+  the script to the session was Explore in R, which put `source("analysis.R")` in the
+  Notebook's line.
+- **Variables and plots had no views.** They were part of the Notebook: beside its cells when
+  the view was at least 840 px wide, otherwise the variables folded into a line above them
+  and the plots were not shown. A pane on the right could only hold one value (`aq`).
+- **A sourced script kept one plot.** `source("analysis.R")` is one top-level expression; the
+  barplot replaced the scatter plot and its line before the cell's only recording. Each cell
+  also drew on a new device, so `abline` run on its own after `plot` would fail with
+  "plot.new has not been called yet".
+
+### What was built
+
+- **Notebook (Plugins `kernel`).** R draws on one recording device that stays open for the
+  session. A later cell draws over an earlier cell's plot and reports the plot it changed;
+  each page is recorded before a new one starts (`before.plot.new`, `before.grid.newpage`),
+  so a sourced script keeps every plot. Calls that only set graphics state (`par`,
+  `palette`, `layout`) do not make a page new.
+- **A script's lines (Rho).** ⌘/Ctrl+Enter or Run in an R or Python script's header runs the
+  selection, or the statement the cursor is in (`src/statements.ts`), as the person's cell
+  named `analysis.R · lines 12–13`, and moves to the next statement. A page without the
+  Notebook gets one under the script.
+- **Variables and Plots (Rho)** are views of their own, offered by Add view and the empty
+  page. Either takes a column along the page's right side (`addAtEdge`, 40% of the width),
+  the other above or below it. The Notebook leaves its own variables and plots out while
+  they are on the page. Views of one page share one `kernel.read`.
+
+### What the screens showed
+
+- **The four panes.** On a new workspace, `analysis.R`, then Variables and Plots from Add
+  view, then ⌘+Enter on line 2: the script top left, Variables top right, the Notebook under
+  the script and Plots under Variables. The first build put Variables beside the Notebook,
+  the last pane, so the script spanned the page above a three-way bottom row; Variables
+  now takes the page's whole right side.
+- **Line by line.** Twelve presses from line 1 ran the eleven statements in order: the
+  comment line moved the cursor on, `plot(…)` over lines 12–13 ran as one cell, and `abline` in the
+  next cell drew its red line over that scatter. Plots came forward to each new plot and
+  Variables listed `aq`, `complete`, `fit` and `by_month` as they were made. The value
+  `fit` opened from Variables as a tab beside the script, with its coefficients.
+- **A plot from an ended session.** After a restart, Plots first showed the barplot of the
+  session that had ended as the current plot. It now shows the live sessions' plots only.
+- **A plot shown twice.** `barplot` calls `par()` before it starts a page, which changed the
+  previous page's record, so a barplot cell reported the earlier scatter again. Pages are
+  now compared by what they draw.
+- **Selection.** Lines 16–18 selected and run with Run made one cell with both values and
+  the barplot; it was named "lines 16–19" because the selection ended at the start of line
+  19. A selection that ends where a line starts now ends on the line before: lines 6–7
+  selected with Shift+↓ ran as "lines 6–7".
+- **Python.** In `explore.py`, a list written over two lines, a function and a `for … else`
+  block each ran as one cell; the next statements failed with `NameError` because the run
+  started below `import statistics`. Variables switched to Python, with R a click away; it
+  first showed Python because it was listed last, and now follows the newest cell.
+- **Narrow windows.** At 760 px the five views showed one at a time as tabs; at 390 px Plots
+  fitted the newest plot to the width with the strip below.
+- **Found in review, not on screen.** With the device kept for the session, reading a value
+  that draws when printed (a ggplot `g`) drew on it, and the next cell, `x <- 1`, reported
+  that plot as its own. A reading now draws on a device of its own and leaves the session's
+  plot unchanged.
+
+### Verification
+
+- Plugins `test/kernel.test.mjs`: a line drawn in a later cell over an earlier plot, a cell
+  that draws nothing, a barplot after a plot, two pages from one expression, and a cell after
+  reading a value that draws when printed. Against the previous runner the test failed at the
+  later cell's line (`error`, not `done`).
+- Rho `test/statements.test.mjs` (R calls over lines, pipes, functions, strings and
+  comments; Python blocks, decorators, clauses and brackets) and `test/layout-commands`
+  (the four panes, joining a row, an empty page).
+- The flows above were run in a real browser; the screenshots were read.
+
+### Left open
+
+- **The Agent in this layout** was not observed: no conversation ran cells here.
+- **A line drawn over an earlier plot** is a second plot in Plots (the scatter, then the
+  scatter with its line).
+- **Python figures** still close after each cell, as in Jupyter; R's stay.
+- **One view at a time.** Below 768 px, or on a stage under 640 px, running a line does not
+  bring the Notebook forward.
+- **The script's header** wraps onto a second row below about 650 px (Explore in, Run, Save,
+  Review selected text, Highlight changes).
+- **Long output** in the Notebook shows its first 12 lines; `summary(fit)` hides its last
+  coefficients until Show all.
+- **Arrange views** stayed open while other parts of the page were clicked.
+- No independent person has used the layout.
