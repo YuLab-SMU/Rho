@@ -193,6 +193,7 @@ export class RhoService {
   conversations: Conversations;
   private consoles = new Map<string, import('@rho-workspace/plugin-console').ConsoleRunner>();
   private kernels = new Map<string, import('@rho-workspace/plugin-kernel').KernelHost>();
+  private skillHosts = new Map<string, import('@rho-workspace/plugin-skills').SkillsHost>();
   private feedback(project: Project, owners = this.plugins.project(project.root, project.id)) {
     const agent = owners.need('agent');
     return new (this.plugins.need('agent').FeedbackDelivery)(project.root, project.id, { agent, annotations: owners.annotations, binding: async (id: string) => (await readJson<any[]>(path.join(await this.dataDir(project), 'bindings.json'), [])).find(b => b.id === id) }, this.config.agentDelivery);
@@ -679,6 +680,18 @@ export class RhoService {
     }
     return host;
   }
+  // The project's skills, written by the person and their Agent. A change reaches open pages
+  // once the request that made it has finished.
+  private skillsFor(p: Project) {
+    let host = this.skillHosts.get(p.id);
+    if (!host) {
+      const { SkillsHost } = this.plugins.need('skills');
+      const changed = () => { if (!this.closing) setTimeout(() => { void this.serial(p.id, () => this.emit(p, 'skills.changed', p.id, localBrowserId)).catch(() => {}); }, 0); };
+      host = new SkillsHost(p.root, { limits: this.config.skills, onChange: changed });
+      this.skillHosts.set(p.id, host);
+    }
+    return host;
+  }
   // The discriminated union is what gives every branch below a typed body: after the
   // `method` comparison TypeScript narrows `request`, so `b` is that operation's own
   // input type. `RhoOutput<RhoMethod>` is the published response union; the concrete
@@ -994,6 +1007,16 @@ export class RhoService {
       if (method === 'kernel.servers') return host.servers();
       if (method === 'kernel.server.skill') return host.serverSkill(b.server, b.name);
     }
+    // How work is done in the project: the person and their Agent read its skills, and record and
+    // undo changes to them, each kept with who made it, why and from what.
+    if (method.startsWith('skills.')) {
+      await capabilities.assertAvailable(method, principal);
+      const host = this.skillsFor(p);
+      if (method === 'skills.list') return host.list();
+      if (method === 'skills.read') return host.read(b.name, b.limit);
+      if (method === 'skills.change') return host.change({ name: b.name, description: b.description, body: b.body, remove: b.remove, reason: b.reason, evidence: b.evidence, expectedVersion: b.expectedVersion, changeId: b.changeId }, principal.id);
+      if (method === 'skills.undo') return host.undo({ name: b.name, change: b.change, changeId: b.changeId }, principal.id);
+    }
     if (method === 'capability.index' || method === 'capability.resolve' || contractRef) {
       const route = await routing.read(), bindings = await readJson<any[]>(path.join(await this.dataDir(p), 'bindings.json'), []);
       const reader = new Discovery(this.plugins, p, principal, route, bindings);
@@ -1307,6 +1330,7 @@ export class RhoService {
     for (const runner of this.consoles.values()) await runner.close();
     // Live sessions end with Rho: their values live only in their processes.
     for (const host of this.kernels.values()) await host.close();
+    for (const host of this.skillHosts.values()) await host.close();
     const shutdown = await this.bridge.close(); await this.state.close(); return shutdown;
   }
 }

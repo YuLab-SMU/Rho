@@ -101,6 +101,20 @@ try {
   await page.locator('.project-rail').getByRole('button', { name: /^Pages 中文/ }).click();
   await page.getByRole('heading', { name: 'Pages 中文', exact: true }).waitFor();
 
+  // A project skill an Agent changed: the Overview names the change by its reason while the page
+  // is open, the change opens its skill led by that reason, and Undo puts the file back.
+  const skillGrant = await admin.call('session.grant', { projectId: project.id, externalSessionId: 'pages-skills', methods: ['skills.change'] });
+  const skillAgent = await RhoClient.fromFile(skillGrant.connectionFile);
+  const made = await skillAgent.call('skills.change', { projectId: project.id, name: 'score-reporting', description: 'Use when a table or a figure reports the scores.', body: '- Report scores with one decimal.\n', reason: 'The person reads scores with one decimal.', expectedVersion: null, changeId: 'pages-1' });
+  await skillAgent.call('skills.change', { projectId: project.id, name: 'score-reporting', body: '- Report scores with one decimal.\n- Give the row count beside every mean.\n', reason: 'The person asked for the row count beside every mean.', evidence: [{ kind: 'file', ref: 'results.csv' }], expectedVersion: made.skill.version, changeId: 'pages-2' });
+  await page.locator('.skills-work').getByRole('button', { name: /The person asked for the row count/ }).click();
+  await page.locator('.skills-change.newest').getByText('The person asked for the row count beside every mean.', { exact: true }).waitFor();
+  failing.push(...await measure('skills'));
+  await page.getByRole('button', { name: 'Undo this change', exact: true }).click();
+  await page.locator('.skills-change.newest .skills-change-reason').getByText(/^Undid: /).waitFor();
+  assert.doesNotMatch(await fs.readFile(path.join(project.root, '.claude/skills/score-reporting/SKILL.md'), 'utf8'), /row count/, 'Undo puts the skill back as it was');
+  await page.locator('.project-nav').getByRole('button', { name: 'Overview', exact: true }).click();
+
   await page.locator('.project-nav').getByRole('button', { name: 'Project settings', exact: true }).click();
   await page.getByRole('button', { name: 'Check project', exact: true }).click();
   await page.getByText(/Rho can write in /).first().waitFor();

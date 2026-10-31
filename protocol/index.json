@@ -4,8 +4,8 @@
   "schemaVersion": 2,
   "shared": {
     "path": "operations/shared.json",
-    "bytes": 75319,
-    "sha256": "f3f11ec319ba56ba1d4ab320a0fab880e4dc67c9daa247d353a155093fb1f422"
+    "bytes": 75341,
+    "sha256": "9352416eb01e98328e65a86f77dd12559a37701da060e535c9ce9592790e6d34"
   },
   "operations": {
     "action.cancel": {
@@ -671,8 +671,8 @@
     "session.grant": {
       "summary": "session.grant",
       "path": "operations/session.grant.json",
-      "bytes": 4598,
-      "sha256": "cf22ef520ade5242996e34f3cac6eb7232e5b73e56ce0b8a8f31993cc5724a76"
+      "bytes": 4708,
+      "sha256": "8f860dcfcbdc620d696bca0f85cfc30aa0b3ee10437ed741861b13f8934af127"
     },
     "skill.list": {
       "summary": "List the application and enabled provider Skills shipped in the selected package. Skills guide discovery but do not grant authorization.",
@@ -685,6 +685,30 @@
       "path": "operations/skill.read.json",
       "bytes": 1247,
       "sha256": "bb85ee1e645ebbf5a77f1b00574c4f780fd902f5822763ffc9c79c36d2a29d4b"
+    },
+    "skills.change": {
+      "summary": "Record in a project skill when the person corrects a method or says how they work, or a failure's cause and fix are found: a new skill, a new text with a one-sentence reason and evidence, or its removal. Record how to work, never results. Made on the version read; the same changeId never writes twice.",
+      "path": "operations/skills.change.json",
+      "bytes": 7788,
+      "sha256": "6282af78ccc119766f567ae1e19fd53b8a5d80f071696c662cbe375c3cf091ce"
+    },
+    "skills.list": {
+      "summary": "The project's skills: how work is done here (the methods the person chose, the conventions they keep, the traps its work ran into), each a SKILL.md in .claude/skills that every Agent here reads, with what it is for and its newest change. Read before analysing.",
+      "path": "operations/skills.list.json",
+      "bytes": 14343,
+      "sha256": "990f3dc97eeba55f58c22324b815dcf40ea0204d868dcaaa1a2fe1ba0f01899a"
+    },
+    "skills.read": {
+      "summary": "One project skill's text and its changes, newest first: who made each, why, from what (cells, conversations, files) and the lines it added and removed, and what changed outside Rho since.",
+      "path": "operations/skills.read.json",
+      "bytes": 8808,
+      "sha256": "e1dd781c1af4e864e346d5a4e703e19366241aa7d8b4dc00d8b75c6c4f7df448"
+    },
+    "skills.undo": {
+      "summary": "Put a project skill back as it was before its newest change, while the file is still as that change left it. The undo is a change of its own.",
+      "path": "operations/skills.undo.json",
+      "bytes": 6351,
+      "sha256": "9c35556dee0c40fb3dffe6a9cc78dde24215c16a959bd1d8a322c28bc50eb07b"
     },
     "task.map.declare": {
       "summary": "Agent only: conditionally declare task items, your own kind/state vocabulary (label, tone, optional role) and the next steps you will take. Rho shows next only from this declaration and never infers it.",

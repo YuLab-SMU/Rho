@@ -2488,7 +2488,8 @@
     "resource.changed",
     "conversation.changed",
     "console.changed",
-    "kernel.changed"
+    "kernel.changed",
+    "skills.changed"
   ],
   "compatibility": "Major API path changes for incompatible fields/semantics; additive optional fields allowed. Per-resource versions are independent.",
   "apiVersion": "2.0",

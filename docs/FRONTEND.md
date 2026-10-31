@@ -207,6 +207,26 @@ inspect what happened. The application gives those actions direct places:
   runs, or after the value or its session is gone, the last reading stays, dimmed, with
   what it is and when it was read
   ([episode](SIMULATED-PROJECT-EPISODE.md#looking-at-values)).
+- **Skills** (listed while the Skills plugin is selected) holds how work is done in the
+  project: the methods the person chose, the conventions they keep and the traps its work
+  ran into, as `SKILL.md` files in `.claude/skills/` that Claude Code loads by itself and
+  other Agents read through Rho. The subtitle counts them and names the newest change. The
+  list gives each skill's name, what it is for and who changed it last, or that it was
+  written or changed outside Rho, or why Agents could not load it; removed skills fold under
+  Removed. A skill opens on its newest change: its reason as the headline, who made it (an
+  Agent's name opens its conversation) and when, its evidence (a Notebook cell opens the
+  Notebook at that cell, a file opens the file, a note is quoted) and the lines it added and
+  removed, with Undo this change (Bring it back after a removal, Put the change back after an
+  undo). A change that writes or removes the whole file folds its text. An edit made outside
+  Rho comes first, amber, with what changed since the last recorded version: Agents read it
+  as it is, the next recorded change starts from it, and it is undone where it was made. Then
+  the text as Agents read it (a first heading that repeats the name is left out), Edit the
+  file, and the earlier changes, each opening to its evidence and lines. The skills serverctl
+  binds to the project's servers are listed read only under From your servers. With no skills
+  the page says what will appear and how, with two things to tell the Agent. Below 760 px of
+  page one region shows at a time: the list, then a skill with All skills to go back. The
+  Overview's side column shows the three newest changes, each opening its skill
+  ([episode](SKILLS-EPISODE.md)).
 - **Files** opens documents, browses the project's folder and the source folders it
   works in, and filters the current folder. A source folder is named as the person
   named it and opens one level at a time, the same way any other folder does.
@@ -453,6 +473,7 @@ files; `showOnServer` takes a file from Data flow to it.
 The HTML page view is `html.reader` from Rho-plugins (HTML 0.1.0); Rho gives it `pageFrame`, the
 service's `/frame.html` (sandboxed, with its own policy and no network; the page's policy adds
 only `frame-src 'self'`), and `fileBytes`, a file snapshot's bytes (`readFile` in `web/previews.ts`).
+`web/skills.tsx` draws the Skills page from `skills.list` and `skills.read`; `web/skills-work.tsx` holds the list read, the authors and the Overview's Skills section, and hands a chosen skill to the page.
 `web/notebook.tsx` draws the Notebook, Variables and Plots from one shared `kernel.read`, and the Notebook's Studio view
 (`SessionPane`) from the same, scoped to the conversation's principal, its start and the
 moment shown inside a conversation's Studio. `web/explore.ts` places the Notebook

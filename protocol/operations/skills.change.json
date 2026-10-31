@@ -1,0 +1,326 @@
+{
+  "method": "skills.change",
+  "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "projectId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "body": {
+        "maxLength": 262144,
+        "type": "string"
+      },
+      "changeId": {
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+        "type": "string"
+      },
+      "description": {
+        "maxLength": 1024,
+        "minLength": 1,
+        "pattern": "^[^\\r\\n]*$",
+        "type": "string"
+      },
+      "evidence": {
+        "items": {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "enum": [
+                "cell",
+                "conversation",
+                "file",
+                "annotation",
+                "place",
+                "note"
+              ]
+            },
+            "label": {
+              "maxLength": 200,
+              "type": "string"
+            },
+            "ref": {
+              "maxLength": 256,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "ref"
+          ],
+          "type": "object"
+        },
+        "maxItems": 16,
+        "type": "array"
+      },
+      "expectedVersion": {
+        "anyOf": [
+          {
+            "pattern": "^[a-f0-9]{64}$",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "name": {
+        "pattern": "^[a-z0-9][a-z0-9-]{0,63}$",
+        "type": "string"
+      },
+      "reason": {
+        "maxLength": 500,
+        "minLength": 1,
+        "type": "string"
+      },
+      "remove": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "projectId",
+      "name",
+      "reason",
+      "expectedVersion",
+      "changeId"
+    ],
+    "type": "object"
+  },
+  "outputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "change": {
+        "additionalProperties": false,
+        "properties": {
+          "added": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "after": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "at": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "before": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "by": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "changeId": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "diff": {
+            "additionalProperties": false,
+            "properties": {
+              "cut": {
+                "type": "boolean"
+              },
+              "lines": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "op": {
+                      "enum": [
+                        " ",
+                        "+",
+                        "-",
+                        "…"
+                      ]
+                    },
+                    "text": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "text"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "lines",
+              "cut"
+            ],
+            "type": "object"
+          },
+          "evidence": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "kind": {
+                  "enum": [
+                    "cell",
+                    "conversation",
+                    "file",
+                    "annotation",
+                    "place",
+                    "note"
+                  ]
+                },
+                "label": {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                "ref": {
+                  "maxLength": 256,
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind",
+                "ref"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "id": {
+            "pattern": "^sc-[a-f0-9]{16}$",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "recorded",
+              "removed",
+              "undone",
+              "outside"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          },
+          "removed": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "skill": {
+            "pattern": "^[a-z0-9][a-z0-9-]{0,63}$",
+            "type": "string"
+          },
+          "undoes": {
+            "anyOf": [
+              {
+                "pattern": "^sc-[a-f0-9]{16}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "undoneBy": {
+            "anyOf": [
+              {
+                "pattern": "^sc-[a-f0-9]{16}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "changeId",
+          "skill",
+          "kind",
+          "by",
+          "at",
+          "reason",
+          "evidence",
+          "before",
+          "after",
+          "undoes",
+          "undoneBy",
+          "added",
+          "removed",
+          "diff"
+        ],
+        "type": "object"
+      },
+      "skill": {
+        "anyOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "body": {
+                "type": "string"
+              },
+              "bytes": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "description": {
+                "type": "string"
+              },
+              "modifiedAt": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "name": {
+                "pattern": "^[a-z0-9][a-z0-9-]{0,63}$",
+                "type": "string"
+              },
+              "version": {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "description",
+              "body",
+              "version",
+              "bytes",
+              "modifiedAt"
+            ],
+            "type": "object"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    },
+    "required": [
+      "skill",
+      "change"
+    ],
+    "type": "object"
+  },
+  "description": "Record in a project skill when the person corrects a method or says how they work, or a failure's cause and fix are found: a new skill, a new text with a one-sentence reason and evidence, or its removal. Record how to work, never results. Made on the version read; the same changeId never writes twice."
+}

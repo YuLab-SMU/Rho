@@ -5,7 +5,7 @@
 // value an accepted response carries. The service, the Node client and the browser
 // client are all written against these types; runtime validation stays with Ajv.
 //
-// Contract identity: apiVersion 2.0, schemaVersion 2, 127 operations.
+// Contract identity: apiVersion 2.0, schemaVersion 2, 131 operations.
 export interface RhoOperationError {
   kind:
     | 'invalid'
@@ -11341,6 +11341,10 @@ export interface SessionGrantInput {
     | 'selection.set'
     | 'skill.list'
     | 'skill.read'
+    | 'skills.change'
+    | 'skills.list'
+    | 'skills.read'
+    | 'skills.undo'
     | 'task.map.declare'
     | 'task.map.present'
     | 'task.map.read'
@@ -11390,6 +11394,237 @@ export interface SkillReadOutput {
   version: string;
   digest: string;
   content: string;
+}
+
+export interface SkillsChangeInput {
+  projectId: string;
+  body?: string;
+  changeId: string;
+  description?: string;
+  /**
+   * @maxItems 16
+   */
+  evidence?: {
+    kind: 'cell' | 'conversation' | 'file' | 'annotation' | 'place' | 'note';
+    label?: string;
+    ref: string;
+  }[];
+  expectedVersion: string | null;
+  name: string;
+  reason: string;
+  remove?: boolean;
+}
+
+export interface SkillsChangeOutput {
+  change: {
+    added: number;
+    after: string | null;
+    at: string;
+    before: string | null;
+    by: string;
+    changeId: string | null;
+    diff: {
+      cut: boolean;
+      lines: {
+        op: ' ' | '+' | '-' | '…';
+        text: string;
+      }[];
+    };
+    evidence: {
+      kind: 'cell' | 'conversation' | 'file' | 'annotation' | 'place' | 'note';
+      label?: string;
+      ref: string;
+    }[];
+    id: string;
+    kind: 'recorded' | 'removed' | 'undone' | 'outside';
+    reason: string;
+    removed: number;
+    skill: string;
+    undoes: string | null;
+    undoneBy: string | null;
+  };
+  skill: {
+    body: string;
+    bytes: number;
+    description: string;
+    modifiedAt: string;
+    name: string;
+    version: string;
+  } | null;
+}
+
+export interface SkillsListInput {
+  projectId: string;
+}
+
+export interface SkillsListOutput {
+  folder: string;
+  limits: {
+    maxSkillBytes: number;
+    maxSkills: number;
+  };
+  removed: {
+    bytes: number;
+    changes: number;
+    description: string;
+    last: {
+      added: number;
+      after: string | null;
+      at: string;
+      before: string | null;
+      by: string;
+      changeId: string | null;
+      evidence: {
+        kind: 'cell' | 'conversation' | 'file' | 'annotation' | 'place' | 'note';
+        label?: string;
+        ref: string;
+      }[];
+      id: string;
+      kind: 'recorded' | 'removed' | 'undone' | 'outside';
+      reason: string;
+      removed: number;
+      skill: string;
+      undoes: string | null;
+      undoneBy: string | null;
+    } | null;
+    modifiedAt: string | null;
+    name: string;
+    outside: boolean;
+    problem: string | null;
+    version: string | null;
+  }[];
+  skills: {
+    bytes: number;
+    changes: number;
+    description: string;
+    last: {
+      added: number;
+      after: string | null;
+      at: string;
+      before: string | null;
+      by: string;
+      changeId: string | null;
+      evidence: {
+        kind: 'cell' | 'conversation' | 'file' | 'annotation' | 'place' | 'note';
+        label?: string;
+        ref: string;
+      }[];
+      id: string;
+      kind: 'recorded' | 'removed' | 'undone' | 'outside';
+      reason: string;
+      removed: number;
+      skill: string;
+      undoes: string | null;
+      undoneBy: string | null;
+    } | null;
+    modifiedAt: string | null;
+    name: string;
+    outside: boolean;
+    problem: string | null;
+    version: string | null;
+  }[];
+}
+
+export interface SkillsReadInput {
+  projectId: string;
+  limit?: number;
+  name: string;
+}
+
+export interface SkillsReadOutput {
+  changes: {
+    added: number;
+    after: string | null;
+    at: string;
+    before: string | null;
+    by: string;
+    changeId: string | null;
+    diff: {
+      cut: boolean;
+      lines: {
+        op: ' ' | '+' | '-' | '…';
+        text: string;
+      }[];
+    };
+    evidence: {
+      kind: 'cell' | 'conversation' | 'file' | 'annotation' | 'place' | 'note';
+      label?: string;
+      ref: string;
+    }[];
+    id: string;
+    kind: 'recorded' | 'removed' | 'undone' | 'outside';
+    reason: string;
+    removed: number;
+    skill: string;
+    undoes: string | null;
+    undoneBy: string | null;
+  }[];
+  omitted: number;
+  outside: {
+    added: number;
+    diff: {
+      cut: boolean;
+      lines: {
+        op: ' ' | '+' | '-' | '…';
+        text: string;
+      }[];
+    };
+    removed: number;
+    since: string | null;
+  } | null;
+  skill: {
+    body: string;
+    bytes: number;
+    description: string;
+    modifiedAt: string;
+    name: string;
+    version: string;
+  } | null;
+}
+
+export interface SkillsUndoInput {
+  projectId: string;
+  change: string;
+  changeId: string;
+  name: string;
+}
+
+export interface SkillsUndoOutput {
+  change: {
+    added: number;
+    after: string | null;
+    at: string;
+    before: string | null;
+    by: string;
+    changeId: string | null;
+    diff: {
+      cut: boolean;
+      lines: {
+        op: ' ' | '+' | '-' | '…';
+        text: string;
+      }[];
+    };
+    evidence: {
+      kind: 'cell' | 'conversation' | 'file' | 'annotation' | 'place' | 'note';
+      label?: string;
+      ref: string;
+    }[];
+    id: string;
+    kind: 'recorded' | 'removed' | 'undone' | 'outside';
+    reason: string;
+    removed: number;
+    skill: string;
+    undoes: string | null;
+    undoneBy: string | null;
+  };
+  skill: {
+    body: string;
+    bytes: number;
+    description: string;
+    modifiedAt: string;
+    name: string;
+    version: string;
+  } | null;
 }
 
 export interface TaskMapDeclareInput {
@@ -13182,6 +13417,10 @@ export interface RhoOperations {
   "session.grant": { input: SessionGrantInput; output: SessionGrantOutput };
   "skill.list": { input: SkillListInput; output: SkillListOutput };
   "skill.read": { input: SkillReadInput; output: SkillReadOutput };
+  "skills.change": { input: SkillsChangeInput; output: SkillsChangeOutput };
+  "skills.list": { input: SkillsListInput; output: SkillsListOutput };
+  "skills.read": { input: SkillsReadInput; output: SkillsReadOutput };
+  "skills.undo": { input: SkillsUndoInput; output: SkillsUndoOutput };
   "task.map.declare": { input: TaskMapDeclareInput; output: TaskMapDeclareOutput };
   "task.map.present": { input: TaskMapPresentInput; output: TaskMapPresentOutput };
   "task.map.read": { input: TaskMapReadInput; output: TaskMapReadOutput };
@@ -13203,5 +13442,5 @@ export type RhoInput<M extends RhoMethod> = RhoOperations[M]['input'];
 export type RhoOutput<M extends RhoMethod> = RhoOperations[M]['output'];
 
 /** The names a caller may pass to protocol.describe / protocol.validate. */
-export const rhoMethods = ["action.cancel","action.export","action.list","action.lookup","action.observe","action.output","action.retry","action.submit","agent.activity.capture","agent.activity.outputs","agent.activity.read","annotation.create","annotation.decide","annotation.list","annotation.read","annotation.reply","artifact.check","binding.activity","binding.activity.append","binding.close","binding.list","binding.open","capability.configure","capability.index","capability.list","capability.resolve","composition.apply","composition.put","composition.read","composition.undo","console.list","console.output","console.run","console.stop","context.create","context.read","conversation.configure","conversation.decide","conversation.delete","conversation.list","conversation.permission","conversation.read","conversation.restore","conversation.send","conversation.settings.check","conversation.settings.read","conversation.settings.update","conversation.start","conversation.stop","conversation.trash","data.compare","data.page","data.plot","document.abandonSave","document.change.read","document.edit","document.history","document.open","document.read","document.revert","document.save","document.undo","document.undoOwn","evidence.export","evidence.preview","feedback.read","feedback.status","feedback.submit","interaction.selection.read","interaction.selection.set","kernel.inspect","kernel.interrupt","kernel.place.check","kernel.place.copy","kernel.place.list","kernel.place.set","kernel.places","kernel.plot","kernel.read","kernel.run","kernel.server.skill","kernel.servers","kernel.stop","media.describe","object.read","observation.snapshot","project.create","project.createWorkspace","project.doctor","project.entries","project.list","project.open","project.openFile","project.pick","project.runs","project.source.add","project.source.pick","project.work.read","protocol.describe","protocol.validate","requirements.check","requirements.prepare","resource.capture","resource.list","resource.read","resource.register","selection.set","session.browser.pair","session.browser.revoke","session.connect","session.grant","skill.list","skill.read","task.map.declare","task.map.present","task.map.read","task.map.respond","task.routing.put","view.close","view.observations.read","view.observe","view.protection.set","workspace.enhance","workspace.export","workspace.observe","workspace.restore","workspace.save"] as const satisfies readonly RhoMethod[];
+export const rhoMethods = ["action.cancel","action.export","action.list","action.lookup","action.observe","action.output","action.retry","action.submit","agent.activity.capture","agent.activity.outputs","agent.activity.read","annotation.create","annotation.decide","annotation.list","annotation.read","annotation.reply","artifact.check","binding.activity","binding.activity.append","binding.close","binding.list","binding.open","capability.configure","capability.index","capability.list","capability.resolve","composition.apply","composition.put","composition.read","composition.undo","console.list","console.output","console.run","console.stop","context.create","context.read","conversation.configure","conversation.decide","conversation.delete","conversation.list","conversation.permission","conversation.read","conversation.restore","conversation.send","conversation.settings.check","conversation.settings.read","conversation.settings.update","conversation.start","conversation.stop","conversation.trash","data.compare","data.page","data.plot","document.abandonSave","document.change.read","document.edit","document.history","document.open","document.read","document.revert","document.save","document.undo","document.undoOwn","evidence.export","evidence.preview","feedback.read","feedback.status","feedback.submit","interaction.selection.read","interaction.selection.set","kernel.inspect","kernel.interrupt","kernel.place.check","kernel.place.copy","kernel.place.list","kernel.place.set","kernel.places","kernel.plot","kernel.read","kernel.run","kernel.server.skill","kernel.servers","kernel.stop","media.describe","object.read","observation.snapshot","project.create","project.createWorkspace","project.doctor","project.entries","project.list","project.open","project.openFile","project.pick","project.runs","project.source.add","project.source.pick","project.work.read","protocol.describe","protocol.validate","requirements.check","requirements.prepare","resource.capture","resource.list","resource.read","resource.register","selection.set","session.browser.pair","session.browser.revoke","session.connect","session.grant","skill.list","skill.read","skills.change","skills.list","skills.read","skills.undo","task.map.declare","task.map.present","task.map.read","task.map.respond","task.routing.put","view.close","view.observations.read","view.observe","view.protection.set","workspace.enhance","workspace.export","workspace.observe","workspace.restore","workspace.save"] as const satisfies readonly RhoMethod[];
 export type RhoInputFor<M extends RhoMethod> = RhoOperations[M]['input'];

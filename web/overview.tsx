@@ -15,6 +15,7 @@ import { AgentPage } from './agent-manage.js';
 import { AgentAccess } from './agents.js';
 import { SharedNotes, TouchedFiles, useProjectWork, WorkSessions } from './work-progress.js';
 import { NotebookWorkSection, useNotebookWork } from './notebook-work.js';
+import { SkillsWorkSection, useSkillList } from './skills-work.js';
 import { AnswerBoard } from './answer-board.js';
 import { readPreview, type Preview } from './previews.js';
 import './overview.css';
@@ -108,6 +109,9 @@ export function ProjectOverview({ project, snapshot, client, section, notesText 
   const readsKernel = snapshot.catalog.operations.some(o => o.method === 'kernel.read' && o.state === 'available' && o.authorized);
   const notebook = useNotebookWork(client, project.id, snapshot.cursor, section === 'overview' && readsKernel);
   const notebookRead = !readsKernel || notebook.read !== null || !!notebook.problem;
+  const readsSkills = snapshot.catalog.operations.some(o => o.method === 'skills.list' && o.state === 'available' && o.authorized);
+  const skills = useSkillList(client, project.id, snapshot.cursor, section === 'overview' && readsSkills);
+  const skillsChanged = !!skills.problem || [...(skills.list?.skills ?? []), ...(skills.list?.removed ?? [])].some(s => s.last);
   const readSequence = useRef(0), runDialog = useRef<HTMLDialogElement>(null);
   const isFiles = section === 'files' || section === 'documents';
   const places = new Map<string, { compositionId: string; viewId: string }>();
@@ -132,7 +136,7 @@ export function ProjectOverview({ project, snapshot, client, section, notesText 
   // The side column earns its place only when it has something to report.
   const recent = !!runsProblem || (runs?.length ?? 0) > 0;
   const touched = !!work.work && (work.work.files.length > 0 || work.work.omitted.fileReferences > 0);
-  const side = recent || touched || workAllowed || snapshot.compositions.length > 0;
+  const side = recent || touched || workAllowed || snapshot.compositions.length > 0 || skillsChanged;
   const shownFigures = figureCount(figures.length);
   const boarded = !!files && !!snapshot.conversations?.length;
   // An empty project leads with the step that has something behind it, and never with a claim
@@ -240,6 +244,7 @@ export function ProjectOverview({ project, snapshot, client, section, notesText 
             </button>)}
             {workAllowed && <SharedNotes work={work.work} openFile={p => void open({ path: p })} />}</div>
           </section>}
+          <SkillsWorkSection list={skills.list} problem={skills.problem} snapshot={snapshot} onOpen={() => onSection('skills')} />
           <TouchedFiles work={work.work} openFile={p => void open({ path: p })} openActivity={() => onSection('agent')} />
           {recent && <section className="project-section project-recent"><div className="section-heading"><h2>Recent activity</h2><button className="text-button" onClick={() => onSection('agent')}>View all</button></div>
             {error(runsProblem, readAgain)}{orderedRuns.length ? <div className="activity-list">{orderedRuns.slice(0, 5).map(runRow)}</div> : <p className="quiet-empty">No runs yet.</p>}

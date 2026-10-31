@@ -1,0 +1,346 @@
+{
+  "method": "skills.read",
+  "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "projectId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "limit": {
+        "maximum": 50,
+        "minimum": 1,
+        "type": "integer"
+      },
+      "name": {
+        "pattern": "^[a-z0-9][a-z0-9-]{0,63}$",
+        "type": "string"
+      }
+    },
+    "required": [
+      "projectId",
+      "name"
+    ],
+    "type": "object"
+  },
+  "outputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "changes": {
+        "items": {
+          "additionalProperties": false,
+          "properties": {
+            "added": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "after": {
+              "anyOf": [
+                {
+                  "pattern": "^[a-f0-9]{64}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "at": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "before": {
+              "anyOf": [
+                {
+                  "pattern": "^[a-f0-9]{64}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "by": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "changeId": {
+              "anyOf": [
+                {
+                  "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "diff": {
+              "additionalProperties": false,
+              "properties": {
+                "cut": {
+                  "type": "boolean"
+                },
+                "lines": {
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "op": {
+                        "enum": [
+                          " ",
+                          "+",
+                          "-",
+                          "…"
+                        ]
+                      },
+                      "text": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "op",
+                      "text"
+                    ],
+                    "type": "object"
+                  },
+                  "type": "array"
+                }
+              },
+              "required": [
+                "lines",
+                "cut"
+              ],
+              "type": "object"
+            },
+            "evidence": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "enum": [
+                      "cell",
+                      "conversation",
+                      "file",
+                      "annotation",
+                      "place",
+                      "note"
+                    ]
+                  },
+                  "label": {
+                    "maxLength": 200,
+                    "type": "string"
+                  },
+                  "ref": {
+                    "maxLength": 256,
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "ref"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "id": {
+              "pattern": "^sc-[a-f0-9]{16}$",
+              "type": "string"
+            },
+            "kind": {
+              "enum": [
+                "recorded",
+                "removed",
+                "undone",
+                "outside"
+              ]
+            },
+            "reason": {
+              "type": "string"
+            },
+            "removed": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "skill": {
+              "pattern": "^[a-z0-9][a-z0-9-]{0,63}$",
+              "type": "string"
+            },
+            "undoes": {
+              "anyOf": [
+                {
+                  "pattern": "^sc-[a-f0-9]{16}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "undoneBy": {
+              "anyOf": [
+                {
+                  "pattern": "^sc-[a-f0-9]{16}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "changeId",
+            "skill",
+            "kind",
+            "by",
+            "at",
+            "reason",
+            "evidence",
+            "before",
+            "after",
+            "undoes",
+            "undoneBy",
+            "added",
+            "removed",
+            "diff"
+          ],
+          "type": "object"
+        },
+        "type": "array"
+      },
+      "omitted": {
+        "minimum": 0,
+        "type": "integer"
+      },
+      "outside": {
+        "anyOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "added": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "diff": {
+                "additionalProperties": false,
+                "properties": {
+                  "cut": {
+                    "type": "boolean"
+                  },
+                  "lines": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "op": {
+                          "enum": [
+                            " ",
+                            "+",
+                            "-",
+                            "…"
+                          ]
+                        },
+                        "text": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "op",
+                        "text"
+                      ],
+                      "type": "object"
+                    },
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "lines",
+                  "cut"
+                ],
+                "type": "object"
+              },
+              "removed": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "since": {
+                "anyOf": [
+                  {
+                    "pattern": "^[a-f0-9]{64}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "since",
+              "added",
+              "removed",
+              "diff"
+            ],
+            "type": "object"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "skill": {
+        "anyOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "body": {
+                "type": "string"
+              },
+              "bytes": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "description": {
+                "type": "string"
+              },
+              "modifiedAt": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "name": {
+                "pattern": "^[a-z0-9][a-z0-9-]{0,63}$",
+                "type": "string"
+              },
+              "version": {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "description",
+              "body",
+              "version",
+              "bytes",
+              "modifiedAt"
+            ],
+            "type": "object"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    },
+    "required": [
+      "skill",
+      "changes",
+      "omitted",
+      "outside"
+    ],
+    "type": "object"
+  },
+  "description": "One project skill's text and its changes, newest first: who made each, why, from what (cells, conversations, files) and the lines it added and removed, and what changed outside Rho since."
+}

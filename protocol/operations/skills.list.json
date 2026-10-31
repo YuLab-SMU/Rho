@@ -1,0 +1,492 @@
+{
+  "method": "skills.list",
+  "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "projectId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      }
+    },
+    "required": [
+      "projectId"
+    ],
+    "type": "object"
+  },
+  "outputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "folder": {
+        "type": "string"
+      },
+      "limits": {
+        "additionalProperties": false,
+        "properties": {
+          "maxSkillBytes": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxSkills": {
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "maxSkills",
+          "maxSkillBytes"
+        ],
+        "type": "object"
+      },
+      "removed": {
+        "items": {
+          "additionalProperties": false,
+          "properties": {
+            "bytes": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "changes": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "description": {
+              "type": "string"
+            },
+            "last": {
+              "anyOf": [
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "added": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "after": {
+                      "anyOf": [
+                        {
+                          "pattern": "^[a-f0-9]{64}$",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "at": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "before": {
+                      "anyOf": [
+                        {
+                          "pattern": "^[a-f0-9]{64}$",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "by": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "changeId": {
+                      "anyOf": [
+                        {
+                          "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "evidence": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "kind": {
+                            "enum": [
+                              "cell",
+                              "conversation",
+                              "file",
+                              "annotation",
+                              "place",
+                              "note"
+                            ]
+                          },
+                          "label": {
+                            "maxLength": 200,
+                            "type": "string"
+                          },
+                          "ref": {
+                            "maxLength": 256,
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "ref"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "id": {
+                      "pattern": "^sc-[a-f0-9]{16}$",
+                      "type": "string"
+                    },
+                    "kind": {
+                      "enum": [
+                        "recorded",
+                        "removed",
+                        "undone",
+                        "outside"
+                      ]
+                    },
+                    "reason": {
+                      "type": "string"
+                    },
+                    "removed": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "skill": {
+                      "pattern": "^[a-z0-9][a-z0-9-]{0,63}$",
+                      "type": "string"
+                    },
+                    "undoes": {
+                      "anyOf": [
+                        {
+                          "pattern": "^sc-[a-f0-9]{16}$",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "undoneBy": {
+                      "anyOf": [
+                        {
+                          "pattern": "^sc-[a-f0-9]{16}$",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "changeId",
+                    "skill",
+                    "kind",
+                    "by",
+                    "at",
+                    "reason",
+                    "evidence",
+                    "before",
+                    "after",
+                    "undoes",
+                    "undoneBy",
+                    "added",
+                    "removed"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "modifiedAt": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "name": {
+              "pattern": "^[a-z0-9][a-z0-9-]{0,63}$",
+              "type": "string"
+            },
+            "outside": {
+              "type": "boolean"
+            },
+            "problem": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "version": {
+              "anyOf": [
+                {
+                  "pattern": "^[a-f0-9]{64}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "name",
+            "description",
+            "version",
+            "bytes",
+            "modifiedAt",
+            "changes",
+            "last",
+            "outside",
+            "problem"
+          ],
+          "type": "object"
+        },
+        "type": "array"
+      },
+      "skills": {
+        "items": {
+          "additionalProperties": false,
+          "properties": {
+            "bytes": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "changes": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "description": {
+              "type": "string"
+            },
+            "last": {
+              "anyOf": [
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "added": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "after": {
+                      "anyOf": [
+                        {
+                          "pattern": "^[a-f0-9]{64}$",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "at": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "before": {
+                      "anyOf": [
+                        {
+                          "pattern": "^[a-f0-9]{64}$",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "by": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "changeId": {
+                      "anyOf": [
+                        {
+                          "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "evidence": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "kind": {
+                            "enum": [
+                              "cell",
+                              "conversation",
+                              "file",
+                              "annotation",
+                              "place",
+                              "note"
+                            ]
+                          },
+                          "label": {
+                            "maxLength": 200,
+                            "type": "string"
+                          },
+                          "ref": {
+                            "maxLength": 256,
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "ref"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "id": {
+                      "pattern": "^sc-[a-f0-9]{16}$",
+                      "type": "string"
+                    },
+                    "kind": {
+                      "enum": [
+                        "recorded",
+                        "removed",
+                        "undone",
+                        "outside"
+                      ]
+                    },
+                    "reason": {
+                      "type": "string"
+                    },
+                    "removed": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "skill": {
+                      "pattern": "^[a-z0-9][a-z0-9-]{0,63}$",
+                      "type": "string"
+                    },
+                    "undoes": {
+                      "anyOf": [
+                        {
+                          "pattern": "^sc-[a-f0-9]{16}$",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "undoneBy": {
+                      "anyOf": [
+                        {
+                          "pattern": "^sc-[a-f0-9]{16}$",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "changeId",
+                    "skill",
+                    "kind",
+                    "by",
+                    "at",
+                    "reason",
+                    "evidence",
+                    "before",
+                    "after",
+                    "undoes",
+                    "undoneBy",
+                    "added",
+                    "removed"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "modifiedAt": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "name": {
+              "pattern": "^[a-z0-9][a-z0-9-]{0,63}$",
+              "type": "string"
+            },
+            "outside": {
+              "type": "boolean"
+            },
+            "problem": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "version": {
+              "anyOf": [
+                {
+                  "pattern": "^[a-f0-9]{64}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "name",
+            "description",
+            "version",
+            "bytes",
+            "modifiedAt",
+            "changes",
+            "last",
+            "outside",
+            "problem"
+          ],
+          "type": "object"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "folder",
+      "skills",
+      "removed",
+      "limits"
+    ],
+    "type": "object"
+  },
+  "description": "The project's skills: how work is done here (the methods the person chose, the conventions they keep, the traps its work ran into), each a SKILL.md in .claude/skills that every Agent here reads, with what it is for and its newest change. Read before analysing."
+}

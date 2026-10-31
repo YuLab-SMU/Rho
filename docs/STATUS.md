@@ -29,15 +29,12 @@ benefits are not established by existing Rho checks.
 | macOS 0.5.1 | Unsigned npm tarball/local WebUI selected; Core bundled explicitly | [Fixed tarball installed and exercised](PREVIEW-0.5.1.md) |
 | Independent researcher use | Unobserved | Trial guide in the episode; no usability claim |
 
-M0 retains the completed Python/R highlighting, Markdown reading and native command
-exit/time/bounded-output work ([record](CODE-MARKDOWN-EPISODE.md)). The real
-Python/R report trial also retains scripts/results/report after originals change.
-The first Codex feedback attempt was incorrectly cancelled by the acceptance
-permission selector; the failure remains recorded. The corrected trial completed.
-Annotations 0.5.1 retains a newly created Review conversation for subsequent feedback;
-candidate 2 repeats that browser path and both real client loops. Installed Codex
-needed an explicitly selected 64-choice native permission budget after hitting the
-default 32; its grant scope did not change.
+M0 retains Python/R highlighting, Markdown reading and native command exit/time/bounded
+output ([record](CODE-MARKDOWN-EPISODE.md)); its report trial keeps scripts, results and
+report after originals change. A first Codex feedback attempt cancelled by the acceptance's
+permission selector stays recorded beside the corrected trial; Annotations 0.5.1 keeps a new
+Review conversation for later feedback. Installed Codex needed a selected 64-choice native
+permission budget (default 32); its grant scope did not change.
 
 A [simulated-project episode](SIMULATED-PROJECT-EPISODE.md) ran two rho-bio-eval
 capsule projects through Rho with Claude Code and changed what their screens showed:
@@ -188,13 +185,10 @@ login without a UTF-8 locale and Explore loading local paths on the server.
 used is now the server's own skill, not Rho's code. A server the person manages with serverctl
 is reached through `serverctl exec`, which holds its login, and `kernel.servers` lists those
 servers with the skills serverctl binds to each; `kernel.server.skill` reads one. The Servers
-view lists them when a server is added, shows each place's skills and reads one in place, and
-the Agent's instructions say to read and follow them. The kernel no longer filters one
-cluster's login notices. On a disposable server whose R is only on a module path, registered in a throwaway
-serverctl with a skill saying so, the person's check found no R, the skill's line found R 4.2.2,
-and the bix-46 cells ran there (mexG −4.96). An Agent with Rho's tools only (Claude Opus 5.5,
-no shell) asked in plain words read the server's skill, named a place with its setup line,
-wrote to the folder the skill names and reported mexG 0.0715 in 1 vs 98, as recomputed. Claude
+view lists them and reads one in place; the Agent's instructions say to follow them. On a
+disposable server whose R is only on a module path, with a skill saying so, the skill's line
+found R 4.2.2 where the person's check found none, and an Agent with Rho's tools only read the
+skill, named a place with its setup line and wrote where the skill says. Claude
 Code started in Rho loaded the person's own ssh-server-manager skill, ran its own shell and
 waits on the person's choice. The serverctl on this machine's path is older than its registry
 ("schema 8 is newer than supported 5"), and Rho shows that. A session left running after a drop,
@@ -209,6 +203,16 @@ resolve continuation may add knownRefs, and the kernel looks for the folder afte
 lines. Steps 1 to 3 then found the server in five calls each and shared one live R session there
 (graded 4/5, 6/11, 0/7: analysis choices and, in step 3, stored results that the Agent showed
 do not come from the counts). The Overview, which said "No work yet", now shows the Notebook's work.
+
+[Project skills](SKILLS-EPISODE.md) (Skills 0.1.0): how work is done in a project is kept as
+its own skills, `SKILL.md` files in `.claude/skills/` that Claude Code loads and other Agents
+read through Rho. Each change keeps its author, reason, evidence and versions; undo is a change;
+an edit outside Rho is seen and kept before anything is written over it. The Skills page leads
+with a skill's newest change beside Undo, and the Overview lists the newest changes. In
+pa14-qs with the person's notes, every Agent listed the skills before its first cell, recorded
+the notes, and new Agents followed them (step 1 again 5/5). A rule an Agent widened while
+recording carried over too; the guidance now keeps the person's terms. Seed skills and records
+from failures are not built.
 
 ## Existing application
 
@@ -234,11 +238,9 @@ do not come from the counts). The Overview, which said "No work yet", now shows 
   standalone previews receive no project credentials and start no runtime
   ([authoring](PLUGIN-AUTHORING.md)).
 
-Earlier observations remain in the [home/project](HOME-PROJECT-EPISODE.md),
-[sidebar/canvas](AGENT-CANVAS-EPISODE.md), [Graph](GRAPH-EPISODE.md),
-[Agent page](AGENT-PAGE-EPISODE.md), [Agent activity](AGENT-ACTIVITY.md) and
-[backend acceptance](BACKEND-ACCEPTANCE.md) records. Their checks retain their
-original scope; they do not establish usability of later changes.
+Earlier observations remain in the [home/project](HOME-PROJECT-EPISODE.md), [sidebar/canvas](AGENT-CANVAS-EPISODE.md),
+[Graph](GRAPH-EPISODE.md), [Agent page](AGENT-PAGE-EPISODE.md), [Agent activity](AGENT-ACTIVITY.md) and
+[backend acceptance](BACKEND-ACCEPTANCE.md) records, within their original scope.
 
 ## Verification
 
@@ -252,9 +254,11 @@ checks still held the 64-method limit and the plugin count, and the Skill's veri
 command was not an application script; corrected, Rho 261/261 and Plugins 132/132. The
 exploring pass first failed Rho 263/264, the Studio shell importing a module outside its
 allowed set, and ui:u2 also matched the New workspace row; corrected, Rho 264/264 and Plugins 132/132.
-The Overview's Notebook pass records Rho 273/274 and Plugins 146/146 in the [ledger](VERIFICATION.json):
-the MCP v2 test at its 30 s limit, which passed alone (24 s); the pages acceptance, with a
-project whose only work is Notebook cells, ui:u2 and person-files passed. The lab study pass
+The project skills pass records Rho 271/274 and Plugins 151/151 in the [ledger](VERIFICATION.json),
+whose script keeps no log; run again with its log, Rho 273/274, the MCP v2 test cancelled at its
+30 s limit (it passed alone). The contract check and the pages (with a Skills step), ui:u2,
+person-files, agent-canvas, graph, agent-page, agent-ui and sources acceptances passed. The
+Overview's Notebook pass recorded Rho 273/274 and Plugins 146/146 (MCP v2). The lab study pass
 recorded 272/274 twice (MCP v2 and Agent settings, each passing alone). The servers' skills
 pass recorded Rho 271/274 and Plugins 145/145, and the remote sessions pass Rho 272/274 and
 Plugins 144/144: the MCP v2 test at its 30 s limit and cleanup races (`.rho`, `ENOTEMPTY`) in
@@ -264,21 +268,18 @@ check and the sources, ui:u2, agent-canvas, graph, agent-page, agent-ui, review 
 acceptances passed; ui:u2 first failed counting the Overview's 3-row previews among the grid's
 reads, and now counts from the Table tab. The shell acceptance (editor focus at 390 px) and the
 interaction acceptance (a `/^workspace/` sidebar row) failed before the toolbar pass and remain
-open. Earlier passes: toolbars Rho 268/269 and Plugins 134/134 with the same acceptances; two forms Rho 269/269 with the seven acceptances (graph passed
-when run again alone); four panes Rho
-268/268 and Plugins 134/134, both suites run again after the R runner's reading fix; value view Rho 265/265 and Plugins 134/134; choices and Console Rho 260/260 and Plugins 125/125; figures and cost Rho 258/258; project notes Rho 249/249 and Plugins 120/120 (ui:u2 first
-failed until the notes stopped opening with every project); meaning layer Rho 253/253;
-descriptions Rho 257/257 and Plugins 122/122, each with the same seven acceptances.
+open. Earlier passes (toolbars, two forms, four panes, value view, choices and Console, figures
+and cost, project notes, meaning layer, descriptions) ran Rho 249–269 and Plugins 120–134 with
+the same seven acceptances; this page's Git history keeps each count and failure.
 The [episode](REVIEW-EVIDENCE-EPISODE.md) records contract, browser and installed results.
-The fixed 0.5.1 candidate passed 230/230; installed review/Graph/restart and both real
-clients passed. See the [preview](PREVIEW-0.5.1.md) for identities and limits.
+The fixed 0.5.1 candidate passed 230/230 with installed review/Graph/restart and both real
+clients ([preview](PREVIEW-0.5.1.md)).
 No failures are converted into passes by omitting the failed run.
 
-Automatic capture defaults: 8 MiB/snapshot, 64 snapshots and 32 MiB/turn, at most
-two workers/project (initial collector serializes), Files 512 MiB/1024 resources.
-Export defaults: 512 MiB/128 files/4 MiB metadata; previews 200 rows/20 columns and
-64 KiB text. Exhaustion preserves earlier evidence, output and uncertainty.
-[Headless](HEADLESS.md#retained-review-evidence) names configuration and behavior.
+Automatic capture defaults: 8 MiB/snapshot, 64 snapshots and 32 MiB/turn, at most two
+workers/project, Files 512 MiB/1024 resources; export 512 MiB/128 files/4 MiB metadata,
+previews 200 rows/20 columns and 64 KiB text. Exhaustion preserves earlier evidence, output
+and uncertainty ([Headless](HEADLESS.md#retained-review-evidence)).
 
 ## Scope and follow-up
 
@@ -291,9 +292,8 @@ signed distribution. Offline evidence is not a workspace restore or executable
 analysis format. Existing archives preserve owner fields within their stated scope
 and reject older collaboration formats that would lose state.
 
-The user withdrew the 2026-10-25 frontend guidance; Git retains it, but it is not a
-requirement. The [2026-10-26 design commission](design/2026-10-26/index.html) describes
-a broader designer task, not a template for these implemented screens. Current work
+The withdrawn 2026-10-25 frontend guidance and the [2026-10-26 design commission](design/2026-10-26/index.html)
+are not requirements or templates for these screens. Current work
 advances by running real episodes and reviewing their results
 ([Development](DEVELOPMENT.md), [Frontend](FRONTEND.md)). No independent researcher
 trial or physical IME observation has yet established ease of use.
