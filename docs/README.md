@@ -23,6 +23,7 @@ were withdrawn on 2026-10-25; Git keeps their history.
 | [Live sessions on a server](REMOTE-EPISODE.md) | R and Python run in a folder on a server reached with ssh: places, checks, the Servers view, copies of server files and a dropped connection; the episode on a disposable server, fixes and limits |
 | [Project skills](SKILLS-EPISODE.md) | How work is done in a project, kept as skills every Agent reads: recorded changes with author, reason and evidence, undo, edits outside Rho, the Skills page, and a case where the person's notes carried over to new Agents; runs, checks and limits |
 | [Agent activity](AGENT-ACTIVITY.md) | Live Claude Code/dsh observations, errors, captured outputs, recovery and real-run evidence |
+| [dsh-rho prototype](DSH-RHO-EPISODE.md) | Native dsh analysis, reused Rho table/figure views, a selected-row question in the original conversation, local package installation and recovery |
 | [Conversation episode](CONVERSATION-EPISODE.md) | Conversations with Claude Code started in Rho, who holds a session's input, limits, real runs and their reviews |
 | [Claude ACP episode](ACP-EPISODE.md) | Agent-owned ACP, real Westlake HPC multi-turn conversation, cancellation and recovery; legacy compatibility and limits |
 | [Claude, Codex and external ACP](ACP-MULTI-AGENT-EPISODE.md) | Second Agent, external-client relay, shared workspace loops and installed Westlake HPC acceptance |

@@ -4,20 +4,18 @@ Updated: 2026-10-31.
 
 ## Current focus
 
-The selected work is result review, retained historical evidence, macOS arm64
-0.5.1 preview delivery and a separately accepted offline reader. The
-[episode](REVIEW-EVIDENCE-EPISODE.md) records baseline, observations, fixes and limits.
+The selected work includes the [dsh-rho prototype](DSH-RHO-EPISODE.md): native dsh analysis,
+reused table/figure views and a selected-row question in the same conversation. Result review,
+historical evidence, macOS 0.5.1 and the offline reader retain their [episode](REVIEW-EVIDENCE-EPISODE.md).
 Native tools remain normal; Core is optional. No Core execution behavior changed.
 
-The [research method proposal](https://github.com/YuLab-SMU/Rho-paper) centers on purpose-driven composition of
-shared scientific workspaces: obtaining and selecting materials, arranging related
-views and available operations, and carrying their meaning into Agent continuation.
-Plugins supply adaptable information, compute and environment capabilities. The
-single-cell walkthrough distinguishes scientific purposes and how available inputs
-and execution conditions change the workspace. Galaxy and JupyterLab constrain
-plugin-related novelty alongside the interface and shared-context comparisons.
-Remote single-cell connections remain illustrative; the proposal's novelty and human
-benefits are not established by existing Rho checks.
+The [research method proposal](https://github.com/YuLab-SMU/Rho-paper) centers on purpose-driven
+composition: selecting materials, arranging related views and operations, and carrying their
+meaning into Agent continuation. Plugins supply information, compute and environment capabilities.
+The single-cell walkthrough distinguishes scientific purposes and how inputs and execution
+conditions change the workspace. Galaxy and JupyterLab constrain plugin-related novelty alongside
+interface and shared-context comparisons. Remote connections remain illustrative; novelty and
+human benefits are not established by existing Rho checks.
 
 | Part | Current behavior | Evidence or remaining work |
 | --- | --- | --- |
@@ -28,6 +26,7 @@ benefits are not established by existing Rho checks.
 | Offline evidence | Preview one review and explicit refs; static reader/original files/manifest; read-only verifier | Service closed/project moved; four browser widths; tamper detection |
 | macOS 0.5.1 | Unsigned npm tarball/local WebUI selected; Core bundled explicitly | [Fixed tarball installed and exercised](PREVIEW-0.5.1.md) |
 | Independent researcher use | Unobserved | Trial guide in the episode; no usability claim |
+| dsh-rho 0.0.1 | Native dsh 0.2.1-rc.5 analysis, captured CSV/SVG, selected-row question | Real model/browser loop; local tarball installed; restart/overwrite/crash preserved results and one analysis run; 5/5 adapter tests and type check |
 
 M0 retains Python/R highlighting, Markdown reading and native command exit/time/bounded
 output ([record](CODE-MARKDOWN-EPISODE.md)); its report trial keeps scripts, results and

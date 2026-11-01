@@ -1,0 +1,6 @@
+- insert:
+    - id: dsh-rho
+      name: dsh-rho
+      config:
+        projectRoot: !!js process.env.RHO_DSH_PROJECT
+        stateDir: !!js process.env.RHO_DSH_STATE
