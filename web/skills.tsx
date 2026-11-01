@@ -4,7 +4,7 @@ import type { RhoOutput } from '../src/contract.generated.js';
 import { when } from './home.js';
 import { Icon } from './icons.js';
 import { AgentMarkdown } from './markdown.js';
-import { askCell } from './notebook-target.js';
+import { askCell } from '@rho-workspace/plugin-kernel/ui';
 import { didWhat, failure, headline, skillPath, skillTitle, askedSkill, answeredSkill, useAuthor, useSkillList, type Author, type SkillList } from './skills-work.js';
 import './skills.css';
 

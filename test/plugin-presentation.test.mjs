@@ -25,7 +25,7 @@ test('browser catalogs and snapshots preserve owner presentation through project
       assert.deepEqual(catalog.plugins.find(p => p.id === descriptor.id).presentation, descriptor.presentation);
       for (const operation of descriptor.operations) assert.deepEqual(catalog.operations.find(o => o.method === operation.method).presentation, operation.presentation);
       for (const component of descriptor.components ?? []) {
-        const observed = catalog.components.find(c => c.id === component.id);
+        const observed = catalog.components.find(c => c.id === component.id && c.version === component.version);
         assert.equal(observed.pluginId, descriptor.id);
         assert.deepEqual(observed.presentation, component.presentation);
       }

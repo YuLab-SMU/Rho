@@ -14,7 +14,7 @@ import { AgentActivity } from './agent-activity.js';
 import { AgentPage } from './agent-manage.js';
 import { AgentAccess } from './agents.js';
 import { SharedNotes, TouchedFiles, useProjectWork, WorkSessions } from './work-progress.js';
-import { NotebookWorkSection, useNotebookWork } from './notebook-work.js';
+import { NotebookWorkSection, useNotebookWork } from '@rho-workspace/plugin-kernel/ui';
 import { SkillsWorkSection, useSkillList } from './skills-work.js';
 import { AnswerBoard } from './answer-board.js';
 import { readPreview, type Preview } from './previews.js';

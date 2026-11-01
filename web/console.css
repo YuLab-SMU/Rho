@@ -40,14 +40,6 @@
 .console-command > .console-actions { margin: 0 0 8px calc(4.6em + 12px); }
 .console-again { min-height: 0; padding: 2px 0; color: var(--color-accent-strong); font-size: 13px; font-weight: 600; }
 .console-again:hover { color: var(--color-accent); text-decoration: underline; }
-.console-prompt { display: flex; flex-direction: column; gap: 6px; }
-.console-prompt .console-prompt-label { display: block; color: var(--color-meta); font-size: 12px; font-weight: 400; }
-.console-prompt label strong { color: var(--color-ink); font-weight: 600; }
-.console-line { display: flex; align-items: flex-start; gap: 8px; padding: 6px 6px 6px 12px; border: 1px solid var(--color-hairline-strong); border-radius: 10px; background: var(--color-surface); }
-.console-line:focus-within { border-color: var(--color-accent); box-shadow: 0 0 0 3px var(--color-accent-soft); }
-.console-line > span { padding-top: 6px; color: var(--color-meta); font: 13px/1.45 var(--font-mono); }
-.console-line textarea { flex: 1; min-width: 0; min-height: 0; padding: 6px 0; border: 0; outline: 0; resize: none; background: none; box-shadow: none; font: 13px/1.45 var(--font-mono); color: var(--color-ink); }
-.console-line button { flex: none; }
 @container (max-width: 560px) {
   .console-command summary, .console-managed { grid-template-columns: minmax(0, 1fr) auto; }
   .console-time { display: none; }

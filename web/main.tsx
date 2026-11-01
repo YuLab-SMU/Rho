@@ -7,15 +7,13 @@ import { AgentRequest } from './agents.js';
 import { AgentConversation } from './conversation.js';
 import { ProjectNavigation, sourceLabels, type Section, type SourceRow } from './project.js';
 import { sourceItems, sourceRowOrder, useProjectFiles, type SourceItem } from './sources.js';
-import { useLiveValues } from './session-values.js';
+import { FormSwitch, savedForm, saveForm, useLiveValues, type Prepared } from '@rho-workspace/plugin-kernel/ui';
 import { useAgentNow, type AgentNow } from './agent-now.js';
 import { NotesPanel, useProjectNotes } from './project-notes.js';
 import { compositionName, defaultWorkspace, fileKey, openInWorkspace, processComposition, processConversation } from './canvas.js';
 import { Icon } from './icons.js';
 import { addNotebook, addObject, addSessionView, canExplore, createWorkspace, loadTable, notebookOn, scriptLanguage, scriptPrepared, sessionTitles, sessionViewOn, type Language, type SessionView } from './explore.js';
 import { PageAdd } from './page-add.js';
-import { FormSwitch, savedForm, saveForm } from './notebook-form.js';
-import type { Prepared } from './notebook.js';
 import { CommandPalette, type Command, type CommandGroup } from './commands.js';
 import { PluginCatalog, PluginNavigation } from './plugins.js';
 import { pluginPresentation } from '../src/plugin-presentation.js';
@@ -31,7 +29,7 @@ const ProjectOverview = lazy(() => import('./overview.js').then(module => ({ def
 const FilePreview = lazy(() => import('./preview.js').then(module => ({ default: module.FilePreview })));
 const WorkGraph = lazy(() => import('./graph.js').then(module => ({ default: module.WorkGraph })));
 const ConsolePage = lazy(() => import('./console.js').then(module => ({ default: module.ConsolePage })));
-const NotebookPage = lazy(() => import('./notebook.js').then(module => ({ default: module.NotebookPage })));
+const NotebookPage = lazy(() => import('@rho-workspace/plugin-kernel/ui').then(module => ({ default: module.NotebookPage })));
 const SkillsPage = lazy(() => import('./skills.js').then(module => ({ default: module.SkillsPage })));
 const ProcessStudio = lazy(() => import('./studio-process.js').then(module => ({ default: module.ProcessStudio })));
 
@@ -625,7 +623,7 @@ function App() {
               : section === 'console' ? <section className="project-page console-section" aria-labelledby="console-title"><header className="page-heading"><div><h1 id="console-title">Console</h1></div></header>
                   <Suspense fallback={<Loading text="Opening the Console…" />}><ConsolePage client={client!} snapshot={snapshot} files={files} focusTurn={consoleTurn} onPath={showPath} onConversation={id => { setSelectedConversation(id); setAgentOpen(true); setContext(false); }} /></Suspense></section>
               : section === 'notebook' ? <section className="project-page notebook-section" aria-labelledby="notebook-title"><header className="page-heading"><div><h1 id="notebook-title">Notebook</h1><p>Live R and Python sessions you share with the Agent</p></div><FormSwitch form={notebookForm} onForm={form => { setNotebookForm(form); saveForm(form); }} /></header>
-                  <Suspense fallback={<Loading text="Opening the Notebook…" />}><NotebookPage client={client!} snapshot={snapshot} onConversation={openConversation} onObject={openObject} form={notebookForm} /></Suspense></section>
+                  <Suspense fallback={<Loading text="Opening the Notebook…" />}><NotebookPage client={client!} snapshot={snapshot} onConversation={openConversation} onObject={openObject} form={notebookForm} shell={shell} /></Suspense></section>
               : section === 'skills' ? <Suspense fallback={<Loading text="Opening the skills…" />}><SkillsPage client={client!} snapshot={snapshot} onPath={showPath} onConversation={openConversation} onNotebook={() => showSection('notebook')} /></Suspense>
               : section === 'graph' ? <Suspense fallback={<Loading text="Opening the graph…" />}><WorkGraph initialResource={graphResource} client={client!} snapshot={snapshot} files={files} agentNow={agentNow} following={following} principalId={connection.principalId} notesText={notes.text}
                   onFollow={() => follow()} onStopFollowing={() => setFollowing(false)} onStudio={layout} workspace={sharedWorkspace} onAbout={about} onAgent={id => { if (id) setSelectedConversation(id); setAgentOpen(true); setContext(false); }} /></Suspense>

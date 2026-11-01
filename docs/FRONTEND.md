@@ -477,26 +477,30 @@ the same graph: `answerBoard` gives each file and command of a message a role,
 `boardThreads` keeps a later question that made no results with the answer it asks
 about, and `src/asking.ts` writes and reads back what a question was asked about.
 `web/answer-board.tsx` draws the board and records decisions (`conversation.decide`);
-`web/console.tsx` draws the Console from the same graph and `console.list`.
-`web/object-view.tsx` draws a value from `kernel.inspect`. `src/statements.ts` finds the
-statement a script line runs (`statementAt`), and `web/entries/documents.tsx` sends it
-through the page's `runCode` shell service.
-`web/flow.tsx` draws Data flow from the same read, with `src/lineage.ts` (`lineage`, `lanes`,
-`related`) making its boxes and lanes from each cell's `defined`, `used` and `files`.
-`web/servers.tsx` draws Servers and the Notebook's place chip from `kernel.places`, the servers
-and their skills from `kernel.servers` and `kernel.server.skill`, and lists and copies a place's
-files; `showOnServer` takes a file from Data flow to it.
+`web/console.tsx` draws the Console from the same graph, with the person's command line and
+records from the Console plugin's `./ui` (`useCommands`, `useCommandLine`, `CommandLine`,
+`CommandRecord`); the Agent's commands and the managed runs stay Rho's.
+The live sessions' views come from the Kernel plugin's `./ui` (Rho-plugins, Notebook 0.4.0):
+the Notebook, Variables, Plots, Data flow, Servers and a value's view (`rho.notebook`,
+`rho.variables`, `rho.plots`, `rho.flow`, `rho.servers`, `rho.object` at version 1), registered
+in `ui-entries.json` and drawn through the registry like the other plugin views.
+`web/entries/kernel.tsx` hands them the page's services from `web/shell/workspace-views.ts`:
+opening a value or a server's file as a view, code waiting for the Notebook's line, saving the
+Notebook's form with the page, which views the page has, and a conversation's share of the
+sessions. Highlighting and Markdown come from the shell services (`highlight`, `markdown`).
+The plugin's `./code` finds the statement a script line runs (`statementAt`), writes the code
+that loads a table or runs a script, and makes Data flow's boxes and lanes (`lineage`);
+`web/entries/documents.tsx` sends a line through the page's `runCode` shell service.
 The HTML page view is `html.reader` from Rho-plugins (HTML 0.1.0); Rho gives it `pageFrame`, the
 service's `/frame.html` (sandboxed, with its own policy and no network; the page's policy adds
 only `frame-src 'self'`), and `fileBytes`, a file snapshot's bytes (`readFile` in `web/previews.ts`).
 `web/skills.tsx` draws the Skills page from `skills.list` and `skills.read`; `web/skills-work.tsx` holds the list read, the authors and the Overview's Skills section, and hands a chosen skill to the page.
-`web/notebook.tsx` draws the Notebook, Variables and Plots from one shared `kernel.read`, and the Notebook's Studio view
-(`SessionPane`) from the same, scoped to the conversation's principal, its start and the
-moment shown inside a conversation's Studio. `web/explore.ts` places the Notebook
+The Notebook's views share one `kernel.read`; inside a conversation's Studio the Notebook is
+scoped to the conversation's principal, its start and the moment shown. `web/explore.ts` places the Notebook
 (`addBeside` in `src/shell-layout.ts`), values (`addWithRoom`) and Variables and Plots
 (`addAtEdge`), loads a table and
 makes the person's pages;
-`src/explore-code.ts` writes the code; `web/page-add.tsx` lists what a page can add.
+the Kernel plugin's `./code` writes the code; `web/page-add.tsx` lists what a page can add.
 A conversation's Studio (`web/studio-process.tsx`) reads its record, builds the graph
 whole and as cut at the moment shown (`turnsAt` in `src/replay.ts`), takes each file's
 role and kept versions from the whole record (`studioFiles` in `src/studio-layout.ts`)

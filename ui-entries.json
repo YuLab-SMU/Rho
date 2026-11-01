@@ -46,5 +46,59 @@
     "component": "rho.agent-note",
     "version": "0.2.0",
     "source": "web/entries/agent.tsx"
+  },
+  {
+    "plugin": "kernel",
+    "package": "@rho-workspace/plugin-kernel",
+    "entry": "./ui",
+    "component": "rho.notebook",
+    "version": "1",
+    "source": "web/entries/kernel.tsx",
+    "export": "notebook"
+  },
+  {
+    "plugin": "kernel",
+    "package": "@rho-workspace/plugin-kernel",
+    "entry": "./ui",
+    "component": "rho.variables",
+    "version": "1",
+    "source": "web/entries/kernel.tsx",
+    "export": "variables"
+  },
+  {
+    "plugin": "kernel",
+    "package": "@rho-workspace/plugin-kernel",
+    "entry": "./ui",
+    "component": "rho.plots",
+    "version": "1",
+    "source": "web/entries/kernel.tsx",
+    "export": "plots"
+  },
+  {
+    "plugin": "kernel",
+    "package": "@rho-workspace/plugin-kernel",
+    "entry": "./ui",
+    "component": "rho.flow",
+    "version": "1",
+    "source": "web/entries/kernel.tsx",
+    "export": "flow"
+  },
+  {
+    "plugin": "kernel",
+    "package": "@rho-workspace/plugin-kernel",
+    "entry": "./ui",
+    "component": "rho.servers",
+    "version": "1",
+    "source": "web/entries/kernel.tsx",
+    "export": "servers"
+  },
+  {
+    "plugin": "kernel",
+    "package": "@rho-workspace/plugin-kernel",
+    "entry": "./ui",
+    "component": "rho.object",
+    "version": "1",
+    "source": "web/entries/kernel.tsx",
+    "export": "object"
   }
 ]

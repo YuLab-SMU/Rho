@@ -20,7 +20,7 @@ export function availability(resource: ResourceSummary) {
 export function views(composition: CompositionSummary) { return composition.views.length + (composition.views.length === 1 ? ' view' : ' views'); }
 
 import { baseRows, sourceRowOrder, type SourceItem, type SourceRow } from './sources.js';
-import type { LiveSession, LiveValues, ValueLanguage } from './session-values.js';
+import type { LiveSession, LiveValues, ValueLanguage } from '@rho-workspace/plugin-kernel/ui';
 export type { SourceRow } from './sources.js';
 export interface AgentBadge { running: boolean; waiting: boolean; conversations: number }
 // The project's places: what it is about, where the work is laid out, the Agent, what ran,

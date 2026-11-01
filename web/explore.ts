@@ -1,12 +1,12 @@
 import { BrowserApiError, type BrowserClient, type WorkspaceSnapshot } from '../src/browser.js';
 import { addAtEdge, addBeside, addInto, addWithRoom, type LayoutNode, type LayoutTree } from '../src/shell-layout.js';
-import { languageNames, loadCode, sourceCode, valueName, type Language } from '../src/explore-code.js';
+import { languageNames, loadCode, sourceCode, valueName, type Language } from '@rho-workspace/plugin-kernel/code';
 
 // Looking into a result in the live sessions the person shares with the Agent. A table loads
 // into a new value, so the person starts where the result is; a script is put into the
 // Notebook's line for the person to check and run, since running it again writes its outputs
 // again. Nothing here ends or restarts a session.
-export { explorableTable, languageNames, loadCode, projectPath, scriptLanguage, sourceCode, valueName, type Language } from '../src/explore-code.js';
+export { explorableTable, languageNames, loadCode, projectPath, scriptLanguage, sourceCode, valueName, type Language } from '@rho-workspace/plugin-kernel/code';
 export const canExplore = (snapshot: WorkspaceSnapshot) => snapshot.catalog.operations.some(o => o.method === 'kernel.run' && o.authorized && o.state === 'available');
 
 // A script waits in the Notebook's line, named with where it came from, for the person to run.

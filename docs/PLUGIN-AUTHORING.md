@@ -57,9 +57,10 @@ shell explain unavailable views; it does not grant those operations.
 
 `shell` in `UiViewProps` carries the services the shell offers any view, each
 optional: `openPath` shows a project file as the person's own choice of it would,
-`imageUrl` gives a URL for a project image's current bytes, and
+`imageUrl` gives a URL for a project image's current bytes,
 `languageExtensions` and `highlight` give Rho's languages for an editor and for
-code in rendered text. A view works without them.
+code in rendered text, and `markdown` reads Markdown as the Agent panel does. A
+view works without them.
 
 The current `UiViewProps` contract remains `0.1-draft`. Pin the Rho SDK version and
 check compatibility when upgrading. Existing first-party adapters can still supply

@@ -158,6 +158,11 @@ a group's + adds a view into it; the strip beside its tabs drags the whole group
 the page. Tabs narrow to icons, so a view's controls take a second row sooner. In a conversation's
 Studio a replay shows the work's views even when closed, and with all closed [Lay out the work
 again](AGENT-CANVAS-EPISODE.md#closing-every-view-of-a-conversations-studio) restores them.
+The live sessions' views (Notebook, Variables, Plots, Data flow, Servers, a value) now come from the
+Kernel plugin's own `./ui` as registered components (Notebook 0.4.0), and the person's command line
+and records from the Console plugin's (Console 0.2.0); Rho keeps the layout, the page services it
+hands them, the Agent's commands and managed runs ([Frontend](FRONTEND.md)). The views still use
+Rho's base classes and theme tokens, which no written contract names yet.
 
 [Sources follow the project](SIMULATED-PROJECT-EPISODE.md#sources-that-follow-the-project):
 Variables lists the live sessions' values between Code and Results, each opening in Studio, and
@@ -253,25 +258,19 @@ From the baseline (Rho 223/223, Plugins 104/104, an explicit unchanged Core bina
 exploring pass (Rho 264/264, Plugins 132/132), each pass that first failed did so on an
 undeclared CSS variable, a stale count or limit in a check, or a shell import outside its set,
 and passed once corrected; this page's Git history keeps each count.
-The project skills pass records Rho 271/274 and Plugins 151/151 in the [ledger](VERIFICATION.json),
-whose script keeps no log; run again with its log, Rho 273/274, the MCP v2 test cancelled at its
-30 s limit (it passed alone). The contract check and the pages (with a Skills step), ui:u2,
-person-files, agent-canvas, graph, agent-page, agent-ui and sources acceptances passed. The
-Overview's Notebook pass recorded Rho 273/274 and Plugins 146/146 (MCP v2). The lab study pass
-recorded 272/274 twice (MCP v2 and Agent settings, each passing alone). The servers' skills
-pass recorded Rho 271/274 and Plugins 145/145, and the remote sessions pass Rho 272/274 and
-Plugins 144/144: the MCP v2 test at its 30 s limit and cleanup races (`.rho`, `ENOTEMPTY`) in
-the Notebook, answer-decisions, ACP permission and Codex restart tests, each passing alone. The Data flow pass recorded Rho 273/274 and Plugins 141/141. The Sources pass recorded
-Rho 268/269, Plugins unchanged at 134/134: the MCP v2 test was cancelled at its 30 s limit and passed alone in 18.1 s. The contract
-check and the sources, ui:u2, agent-canvas, graph, agent-page, agent-ui, review and person-files
-acceptances passed; ui:u2 first failed counting the Overview's 3-row previews among the grid's
-reads, and now counts from the Table tab. The shell acceptance (editor focus at 390 px) and the
-interaction acceptance (a `/^workspace/` sidebar row) failed before the toolbar pass and remain
-open. Earlier passes ran Rho 249–269 and Plugins 120–134 with the same seven acceptances;
-this page's Git history keeps each count and failure.
-The by-hand and closed-views passes ran against a separate browser build: layout and Studio tests
-25/25, shell boundary 2/2, type checks, frontend 14/14, agent-canvas 10/10, pages, objects and
-person-files passed; shell failed as above, also unchanged. The full suite was not run. The [episode](REVIEW-EVIDENCE-EPISODE.md)
+Later passes (project skills, the Overview's Notebook, lab study, servers' skills, remote sessions,
+Data flow, Sources) recorded Rho 268–273 of 269–274 and Plugins 134–151; each miss was the MCP v2
+test at its 30 s limit or a cleanup race (`.rho`, `ENOTEMPTY`), passing alone. Their contract checks and the pages, ui:u2, person-files, agent-canvas,
+graph, agent-page, agent-ui, sources and review acceptances passed. The shell acceptance (editor
+focus at 390 px) and the interaction acceptance (a `/^workspace/` sidebar row) failed before the
+toolbar pass and remain open; this page's Git history keeps each count and failure.
+The by-hand and closed-views passes ran their focused tests and acceptances on a separate browser
+build. The plugin views pass records Rho 264/267 and Plugins 161/161 in the [ledger](VERIFICATION.json):
+MCP v2 at its limit and a Console test's `.rho` cleanup race, each passing alone. A first run also
+caught the `--tabs` variable the by-hand pass left undeclared and a catalog check by id that two
+`rho.object` versions broke; both were fixed and pass. On a separate browser build
+a browser episode of the six views and both command lines, pages, agent-canvas 10/10, frontend
+14/14 and objects passed; shell failed as above. The [episode](REVIEW-EVIDENCE-EPISODE.md)
 records contract, browser and installed results; the fixed 0.5.1 candidate passed 230/230
 ([preview](PREVIEW-0.5.1.md)). No failures are converted into passes by omitting the failed run.
 

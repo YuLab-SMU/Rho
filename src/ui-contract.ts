@@ -1,4 +1,4 @@
-import type { ComponentType } from 'react';
+import type { ComponentType, ReactNode } from 'react';
 import type { BrowserClient, ViewDescription, WorkspaceSnapshot } from './browser.js';
 import type { FormDeclarations, TaskItem, TaskMapState } from './task-frame.js';
 
@@ -92,6 +92,8 @@ export interface ShellServices {
   languageExtensions?(path: string): Promise<unknown[]>;
   // Code highlighted as the named language, as text and spans; null for a language Rho lacks.
   highlight?(code: string, language: string): Promise<DocumentFragment | null>;
+  // Markdown read as the Agent panel reads it: prose, lists and code, with no raw HTML.
+  markdown?(text: string): ReactNode;
   // Runs code from a view (a script's line) as the person's cell in the live session of its
   // language, on a page that shows the Notebook; absent where the person cannot run code there.
   runCode?(run: { viewId: string; language: 'r' | 'python'; code: string; purpose: string }): Promise<void>;

@@ -1,9 +1,10 @@
-import { createContext } from 'react';
+import { createContext, createElement } from 'react';
 import type { BrowserClient, WorkspaceSnapshot } from '../src/browser.js';
 import type { ShellServices } from '../src/ui-contract.js';
 import type { Entry } from './project.js';
 import { highlight, languageExtensions } from './languages.js';
 import { readFile, readImage } from './previews.js';
+import { AgentMarkdown } from './markdown.js';
 
 // The services the shell gives every view on the project screen (see ShellServices).
 export const ShellContext = createContext<ShellServices | undefined>(undefined);
@@ -22,5 +23,6 @@ export function shellServices(client: BrowserClient, current: () => { snapshot: 
     pageFrame: '/frame.html',
     languageExtensions,
     highlight,
+    markdown: text => createElement(AgentMarkdown, { text, streaming: false }),
   };
 }

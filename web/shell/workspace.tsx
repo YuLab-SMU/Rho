@@ -11,15 +11,13 @@ import { AgentColumn, Bar, Digest, Evidence, Interruption, waiting } from './lay
 import { openRun, runFirstLine, RunView, SourceLine } from './facts.js';
 import { ActionForm } from './action-form.js';
 import { CommandPane } from '../console.js';
-import { FormSwitch, PlotsPane, SessionPane, VariablesPane, type NotebookForm, type Prepared } from '../notebook.js';
-import { FlowPane } from '../flow.js';
-import { ServersPane, showOnServer } from '../servers.js';
-import { addNotebook, addObject, addSessionView, canExplore, explorableTable, languageNames, loadTable, notebookComponent, notebookView, objectComponent, projectPath, scriptLanguage, scriptPrepared, sessionComponents, type Language } from '../explore.js';
-import { ObjectView } from '../object-view.js';
+import { showOnServer, type Prepared, type SessionScope } from '@rho-workspace/plugin-kernel/ui';
+import { addNotebook, addObject, addSessionView, canExplore, explorableTable, languageNames, loadTable, notebookComponent, notebookView, projectPath, scriptLanguage, scriptPrepared, sessionComponents, type Language } from '../explore.js';
 import { ExploreIn } from '../explore-in.js';
 import { useProcess } from '../process-context.js';
 import { ProcessFrame } from './process-views.js';
 import { ShellContext } from '../shell-services.js';
+import { WorkspaceViewsContext, type WorkspaceViews } from './workspace-views.js';
 import type { ShellServices } from '../../src/ui-contract.js';
 import { boundResource } from '../executions.js';
 import { AddButton, Slot, Split, TabGroup, place, unplace, useTabOverflow, type Dragged, type DropTarget, type TabDrag, type TabRender, type TabTools } from './regions.js';
@@ -196,12 +194,9 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
     runs.current = sent.catch(() => {});
     await sent.catch(refusal);
   };
-  // The Notebook's form is the person's choice, saved with the page; this tab shows it at once.
-  const [forms, setForms] = useState<Record<string, NotebookForm>>({});
-  useEffect(() => setForms({}), [layout.version]);
-  function chooseForm(viewId: string, form: NotebookForm) {
-    setForms(f => ({ ...f, [viewId]: form }));
-    const now = treeNow(), next = now && setViewProps(now, viewId, { form });
+  // A view's own choice, such as the Notebook's form, saved with the page.
+  function saveProps(viewId: string, props: Record<string, unknown>) {
+    const now = treeNow(), next = now && setViewProps(now, viewId, props);
     if (next && allowed('composition.apply')) void writeLayout(next);
   }
   const shellAbove = useContext(ShellContext), runnable = !process && !!tree && canExplore(snapshot);
@@ -213,6 +208,16 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
     if (notebook) { show(notebook); return; }
     if (!process) addNotebook(client, snapshot.project.id, layout.compositionId, null).then(id => show(id), refusal);
   }
+  // In a conversation's Studio the live sessions show that conversation's share: the cells its
+  // Agent and the person ran since it began, up to the moment shown.
+  const principal = process ? snapshot.conversations?.find(c => c.conversationId === process.conversationId)?.principal ?? null : null;
+  const starts = process ? process.whole.turns.filter(t => t.conversationId === process.conversationId).map(t => t.start) : [];
+  const scope: SessionScope | undefined = process ? { principal, since: starts.length ? Math.min(...starts) : null, at: process.at } : undefined;
+  const views: WorkspaceViews = {
+    openValue: openObject, openRemote, toNotebook: (language, code, from) => useInNotebook(language, code, from),
+    prepared, taken: () => setPrepared(null), setProps: saveProps, has: component => layout.views.some(v => v.component === component),
+    scope, openConversation: onConversation,
+  };
   // A divider is written back once the person stops moving it.
   const resizing = useRef<ReturnType<typeof setTimeout>>(undefined);
   function resized(splitId: string, values: number[]) {
@@ -344,18 +349,6 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
     const view = byId.get(id)!, isVisible = visible.includes(id);
     if (view.component === 'rho.action') return <ActionForm view={view} snapshot={snapshot} client={client} live={live} />;
     if (view.component === 'rho.console') return <CommandPane client={client} snapshot={snapshot} />;
-    if (view.component === sessionComponents.variables) return <VariablesPane client={client} snapshot={snapshot} onObject={openObject} />;
-    if (view.component === sessionComponents.plots) return <PlotsPane client={client} snapshot={snapshot} />;
-    if (view.component === sessionComponents.flow) return <FlowPane client={client} snapshot={snapshot} onObject={openObject} onPath={shellAbove?.openPath} onRemote={openRemote} />;
-    if (view.component === sessionComponents.servers) return <ServersPane client={client} snapshot={snapshot} onPath={shellAbove?.openPath} />;
-    if (view.component === notebookComponent) {
-      const form: NotebookForm = forms[id] ?? (view.props.form === 'console' ? 'console' : 'notebook');
-      return <>{isVisible && createPortal(<FormSwitch form={form} onForm={f => chooseForm(id, f)} />, ownHeader(id), 'form-' + id)}<SessionPane form={form} beside={{ variables: layout.views.some(v => v.component === sessionComponents.variables), plots: layout.views.some(v => v.component === sessionComponents.plots) }} client={client} snapshot={snapshot} prepared={prepared} onTaken={() => setPrepared(null)} onConversation={onConversation} onObject={openObject} /></>;
-    }
-    if (view.component === objectComponent) {
-      const language = view.props.language === 'python' ? 'python' : 'r', name = String(view.props.name ?? title(view));
-      return <ObjectView client={client} snapshot={snapshot} language={language} name={name} onUse={expression => useInNotebook(language, expression, name)} />;
-    }
     if (view.component === 'rho.execution') {
       const operationId = String(view.props.operationId ?? id);
       return <RunView snapshot={snapshot} client={client} operationId={operationId} runs={live.runs} readRuns={live.readRuns} firstLine={runFirstLine(live, operationId)} opener={ref => () => openRef(ref)} onOpenRun={other => openRun(live, other)} chain />;
@@ -430,7 +423,7 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
   const focusObject = live.screen?.views.find(v => v.id === focused)?.object ?? null;
   const toggleEvidence = () => { setEvidence(v => !v); onShowAgent?.(); live.act({ kind: 'reveal', target: evidence ? null : live.screen?.agent?.object ?? 'workspace' }); };
   const statusBar = bar && <Bar live={live} evidence={evidence} held={items.length - unhidden.length} onEvidence={toggleEvidence} attention={attention} />;
-  return <ShellContext.Provider value={shellHere}><section className="workspace shell" aria-label="Layout">
+  return <ShellContext.Provider value={shellHere}><WorkspaceViewsContext.Provider value={views}><section className="workspace shell" aria-label="Layout">
     {/* In the page's own bar when it gives one; until that bar is there, nowhere. */}
     {statusBar && (barTarget ? createPortal(statusBar, barTarget) : barTarget === undefined && statusBar)}
     {agentTarget && createPortal(<AgentColumn live={live} agents={snapshot.agents} contexts={snapshot.contexts} prepare={prepareQuestion} principalId={principalId} evidence={evidence} onEvidence={toggleEvidence} focusObject={focusObject} />, agentTarget)}
@@ -463,5 +456,5 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
       {closed && canArrange && <div className="shell-closed" role="status"><span>Closed {closed.label}</span><button className="shell-link" onClick={() => void undoClose()}>Undo</button><button className="shell-quiet" aria-label="Dismiss" onClick={() => setClosed(null)}><Icon name="close" size={13} /></button></div>}
       {[...seen.current].filter(id => byId.has(id)).map(id => createPortal(body(id), container(id), id))}
     </div>
-  </section></ShellContext.Provider>;
+  </section></WorkspaceViewsContext.Provider></ShellContext.Provider>;
 }

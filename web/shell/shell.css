@@ -16,7 +16,7 @@
 /* Beside the tabs: Add view and the empty strip that carries the whole group. The strip gives
    way to a view's own controls down to room for the shown tab's name and every other tab's icon
    (--tabs is the number of tabs); below that the controls take a second row. */
-.shell-tabstrip { display: flex; align-self: stretch; align-items: stretch; flex: 1 1 min(100%, calc(128px + (var(--tabs, 1) - 1) * 44px + 40px)); max-width: 100%; min-width: 0; }
+.shell-tabstrip { --tabs: 1; display: flex; align-self: stretch; align-items: stretch; flex: 1 1 min(100%, calc(128px + (var(--tabs, 1) - 1) * 44px + 40px)); max-width: 100%; min-width: 0; }
 .shell-tabs { display: flex; align-items: stretch; flex: 0 1 auto; min-width: 0; overflow-x: auto; scrollbar-width: none; }
 /* A strip that scrolls fades where tabs go on, instead of a scrollbar that would add to its height. */
 .shell-tabs[data-overflow=end] { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); }

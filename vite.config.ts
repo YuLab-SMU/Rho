@@ -24,7 +24,7 @@ export default defineConfig({
       if (id === '\0virtual:rho-ui-registry-meta') return 'export const rendered = ' + JSON.stringify(chosen.map(e => ({ component: e.component, version: e.version }))) + ';';
       if (id === '\0virtual:rho-ui-registry') return chosen.map((e, i) => e.extension
         ? `import { ${e.extension.export} as View${i} } from ${JSON.stringify(path.resolve(e.source))};\nconst e${i} = { ...${JSON.stringify(contributionMetadata(e))}, View: View${i} };`
-        : 'import { entry as e' + i + ' } from ' + JSON.stringify(path.resolve(e.source)) + ';').join('\n') + '\nexport const registry = { entries: [' + chosen.map((_, i) => 'e' + i).join(',') + '] };';
+        : 'import { ' + (e.export ?? 'entry') + ' as e' + i + ' } from ' + JSON.stringify(path.resolve(e.source)) + ';').join('\n') + '\nexport const registry = { entries: [' + chosen.map((_, i) => 'e' + i).join(',') + '] };';
     },
   }],
   base: '/',

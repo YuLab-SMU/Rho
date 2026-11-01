@@ -950,3 +950,5 @@ button.explore-in-one:hover:not(:disabled) { background: var(--color-hover); col
 .page-empty .page-add { width: min(560px, 100%); max-height: none; margin-top: 8px; }
 .nav-new { color: var(--color-meta); }
 .nav-new:hover { color: var(--color-accent-strong); }
+/* The Notebook's page: its views size themselves to it. */
+.notebook-section { max-width: 1280px; container-type: inline-size; }

@@ -1,0 +1,50 @@
+import { useContext, useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { FlowPane, FormSwitch, ObjectView, PlotsPane, ServersPane, SessionPane, VariablesPane, kernelEntries, type NotebookForm } from '@rho-workspace/plugin-kernel/ui';
+import type { UiContribution, UiViewProps } from '../../src/ui-contract.js';
+import { WorkspaceViewsContext } from '../shell/workspace-views.js';
+
+// The live sessions' views, from the Kernel plugin, on a page of views: the page hands each the
+// way to open a value, a server's file or the Notebook's line as its own views, and in a
+// conversation's Studio the share of the sessions that conversation shows.
+const props = { type: 'object', properties: { title: { type: 'string' } } };
+const contribution = (component: keyof typeof kernelEntries, View: UiContribution['View'], propsSchema: Record<string, unknown> = props): UiContribution =>
+  ({ ...kernelEntries[component], entryVersion: '0.1-draft', packageVersion: '0.4.0', propsSchema, commands: [], View });
+
+// The Notebook's form is the person's choice, saved with the page; this tab shows it at once.
+function Notebook({ viewId, view, client, snapshot, headerTarget, shell }: UiViewProps) {
+  const page = useContext(WorkspaceViewsContext);
+  const saved: NotebookForm = view.props.form === 'console' ? 'console' : 'notebook';
+  const [form, setForm] = useState<NotebookForm>(saved);
+  useEffect(() => setForm(saved), [saved]);
+  const choose = (next: NotebookForm) => { setForm(next); page?.setProps?.(viewId, { form: next }); };
+  return <>
+    {headerTarget && createPortal(<FormSwitch form={form} onForm={choose} />, headerTarget, 'form-' + viewId)}
+    <SessionPane client={client} snapshot={snapshot} form={form} shell={shell} scope={page?.scope}
+      beside={{ variables: !!page?.has('rho.variables'), plots: !!page?.has('rho.plots') }}
+      prepared={page?.prepared} onTaken={page?.taken} onConversation={page?.openConversation} onObject={page?.openValue} />
+  </>;
+}
+function Variables({ client, snapshot }: UiViewProps) {
+  const page = useContext(WorkspaceViewsContext);
+  return <VariablesPane client={client} snapshot={snapshot} onObject={page?.openValue} />;
+}
+const Plots = ({ client, snapshot }: UiViewProps) => <PlotsPane client={client} snapshot={snapshot} />;
+function Flow({ client, snapshot, shell }: UiViewProps) {
+  const page = useContext(WorkspaceViewsContext);
+  return <FlowPane client={client} snapshot={snapshot} shell={shell} onObject={page?.openValue} onPath={shell?.openPath} onRemote={page?.openRemote} />;
+}
+const Servers = ({ client, snapshot, shell }: UiViewProps) => <ServersPane client={client} snapshot={snapshot} shell={shell} onPath={shell?.openPath} />;
+// One value of a live session; what reaches into it waits in the Notebook's line.
+function Value({ view, client, snapshot }: UiViewProps) {
+  const page = useContext(WorkspaceViewsContext);
+  const language = view.props.language === 'python' ? 'python' : 'r', name = String(view.props.name ?? view.props.title ?? '');
+  return <ObjectView client={client} snapshot={snapshot} language={language} name={name} onUse={expression => page?.toNotebook?.(language, expression, name)} />;
+}
+
+export const notebook = contribution('rho.notebook', Notebook, { type: 'object', properties: { title: { type: 'string' }, form: { enum: ['notebook', 'console'] } } });
+export const variables = contribution('rho.variables', Variables);
+export const plots = contribution('rho.plots', Plots);
+export const flow = contribution('rho.flow', Flow);
+export const servers = contribution('rho.servers', Servers);
+export const object = contribution('rho.object', Value, { type: 'object', properties: { title: { type: 'string' }, language: { enum: ['r', 'python'] }, name: { type: 'string', minLength: 1 } } });
