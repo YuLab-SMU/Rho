@@ -22,7 +22,7 @@ import { ProcessFrame } from './process-views.js';
 import { ShellContext } from '../shell-services.js';
 import type { ShellServices } from '../../src/ui-contract.js';
 import { boundResource } from '../executions.js';
-import { Slot, Split, TabGroup, place, unplace, useTabOverflow, type Dragged, type DropTarget, type TabDrag, type TabRender, type TabTools } from './regions.js';
+import { AddButton, Slot, Split, TabGroup, place, unplace, useTabOverflow, type Dragged, type DropTarget, type TabDrag, type TabRender, type TabTools } from './regions.js';
 import type { MenuItem } from './menu.js';
 import './shell.css';
 
@@ -447,7 +447,7 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
                 onKeyDown={event => { if (event.key === 'Delete' && canArrange) { event.preventDefault(); closeTab(id); } }}><span className="shell-tab-name">{title(byId.get(id)!)}</span></button>
               {canArrange && id === focused && <button className="shell-tab-close" tabIndex={-1} aria-hidden="true" title={'Close ' + title(byId.get(id)!)} onClick={() => closeTab(id)}><Icon name="close" size={12} stroke={2} /></button>}
             </div>)}
-          </div></div>
+          </div>{canArrange && addView && <AddButton name="Views" content={() => addView(groupNode(groupOf(root, focused)?.id ?? root.id))} />}</div>
           <div className="shell-header-slot shell-header-narrow" ref={headerRef('narrow')} />
           {focused && <Slot key={focused} container={container(focused)} id={tabId + 'panel'} labelledBy={tabId + order.indexOf(focused)} />}
         </section>
@@ -460,7 +460,7 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
           onDrop={event => { event.preventDefault(); drag.drop({ edge: side }); }} />)}
         {drag.target && 'edge' in drag.target && <div className="shell-edge-preview" data-side={drag.target.edge} />}
       </div>}
-      {closed && <div className="shell-closed" role="status"><span>Closed {closed.label}</span><button className="shell-link" onClick={() => void undoClose()}>Undo</button><button className="shell-quiet" aria-label="Dismiss" onClick={() => setClosed(null)}><Icon name="close" size={13} /></button></div>}
+      {closed && canArrange && <div className="shell-closed" role="status"><span>Closed {closed.label}</span><button className="shell-link" onClick={() => void undoClose()}>Undo</button><button className="shell-quiet" aria-label="Dismiss" onClick={() => setClosed(null)}><Icon name="close" size={13} /></button></div>}
       {[...seen.current].filter(id => byId.has(id)).map(id => createPortal(body(id), container(id), id))}
     </div>
   </section></ShellContext.Provider>;

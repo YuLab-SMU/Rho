@@ -175,6 +175,22 @@ try {
   await until(tabs, list => list.some(tab => tab.name === 'notes.md'), 'back to now');
   passed('a moment chosen on the timeline shows the views and the conversation as they were then; Back to now returns');
 
+  // The person closes every view of the work: a moment replayed still shows the work as it was
+  // then, and Lay out the work again puts its views back by role.
+  for (let count = (await tabs()).length; count > 0; count--) {
+    const tab = page.locator('.shell-tab').first();
+    await tab.getByRole('tab').click(); await tab.locator('.shell-tab-close').click();
+    await until(tabs, list => list.length < count, 'a view closed');
+  }
+  await page.getByRole('heading', { name: 'Every view of this work is closed' }).waitFor();
+  await page.mouse.click(track.x + track.width / 2, track.y + 10);
+  await until(tabs, list => list.some(tab => tab.name === 'airquality.csv'), 'the replayed moment showing the data the work had read then');
+  await page.getByRole('button', { name: 'Back to now' }).click();
+  await page.getByRole('button', { name: 'Lay out the work again' }).click();
+  await until(tabs, list => ['airquality.csv', 'analysis.R', 'Commands', 'ozone.svg', 'notes.md'].every(name => list.some(tab => tab.name === name)), 'the work laid out again');
+  await shot('07b-laid-out-again');
+  passed('with every view closed, a replayed moment still shows the work then, and Lay out the work again brings its views back');
+
   // The Overview's answer board follows the answer whose results the next question asks about.
   await nav.getByRole('button', { name: 'Overview', exact: true }).click();
   const board = page.locator('.answer-board');

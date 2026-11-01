@@ -653,3 +653,65 @@ what each step drew. The person's own Rho running at the time was not touched.
 - Maximize lasts for the browser tab and is not saved.
 - No drag between workspaces, and none from Sources into Studio.
 - No person has used these yet; the runs show the paths work, not that they are easy.
+
+## Closing every view of a conversation's Studio
+
+### Question
+
+On 2026-10-31 the user closed every view of a finished conversation's Studio and found
+no way back to how it was: the page said "No views in this layout", and choosing a
+moment on the timeline showed nothing either.
+
+### Observed before
+
+`drive/process-close.mjs` (in `work/studio-human/`, ignored by Git) runs a disposable
+project with the agent-canvas acceptance's stand-in Agent: one turn reads a CSV, edits
+a script, runs it and writes a figure. Its Studio showed `airquality.csv`,
+`analysis.R`, Commands and `ozone.svg`. After all four were closed from their tabs, now
+and a moment early in the work both read "No views in this layout. The saved layout is
+empty. No view is created automatically." The only way back was Undo, once per close.
+
+The cause was in `web/studio-process.tsx`: once arranged, the saved layout keeps every
+view the person has closed out of the page, and a replay applied the same rule, so a
+replayed moment showed only the views the person still had.
+
+### Changed
+
+Rho only (`web/studio-process.tsx`, `web/shell/regions.tsx`, `web/shell/workspace.tsx`,
+`web/shell/shell.css`, `web/theme.css`):
+
+- **A replay shows the work then.** A moment replayed shows every view the work had at
+  that moment, also those the person closed; with none of theirs left it shows the work
+  laid out by role. Returning to now keeps their closes.
+- **Lay out the work again.** A conversation's Studio with every view closed says so,
+  that its files, commands and versions are kept, and offers Lay out the work again: one
+  conditional write of the arrangement the roles call for, which Undo reverses.
+- **Reopen one.** Each group's + in a conversation's Studio lists the work's closed views
+  and opens the one chosen in that group. The one list of views a narrow stage shows has
+  a + too, adding beside the view shown.
+- The close message is hidden during a replay, where its Undo would act on the present.
+
+### Runs
+
+| Run | What happened | Cause | Change |
+| --- | --- | --- | --- |
+| `f` | Closed: the message and the button. Replay: `airquality.csv`, `analysis.R` and Commands, the figure not yet made. The button laid out all four. One closed, then + was missing. | The notes and Agent panel left the stage under 640 px, and its one list had no +. | The list has a +. |
+| `g` | + listed `ozone.svg` and put it back. The entry sat centred, and the close message stayed on during the replay. | Add entries without a second label centred; the message ignored the replay. | Entries start at the left; no message in a replay. |
+
+### Checks
+
+- `acceptance:agent-canvas` adds one check: all five views of the conversation's
+  Studio closed from their tabs, the message shown, a moment replayed showing the data
+  read then, and Lay out the work again bringing back all five. It fails on the previous
+  build at the message and passed twice on this one (10/10).
+- Against the separate browser build: frontend 14/14 twice (a first run failed reading
+  the editor at once after a reload, a step this pass does not touch), objects passed;
+  layout, shell-layout and conversation Studio tests 25/25, shell boundary 2/2, both type
+  checks.
+
+### Limits
+
+- With some views closed and the rest moved about, there is no single command for the
+  roles' arrangement; it is offered only once every view is closed.
+- A view the person closes stays closed at now even when the work later writes a new
+  version of its file.

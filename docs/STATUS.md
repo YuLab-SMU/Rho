@@ -153,11 +153,12 @@ control only while it can act (Documents 0.4.9: Save with unsaved edits, Review 
 Highlight changes while Agent or disk edits remain). The Activity row joined the Studio bar, so
 the code starts 72 px higher at 1440 × 900.
 
-[By hand](AGENT-CANVAS-EPISODE.md#the-persons-own-hands-on-the-layout), the person now arranges
-Studio as the Agent does: the shown tab closes with ×, any tab with a middle click, Delete or its
-menu (close others, split, maximize), each close with Undo; each group's + adds a view into it;
-the strip beside a group's tabs drags the whole group beside or into another, or to a side of the
-page. Tabs narrow to icons before they hide, so a view's controls take a second row sooner.
+[By hand](AGENT-CANVAS-EPISODE.md#the-persons-own-hands-on-the-layout), the person arranges Studio
+as the Agent does: × on the shown tab, a middle click, Delete or the tab's menu closes, with Undo;
+a group's + adds a view into it; the strip beside its tabs drags the whole group, also to a side of
+the page. Tabs narrow to icons, so a view's controls take a second row sooner. In a conversation's
+Studio a replay shows the work's views even when closed, and with all closed [Lay out the work
+again](AGENT-CANVAS-EPISODE.md#closing-every-view-of-a-conversations-studio) restores them.
 
 [Sources follow the project](SIMULATED-PROJECT-EPISODE.md#sources-that-follow-the-project):
 Variables lists the live sessions' values between Code and Results, each opening in Studio, and
@@ -269,10 +270,9 @@ reads, and now counts from the Table tab. The shell acceptance (editor focus at 
 interaction acceptance (a `/^workspace/` sidebar row) failed before the toolbar pass and remain
 open. Earlier passes ran Rho 249–269 and Plugins 120–134 with the same seven acceptances;
 this page's Git history keeps each count and failure.
-The by-hand pass ran against a separate browser build, so as not to replace the one a running
-Rho served: layout tests 19/19, shell boundary 2/2, both type checks, and the frontend (14/14),
-agent-canvas, pages, objects and person-files acceptances passed; shell failed as above, also on
-the unchanged build. The full suite was not run. The [episode](REVIEW-EVIDENCE-EPISODE.md)
+The by-hand and closed-views passes ran against a separate browser build: layout and Studio tests
+25/25, shell boundary 2/2, type checks, frontend 14/14, agent-canvas 10/10, pages, objects and
+person-files passed; shell failed as above, also unchanged. The full suite was not run. The [episode](REVIEW-EVIDENCE-EPISODE.md)
 records contract, browser and installed results; the fixed 0.5.1 candidate passed 230/230
 ([preview](PREVIEW-0.5.1.md)). No failures are converted into passes by omitting the failed run.
 

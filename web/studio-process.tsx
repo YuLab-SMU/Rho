@@ -6,7 +6,7 @@ import { buildWorkGraph, type GraphEvent, type GraphTurn } from '../src/work-gra
 import { turnsAt } from '../src/replay.js';
 import { chapters, type Chapter } from '../src/studio-chapters.js';
 import { studioAt, studioFiles, studioIds, studioMerge, studioTree, type StudioFile } from '../src/studio-layout.js';
-import type { LayoutNode, LayoutTree } from '../src/shell-layout.js';
+import { addInto, type LayoutNode, type LayoutTree } from '../src/shell-layout.js';
 import { askedAbout } from '../src/asking.js';
 import { capturable, kindOf, type ProjectFiles } from './sources.js';
 import { agentName, type AgentNow } from './agent-now.js';
@@ -196,7 +196,8 @@ export function ProcessStudio({ client, snapshot, files, conversationId, notesTe
   // When the Agent first ran code in a live session, from its own calls.
   const firstCell = (list: typeof turns) => list.flatMap(t => t.turn.steps ?? []).filter(s => s.kind === 'tool' && s.operation?.startsWith('kernel.run')).reduce((min, s) => Math.min(min, Date.parse(s.startedAt ?? s.at)), Infinity);
   const firstCellShown = useMemo(() => firstCell(shownTurns), [shownTurns]), firstCellEver = useMemo(() => firstCell(turns), [turns]);
-  const tree = useMemo((): LayoutTree | null => {
+  // The arrangement the work's roles call for at the moment shown.
+  const derived = useMemo((): LayoutTree | null => {
     const node = (file: StudioFile): LayoutNode | null => {
       const props = { title: file.title };
       if (capturable(file.path)) {
@@ -213,15 +214,20 @@ export function ProcessStudio({ client, snapshot, files, conversationId, notesTe
     const views = shown.flatMap(file => { const n = node(file); return n ? [{ role: file.role, node: n, figure: n.component === 'rho.media' }] : []; });
     const commands: LayoutNode | null = Number.isFinite(firstRun) ? { id: studioIds.console, kind: 'view', component: 'rho.console', version: '1', props: { title: 'Commands' }, bindings: {} } : null;
     const session: LayoutNode | null = Number.isFinite(firstCellShown) ? { id: studioIds.session, kind: 'view', component: 'rho.notebook', version: '1', props: { title: 'Notebook' }, bindings: {} } : null;
-    const derived = studioTree(views, commands, session);
+    return studioTree(views, commands, session);
+  }, [shown, docs, captured, at, firstRun, firstCellShown, snapshot.catalog]);
+  const tree = useMemo((): LayoutTree | null => {
     const saved = snapshot.compositions.find(c => c.compositionId === compositionId) as CompositionSummary | undefined;
     if (!saved?.rootId || !saved.nodes?.length) return derived;
     const savedTree: LayoutTree = { rootId: saved.rootId, nodes: saved.nodes as unknown as LayoutNode[] };
+    // A replay shows what the work had at that moment, also the views the person has closed since;
+    // with none of theirs left, it shows the work as the roles lay it out.
+    if (at !== null) return savedTree.nodes.some(n => n.kind === 'view') ? studioMerge(savedTree, derived ?? { rootId: '', nodes: [] }, () => false) : derived;
     // The person saw every file the work had when they last arranged it; those they closed stay closed.
     const arranged = Date.parse(saved.acknowledgedAt ?? '');
     const first = (id: string) => id === studioIds.console ? firstEver : id === studioIds.session ? firstCellEver : every.find(f => viewId(f.path) === id)?.first ?? Infinity;
     return studioMerge(savedTree, derived ?? { rootId: '', nodes: [] }, id => !Number.isFinite(arranged) || first(id) <= arranged);
-  }, [shown, every, docs, captured, at, firstRun, firstEver, firstCellShown, firstCellEver, snapshot.compositions, snapshot.catalog]);
+  }, [derived, every, at, firstEver, firstCellEver, snapshot.compositions]);
   const saved = snapshot.compositions.find(c => c.compositionId === compositionId);
   const signature = JSON.stringify(tree) + ':' + (saved?.version ?? 0);
   const composition = useMemo((): CompositionSummary | null => tree ? { ...(saved ?? {}), compositionId, version: saved?.version ?? 0, rootId: tree.rootId, nodes: tree.nodes as never, views: tree.nodes.filter(n => n.kind === 'view') as never } : null, [signature]);
@@ -252,13 +258,40 @@ export function ProcessStudio({ client, snapshot, files, conversationId, notesTe
   useEffect(() => { setChosen(null); }, [at === null, conversationId]);
   const presence = live && working && views.has(working) ? { viewId: working, label: live.title, verb: working === studioIds.console ? 'Running' : live.files.at(-1)?.verb ?? 'Working', live: live.latest?.outcome === 'requested' } : null;
 
+  // Bringing the work's views back after the person closed them: all of them, laid out by role
+  // as from nothing, or one into the group they choose. Each is one conditional write of this
+  // Studio's saved layout, which Undo in Arrange views reverses.
+  const [restoring, setRestoring] = useState(''), [restoreProblem, setRestoreProblem] = useState('');
+  const arrangeable = at === null && snapshot.catalog.operations.some(o => o.method === 'composition.apply' && o.authorized && o.state === 'available');
+  const closedViews = at === null && derived ? derived.nodes.filter(n => n.kind === 'view' && !views.has(n.id)) : [];
+  async function writeStudio(next: LayoutTree, change: string) {
+    setRestoring(change); setRestoreProblem('');
+    try { await client.call('composition.apply', { projectId, compositionId, expectedVersion: saved?.version ?? 0, changeId: 'studio-' + change + '-' + crypto.randomUUID(), operations: [{ op: 'replace', rootId: next.rootId, nodes: next.nodes }] } as never); }
+    catch (error) { setRestoreProblem(error instanceof Error ? error.message : 'The layout could not be written.'); }
+    finally { setRestoring(''); }
+  }
+  const reopen = (node: LayoutNode, into: string) => {
+    const next = tree && addInto(tree, node as never, into, kind => `${kind}-${crypto.randomUUID().slice(0, 8)}`);
+    if (next) { setChosen(node.id); void writeStudio(next, 'reopen'); }
+  };
+  const emptied = arrangeable && derived ? <div className="studio-empty">
+    <span className="empty-symbol"><Icon name="layout" size={26} stroke={1.5} /></span>
+    <h2>Every view of this work is closed</h2>
+    <p>Its files, commands and versions are all kept. Lay them out again by what each is to the work, or choose a moment on the timeline to see the work as it was then.</p>
+    <button className="primary" disabled={!!restoring} onClick={() => void writeStudio(derived, 'relayout')}>{restoring ? 'Laying out…' : 'Lay out the work again'}</button>
+  </div> : undefined;
+  const reopenMenu = arrangeable && closedViews.length ? (into: string) => <div className="page-add"><section className="page-add-kind" aria-label="Closed views of this work">
+    <h3>Closed views of this work</h3>
+    {closedViews.map(n => <button key={n.id} onClick={() => reopen(n, into)}><Icon name={n.component === 'rho.console' ? 'prompt' : n.component === 'rho.notebook' ? 'code' : n.component === 'rho.media' ? 'image' : n.component === 'rho.table' ? 'table' : 'file'} size={15} stroke={1.7} /><span>{String((n.props as { title?: string } | undefined)?.title ?? n.id)}</span></button>)}
+  </section></div> : undefined;
   const said = useMemo(() => fileDescriptions(notesMeaning(notesText)), [notesText]), described = useMemo(() => describedFiles(turns), [turns]);
   const process: Process = useMemo(() => ({ conversationId, graph, whole, at, files: shown, every, setAt: onAt, showPath: path => setChosen(viewId(path)), holds: path => holdsOf(path, said, described, at) }), [described, conversationId, graph, whole, at, shown, every, said]);
   return <ProcessContext.Provider value={process}>
     <div className="process-studio">
       <div className="process-stage">
         {problem && <p className="inline-error" role="alert">{problem}</p>}
-        {composition ? <Workspace key={projectId + compositionId} {...workspace} bar={false} composition={composition} snapshot={snapshot} client={client} openView={openView} presence={presence} arrange={at === null} following={following || at !== null} />
+        {restoreProblem && <p className="inline-error" role="alert">{restoreProblem}</p>}
+        {composition ? <Workspace key={projectId + compositionId} {...workspace} bar={false} composition={composition} snapshot={snapshot} client={client} openView={openView} presence={presence} arrange={at === null} following={following || at !== null} empty={emptied} addView={reopenMenu} />
           : <div className="studio-empty"><span className="empty-symbol">{running ? <span className="pulse-dot large" aria-hidden="true" /> : <Icon name="layout" size={26} stroke={1.5} />}</span>
             <h2>{loading ? 'Reading the conversation…' : running ? (summary ? agentName(summary.client) : 'The Agent') + ' is starting' : 'Nothing to show yet'}</h2>
             <p>{running ? 'The data it reads, the code it writes, the commands it runs and the results they make appear here as it works.' : 'This conversation has not read or made any project files.'}</p></div>}

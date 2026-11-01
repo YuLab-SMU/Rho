@@ -72,8 +72,8 @@ export function useTabOverflow(ref: RefObject<HTMLElement | null>, selected: str
 // tab shown has a close button; any tab closes from its menu or with a middle click, so a click
 // meant to show a tab never lands on a close button.
 export function TabGroup({ group, name, selected, onSelect, onHeader, render, drag, tools }: { group: Tabs; name: string; selected: string; onSelect: (id: string) => void; onHeader: (element: HTMLDivElement | null) => void; render: TabRender; drag?: TabDrag; tools?: TabTools }) {
-  const list = useRef<HTMLDivElement>(null), adder = useRef<HTMLButtonElement>(null);
-  const [menu, setMenu] = useState<{ kind: 'tab'; id: string; at: MenuPoint; from: HTMLElement } | { kind: 'add'; at: MenuPoint; from: HTMLElement } | null>(null);
+  const list = useRef<HTMLDivElement>(null);
+  const [menu, setMenu] = useState<{ id: string; at: MenuPoint; from: HTMLElement } | null>(null);
   useTabOverflow(list, selected);
   const base = 'shell-' + group.id.replace(/[^A-Za-z0-9_-]/g, '_'), index = Math.max(0, group.views.indexOf(selected));
   const tabElements = () => [...(list.current?.querySelectorAll<HTMLElement>('[role=tab]') ?? [])];
@@ -86,11 +86,11 @@ export function TabGroup({ group, name, selected, onSelect, onHeader, render, dr
   }
   function tabKey(event: KeyboardEvent<HTMLButtonElement>, id: string) {
     if (event.key === 'Delete' && tools?.close) { event.preventDefault(); tools.close(id); }
-    else if ((event.key === 'ContextMenu' || (event.key === 'F10' && event.shiftKey)) && tools?.menu) { event.preventDefault(); setMenu({ kind: 'tab', id, at: under(event.currentTarget), from: event.currentTarget }); }
+    else if ((event.key === 'ContextMenu' || (event.key === 'F10' && event.shiftKey)) && tools?.menu) { event.preventDefault(); setMenu({ id, at: under(event.currentTarget), from: event.currentTarget }); }
   }
   function tabMenu(event: MouseEvent<HTMLButtonElement>, id: string) {
     if (!tools?.menu) return;
-    event.preventDefault(); setMenu({ kind: 'tab', id, at: { x: event.clientX, y: event.clientY }, from: event.currentTarget });
+    event.preventDefault(); setMenu({ id, at: { x: event.clientX, y: event.clientY }, from: event.currentTarget });
   }
   const closeMenu = (refocus: boolean) => { const from = menu?.from; setMenu(null); if (refocus && from?.isConnected) from.focus(); };
   // A group cannot be dropped on itself.
@@ -128,8 +128,7 @@ export function TabGroup({ group, name, selected, onSelect, onHeader, render, dr
             {tools?.close && id === selected && <button className="shell-tab-close" tabIndex={-1} aria-hidden="true" title={'Close ' + render.label(id)} draggable={false} onClick={() => tools.close!(id)}><Icon name="close" size={12} stroke={2} /></button>}
           </div>)}
         </div>
-        {tools?.add && <button ref={adder} className="shell-tab-add" aria-label={'Add a view to ' + name} title="Add a view here" aria-haspopup="dialog" aria-expanded={menu?.kind === 'add'}
-          onClick={event => menu?.kind === 'add' ? setMenu(null) : setMenu({ kind: 'add', at: under(event.currentTarget), from: event.currentTarget })}><Icon name="plus" size={15} stroke={1.8} /></button>}
+        {tools?.add && <AddButton name={name} content={tools.add} />}
         <div className="shell-tabs-fill" aria-hidden="true" data-movable={movable ? '' : undefined} title={movable ? 'Drag to move these views together. Double-click to maximize.' : tools?.maximized ? 'Double-click to show every group' : undefined}
           draggable={movable} onDoubleClick={() => (movable || tools?.maximized) && tools?.onMaximize?.()}
           onDragStart={event => { if (!movable) return; event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData(dragType, group.id); if (list.current) event.dataTransfer.setDragImage(list.current, 16, 16); drag!.start({ kind: 'group', id: group.id }); }} onDragEnd={() => drag?.end()} />
@@ -142,9 +141,18 @@ export function TabGroup({ group, name, selected, onSelect, onHeader, render, dr
       {drag?.dragging && !self && <div className="shell-drop" data-zone={here && here.zone !== 'tab' ? here.zone : undefined} onDragOver={overPanel} onDrop={drop} aria-hidden="true"
         onDragLeave={event => { if (here && !event.currentTarget.contains(event.relatedTarget as Node | null)) drag.over(null); }}><div className="shell-drop-preview" /></div>}
     </div>
-    {menu?.kind === 'tab' && tools?.menu && <FloatingMenu at={menu.at} anchor={menu.from} label={render.label(menu.id)} onClose={closeMenu}><MenuItems items={tools.menu(menu.id)} /></FloatingMenu>}
-    {menu?.kind === 'add' && tools?.add && <FloatingMenu at={menu.at} anchor={adder.current} label={'Add a view to ' + name} role="dialog" className="add-into" onClose={closeMenu}>{tools.add()}</FloatingMenu>}
+    {menu && tools?.menu && <FloatingMenu at={menu.at} anchor={menu.from} label={render.label(menu.id)} onClose={closeMenu}><MenuItems items={tools.menu(menu.id)} /></FloatingMenu>}
   </section>;
+}
+
+// The + after a group's tabs: what can be put into that group, in a menu over the page.
+export function AddButton({ name, content }: { name: string; content: () => ReactNode }) {
+  const button = useRef<HTMLButtonElement>(null), [at, setAt] = useState<MenuPoint | null>(null);
+  return <>
+    <button ref={button} className="shell-tab-add" aria-label={'Add a view to ' + name} title="Add a view here" aria-haspopup="dialog" aria-expanded={!!at}
+      onClick={event => setAt(at ? null : under(event.currentTarget))}><Icon name="plus" size={15} stroke={1.8} /></button>
+    {at && <FloatingMenu at={at} anchor={button.current} label={'Add a view to ' + name} role="dialog" className="add-into" onClose={refocus => { setAt(null); if (refocus) button.current?.focus(); }}>{content()}</FloatingMenu>}
+  </>;
 }
 
 // A split: children share the axis by weight; each divider is a focusable window splitter.

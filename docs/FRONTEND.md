@@ -274,7 +274,11 @@ inspect what happened. The application gives those actions direct places:
   part and the conversation in the Agent panel all show the record as it stood then, to
   the second, and a text file shows its version kept then, read only. Arranging the
   views saves the layout as `conversation-<id>`; later files join their role's place and
-  files the person closed stay closed. Studio opens on the work going on now, else the
+  files the person closed stay closed. A moment replayed still shows every view the work
+  had then, also those closed. With every view closed, Lay out the work again lays them out
+  by role once more, and each group's + lists the work's closed views to open one there
+  ([closed views](AGENT-CANVAS-EPISODE.md#closing-every-view-of-a-conversations-studio)).
+  Studio opens on the work going on now, else the
   Studio last open, else the newest conversation's. The person's workspace is shared with
   the Agent: nothing opens there by itself. Sending a message from another page follows
   the turn on the Overview's board; sent from Studio, it leaves the person where they
