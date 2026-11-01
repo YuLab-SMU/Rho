@@ -36,8 +36,8 @@ source/tree, input, lock and artifact digests; installed acceptance runs outside
 the source checkouts. See [assembly instructions](HEADLESS.md#budgets-verification-and-assembly)
 and [accepted scope](BACKEND-ACCEPTANCE.md).
 
-This delivery is an unsigned local tarball on macOS arm64 with external Node and
-Python prerequisites; R is needed only for R execution. Browser assets, npm registry namespace/channel rights,
+This delivery is an unsigned local tarball, on macOS arm64 until 0.5.2 and since then also on
+Linux x64 and arm64, with external Node and Python prerequisites; R is needed only for R execution. Browser assets, npm registry namespace/channel rights,
 other platforms and full product installation are not accepted by a headless run.
 No registry publication or signing is performed. npm publication would not itself
 establish a signed desktop distribution or require creating Rho-releases.
@@ -123,8 +123,11 @@ is included. Independent researcher observation remains a separate follow-up.
 
 ## Version 0.5.2 candidate
 
-The form is still an unsigned npm tarball with a local WebUI on macOS arm64, an explicitly
-selected digest-checked Core, and an installation that downloads nothing. The Agent clients
+The form is still an unsigned npm tarball with a local WebUI, explicitly selected
+digest-checked Cores, and an installation that downloads nothing. One tarball now serves
+macOS arm64, Linux x64 and Linux arm64: it carries one Core per platform from one Core commit,
+Linux's statically linked, and startup selects this machine's
+([platforms episode](PLATFORMS-0.5.2-EPISODE.md)). The current candidate is 16,854,000 bytes. The Agent clients
 are no longer in it. Conversations and the external relay drive the person's installed
 Claude Code or Codex (`--claude`/`--codex`, `RHO_CLAUDE`/`RHO_CODEX`, else `PATH`). A
 missing client is named, not replaced. Rho pins the ACP adapters; the client versions are
@@ -132,13 +135,16 @@ the person's. The tarball fell from 274,921,791 to 12,753,572 bytes. The packer 
 `SHA256SUMS` beside the tarball and its composition.
 
 ```sh
-shasum -a 256 -c SHA256SUMS
+shasum -a 256 -c SHA256SUMS            # Linux: sha256sum -c SHA256SUMS
 npm install --prefix "$HOME/rho-0.5.2" --omit=dev --ignore-scripts /absolute/rho-workspace-local-0.5.2.tgz
 "$HOME/rho-0.5.2/node_modules/.bin/rho" --root "$HOME/rho-projects" --state-dir "$HOME/.rho-0.5.2" --open
 ```
 
-The [episode](PACKAGE-0.5.2-EPISODE.md) records the candidate, its offline installation,
-real Claude and Codex conversations, and open items. It has not had the full 0.5.1
+The [packing episode](PACKAGE-0.5.2-EPISODE.md) records leaving out the Agent clients, real
+Claude and Codex conversations and open items; the [platforms episode](PLATFORMS-0.5.2-EPISODE.md)
+records the current candidate's installation on macOS, Debian 12 arm64, Ubuntu 25.04 x64 and
+Rocky 8 x64. Linux Agent conversations and real x86_64 hardware are unverified; Windows is
+not yet packed. It has not had the full 0.5.1
 acceptance. No registry publication, GitHub release or signing was performed. At this
 size, a GitHub Release asset installed with `npm install --prefix DIR URL` is the next
 distribution step to select.

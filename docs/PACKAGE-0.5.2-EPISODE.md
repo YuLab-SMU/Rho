@@ -117,7 +117,8 @@ establishes the packaging change, not that acceptance.
 - The Overview gives a failed answer no reason, still offers "Use this answer", and counts
   it as Answered.
 - `dist/plugin-inventory.json` describes ten owners, not Notebook and Skills.
-- The tarball is platform-neutral JavaScript except the bundled darwin-arm64 Core.
+- The tarball is platform-neutral JavaScript except the bundled darwin-arm64 Core. Addressed
+  by the [platforms episode](PLATFORMS-0.5.2-EPISODE.md): one Core per platform.
 - No distribution step was taken. At 12 MB, the tarball and `SHA256SUMS` fit a GitHub
   Release, installed with `npm install --prefix DIR URL` and no registry rights. Registry
   publication with trusted publishing would also need `private` removed, the

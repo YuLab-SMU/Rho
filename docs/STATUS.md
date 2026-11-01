@@ -25,7 +25,7 @@ human benefits are not established by existing Rho checks.
 | Graph | Exact captured refs and capture times, current-file action separate, honest reported/named/observed links, bounded focus | Same-path versions and 160-node-cap regressions; old records show gaps |
 | Offline evidence | Preview one review and explicit refs; static reader/original files/manifest; read-only verifier | Service closed/project moved; four browser widths; tamper detection |
 | macOS 0.5.1 | Unsigned npm tarball/local WebUI selected; Core bundled explicitly | [Fixed tarball installed and exercised](PREVIEW-0.5.1.md) |
-| 0.5.2 candidate | 12 MB tarball: Core bundled, Claude Code/Codex the person's own, all 12 plugins | [Offline install, smoke, real Claude/Codex](PACKAGE-0.5.2-EPISODE.md); not the full 0.5.1 acceptance |
+| 0.5.2 candidate | 16 MB tarball for macOS arm64 and Linux x64/arm64: one Core per platform (Core `c3dbeca`), Claude Code/Codex the person's own, all 12 plugins | [Packing, real Claude/Codex](PACKAGE-0.5.2-EPISODE.md); [offline install on four systems, Linux Notebook and Open folder](PLATFORMS-0.5.2-EPISODE.md); x64 only under Rosetta; not the full 0.5.1 acceptance |
 | Independent researcher use | Unobserved | Trial guide in the episode; no usability claim |
 | dsh-rho 0.0.1 | Native dsh 0.2.1-rc.5 analysis, captured CSV/SVG, selected-row question | Real model/browser loop; local tarball installed; restart/overwrite/crash preserved results and one analysis run; 5/5 adapter tests and type check |
 
@@ -284,8 +284,8 @@ and uncertainty ([Headless](HEADLESS.md#retained-review-evidence)).
 
 ## Scope and follow-up
 
-The product target is local WebUI on macOS arm64. Windows/Linux folder picking, POSIX locks,
-executable discovery, packaging and installation need their own portability acceptance. No
+The product target is local WebUI on macOS arm64 and, from 0.5.2, Linux x64/arm64 (installed on
+four systems; x64 only under Rosetta). Windows needs its own Core build and acceptance. No
 cloud/account/team/billing, native shell, automatic runtime download, public npm publication or
 signed release is included. From 0.5.2 the person installs the Agent clients; Rho pins their ACP
 adapters. [Release](RELEASE.md) separates source, fixed composition, installation and future signed
