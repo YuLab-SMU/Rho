@@ -84,6 +84,15 @@ Host, and none of their lifetimes is a reason to stop or restart it.
   original request identity and any partial/unknown outcome. After a service
   restart, inspect the existing Host and original request through the public CLI;
   do not automatically repeat execution or claim native-session recovery.
+- On Windows a Host serves a named pipe named from a hash of its state folder, known
+  from its `ready` line or found among Core's pipes by the project its `capability`
+  names. Node there ends the processes it starts when it ends, so `cmd.exe` starts the
+  Host and waits for it; the Host outlives the service and its runs share cmd's
+  console, which has no window. A Host takes Ctrl+Break as an end without its report,
+  so Rho starts it with `RHO_CORE_STOP_FILE` and creates that file instead of sending
+  SIGTERM. A Host serves one pipe instance at a time; a call that finds it busy is
+  not delivered (exit 3) and is tried up to five times
+  ([Windows episode](WINDOWS-0.5.2-EPISODE.md)).
 
 Reads are bounded observations. A read never starts or recovers a Host or a native
 session.

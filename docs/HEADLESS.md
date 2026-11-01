@@ -37,7 +37,9 @@ it. Missing browser renderers do not disable the headless protocol.
 ## Install and start
 
 The selected baseline is macOS arm64, Node 22.22.3 (engine range
-`>=22.22.0 <23`), npm 10.9.8, Python 3 with `fcntl`, and Rscript 4.5.2.
+`>=22.22.0 <23`), npm 10.9.8, Python 3 with `fcntl`, and Rscript 4.5.2. Windows x64
+was checked with Node 22.23.4 and Rscript 4.5.1; its writer lock needs no Python, and
+there `rho.cmd` starts Rho and Ctrl+Break on its console stops it in order.
 The unsigned local tarball contains Plugins and the selected digest-checked Core
 binary. R and any project-selected packages are external prerequisites, and so are
 the Agent clients: conversations drive the person's installed Claude Code or Codex.
@@ -66,7 +68,7 @@ operator selections; `RHO_RSCRIPT`, `RHO_CORE_BINARY` and `RHO_PYTHON` select
 equivalent runtimes. A Core override is outside bundled digest verification.
 A source checkout has no bundled Core: packaging supplies one per platform under
 `vendor/core/PLATFORM/`, and startup selects this machine's (`darwin-arm64`,
-`linux-x64`, `linux-arm64`) by its recorded digest. A package without this platform's
+`linux-x64`, `linux-arm64`, `win32-x64`) by its recorded digest. A package without this platform's
 Core refuses to start and names the platforms it carries. Without a Core
 binary on PATH, the workspace and native Agent tools still start. Explicit managed
 operations and Host activity require `--core`/`RHO_CORE_BINARY` or a bundled Core.
@@ -75,7 +77,8 @@ startup; no alternate executable silently replaces it. Execution acceptance need
 an explicit Core selection. General project diagnosis does not treat absent R as
 a broken workspace; diagnosis for the managed `run-r` intent does.
 Core uses the canonical project path plus `/.rho/host.sock`; macOS permits at
-most 103 UTF-8 bytes. A longer path fails before Host startup.
+most 103 UTF-8 bytes. A longer path fails before Host startup. A Windows Host serves a
+named pipe instead, with no such limit.
 
 `--plugins documents,files` selects only those owners; `--plugins ""` selects
 none. The default selects all nine. The allowlisted package identities and exact
