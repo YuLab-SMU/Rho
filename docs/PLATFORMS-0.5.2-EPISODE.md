@@ -121,9 +121,8 @@ Rho passes 269/270 with the new macOS Core; the MCP v2 stdio test was again canc
 - x86_64 hardware: every x64 result above ran under Rosetta.
 - kdialog, Wayland, and remote sessions over ssh with the new reader.
 - The rest of 0.5.1's acceptance, as for 0.5.2. 0.5.1 remains the accepted preview.
-- Windows: Core `c3dbeca` keeps the Windows port; Rho needs a `win32-x64` Core for
-  `--core win32-x64=…` (packed as `rho-core.exe`), and the folder chooser and other
-  platform paths still say macOS and Linux.
+- Windows: done on a Windows machine with the same Core commit, packed as a separate candidate
+  ([Windows episode](WINDOWS-0.5.2-EPISODE.md)).
 - No push, registry publication, GitHub release or signing.
 
 ## Open items

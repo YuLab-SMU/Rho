@@ -143,8 +143,17 @@ npm install --prefix "$HOME/rho-0.5.2" --omit=dev --ignore-scripts /absolute/rho
 The [packing episode](PACKAGE-0.5.2-EPISODE.md) records leaving out the Agent clients, real
 Claude and Codex conversations and open items; the [platforms episode](PLATFORMS-0.5.2-EPISODE.md)
 records the current candidate's installation on macOS, Debian 12 arm64, Ubuntu 25.04 x64 and
-Rocky 8 x64. Linux Agent conversations and real x86_64 hardware are unverified; Windows is
-not yet packed. It has not had the full 0.5.1
+Rocky 8 x64. Linux Agent conversations and real x86_64 hardware are unverified. A Windows x64
+candidate from the same Core commit is packed and installed separately
+([Windows episode](WINDOWS-0.5.2-EPISODE.md)). On Windows, in PowerShell:
+
+```powershell
+Get-FileHash rho-workspace-local-0.5.2.tgz -Algorithm SHA256   # compare with SHA256SUMS
+npm install --prefix "$HOME\rho-0.5.2" --omit=dev --ignore-scripts C:\absolute\rho-workspace-local-0.5.2.tgz
+& "$HOME\rho-0.5.2\node_modules\.bin\rho.cmd" --root "$HOME\rho-projects" --state-dir "$HOME\.rho-0.5.2" --open
+```
+
+One tarball for all four platforms waits for the macOS and Linux Cores. It has not had the full 0.5.1
 acceptance. No registry publication, GitHub release or signing was performed. At this
 size, a GitHub Release asset installed with `npm install --prefix DIR URL` is the next
 distribution step to select.

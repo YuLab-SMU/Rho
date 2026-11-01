@@ -1,6 +1,6 @@
 # Rho status
 
-Updated: 2026-11-01.
+Updated: 2026-11-02.
 
 ## Current focus
 
@@ -25,7 +25,7 @@ human benefits are not established by existing Rho checks.
 | Graph | Exact captured refs and capture times, current-file action separate, honest reported/named/observed links, bounded focus | Same-path versions and 160-node-cap regressions; old records show gaps |
 | Offline evidence | Preview one review and explicit refs; static reader/original files/manifest; read-only verifier | Service closed/project moved; four browser widths; tamper detection |
 | macOS 0.5.1 | Unsigned npm tarball/local WebUI selected; Core bundled explicitly | [Fixed tarball installed and exercised](PREVIEW-0.5.1.md) |
-| 0.5.2 candidate | 16 MB tarball for macOS arm64 and Linux x64/arm64: one Core per platform (Core `c3dbeca`), Claude Code/Codex the person's own, all 12 plugins | [Packing, real Claude/Codex](PACKAGE-0.5.2-EPISODE.md); [offline install on four systems, Linux Notebook and Open folder](PLATFORMS-0.5.2-EPISODE.md); x64 only under Rosetta; not the full 0.5.1 acceptance |
+| 0.5.2 candidate | 16 MB tarball for macOS arm64 and Linux x64/arm64, and a 12 MB Windows x64 one: one Core per platform (Core `c3dbeca`), Claude Code/Codex the person's own, all 12 plugins | [Packing, real Claude/Codex](PACKAGE-0.5.2-EPISODE.md); [offline install on four systems, Linux Notebook and Open folder](PLATFORMS-0.5.2-EPISODE.md); [Windows: Host lifetime and stop, installed checks](WINDOWS-0.5.2-EPISODE.md); x64 only under Rosetta; one four-platform tarball and the full 0.5.1 acceptance not done |
 | Independent researcher use | Unobserved | Trial guide in the episode; no usability claim |
 | dsh-rho 0.0.1 | Native dsh 0.2.1-rc.5 analysis, captured CSV/SVG, selected-row question | Real model/browser loop; local tarball installed; restart/overwrite/crash preserved results and one analysis run; 5/5 adapter tests and type check |
 
@@ -275,7 +275,8 @@ The timeline events pass recorded Rho 267/269 and Plugins 163/163 (the same two 
 pages and agent-canvas 10/10 passed, the last once its replay click moved to the first read mark.
 The [episode](REVIEW-EVIDENCE-EPISODE.md) records contract, browser and installed results; the fixed
 0.5.1 candidate passed 230/230 ([preview](PREVIEW-0.5.1.md)). No failure is omitted to make a pass.
-The 0.5.2 packaging pass records Rho 269/270 and Plugins 165/165 in the [ledger](VERIFICATION.json).
+The 0.5.2 packaging pass records Rho 269/270 and Plugins 165/165 in the [ledger](VERIFICATION.json);
+on Windows 11 x64, Rho 259/273 (13 skipped, MCP v2 cancelled) and Plugins 158/166 (8 skipped).
 
 Automatic capture defaults: 8 MiB/snapshot, 64 snapshots and 32 MiB/turn, at most two
 workers/project, Files 512 MiB/1024 resources; export 512 MiB/128 files/4 MiB metadata,
@@ -284,13 +285,12 @@ and uncertainty ([Headless](HEADLESS.md#retained-review-evidence)).
 
 ## Scope and follow-up
 
-The product target is local WebUI on macOS arm64 and, from 0.5.2, Linux x64/arm64 (installed on
-four systems; x64 only under Rosetta). Windows needs its own Core build and acceptance. No
-cloud/account/team/billing, native shell, automatic runtime download, public npm publication or
-signed release is included. From 0.5.2 the person installs the Agent clients; Rho pins their ACP
-adapters. [Release](RELEASE.md) separates source, fixed composition, installation and future signed
-distribution. Offline evidence is not a workspace restore or executable analysis format. Existing
-archives keep owner fields in their scope and reject older collaboration formats that would lose state.
+The product target is local WebUI on macOS arm64 and, from 0.5.2, Linux x64/arm64 (installed on four
+systems; x64 only under Rosetta) and Windows x64. No cloud/account/team/billing, native shell, automatic
+runtime download, public npm publication or signed release is included. From 0.5.2 the person installs
+the Agent clients; Rho pins their ACP adapters. [Release](RELEASE.md) separates source, fixed composition,
+installation and future signed distribution. Offline evidence is not a workspace restore or executable
+analysis format. Existing archives keep owner fields in their scope and reject older collaboration formats that would lose state.
 
 The withdrawn 2026-10-25 frontend guidance and the [2026-10-26 design commission](design/2026-10-26/index.html)
 are not requirements or templates for these screens. Current work
