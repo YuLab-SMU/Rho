@@ -27,13 +27,14 @@ if (values['package-root']) {
     assert.notEqual(packageRoot, await fs.realpath(directory));
   }
   runtime.composition = JSON.parse(await fs.readFile(path.join(packageRoot, 'vendor/composition.json'), 'utf8'));
-  assert.equal(runtime.composition.platform, process.platform + '-' + process.arch);
+  runtime.core = runtime.composition.core.artifacts[process.platform + '-' + process.arch];
+  assert.ok(runtime.core, 'The package carries no Core for this platform');
   for (const name of ['@rho-workspace/plugin-agent', '@agentclientprotocol/sdk', '@agentclientprotocol/claude-agent-acp', '@agentclientprotocol/codex-acp', '@openai/codex', '@anthropic-ai/claude-agent-sdk', '@modelcontextprotocol/sdk']) {
     const directory = await fs.realpath(path.join(packageRoot, 'node_modules', name));
     assert.ok(directory.startsWith(packageRoot + path.sep), 'Installed dependency escaped the package: ' + name);
     runtime.dependencies[name] = JSON.parse(await fs.readFile(path.join(directory, 'package.json'), 'utf8')).version;
   }
-  assert.equal(sha(await fs.readFile(path.join(packageRoot, 'vendor/rho-core'))), runtime.composition.core.artifactSha256);
+  assert.equal(sha(await fs.readFile(path.join(packageRoot, runtime.core.path))), runtime.core.sha256);
 }
 for (const name of ['server', 'client', 'browser']) {
   const file = await fs.realpath(path.join(packageRoot, 'dist', name + '.js'));
@@ -52,7 +53,7 @@ const model = 'westlakehpc/deepseek-v4.1-flash';
 const env = { CLAUDE_CONFIG_DIR: configDir, CLAUDE_CODE_DISABLE_AUTO_MEMORY: '1', CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION: 'false', ANTHROPIC_MODEL: model };
 for (const k of ['ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_API_KEY', 'ANTHROPIC_BASE_URL']) if (auth[k]) env[k] = auth[k];
 const claude = process.env.RHO_CLAUDE ?? path.join(os.homedir(), '.local/bin/claude');
-const options = { root, stateDir: path.join(root, '.service'), coreBinary: values['package-root'] ? path.join(packageRoot, 'vendor/rho-core') : path.resolve(checkout, '../Rho-core/target/debug/rho-core'), rscript: 'Rscript', claude,
+const options = { root, stateDir: path.join(root, '.service'), coreBinary: values['package-root'] ? path.join(packageRoot, runtime.core.path) : path.resolve(checkout, '../Rho-core/target/debug/rho-core'), rscript: 'Rscript', claude,
   webRoot: path.join(packageRoot, 'dist/web'),
   codexAcp: { env: await westlakeCodexEnv(auth, root, model), model },
   claudeAcp: { env, model, settingSources: [], allowedTools: ['Read'] }, conversations: { maxAgentTurns: 16, turnWallMs: 180000, stopGraceMs: 15000 } };

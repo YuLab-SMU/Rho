@@ -5,8 +5,8 @@ import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { parseArgs } from 'node:util';
 const root = fileURLToPath(new URL('..', import.meta.url));
-const { values } = parseArgs({ options: { core: { type: 'string' }, 'core-source': { type: 'string' }, 'core-composition': { type: 'string' }, plugins: { type: 'string' }, destination: { type: 'string' }, 'allow-dirty': { type: 'boolean', default: false }, 'select-plugins': { type: 'string' } } });
-if (!values.core || !values['core-source']) throw new Error('Select --core BINARY and --core-source REPOSITORY. The build must already have completed.');
+const { values } = parseArgs({ options: { core: { type: 'string', multiple: true }, 'core-source': { type: 'string' }, 'core-composition': { type: 'string' }, plugins: { type: 'string' }, destination: { type: 'string' }, 'allow-dirty': { type: 'boolean', default: false }, 'select-plugins': { type: 'string' } } });
+if (!values.core?.length || !values['core-source']) throw new Error('Select --core [PLATFORM=]BINARY, once per platform, and --core-source REPOSITORY. The builds must already have completed.');
 const pluginRoot = path.resolve(values.plugins ?? path.join(root, '../Rho-plugins'));
 const coreRoot = path.resolve(values['core-source']);
 const destination = path.resolve(values.destination ?? path.join(root, 'work/package-' + Date.now()));
@@ -47,14 +47,43 @@ const plugins = await source(pluginRoot, ['packages/contracts', ...uiSources, ..
 // The descriptive inventory contains all reviewed owners, including owners
 // physically omitted from a reduced package. Freeze those inputs too.
 const catalogSource = await source(pluginRoot, ['packages/contracts', ...uiSources, ...pluginIds.map(id => 'plugins/' + id), 'scripts', 'package.json', 'package-lock.json', 'LICENSE']);
-const binary = await fs.readFile(path.resolve(values.core));
+// One Core per platform, all built from the selected Core source. Each binary's own header
+// must name the platform it is selected for, so a mislabelled build cannot be packed.
+function executableTarget(bytes) {
+  if (bytes.length >= 8 && bytes.readUInt32LE(0) === 0xfeedfacf) return { platform: 'darwin', arch: { 0x0100000c: 'arm64', 0x01000007: 'x64' }[bytes.readUInt32LE(4)], format: 'mach-o' };
+  if (bytes.length >= 64 && bytes.readUInt32BE(0) === 0x7f454c46 && bytes[4] === 2 && bytes[5] === 1) {
+    const offset = Number(bytes.readBigUInt64LE(32)), size = bytes.readUInt16LE(54), count = bytes.readUInt16LE(56);
+    let interpreter = false;
+    for (let i = 0; i < count; i++) if (bytes.readUInt32LE(offset + i * size) === 3) interpreter = true;
+    return { platform: 'linux', arch: { 0x3e: 'x64', 0xb7: 'arm64' }[bytes.readUInt16LE(18)], format: 'elf', linkage: interpreter ? 'dynamic' : 'static' };
+  }
+  if (bytes.length >= 64 && bytes.readUInt16LE(0) === 0x5a4d) {
+    const pe = bytes.readUInt32LE(0x3c);
+    if (bytes.length >= pe + 6 && bytes.readUInt32LE(pe) === 0x4550) return { platform: 'win32', arch: { 0x8664: 'x64', 0xaa64: 'arm64' }[bytes.readUInt16LE(pe + 4)], format: 'pe' };
+  }
+  return null;
+}
+const cores = [];
+for (const selection of values.core) {
+  const at = selection.indexOf('='), labelled = at > 0 && /^[a-z0-9]+-[a-z0-9]+$/.test(selection.slice(0, at));
+  const platform = labelled ? selection.slice(0, at) : process.platform + '-' + process.arch, file = path.resolve(labelled ? selection.slice(at + 1) : selection);
+  const bytes = await fs.readFile(file), target = executableTarget(bytes);
+  if (!target || target.platform + '-' + target.arch !== platform) throw new Error('Core ' + file + ' is not a ' + platform + ' executable' + (target ? ' (it is ' + target.platform + '-' + target.arch + ').' : '.'));
+  if (cores.some(c => c.platform === platform)) throw new Error('Select one Core per platform: ' + platform);
+  const { format, linkage } = target;
+  cores.push({ platform, bytes, record: { path: 'vendor/core/' + platform + '/' + (target.platform === 'win32' ? 'rho-core.exe' : 'rho-core'), sha256: sha(bytes), bytes: bytes.length, format, ...(linkage ? { linkage } : {}) } });
+}
+cores.sort((a, b) => a.platform.localeCompare(b.platform));
 let core;
 if (values['core-composition']) {
-  const recorded = JSON.parse(await fs.readFile(path.resolve(values['core-composition']), 'utf8')).core;
-  if (recorded.repository !== 'https://github.com/YuLab-SMU/Rho-core' || recorded.artifactSha256 !== sha(binary) || recorded.bytes !== binary.length || recorded.localOverride) throw new Error('Selected binary does not match the accepted Core identity.');
+  const accepted = JSON.parse(await fs.readFile(path.resolve(values['core-composition']), 'utf8')), recorded = accepted.core;
+  // Compositions before 0.5.2 recorded one artifact, for the platform that packed them.
+  const known = recorded.artifacts ?? { [accepted.platform]: { sha256: recorded.artifactSha256, bytes: recorded.bytes } };
+  if (recorded.repository !== 'https://github.com/YuLab-SMU/Rho-core' || recorded.localOverride || cores.some(c => known[c.platform]?.sha256 !== c.record.sha256 || known[c.platform]?.bytes !== c.record.bytes)) throw new Error('Selected binary does not match the accepted Core identity.');
   if (run('git', ['rev-parse', recorded.commit + '^{tree}'], coreRoot).trim() !== recorded.tree) throw new Error('Recorded Core tree is unavailable or mismatched.');
-  core = { ...recorded, buildAssociation: 'Digest-verified accepted public Core binary reused; no local Core source changes selected.' };
-} else core = { ...await source(coreRoot, ['src', 'Cargo.toml', 'Cargo.lock', 'LICENSE']), buildAssociation: 'Explicitly selected local build; no reproducible-build or signing claim.' };
+  const { artifacts, artifactSha256, bytes, ...identity } = recorded;
+  core = { ...identity, buildAssociation: 'Digest-verified accepted public Core binaries reused; no local Core source changes selected.' };
+} else core = { ...await source(coreRoot, ['src', 'Cargo.toml', 'Cargo.lock', 'LICENSE']), buildAssociation: 'Explicitly selected local builds of this source, one per platform; no reproducible-build or signing claim.' };
 const pluginPacks = JSON.parse(run(process.execPath, [path.join(pluginRoot, 'scripts/pack.mjs'), '--destination', path.join(destination, 'plugins'), '--plugins', selected.join(',')], pluginRoot));
 const manifest = JSON.parse(await fs.readFile(path.join(root, 'package.json'), 'utf8'));
 for (const entry of manifest.files.filter(p => p !== 'vendor')) {
@@ -65,7 +94,10 @@ for (const item of pluginPacks.packages) {
   await fs.copyFile(path.join(pluginPacks.destination, item.filename), path.join(stage, 'vendor', item.filename));
 }
 
-await fs.writeFile(path.join(stage, 'vendor/rho-core'), binary, { mode: 0o755 });
+for (const c of cores) {
+  await fs.mkdir(path.join(stage, path.dirname(c.record.path)), { recursive: true });
+  await fs.writeFile(path.join(stage, c.record.path), c.bytes, { mode: 0o755 });
+}
 await fs.writeFile(path.join(stage, 'vendor/CORE-LICENSE'), run('git', ['show', core.commit + ':LICENSE'], coreRoot));
 for (const name of Object.keys(manifest.dependencies).filter(name => name.startsWith('@rho-workspace/plugin-'))) delete manifest.dependencies[name];
 for (const item of pluginPacks.packages) manifest.dependencies[item.package] = 'file:vendor/' + item.filename;
@@ -78,15 +110,17 @@ await fs.writeFile(path.join(stage, 'package.json'), JSON.stringify(manifest, nu
 run('npm', ['install', '--omit=dev', '--omit=optional', '--ignore-scripts', '--no-audit', '--no-fund'], stage);
 const web = JSON.parse(await fs.readFile(path.join(stage, 'dist/web/composition.json'), 'utf8'));
 const catalogBytes = await fs.readFile(path.join(stage, 'dist/plugin-inventory.json'));
-const composition = { schemaVersion: 1, platform: process.platform + '-' + process.arch, node: process.version, application: { repository: 'https://github.com/YuLab-SMU/Rho', ...application }, plugins: { repository: 'https://github.com/YuLab-SMU/Rho-plugins', ...plugins, selected, uiSources, packages: pluginPacks.packages.map(({ files, ...item }) => item) }, catalog: { path: 'dist/plugin-inventory.json', sha256: sha(catalogBytes), bytes: catalogBytes.length, source: catalogSource, scope: 'Descriptive inventory of the reviewed owners; contributes no runtime entry or authority.' }, core: { repository: 'https://github.com/YuLab-SMU/Rho-core', ...core, artifactSha256: sha(binary), bytes: binary.length }, web, productionLockSha256: sha(await fs.readFile(path.join(stage, 'package-lock.json'))), agentClients: { bundled: false, selection: ['--claude/--codex', 'RHO_CLAUDE/RHO_CODEX', 'PATH'] }, distribution: 'unsigned-local-npm-tarball', registryPublication: 'not-performed' };
+// Everything but Core is platform-neutral JavaScript, so the package serves each Core's platform.
+const composition = { schemaVersion: 2, platforms: cores.map(c => c.platform), packedOn: process.platform + '-' + process.arch, node: process.version, application: { repository: 'https://github.com/YuLab-SMU/Rho', ...application }, plugins: { repository: 'https://github.com/YuLab-SMU/Rho-plugins', ...plugins, selected, uiSources, packages: pluginPacks.packages.map(({ files, ...item }) => item) }, catalog: { path: 'dist/plugin-inventory.json', sha256: sha(catalogBytes), bytes: catalogBytes.length, source: catalogSource, scope: 'Descriptive inventory of the reviewed owners; contributes no runtime entry or authority.' }, core: { repository: 'https://github.com/YuLab-SMU/Rho-core', ...core, artifacts: Object.fromEntries(cores.map(c => [c.platform, c.record])) }, web, productionLockSha256: sha(await fs.readFile(path.join(stage, 'package-lock.json'))), agentClients: { bundled: false, selection: ['--claude/--codex', 'RHO_CLAUDE/RHO_CODEX', 'PATH'] }, distribution: 'unsigned-local-npm-tarball', registryPublication: 'not-performed' };
 await fs.writeFile(path.join(stage, 'vendor/composition.json'), JSON.stringify(composition, null, 2) + '\n');
 const result = JSON.parse(run('npm', ['pack', '--ignore-scripts', '--json', '--pack-destination', destination], stage))[0];
 if (result.files.some(f => path.isAbsolute(f.path) || f.path.split('/').includes('..'))) throw new Error('Package contains a path outside the assembled root.');
-for (const required of ['vendor/rho-core', 'protocol/index.json', 'fixtures/states.json', 'dist/web/index.html', 'dist/web/composition.json', 'dist/web/licenses.md', ...web.assets.map(a => 'dist/web/' + a.path), ...pluginPacks.packages.map(p => 'node_modules/' + p.package + '/dist/index.js')]) if (!result.files.some(f => f.path === required)) throw new Error('Package is missing ' + required);
+for (const required of [...cores.map(c => c.record.path), 'protocol/index.json', 'fixtures/states.json', 'dist/web/index.html', 'dist/web/composition.json', 'dist/web/licenses.md', ...web.assets.map(a => 'dist/web/' + a.path), ...pluginPacks.packages.map(p => 'node_modules/' + p.package + '/dist/index.js')]) if (!result.files.some(f => f.path === required)) throw new Error('Package is missing ' + required);
 for (const [id, dependency] of [['tables', 'csv-parse'], ['agent', '@modelcontextprotocol/sdk'], ['agent', '@agentclientprotocol/sdk'], ['agent', '@agentclientprotocol/claude-agent-acp'], ['agent', '@agentclientprotocol/codex-acp'], ['agent', '@openai/codex']]) {
   if (result.files.some(f => f.path === 'node_modules/' + dependency + '/package.json') !== selected.includes(id)) throw new Error('Optional dependency did not follow its plugin: ' + dependency);
 }
 if (result.files.some(f => /(^|\/)node_modules\/(@openai\/codex-|@anthropic-ai\/claude-agent-sdk-)[^/]+\//.test(f.path))) throw new Error('A native Agent client entered the package.');
+if (result.files.some(f => f.path.endsWith('.node'))) throw new Error('A native Node addon entered the package; it would bind the package to the packing platform.');
 const firstParty = file => !file.startsWith('node_modules/') || file.startsWith('node_modules/@rho-workspace/');
 if (result.files.some(f => (firstParty(f.path) && /(^|\/)examples\//.test(f.path)) || (/\.R$/.test(f.path) && f.path !== 'node_modules/@rho-workspace/plugin-kernel/runners/runner.R') || f.path.includes('@rho-workspace/headless'))) throw new Error('An aggregate package or project recipe leaked into the application.');
 const artifact = path.join(destination, result.filename);

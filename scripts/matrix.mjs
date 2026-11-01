@@ -4,7 +4,7 @@
 //   node scripts/matrix.mjs                  # source build only
 //   node scripts/matrix.mjs --install DIR    # also run against an installed package
 //
-// The install directory is the package root (contains dist/, vendor/rho-core).
+// The install directory is the package root (contains dist/, vendor/core/PLATFORM/rho-core).
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -19,9 +19,8 @@ await fs.mkdir(evidence, { recursive: true });
 const driver = fileURLToPath(import.meta.resolve('@playwright/test'));
 const columns = [{ id: 'source', packageRoot: root, core: process.env.RHO_CORE_BINARY }];
 if (install) {
-  const vendor = path.join(install, 'vendor/rho-core');
-  const hasVendor = await fs.access(vendor).then(() => true, () => false);
-  columns.push({ id: 'installed', packageRoot: install, core: hasVendor ? vendor : process.env.RHO_CORE_BINARY });
+  const packed = await fs.readFile(path.join(install, 'vendor/composition.json'), 'utf8').then(text => JSON.parse(text).core.artifacts[process.platform + '-' + process.arch], () => null);
+  columns.push({ id: 'installed', packageRoot: install, core: packed ? path.join(install, packed.path) : process.env.RHO_CORE_BINARY });
 }
 
 const journeys = [

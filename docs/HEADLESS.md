@@ -64,7 +64,10 @@ credential is the machine's own. Host and Origin are checked on every request, a
 a browser request marked as coming from another site is refused. `--port`, `--rscript`, `--core`, `--plugins` and `--limits` are explicit
 operator selections; `RHO_RSCRIPT`, `RHO_CORE_BINARY` and `RHO_PYTHON` select
 equivalent runtimes. A Core override is outside bundled digest verification.
-A source checkout has no `vendor/rho-core`: packaging supplies it. Without a Core
+A source checkout has no bundled Core: packaging supplies one per platform under
+`vendor/core/PLATFORM/`, and startup selects this machine's (`darwin-arm64`,
+`linux-x64`, `linux-arm64`) by its recorded digest. A package without this platform's
+Core refuses to start and names the platforms it carries. Without a Core
 binary on PATH, the workspace and native Agent tools still start. Explicit managed
 operations and Host activity require `--core`/`RHO_CORE_BINARY` or a bundled Core.
 An explicitly selected missing binary or invalid bundled artifact still fails
@@ -371,7 +374,8 @@ RHO_CORE_BINARY=/absolute/rho-core npm run acceptance -- \
   /absolute/trial /absolute/explicit-project
 RHO_CORE_BINARY=/absolute/rho-core npm run recovery
 RHO_CORE_BINARY=/absolute/rho-core npm run agent
-npm run pack:local -- --core /absolute/rho-core \
+npm run pack:local -- --core darwin-arm64=/absolute/mac/rho-core \
+  --core linux-x64=/absolute/linux-x64/rho-core --core linux-arm64=/absolute/linux-arm64/rho-core \
   --core-source /absolute/Rho-core --plugins /absolute/Rho-plugins
 node scripts/install-acceptance.mjs /absolute/rho-workspace-local-0.5.2.tgz \
   /absolute/ordinary-project /absolute/paired-project
@@ -383,13 +387,16 @@ owned Hosts. [Read-only fixtures](../fixtures/README.md) cannot be replayed.
 
 The packer rejects dirty selected build inputs unless explicitly recording
 `--allow-dirty`, builds the Node owners, stages production dependencies and
-Core, and checks that project recipes/native R scripts and the old aggregate
+one Core per `--core PLATFORM=BINARY` (a bare path is this machine's), and checks that project recipes/native R scripts and the old aggregate
 package are absent. Its plugin list must equal the application's runtime selection.
 Production dependencies install with `--omit=optional`, which leaves out only the
 Agent adapters' platform-specific Claude Code and Codex binaries; a native Agent
 client found in the package fails packing, and the installed smoke check fails if
 npm fetched one. Notebook's R and Python runners are its only packed `.R`/`.py`
-inputs. The packer writes `SHA256SUMS` beside the tarball and composition. `--select-plugins documents,files` builds a reduced artifact
+inputs. Each Core's own header (Mach-O, ELF or PE and its machine) must match its
+platform, and the composition records whether a Linux Core is statically linked. Every
+other file is platform-neutral JavaScript: a native Node addon (`.node`) fails packing.
+The packer writes `SHA256SUMS` beside the tarball and composition. `--select-plugins documents,files` builds a reduced artifact
 with other capability packages physically absent. A separate
 `--select-plugins files,r` artifact exercises exported object reads with no editor
 or dependency checker installed. `scripts/plugin-install-acceptance.mjs` accepts

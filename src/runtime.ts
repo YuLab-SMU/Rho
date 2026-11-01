@@ -13,12 +13,16 @@ export async function executable(name: string, selected?: string) {
 export async function runtime(core?: string, rscript?: string) {
   let bundled: string | undefined;
   if (!core && !process.env.RHO_CORE_BINARY) {
-    const p = fileURLToPath(new URL('../vendor/rho-core', import.meta.url));
     try {
       const manifest = JSON.parse(await fs.readFile(new URL('../vendor/composition.json', import.meta.url), 'utf8'));
-      requireThat(manifest.platform === process.platform + '-' + process.arch, 'condition', 'Installed Core artifact does not match this platform.');
+      // A package carries one Core per platform, each under vendor/core/PLATFORM/.
+      const platform = process.platform + '-' + process.arch, packed = manifest.core?.artifacts ?? {};
+      const artifact = Object.hasOwn(packed, platform) ? packed[platform] : undefined;
+      requireThat(artifact, 'condition', `This installation has no Core for ${platform}; it carries ${Object.keys(packed).join(', ') || 'none'}. Select a Core with --core ABSOLUTE_PATH or RHO_CORE_BINARY.`, { platform, packed: Object.keys(packed) });
+      requireThat(typeof artifact.path === 'string' && artifact.path === 'vendor/core/' + platform + '/' + path.posix.basename(artifact.path), 'condition', 'Installed Core artifact path is invalid.');
+      const p = fileURLToPath(new URL('../' + artifact.path, import.meta.url));
       const { digest } = await import('@rho-workspace/plugin-contracts');
-      requireThat(digest(await fs.readFile(p)) === manifest.core.artifactSha256, 'condition', 'Installed Core artifact digest failed verification.');
+      requireThat(digest(await fs.readFile(p)) === artifact.sha256, 'condition', 'Installed Core artifact digest failed verification.');
       bundled = p;
     } catch (e: any) { if (e.code !== 'ENOENT') throw e; }
   }
@@ -39,7 +43,7 @@ export async function runtime(core?: string, rscript?: string) {
   catch (e) {
     if (!(e instanceof Fault && e.kind === 'unavailable')) throw e;
     if (!chosen) return { coreBinary: undefined, rscript: selectedRscript };
-    requireThat(false, 'unavailable', 'The Core binary is unavailable. Select it with --core ABSOLUTE_PATH or RHO_CORE_BINARY; a packed install supplies vendor/rho-core, and a source checkout does not.', { executable: 'rho-core', remedy: '--core, RHO_CORE_BINARY or the packaged vendor/rho-core' });
+    requireThat(false, 'unavailable', 'The Core binary is unavailable. Select it with --core ABSOLUTE_PATH or RHO_CORE_BINARY; a packed install supplies vendor/core/PLATFORM/rho-core, and a source checkout does not.', { executable: 'rho-core', remedy: '--core, RHO_CORE_BINARY or the packaged vendor/core/PLATFORM/rho-core' });
   }
   return { coreBinary, rscript: selectedRscript };
 }

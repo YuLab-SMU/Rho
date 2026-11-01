@@ -27,9 +27,10 @@ try {
   await command('npm', ['install', '--prefix', install, '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund', artifact], root);
   const pkg = path.join(install, 'node_modules/@rho-workspace/local');
   const manifest = JSON.parse(await fs.readFile(path.join(pkg, 'vendor/composition.json'), 'utf8'));
-  assert.equal(manifest.platform, report.platform); report.composition = manifest;
+  const packedCore = manifest.core.artifacts[report.platform];
+  assert.ok(packedCore, 'The package carries no Core for ' + report.platform); report.composition = manifest;
   const selected = await (await import(pathToFileURL(path.join(pkg, 'dist/runtime.js')))).runtime();
-  assert.equal(selected.coreBinary, await fs.realpath(path.join(pkg, 'vendor/rho-core')));
+  assert.equal(selected.coreBinary, await fs.realpath(path.join(pkg, packedCore.path)));
   for (const item of manifest.plugins.packages) {
     assert.equal((await fs.lstat(path.join(pkg, 'node_modules', item.package))).isSymbolicLink(), false);
     const installed = JSON.parse(await fs.readFile(path.join(pkg, 'node_modules', item.package, 'package.json'), 'utf8'));

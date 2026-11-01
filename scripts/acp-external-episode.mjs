@@ -27,7 +27,8 @@ if (values['package-root']) {
 }
 const auth = JSON.parse(await fs.readFile(path.join(os.homedir(), '.claude/settings.json'), 'utf8')).env, model = 'westlakehpc/deepseek-v4.1-flash';
 const env = { ...process.env, ...await westlakeCodexEnv(auth, root, model) };
-const options = { root, stateDir: path.join(root, '.service'), coreBinary: values['package-root'] ? path.join(packageRoot, 'vendor/rho-core') : path.resolve('../Rho-core/target/debug/rho-core'), rscript: 'Rscript', webRoot: path.join(packageRoot, 'dist/web') };
+const packagedCore = values['package-root'] ? JSON.parse(await fs.readFile(path.join(packageRoot, 'vendor/composition.json'), 'utf8')).core.artifacts[process.platform + '-' + process.arch] : null;
+const options = { root, stateDir: path.join(root, '.service'), coreBinary: packagedCore ? path.join(packageRoot, packagedCore.path) : path.resolve('../Rho-core/target/debug/rho-core'), rscript: 'Rscript', webRoot: path.join(packageRoot, 'dist/web') };
 const report = { passed: false, root, mode: values['package-root'] ? 'installed' : 'source', packageRoot, provider: 'Westlake HPC', model, checks: [], screenshots: [], browserErrors: [], permissions: 0 };
 const peers = [], pids = new Set(); let service, browser, page, project, person, serial = 0;
 const delay = ms => new Promise(r => setTimeout(r, ms));

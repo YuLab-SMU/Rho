@@ -29,8 +29,9 @@ try {
   report.installedKiB = Number(spawnSync('du', ['-sk', install], { encoding: 'utf8' }).stdout.split('\t')[0]);
   const pkg = path.join(install, 'node_modules/@rho-workspace/local');
   const manifest = JSON.parse(await fs.readFile(path.join(pkg, 'vendor/composition.json'), 'utf8'));
-  report.core = { located: 'vendor/rho-core', platform: manifest.platform, artifactSha256: manifest.core?.artifactSha256 };
-  assert.equal(manifest.platform, report.platform);
+  const packedCore = manifest.core?.artifacts?.[report.platform];
+  report.core = { located: packedCore?.path, platforms: manifest.platforms, artifactSha256: packedCore?.sha256 };
+  assert.ok(packedCore, 'The package carries no Core for ' + report.platform);
   const started = Date.now();
   child = spawn(path.join(install, 'node_modules/.bin/rho'), ['--root', projects, '--state-dir', state], { cwd: root, env, stdio: ['ignore', 'pipe', 'pipe'] });
   let stderr = ''; child.stderr.on('data', b => { stderr = (stderr + b).slice(-4000); });
@@ -68,7 +69,7 @@ try {
   const code = await new Promise(resolve => child.once('exit', resolve)); child = null;
   assert.equal(code === 0 || code === null, true, 'Launcher shutdown failed: ' + stderr);
   const shutdown = lines.find(l => l.includes('"shutdown"')); report.shutdown = shutdown ? JSON.parse(shutdown).shutdown : 'not reported';
-  const left = spawnSync('pgrep', ['-f', path.join(pkg, 'vendor/rho-core')], { encoding: 'utf8' }).stdout.trim();
+  const left = spawnSync('pgrep', ['-f', path.join(pkg, packedCore.path)], { encoding: 'utf8' }).stdout.trim();
   assert.equal(left, '', 'A Core process started by this installation is still running');
   report.hostsLeft = 0; report.passed = true;
 } catch (error) {
