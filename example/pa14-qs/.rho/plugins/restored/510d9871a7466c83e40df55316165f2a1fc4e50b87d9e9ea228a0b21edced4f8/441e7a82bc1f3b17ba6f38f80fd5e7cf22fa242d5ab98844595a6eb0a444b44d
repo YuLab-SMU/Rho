@@ -1,0 +1,181 @@
+"rank_by","rank","comparison","media","strain","mutant","locus_tag","gene","product","baseMean","log2FC","padj"
+"padj",1,"MMGluFeMinus_97","MMGluFeMinus","97","ΔrhlI","PA14_39870","","hydrolase",4080.39,-4.09825,3.79611e-77
+"padj",2,"MMGluFeMinus_97","MMGluFeMinus","97","ΔrhlI","PA14_37760","","MFS transporter",2282.23,-3.63515,1.27424e-60
+"padj",3,"MMGluFeMinus_97","MMGluFeMinus","97","ΔrhlI","PA14_37780","","hypothetical protein",1250.58,-2.47166,1.91279e-49
+"padj",4,"MMGluFeMinus_97","MMGluFeMinus","97","ΔrhlI","PA14_56990","","hypothetical protein",1070.88,-2.12152,7.51092e-46
+"padj",5,"MMGluFeMinus_97","MMGluFeMinus","97","ΔrhlI","PA14_37770","","hydrolase",1641.34,-2.64231,2.57383e-41
+"padj",6,"MMGluFeMinus_97","MMGluFeMinus","97","ΔrhlI","PA14_55080","","hypothetical protein",3397.48,-1.1559,7.38055e-34
+"padj",7,"MMGluFeMinus_97","MMGluFeMinus","97","ΔrhlI","PA14_37745","","carbamoyl transferase",10576.4,-5.14014,4.85064e-33
+"padj",8,"MMGluFeMinus_97","MMGluFeMinus","97","ΔrhlI","PA14_16290","","hypothetical protein",1794.05,-2.56734,5.60798e-33
+"padj",9,"MMGluFeMinus_97","MMGluFeMinus","97","ΔrhlI","PA14_39880","phzG2","pyridoxamine 5'-phosphate oxidase",15878.9,-5.36567,1.37593e-27
+"padj",10,"MMGluFeMinus_97","MMGluFeMinus","97","ΔrhlI","PA14_32950","","hypothetical protein",2489.82,-1.94757,3.5585e-24
+"abs_log2FC",1,"MMGluFeMinus_97","MMGluFeMinus","97","ΔrhlI","PA14_39880","phzG2","pyridoxamine 5'-phosphate oxidase",15878.9,-5.36567,1.37593e-27
+"abs_log2FC",2,"MMGluFeMinus_97","MMGluFeMinus","97","ΔrhlI","PA14_10360","","hypothetical protein",71215.6,-5.23103,1.76763e-12
+"abs_log2FC",3,"MMGluFeMinus_97","MMGluFeMinus","97","ΔrhlI","PA14_37745","","carbamoyl transferase",10576.4,-5.14014,4.85064e-33
+"abs_log2FC",4,"MMGluFeMinus_97","MMGluFeMinus","97","ΔrhlI","PA14_09420","phzF1","phenazine biosynthesis protein",13452.8,-4.64498,3.60136e-07
+"abs_log2FC",5,"MMGluFeMinus_97","MMGluFeMinus","97","ΔrhlI","PA14_39890","phzF2","phenazine biosynthesis protein",13448.8,-4.6048,3.60274e-07
+"abs_log2FC",6,"MMGluFeMinus_97","MMGluFeMinus","97","ΔrhlI","PA14_39870","","hydrolase",4080.39,-4.09825,3.79611e-77
+"abs_log2FC",7,"MMGluFeMinus_97","MMGluFeMinus","97","ΔrhlI","PA14_06830","norB","nitric-oxide reductase subunit B",9081.2,-4.00224,0.00505999
+"abs_log2FC",8,"MMGluFeMinus_97","MMGluFeMinus","97","ΔrhlI","PA14_06810","norC","nitric-oxide reductase subunit C",2464.24,-3.96641,0.00373779
+"abs_log2FC",9,"MMGluFeMinus_97","MMGluFeMinus","97","ΔrhlI","PA14_39910","phzE2","phenazine biosynthesis protein PhzE",21435.8,-3.95462,1.95e-05
+"abs_log2FC",10,"MMGluFeMinus_97","MMGluFeMinus","97","ΔrhlI","PA14_09440","phzE1","phenazine biosynthesis protein PhzE",31411.4,-3.95053,3.33375e-06
+"padj",1,"MMGluFeMinus_98","MMGluFeMinus","98","ΔlasI","PA14_01780","","nucleoside 2-deoxyribosyltransferase",1173.74,-3.99203,3.5714e-163
+"padj",2,"MMGluFeMinus_98","MMGluFeMinus","98","ΔlasI","PA14_13390","","hypothetical protein",1064.67,-6.03417,3.59834e-152
+"padj",3,"MMGluFeMinus_98","MMGluFeMinus","98","ΔlasI","PA14_10700","","bacteriophytochrome",9001.11,-2.34146,3.88613e-141
+"padj",4,"MMGluFeMinus_98","MMGluFeMinus","98","ΔlasI","PA14_45940","lasI","autoinducer synthesis protein LasI",3960.62,-4.42944,5.946e-114
+"padj",5,"MMGluFeMinus_98","MMGluFeMinus","98","ΔlasI","PA14_28290","","hypothetical protein",1105.37,-3.36803,8.77835e-113
+"padj",6,"MMGluFeMinus_98","MMGluFeMinus","98","ΔlasI","PA14_59180","","topoisomerase I - like protein",1587.89,-2.10637,7.1317e-108
+"padj",7,"MMGluFeMinus_98","MMGluFeMinus","98","ΔlasI","PA14_13360","","hypothetical protein",1104.14,-4.08141,2.24288e-105
+"padj",8,"MMGluFeMinus_98","MMGluFeMinus","98","ΔlasI","PA14_13380","","hypothetical protein",654.876,-4.45969,3.50591e-104
+"padj",9,"MMGluFeMinus_98","MMGluFeMinus","98","ΔlasI","PA14_10380","","hypothetical protein",27910.6,-5.40704,1.64424e-101
+"padj",10,"MMGluFeMinus_98","MMGluFeMinus","98","ΔlasI","PA14_10370","","hypothetical protein",5583.98,-4.87545,7.39935e-98
+"abs_log2FC",1,"MMGluFeMinus_98","MMGluFeMinus","98","ΔlasI","PA14_06810","norC","nitric-oxide reductase subunit C",2464.24,-6.35538,4.60633e-07
+"abs_log2FC",2,"MMGluFeMinus_98","MMGluFeMinus","98","ΔlasI","PA14_06830","norB","nitric-oxide reductase subunit B",9081.2,-6.30858,1.72407e-06
+"abs_log2FC",3,"MMGluFeMinus_98","MMGluFeMinus","98","ΔlasI","PA14_13390","","hypothetical protein",1064.67,-6.03417,3.59834e-152
+"abs_log2FC",4,"MMGluFeMinus_98","MMGluFeMinus","98","ΔlasI","PA14_10380","","hypothetical protein",27910.6,-5.40704,1.64424e-101
+"abs_log2FC",5,"MMGluFeMinus_98","MMGluFeMinus","98","ΔlasI","PA14_06840","","dinitrification protein NorD",5938.68,-5.33934,4.21804e-06
+"abs_log2FC",6,"MMGluFeMinus_98","MMGluFeMinus","98","ΔlasI","PA14_72360","","hypothetical protein",10907.3,-5.33325,7.86544e-61
+"abs_log2FC",7,"MMGluFeMinus_98","MMGluFeMinus","98","ΔlasI","PA14_72370","","hypothetical protein",7360.12,-5.3031,6.9212e-54
+"abs_log2FC",8,"MMGluFeMinus_98","MMGluFeMinus","98","ΔlasI","PA14_72060","","hypothetical protein",3314.04,-5.24861,1.07433e-91
+"abs_log2FC",9,"MMGluFeMinus_98","MMGluFeMinus","98","ΔlasI","PA14_13370","","hypothetical protein",495.95,-4.92808,5.08836e-67
+"abs_log2FC",10,"MMGluFeMinus_98","MMGluFeMinus","98","ΔlasI","PA14_49310","","hypothetical protein",426.629,-4.92332,3.2465e-66
+"padj",1,"MMGluFeMinus_99","MMGluFeMinus","99","ΔlasIΔrhlI","PA14_45940","lasI","autoinducer synthesis protein LasI",3960.62,-6.31848,8.1691e-205
+"padj",2,"MMGluFeMinus_99","MMGluFeMinus","99","ΔlasIΔrhlI","PA14_55080","","hypothetical protein",3397.48,-2.84897,2.7125e-200
+"padj",3,"MMGluFeMinus_99","MMGluFeMinus","99","ΔlasIΔrhlI","PA14_59180","","topoisomerase I - like protein",1587.89,-2.87629,7.68165e-191
+"padj",4,"MMGluFeMinus_99","MMGluFeMinus","99","ΔlasIΔrhlI","PA14_10380","","hypothetical protein",27910.6,-7.29509,6.32574e-183
+"padj",5,"MMGluFeMinus_99","MMGluFeMinus","99","ΔlasIΔrhlI","PA14_01780","","nucleoside 2-deoxyribosyltransferase",1173.74,-4.24153,7.47052e-183
+"padj",6,"MMGluFeMinus_99","MMGluFeMinus","99","ΔlasIΔrhlI","PA14_10370","","hypothetical protein",5583.98,-6.71408,8.64395e-177
+"padj",7,"MMGluFeMinus_99","MMGluFeMinus","99","ΔlasIΔrhlI","PA14_13390","","hypothetical protein",1064.67,-5.59172,2.83761e-167
+"padj",8,"MMGluFeMinus_99","MMGluFeMinus","99","ΔlasIΔrhlI","PA14_10700","","bacteriophytochrome",9001.11,-2.46712,1.99632e-157
+"padj",9,"MMGluFeMinus_99","MMGluFeMinus","99","ΔlasIΔrhlI","PA14_72060","","hypothetical protein",3314.04,-6.6777,2.33523e-142
+"padj",10,"MMGluFeMinus_99","MMGluFeMinus","99","ΔlasIΔrhlI","PA14_59830","","helicase",1277.49,-2.11791,1.21925e-131
+"abs_log2FC",1,"MMGluFeMinus_99","MMGluFeMinus","99","ΔlasIΔrhlI","PA14_10360","","hypothetical protein",71215.6,-8.36908,3.73045e-33
+"abs_log2FC",2,"MMGluFeMinus_99","MMGluFeMinus","99","ΔlasIΔrhlI","PA14_19100","rhlA","rhamnosyltransferase chain A",34826.7,-8.07944,1.39223e-36
+"abs_log2FC",3,"MMGluFeMinus_99","MMGluFeMinus","99","ΔlasIΔrhlI","PA14_06810","norC","nitric-oxide reductase subunit C",2464.24,-7.3856,5.23074e-10
+"abs_log2FC",4,"MMGluFeMinus_99","MMGluFeMinus","99","ΔlasIΔrhlI","PA14_10380","","hypothetical protein",27910.6,-7.29509,6.32574e-183
+"abs_log2FC",5,"MMGluFeMinus_99","MMGluFeMinus","99","ΔlasIΔrhlI","PA14_06830","norB","nitric-oxide reductase subunit B",9081.2,-7.16599,6.67365e-09
+"abs_log2FC",6,"MMGluFeMinus_99","MMGluFeMinus","99","ΔlasIΔrhlI","PA14_19130","rhlI","autoinducer synthesis protein RhlI",3494.84,-6.92334,1.58744e-38
+"abs_log2FC",7,"MMGluFeMinus_99","MMGluFeMinus","99","ΔlasIΔrhlI","PA14_01490","","hemolysin",41622.4,-6.82193,7.5528e-36
+"abs_log2FC",8,"MMGluFeMinus_99","MMGluFeMinus","99","ΔlasIΔrhlI","PA14_10350","","secretion protein",3785.36,-6.81236,8.30209e-26
+"abs_log2FC",9,"MMGluFeMinus_99","MMGluFeMinus","99","ΔlasIΔrhlI","PA14_10370","","hypothetical protein",5583.98,-6.71408,8.64395e-177
+"abs_log2FC",10,"MMGluFeMinus_99","MMGluFeMinus","99","ΔlasIΔrhlI","PA14_72060","","hypothetical protein",3314.04,-6.6777,2.33523e-142
+"padj",1,"MMGluFePlus_97","MMGluFePlus","97","ΔrhlI","PA14_39870","","hydrolase",4080.39,-5.69359,3.68631e-153
+"padj",2,"MMGluFePlus_97","MMGluFePlus","97","ΔrhlI","PA14_53070","hpd","4-hydroxyphenylpyruvate dioxygenase",3169.16,-5.90176,1.33359e-143
+"padj",3,"MMGluFePlus_97","MMGluFePlus","97","ΔrhlI","PA14_37760","","MFS transporter",2282.23,-4.51318,1.11787e-94
+"padj",4,"MMGluFePlus_97","MMGluFePlus","97","ΔrhlI","PA14_37780","","hypothetical protein",1250.58,-3.29383,1.20541e-90
+"padj",5,"MMGluFePlus_97","MMGluFePlus","97","ΔrhlI","PA14_61020","","hypothetical protein",1289.55,-6.1958,1.60876e-90
+"padj",6,"MMGluFePlus_97","MMGluFePlus","97","ΔrhlI","PA14_38510","hmgA","homogentisate 1,2-dioxygenase",3262.3,-3.89288,1.36005e-89
+"padj",7,"MMGluFePlus_97","MMGluFePlus","97","ΔrhlI","PA14_05870","","phosphate transporter",978.408,-3.53724,1.94816e-85
+"padj",8,"MMGluFePlus_97","MMGluFePlus","97","ΔrhlI","PA14_37770","","hydrolase",1641.34,-3.7284,1.11297e-83
+"padj",9,"MMGluFePlus_97","MMGluFePlus","97","ΔrhlI","PA14_21520","","hypothetical protein",1294.44,-2.84819,2.62631e-77
+"padj",10,"MMGluFePlus_97","MMGluFePlus","97","ΔrhlI","PA14_55940","","hypothetical protein",5142.91,-4.65692,3.2285e-75
+"abs_log2FC",1,"MMGluFePlus_97","MMGluFePlus","97","ΔrhlI","PA14_61040","katB","catalase",10196,-8.17432,1.3795e-62
+"abs_log2FC",2,"MMGluFePlus_97","MMGluFePlus","97","ΔrhlI","PA14_06830","norB","nitric-oxide reductase subunit B",9081.2,-8.11369,1.8252e-10
+"abs_log2FC",3,"MMGluFePlus_97","MMGluFePlus","97","ΔrhlI","PA14_22320","","hypothetical protein",2249.7,-7.92588,4.87272e-56
+"abs_log2FC",4,"MMGluFePlus_97","MMGluFePlus","97","ΔrhlI","PA14_06810","norC","nitric-oxide reductase subunit C",2464.24,-7.57188,7.80602e-10
+"abs_log2FC",5,"MMGluFePlus_97","MMGluFePlus","97","ΔrhlI","PA14_53300","","alkyl hydroperoxide reductase",5937.44,-7.49067,2.69714e-40
+"abs_log2FC",6,"MMGluFePlus_97","MMGluFePlus","97","ΔrhlI","PA14_39945","phzC2","phenazine biosynthesis protein PhzC",32722.3,-6.80617,3.24425e-22
+"abs_log2FC",7,"MMGluFePlus_97","MMGluFePlus","97","ΔrhlI","PA14_39960","phzB2","phenazine biosynthesis protein",33760.3,-6.80584,1.3199e-22
+"abs_log2FC",8,"MMGluFePlus_97","MMGluFePlus","97","ΔrhlI","PA14_53290","trxB2","thioredoxin reductase 2",9809.18,-6.67943,1.85767e-59
+"abs_log2FC",9,"MMGluFePlus_97","MMGluFePlus","97","ΔrhlI","PA14_39880","phzG2","pyridoxamine 5'-phosphate oxidase",15878.9,-6.58627,7.54807e-43
+"abs_log2FC",10,"MMGluFePlus_97","MMGluFePlus","97","ΔrhlI","PA14_21530","","ankyrin domain-containing protein",4076.3,-6.55277,1.1348e-53
+"padj",1,"MMGluFePlus_98","MMGluFePlus","98","ΔlasI","PA14_01780","","nucleoside 2-deoxyribosyltransferase",1173.74,-4.23261,8.95462e-178
+"padj",2,"MMGluFePlus_98","MMGluFePlus","98","ΔlasI","PA14_13390","","hypothetical protein",1064.67,-5.62707,7.68948e-174
+"padj",3,"MMGluFePlus_98","MMGluFePlus","98","ΔlasI","PA14_13360","","hypothetical protein",1104.14,-4.86541,1.75949e-163
+"padj",4,"MMGluFePlus_98","MMGluFePlus","98","ΔlasI","PA14_45940","lasI","autoinducer synthesis protein LasI",3960.62,-5.30508,3.1417e-162
+"padj",5,"MMGluFePlus_98","MMGluFePlus","98","ΔlasI","PA14_13380","","hypothetical protein",654.876,-5.50145,8.81395e-147
+"padj",6,"MMGluFePlus_98","MMGluFePlus","98","ΔlasI","PA14_13350","","hypothetical protein",1695.49,-3.9015,1.87724e-128
+"padj",7,"MMGluFePlus_98","MMGluFePlus","98","ΔlasI","PA14_18630","","serine protease",2075.18,-3.0935,1.62578e-125
+"padj",8,"MMGluFePlus_98","MMGluFePlus","98","ΔlasI","PA14_10700","","bacteriophytochrome",9001.11,-2.0177,5.26423e-105
+"padj",9,"MMGluFePlus_98","MMGluFePlus","98","ΔlasI","PA14_13370","","hypothetical protein",495.95,-5.55424,3.02928e-103
+"padj",10,"MMGluFePlus_98","MMGluFePlus","98","ΔlasI","PA14_55940","","hypothetical protein",5142.91,-5.01754,4.09024e-87
+"abs_log2FC",1,"MMGluFePlus_98","MMGluFePlus","98","ΔlasI","PA14_22320","","hypothetical protein",2249.7,-7.1346,5.56253e-46
+"abs_log2FC",2,"MMGluFePlus_98","MMGluFePlus","98","ΔlasI","PA14_61040","katB","catalase",10196,-5.91507,3.86084e-33
+"abs_log2FC",3,"MMGluFePlus_98","MMGluFePlus","98","ΔlasI","PA14_13390","","hypothetical protein",1064.67,-5.62707,7.68948e-174
+"abs_log2FC",4,"MMGluFePlus_98","MMGluFePlus","98","ΔlasI","PA14_13370","","hypothetical protein",495.95,-5.55424,3.02928e-103
+"abs_log2FC",5,"MMGluFePlus_98","MMGluFePlus","98","ΔlasI","PA14_13380","","hypothetical protein",654.876,-5.50145,8.81395e-147
+"abs_log2FC",6,"MMGluFePlus_98","MMGluFePlus","98","ΔlasI","PA14_21530","","ankyrin domain-containing protein",4076.3,-5.42334,4.97558e-37
+"abs_log2FC",7,"MMGluFePlus_98","MMGluFePlus","98","ΔlasI","PA14_53300","","alkyl hydroperoxide reductase",5937.44,-5.3982,3.42783e-21
+"abs_log2FC",8,"MMGluFePlus_98","MMGluFePlus","98","ΔlasI","PA14_45940","lasI","autoinducer synthesis protein LasI",3960.62,-5.30508,3.1417e-162
+"abs_log2FC",9,"MMGluFePlus_98","MMGluFePlus","98","ΔlasI","PA14_53290","trxB2","thioredoxin reductase 2",9809.18,-5.04931,3.45722e-34
+"abs_log2FC",10,"MMGluFePlus_98","MMGluFePlus","98","ΔlasI","PA14_61020","","hypothetical protein",1289.55,-5.04566,1.24123e-61
+"padj",1,"MMGluFePlus_99","MMGluFePlus","99","ΔlasIΔrhlI","PA14_45940","lasI","autoinducer synthesis protein LasI",3960.62,-6.75534,1.09532e-229
+"padj",2,"MMGluFePlus_99","MMGluFePlus","99","ΔlasIΔrhlI","PA14_39870","","hydrolase",4080.39,-5.9578,1.62301e-165
+"padj",3,"MMGluFePlus_99","MMGluFePlus","99","ΔlasIΔrhlI","PA14_13390","","hypothetical protein",1064.67,-5.8359,4.30959e-163
+"padj",4,"MMGluFePlus_99","MMGluFePlus","99","ΔlasIΔrhlI","PA14_01780","","nucleoside 2-deoxyribosyltransferase",1173.74,-3.98722,1.37705e-160
+"padj",5,"MMGluFePlus_99","MMGluFePlus","99","ΔlasIΔrhlI","PA14_55940","","hypothetical protein",5142.91,-6.95852,1.24052e-159
+"padj",6,"MMGluFePlus_99","MMGluFePlus","99","ΔlasIΔrhlI","PA14_13360","","hypothetical protein",1104.14,-4.92609,3.92318e-159
+"padj",7,"MMGluFePlus_99","MMGluFePlus","99","ΔlasIΔrhlI","PA14_18630","","serine protease",2075.18,-3.32705,8.54795e-141
+"padj",8,"MMGluFePlus_99","MMGluFePlus","99","ΔlasIΔrhlI","PA14_55080","","hypothetical protein",3397.48,-2.35008,6.41421e-136
+"padj",9,"MMGluFePlus_99","MMGluFePlus","99","ΔlasIΔrhlI","PA14_37760","","MFS transporter",2282.23,-5.51261,1.05739e-133
+"padj",10,"MMGluFePlus_99","MMGluFePlus","99","ΔlasIΔrhlI","PA14_72060","","hypothetical protein",3314.04,-6.50799,7.64788e-133
+"abs_log2FC",1,"MMGluFePlus_99","MMGluFePlus","99","ΔlasIΔrhlI","PA14_39945","phzC2","phenazine biosynthesis protein PhzC",32722.3,-9.09862,9.13776e-40
+"abs_log2FC",2,"MMGluFePlus_99","MMGluFePlus","99","ΔlasIΔrhlI","PA14_39960","phzB2","phenazine biosynthesis protein",33760.3,-8.8145,4.44917e-38
+"abs_log2FC",3,"MMGluFePlus_99","MMGluFePlus","99","ΔlasIΔrhlI","PA14_39925","phzD2","phenazine biosynthesis protein PhzD",6960.19,-8.66889,1.39535e-20
+"abs_log2FC",4,"MMGluFePlus_99","MMGluFePlus","99","ΔlasIΔrhlI","PA14_09450","phzD1","phenazine biosynthesis protein PhzD",12961,-8.38716,6.63133e-19
+"abs_log2FC",5,"MMGluFePlus_99","MMGluFePlus","99","ΔlasIΔrhlI","PA14_39880","phzG2","pyridoxamine 5'-phosphate oxidase",15878.9,-8.2246,1.83043e-66
+"abs_log2FC",6,"MMGluFePlus_99","MMGluFePlus","99","ΔlasIΔrhlI","PA14_39890","phzF2","phenazine biosynthesis protein",13448.8,-8.19425,4.64243e-23
+"abs_log2FC",7,"MMGluFePlus_99","MMGluFePlus","99","ΔlasIΔrhlI","PA14_09420","phzF1","phenazine biosynthesis protein",13452.8,-8.17091,1.42255e-22
+"abs_log2FC",8,"MMGluFePlus_99","MMGluFePlus","99","ΔlasIΔrhlI","PA14_09440","phzE1","phenazine biosynthesis protein PhzE",31411.4,-8.13598,2.4958e-26
+"abs_log2FC",9,"MMGluFePlus_99","MMGluFePlus","99","ΔlasIΔrhlI","PA14_61040","katB","catalase",10196,-8.05709,2.66806e-61
+"abs_log2FC",10,"MMGluFePlus_99","MMGluFePlus","99","ΔlasIΔrhlI","PA14_39910","phzE2","phenazine biosynthesis protein PhzE",21435.8,-8.0555,2.8248e-22
+"padj",1,"Succinate_97","Succinate","97","ΔrhlI","PA14_39870","","hydrolase",4080.39,-4.03688,1.52654e-74
+"padj",2,"Succinate_97","Succinate","97","ΔrhlI","PA14_37760","","MFS transporter",2282.23,-3.6282,2.93679e-60
+"padj",3,"Succinate_97","Succinate","97","ΔrhlI","PA14_37770","","hydrolase",1641.34,-2.85589,2.38863e-48
+"padj",4,"Succinate_97","Succinate","97","ΔrhlI","PA14_37780","","hypothetical protein",1250.58,-2.41382,2.38863e-48
+"padj",5,"Succinate_97","Succinate","97","ΔrhlI","PA14_32950","","hypothetical protein",2489.82,-2.59708,8.85827e-44
+"padj",6,"Succinate_97","Succinate","97","ΔrhlI","PA14_31290","pa1L","PA-I galactophilic lectin",413.932,-3.90917,4.08789e-41
+"padj",7,"Succinate_97","Succinate","97","ΔrhlI","PA14_03530","","transcriptional regulator",621.232,-1.62424,3.09453e-38
+"padj",8,"Succinate_97","Succinate","97","ΔrhlI","PA14_09540","mexG","hypothetical protein",5807.15,-5.19163,6.57325e-38
+"padj",9,"Succinate_97","Succinate","97","ΔrhlI","PA14_37745","","carbamoyl transferase",10576.4,-5.27062,7.7936e-35
+"padj",10,"Succinate_97","Succinate","97","ΔrhlI","PA14_09500","opmD","outer membrane protein",8766.5,-4.76697,9.12981e-35
+"abs_log2FC",1,"Succinate_97","Succinate","97","ΔrhlI","PA14_09460","phzC1","phenazine biosynthesis protein PhzC",9810.05,-6.66812,1.01994e-10
+"abs_log2FC",2,"Succinate_97","Succinate","97","ΔrhlI","PA14_09470","phzB1","phenazine biosynthesis protein",6181.98,-6.6658,4.43603e-10
+"abs_log2FC",3,"Succinate_97","Succinate","97","ΔrhlI","PA14_09410","phzG1","pyrodoxamine 5'-phosphate oxidase",5398.6,-6.32235,1.30706e-13
+"abs_log2FC",4,"Succinate_97","Succinate","97","ΔrhlI","PA14_09420","phzF1","phenazine biosynthesis protein",13452.8,-6.29797,5.09328e-13
+"abs_log2FC",5,"Succinate_97","Succinate","97","ΔrhlI","PA14_39890","phzF2","phenazine biosynthesis protein",13448.8,-6.28076,3.73076e-13
+"abs_log2FC",6,"Succinate_97","Succinate","97","ΔrhlI","PA14_09450","phzD1","phenazine biosynthesis protein PhzD",12961,-6.27744,2.7418e-10
+"abs_log2FC",7,"Succinate_97","Succinate","97","ΔrhlI","PA14_39925","phzD2","phenazine biosynthesis protein PhzD",6960.19,-6.15067,3.76557e-10
+"abs_log2FC",8,"Succinate_97","Succinate","97","ΔrhlI","PA14_09440","phzE1","phenazine biosynthesis protein PhzE",31411.4,-6.03241,4.74268e-14
+"abs_log2FC",9,"Succinate_97","Succinate","97","ΔrhlI","PA14_39910","phzE2","phenazine biosynthesis protein PhzE",21435.8,-6.02381,4.245e-12
+"abs_log2FC",10,"Succinate_97","Succinate","97","ΔrhlI","PA14_39880","phzG2","pyridoxamine 5'-phosphate oxidase",15878.9,-5.90423,8.29098e-34
+"padj",1,"Succinate_98","Succinate","98","ΔlasI","PA14_45940","lasI","autoinducer synthesis protein LasI",3960.62,-6.17605,7.50581e-199
+"padj",2,"Succinate_98","Succinate","98","ΔlasI","PA14_01780","","nucleoside 2-deoxyribosyltransferase",1173.74,-3.93728,1.23318e-164
+"padj",3,"Succinate_98","Succinate","98","ΔlasI","PA14_13390","","hypothetical protein",1064.67,-5.23353,2.62863e-145
+"padj",4,"Succinate_98","Succinate","98","ΔlasI","PA14_55940","","hypothetical protein",5142.91,-6.52684,1.87428e-142
+"padj",5,"Succinate_98","Succinate","98","ΔlasI","PA14_55930","","pilus assembly protein",1231.79,-4.50428,6.06221e-140
+"padj",6,"Succinate_98","Succinate","98","ΔlasI","PA14_41500","","lyase",1118.64,-3.93214,9.36581e-133
+"padj",7,"Succinate_98","Succinate","98","ΔlasI","PA14_13380","","hypothetical protein",654.876,-5.03703,5.51051e-130
+"padj",8,"Succinate_98","Succinate","98","ΔlasI","PA14_13360","","hypothetical protein",1104.14,-4.21669,5.40653e-127
+"padj",9,"Succinate_98","Succinate","98","ΔlasI","PA14_40240","","ABC transporter ATP-binding protein/permease",1587.74,-4.98694,5.09923e-124
+"padj",10,"Succinate_98","Succinate","98","ΔlasI","PA14_55920","","type II secretion system protein",1161.18,-4.22312,2.0102e-122
+"abs_log2FC",1,"Succinate_98","Succinate","98","ΔlasI","PA14_55940","","hypothetical protein",5142.91,-6.52684,1.87428e-142
+"abs_log2FC",2,"Succinate_98","Succinate","98","ΔlasI","PA14_31290","pa1L","PA-I galactophilic lectin",413.932,-6.41962,2.82485e-91
+"abs_log2FC",3,"Succinate_98","Succinate","98","ΔlasI","PA14_34870","chiC","chitinase",17216.9,-6.38591,3.65405e-41
+"abs_log2FC",4,"Succinate_98","Succinate","98","ΔlasI","PA14_45940","lasI","autoinducer synthesis protein LasI",3960.62,-6.17605,7.50581e-199
+"abs_log2FC",5,"Succinate_98","Succinate","98","ΔlasI","PA14_53250","cpbD","chitin-binding protein CbpD",30549.5,-5.99044,2.16344e-40
+"abs_log2FC",6,"Succinate_98","Succinate","98","ΔlasI","PA14_39780","","hypothetical protein",2922.09,-5.95152,6.73155e-88
+"abs_log2FC",7,"Succinate_98","Succinate","98","ΔlasI","PA14_39960","phzB2","phenazine biosynthesis protein",33760.3,-5.81471,7.43691e-17
+"abs_log2FC",8,"Succinate_98","Succinate","98","ΔlasI","PA14_39970","phzA2","phenazine biosynthesis protein",1716.32,-5.74355,1.0244e-23
+"abs_log2FC",9,"Succinate_98","Succinate","98","ΔlasI","PA14_40260","","hypothetical protein",29203.5,-5.619,9.40242e-115
+"abs_log2FC",10,"Succinate_98","Succinate","98","ΔlasI","PA14_34830","","regulatory protein",3620.33,-5.36551,3.33068e-47
+"padj",1,"Succinate_99","Succinate","99","ΔlasIΔrhlI","PA14_45940","lasI","autoinducer synthesis protein LasI",3960.62,-6.79592,1.08898e-230
+"padj",2,"Succinate_99","Succinate","99","ΔlasIΔrhlI","PA14_55940","","hypothetical protein",5142.91,-7.24114,3.24596e-172
+"padj",3,"Succinate_99","Succinate","99","ΔlasIΔrhlI","PA14_01780","","nucleoside 2-deoxyribosyltransferase",1173.74,-3.85694,1.77224e-166
+"padj",4,"Succinate_99","Succinate","99","ΔlasIΔrhlI","PA14_13390","","hypothetical protein",1064.67,-5.21665,9.20866e-157
+"padj",5,"Succinate_99","Succinate","99","ΔlasIΔrhlI","PA14_55930","","pilus assembly protein",1231.79,-4.53562,1.30802e-143
+"padj",6,"Succinate_99","Succinate","99","ΔlasIΔrhlI","PA14_55920","","type II secretion system protein",1161.18,-4.47253,2.66179e-137
+"padj",7,"Succinate_99","Succinate","99","ΔlasIΔrhlI","PA14_13380","","hypothetical protein",654.876,-4.26391,2.47658e-134
+"padj",8,"Succinate_99","Succinate","99","ΔlasIΔrhlI","PA14_10700","","bacteriophytochrome",9001.11,-2.28418,8.75159e-134
+"padj",9,"Succinate_99","Succinate","99","ΔlasIΔrhlI","PA14_41500","","lyase",1118.64,-3.83327,2.41428e-129
+"padj",10,"Succinate_99","Succinate","99","ΔlasIΔrhlI","PA14_55780","","two-component sensor",1506.98,-3.70285,2.49228e-125
+"abs_log2FC",1,"Succinate_99","Succinate","99","ΔlasIΔrhlI","PA14_10360","","hypothetical protein",71215.6,-9.09231,4.98689e-39
+"abs_log2FC",2,"Succinate_99","Succinate","99","ΔlasIΔrhlI","PA14_09470","phzB1","phenazine biosynthesis protein",6181.98,-8.89235,2.46526e-18
+"abs_log2FC",3,"Succinate_99","Succinate","99","ΔlasIΔrhlI","PA14_16250","lasB","elastase LasB",28707.1,-8.28396,5.78875e-37
+"abs_log2FC",4,"Succinate_99","Succinate","99","ΔlasIΔrhlI","PA14_09460","phzC1","phenazine biosynthesis protein PhzC",9810.05,-8.26004,5.32456e-17
+"abs_log2FC",5,"Succinate_99","Succinate","99","ΔlasIΔrhlI","PA14_34870","chiC","chitinase",17216.9,-8.07849,2.05739e-65
+"abs_log2FC",6,"Succinate_99","Succinate","99","ΔlasIΔrhlI","PA14_40290","lasA","LasA protease",45935.5,-7.74775,1.56643e-29
+"abs_log2FC",7,"Succinate_99","Succinate","99","ΔlasIΔrhlI","PA14_09450","phzD1","phenazine biosynthesis protein PhzD",12961,-7.71072,4.7219e-16
+"abs_log2FC",8,"Succinate_99","Succinate","99","ΔlasIΔrhlI","PA14_53250","cpbD","chitin-binding protein CbpD",30549.5,-7.61098,5.76276e-65
+"abs_log2FC",9,"Succinate_99","Succinate","99","ΔlasIΔrhlI","PA14_39925","phzD2","phenazine biosynthesis protein PhzD",6960.19,-7.57905,6.93703e-16
+"abs_log2FC",10,"Succinate_99","Succinate","99","ΔlasIΔrhlI","PA14_09420","phzF1","phenazine biosynthesis protein",13452.8,-7.47314,5.75922e-19

@@ -168,6 +168,7 @@ function TurnView({ turn, running, observation, projectRoot, choose, choosing, a
       </div>
     </details>}
     {answer.map(block => <BlockView key={block.key} block={block} />)}
+    {turn.continued && <p className="turn-note">The Agent session this conversation had been using had ended, so this message ran in a new one, told what was said here before.</p>}
     {turn.omitted > 0 && <p className="turn-note">{turn.omitted} later {turn.omitted === 1 ? 'step was' : 'steps were'} not kept.</p>}
     {running && at == null && turn.permissions?.filter(p => p.state === 'pending').map(permission => <div key={permission.id} className="turn-permission" role="group" aria-label="Agent permission">
       <p className="permission-caption"><span aria-hidden="true" />Needs your choice</p>

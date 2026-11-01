@@ -1,0 +1,635 @@
+# Swarming rescue in PA14 ΔrhlI + ΔlasI co-cultures
+#
+# Reads data/swarming/cocultures.csv and writes
+#   results/swarming_cocultures_summary.csv      one row per condition: descriptive
+#     statistics and, for each mix ratio, the comparison against wild type
+#   results/swarming_cocultures_ratio_model.csv  model fit, peak location, ratio
+#     effect size and sensitivity analyses
+#   results/swarming_cocultures.png              three-panel figure
+#
+# Run from the project root:  Rscript analysis/swarming_cocultures.R
+#
+# Colony area and circularity are analysed on the log scale, so differences are
+# ratios of geometric means; roundness is analysed on its raw scale. Each mix
+# ratio is compared with wild type by Welch t-test, with Holm adjustment across
+# the twelve mix ratios within each metric.
+#
+# The ratio response is modelled as a quadratic in log2(ratio) over the rescue
+# window 1:3-100:1. The two extreme ratios (500:1 and 1000:1) are outside the
+# fitted window: at 500:1 rescue failed in all three dishes, and 1000:1 was
+# heterogeneous (one dish failed, two were partially rescued).
+
+suppressPackageStartupMessages({
+  library(dplyr)
+  library(ggplot2)
+  library(patchwork)
+})
+
+dir.create("results", showWarnings = FALSE)
+
+## ---- data ----------------------------------------------------------------
+
+coc <- read.csv("data/swarming/cocultures.csv", fileEncoding = "UTF-8")
+coc$culture <- factor(coc$culture,
+                      levels = c("wild type", "ΔlasI", "ΔrhlI", "ΔrhlI:ΔlasI"))
+
+ratio_levels <- c("1:3", "1:2", "1:1", "2:1", "3:1", "4:1",
+                  "5:1", "10:1", "50:1", "100:1", "500:1", "1000:1")
+
+mix <- subset(coc, culture == "ΔrhlI:ΔlasI")
+mix$ratio <- as.numeric(sub(":.*", "", mix$ratio_rhlI_to_lasI)) /
+             as.numeric(sub(".*:", "", mix$ratio_rhlI_to_lasI))
+mix$ratio_label <- factor(mix$ratio_rhlI_to_lasI, levels = ratio_levels)
+mix <- mix[order(mix$ratio), ]
+
+wt_area  <- coc$area[coc$culture == "wild type"]
+wt_circ  <- coc$circularity[coc$culture == "wild type"]
+wt_round <- coc$roundness[coc$culture == "wild type"]
+wt_area_gm <- exp(mean(log(wt_area)))
+
+## ---- comparisons with wild type ------------------------------------------
+
+welch_vs_wt <- function(df, var, tf = identity) {
+  wtv <- tf(df[[var]][df$culture == "wild type"])
+  out <- df %>%
+    filter(culture == "ΔrhlI:ΔlasI") %>%
+    group_by(ratio_rhlI_to_lasI) %>%
+    group_modify(function(.x, .y) {
+      x <- tf(.x[[var]])
+      tt <- t.test(x, wtv, var.equal = FALSE)
+      data.frame(
+        n = nrow(.x),
+        estimate = unname(tt$estimate[1] - tt$estimate[2]),
+        ci_low   = unname(tt$conf.int[1]),
+        ci_high  = unname(tt$conf.int[2]),
+        p_raw    = tt$p.value
+      )
+    }) %>%
+    ungroup() %>%
+    as.data.frame()
+  out$ratio_label <- factor(out$ratio_rhlI_to_lasI, levels = ratio_levels)
+  out <- out[order(out$ratio_label), ]
+  out$p_holm <- p.adjust(out$p_raw, method = "holm")
+  out
+}
+
+area_t <- welch_vs_wt(coc, "area", log)
+area_t$ratio      <- exp(area_t$estimate)
+area_t$ratio_low  <- exp(area_t$ci_low)
+area_t$ratio_high <- exp(area_t$ci_high)
+
+circ_t <- welch_vs_wt(coc, "circularity", log)
+circ_t$ratio      <- exp(circ_t$estimate)
+circ_t$ratio_low  <- exp(circ_t$ci_low)
+circ_t$ratio_high <- exp(circ_t$ci_high)
+
+round_t <- welch_vs_wt(coc, "roundness", identity)
+
+# Single mutants: descriptive comparison against wild type (context only; the
+# tested family is the twelve mix ratios).
+single_stats <- function(grp, var, tf = identity) {
+  x <- tf(coc[[var]][coc$culture == grp])
+  w <- tf(coc[[var]][coc$culture == "wild type"])
+  tt <- t.test(x, w, var.equal = FALSE)
+  c(est = unname(tt$estimate[1] - tt$estimate[2]),
+    lo  = unname(tt$conf.int[1]),
+    hi  = unname(tt$conf.int[2]))
+}
+
+## ---- descriptive table ---------------------------------------------------
+
+condition_levels <- c("wild type", "ΔlasI", "ΔrhlI", paste0("mix ", ratio_levels))
+
+desc <- coc %>%
+  mutate(condition = factor(
+    ifelse(culture == "ΔrhlI:ΔlasI",
+           paste0("mix ", ratio_rhlI_to_lasI),
+           as.character(culture)),
+    levels = condition_levels)) %>%
+  group_by(condition, culture, ratio_rhlI_to_lasI) %>%
+  summarise(
+    n = n(),
+    area_mean = mean(area), area_sd = sd(area),
+    area_geomean = exp(mean(log(area))),
+    circularity_mean = mean(circularity), circularity_sd = sd(circularity),
+    roundness_mean = mean(roundness), roundness_sd = sd(roundness),
+    .groups = "drop"
+  ) %>%
+  as.data.frame()
+
+tab <- desc
+tab$area_ratio_vs_wt         <- NA_real_
+tab$area_ratio_ci_low        <- NA_real_
+tab$area_ratio_ci_high       <- NA_real_
+tab$area_change_pct          <- NA_real_
+tab$area_p_holm              <- NA_real_
+tab$circularity_ratio_vs_wt  <- NA_real_
+tab$circularity_ratio_ci_low <- NA_real_
+tab$circularity_ratio_ci_high <- NA_real_
+tab$circularity_p_holm       <- NA_real_
+tab$roundness_diff_vs_wt     <- NA_real_
+tab$roundness_diff_ci_low    <- NA_real_
+tab$roundness_diff_ci_high   <- NA_real_
+tab$roundness_p_holm         <- NA_real_
+
+# Wild type is the reference row.
+i <- which(tab$condition == "wild type")
+tab$area_ratio_vs_wt[i] <- 1
+tab$area_ratio_ci_low[i] <- 1
+tab$area_ratio_ci_high[i] <- 1
+tab$area_change_pct[i] <- 0
+tab$circularity_ratio_vs_wt[i] <- 1
+tab$circularity_ratio_ci_low[i] <- 1
+tab$circularity_ratio_ci_high[i] <- 1
+tab$roundness_diff_vs_wt[i] <- 0
+tab$roundness_diff_ci_low[i] <- 0
+tab$roundness_diff_ci_high[i] <- 0
+
+# Mix ratios: tested against wild type.
+mi <- match(as.character(tab$ratio_rhlI_to_lasI), as.character(area_t$ratio_label))
+rows <- which(!is.na(mi) & tab$culture == "ΔrhlI:ΔlasI")
+tab$area_ratio_vs_wt[rows]         <- area_t$ratio[mi[rows]]
+tab$area_ratio_ci_low[rows]        <- area_t$ratio_low[mi[rows]]
+tab$area_ratio_ci_high[rows]       <- area_t$ratio_high[mi[rows]]
+tab$area_change_pct[rows]          <- (area_t$ratio[mi[rows]] - 1) * 100
+tab$area_p_holm[rows]              <- area_t$p_holm[mi[rows]]
+tab$circularity_ratio_vs_wt[rows]  <- circ_t$ratio[mi[rows]]
+tab$circularity_ratio_ci_low[rows] <- circ_t$ratio_low[mi[rows]]
+tab$circularity_ratio_ci_high[rows] <- circ_t$ratio_high[mi[rows]]
+tab$circularity_p_holm[rows]       <- circ_t$p_holm[mi[rows]]
+tab$roundness_diff_vs_wt[rows]     <- round_t$estimate[mi[rows]]
+tab$roundness_diff_ci_low[rows]    <- round_t$ci_low[mi[rows]]
+tab$roundness_diff_ci_high[rows]   <- round_t$ci_high[mi[rows]]
+tab$roundness_p_holm[rows]         <- round_t$p_holm[mi[rows]]
+
+# Single mutants: descriptive ratios/differences against wild type.
+for (g in c("ΔlasI", "ΔrhlI")) {
+  i <- which(tab$culture == g)
+  sa <- single_stats(g, "area", log)
+  tab$area_ratio_vs_wt[i]   <- exp(sa["est"])
+  tab$area_ratio_ci_low[i]  <- exp(sa["lo"])
+  tab$area_ratio_ci_high[i] <- exp(sa["hi"])
+  tab$area_change_pct[i]    <- (exp(sa["est"]) - 1) * 100
+  sc <- single_stats(g, "circularity", log)
+  tab$circularity_ratio_vs_wt[i]   <- exp(sc["est"])
+  tab$circularity_ratio_ci_low[i]  <- exp(sc["lo"])
+  tab$circularity_ratio_ci_high[i] <- exp(sc["hi"])
+  sr <- single_stats(g, "roundness", identity)
+  tab$roundness_diff_vs_wt[i]   <- sr["est"]
+  tab$roundness_diff_ci_low[i]  <- sr["lo"]
+  tab$roundness_diff_ci_high[i] <- sr["hi"]
+}
+
+fmt <- function(x, digits) {
+  ifelse(is.na(x), "", formatC(x, format = "f", digits = digits))
+}
+fmt_p <- function(p) {
+  ifelse(is.na(p), "",
+         ifelse(p < 0.001, formatC(p, format = "e", digits = 1),
+                formatC(p, format = "f", digits = 3)))
+}
+
+ratio_numeric <- ifelse(tab$culture == "ΔrhlI:ΔlasI",
+                        as.numeric(sub(":.*", "", tab$ratio_rhlI_to_lasI)) /
+                          as.numeric(sub(".*:", "", tab$ratio_rhlI_to_lasI)),
+                        NA_real_)
+
+summary_out <- data.frame(
+  condition = as.character(tab$condition),
+  culture = as.character(tab$culture),
+  ratio_rhlI_to_lasI = tab$ratio_rhlI_to_lasI,
+  ratio_numeric = ifelse(is.na(ratio_numeric), "", fmt(ratio_numeric, 3)),
+  n = tab$n,
+  area_mean = fmt(tab$area_mean, 0),
+  area_sd = fmt(tab$area_sd, 0),
+  area_geomean = fmt(tab$area_geomean, 0),
+  area_ratio_vs_wt = fmt(tab$area_ratio_vs_wt, 3),
+  area_ratio_ci_low = fmt(tab$area_ratio_ci_low, 3),
+  area_ratio_ci_high = fmt(tab$area_ratio_ci_high, 3),
+  area_change_pct = fmt(tab$area_change_pct, 1),
+  area_p_holm = fmt_p(tab$area_p_holm),
+  circularity_mean = fmt(tab$circularity_mean, 3),
+  circularity_sd = fmt(tab$circularity_sd, 3),
+  circularity_ratio_vs_wt = fmt(tab$circularity_ratio_vs_wt, 2),
+  circularity_ratio_ci_low = fmt(tab$circularity_ratio_ci_low, 2),
+  circularity_ratio_ci_high = fmt(tab$circularity_ratio_ci_high, 2),
+  circularity_p_holm = fmt_p(tab$circularity_p_holm),
+  roundness_mean = fmt(tab$roundness_mean, 3),
+  roundness_sd = fmt(tab$roundness_sd, 3),
+  roundness_diff_vs_wt = fmt(tab$roundness_diff_vs_wt, 3),
+  roundness_diff_ci_low = fmt(tab$roundness_diff_ci_low, 3),
+  roundness_diff_ci_high = fmt(tab$roundness_diff_ci_high, 3),
+  roundness_p_holm = fmt_p(tab$roundness_p_holm)
+)
+
+write.csv(summary_out, "results/swarming_cocultures_summary.csv",
+          row.names = FALSE, fileEncoding = "UTF-8")
+
+## ---- ratio model ---------------------------------------------------------
+
+win <- subset(mix, ratio >= 1/3 & ratio <= 100)
+win$x <- log2(win$ratio)
+
+m_lin  <- lm(log(area) ~ x, data = win)
+m_quad <- lm(log(area) ~ x + I(x^2), data = win)
+m_cub  <- lm(log(area) ~ x + I(x^2) + I(x^3), data = win)
+
+cf <- coef(m_quad)
+peak_log2  <- -cf[2] / (2 * cf[3])
+peak_ratio <- 2^peak_log2
+peak_area  <- exp(cf[1] - cf[2]^2 / (4 * cf[3]))
+
+# Cluster bootstrap: resample the three dishes within each ratio.
+set.seed(1)
+boot <- t(replicate(5000, {
+  idx <- unlist(lapply(split(seq_len(nrow(win)), win$ratio),
+                       function(i) sample(i, length(i), replace = TRUE)))
+  bcf <- coef(lm(log(area) ~ x + I(x^2), data = win[idx, ]))
+  if (is.na(bcf[3]) || bcf[3] >= 0) {
+    c(NA_real_, NA_real_)
+  } else {
+    c(2^(-bcf[2] / (2 * bcf[3])),
+      exp(bcf[1] - bcf[2]^2 / (4 * bcf[3])))
+  }
+}))
+boot_peak <- boot[, 1]
+boot_val  <- boot[, 2]
+peak_ci      <- quantile(boot_peak, c(0.025, 0.975), na.rm = TRUE)
+peak_val_ci  <- quantile(boot_val,  c(0.025, 0.975), na.rm = TRUE)
+
+# Fitted values at the ends of the window and at the peak.
+fit_area <- function(r) exp(predict(m_quad, newdata = data.frame(x = log2(r))))
+fit_1to3  <- fit_area(1/3)
+fit_100to1 <- fit_area(100)
+obs_500_gm <- exp(mean(log(mix$area[mix$ratio == 500])))
+
+# Ratios where the fitted area reaches the wild-type geometric mean.
+roots <- polyroot(c(cf[1] - log(wt_area_gm), cf[2], cf[3]))
+roots <- Re(roots[abs(Im(roots)) < 1e-8])
+wt_low  <- min(2^roots)
+wt_high <- max(2^roots)
+
+# One-way ratio effect among the mix conditions.
+one_way_r2 <- function(d, var, tf) {
+  y <- tf(d[[var]])
+  a <- aov(y ~ factor(ratio), data = d)
+  s <- summary(a)[[1]][["Sum Sq"]]
+  s[1] / sum(s)
+}
+
+# Sensitivity fits.
+fit_peak_r2 <- function(d) {
+  d$x <- log2(d$ratio)
+  m <- lm(log(area) ~ x + I(x^2), data = d)
+  cf <- coef(m)
+  c(peak = unname(2^(-cf[2] / (2 * cf[3]))),
+    r2 = unname(summary(m)$r.squared))
+}
+sens_all      <- fit_peak_r2(mix)
+sens_excl1000 <- fit_peak_r2(subset(mix, ratio != 1000))
+sens_excl500  <- fit_peak_r2(subset(mix, ratio != 500))
+
+# Leave-one-ratio-out peak estimates.
+loo <- sapply(sort(unique(win$ratio)), function(r) {
+  d <- subset(win, ratio != r)
+  cf <- coef(lm(log(area) ~ x + I(x^2), data = d))
+  2^(-cf[2] / (2 * cf[3]))
+})
+
+# Model assumptions.
+levene_p  <- car::leveneTest(log(area) ~ factor(ratio), data = win)$`Pr(>F)`[1]
+shapiro_p <- shapiro.test(resid(m_quad))$p.value
+max_cook  <- max(cooks.distance(m_quad))
+
+# Circularity and roundness on the same window.
+m_circ_lin <- lm(log(circularity) ~ x, data = win)
+m_circ     <- lm(log(circularity) ~ x + I(x^2), data = win)
+ccf <- coef(m_circ)
+circ_min_x     <- -ccf[2] / (2 * ccf[3])
+circ_min_ratio <- 2^circ_min_x
+circ_min       <- exp(ccf[1] - ccf[2]^2 / (4 * ccf[3]))
+
+m_round_lin <- lm(roundness ~ x, data = win)
+m_round     <- lm(roundness ~ x + I(x^2), data = win)
+rcf <- coef(m_round)
+round_max_x     <- -rcf[2] / (2 * rcf[3])
+round_max_ratio <- 2^round_max_x
+round_max       <- rcf[1] - rcf[2]^2 / (4 * rcf[3])
+
+fit_circ <- function(r) exp(predict(m_circ, newdata = data.frame(x = log2(r))))
+fit_round <- function(r) predict(m_round, newdata = data.frame(x = log2(r)))
+
+## ---- model table ---------------------------------------------------------
+
+mrow <- function(metric, quantity, estimate, ci_low = NA, ci_high = NA, detail = "") {
+  data.frame(metric = metric, quantity = quantity,
+             estimate = unname(estimate), ci_low = unname(ci_low),
+             ci_high = unname(ci_high), detail = detail,
+             stringsAsFactors = FALSE)
+}
+
+model_out <- rbind(
+  mrow("area", "model", NA,
+       detail = "quadratic in log2(ratio), ratios 1:3-100:1, 30 dishes, 10 ratios"),
+  mrow("area", "quadratic_r2", summary(m_quad)$r.squared,
+       detail = "fraction of log-area variance explained"),
+  mrow("area", "linear_r2", summary(m_lin)$r.squared,
+       detail = "linear fit in log2(ratio) for comparison"),
+  mrow("area", "quadratic_term_p", anova(m_lin, m_quad)$`Pr(>F)`[2],
+       detail = "test of adding the quadratic term"),
+  mrow("area", "cubic_term_p", anova(m_quad, m_cub)$`Pr(>F)`[2],
+       detail = "test of adding a cubic term"),
+  mrow("area", "residual_sd_log", summary(m_quad)$sigma,
+       detail = "residual standard deviation on the log scale"),
+  mrow("area", "ratio_one_way_r2", one_way_r2(win, "area", log),
+       detail = "one-way ANOVA across the 10 window ratios"),
+  mrow("area", "peak_ratio", peak_ratio, peak_ci[1], peak_ci[2],
+       detail = "fitted peak; cluster bootstrap 95% CI, 5000 resamples"),
+  mrow("area", "peak_area", peak_area, peak_val_ci[1], peak_val_ci[2],
+       detail = "fitted geometric mean at the peak; bootstrap 95% CI"),
+  mrow("area", "peak_over_wildtype", peak_area / wt_area_gm,
+       detail = "fitted peak geometric mean / wild-type geometric mean"),
+  mrow("area", "fold_peak_vs_1to3", peak_area / fit_1to3,
+       detail = "fitted peak / fitted value at 1:3"),
+  mrow("area", "fold_peak_vs_100to1", peak_area / fit_100to1,
+       detail = "fitted peak / fitted value at 100:1"),
+  mrow("area", "fold_peak_vs_500to1", peak_area / obs_500_gm,
+       detail = "fitted peak / observed 500:1 geometric mean"),
+  mrow("area", "fitted_area_1to3", fit_1to3, detail = "fitted geometric mean"),
+  mrow("area", "fitted_area_100to1", fit_100to1, detail = "fitted geometric mean"),
+  mrow("area", "wildtype_area_geomean", wt_area_gm,
+       detail = "geometric mean of the three wild-type dishes"),
+  mrow("area", "wt_level_ratio_low", wt_low,
+       detail = "lower mix ratio where the fitted area reaches the wild-type mean"),
+  mrow("area", "wt_level_ratio_high", wt_high,
+       detail = "upper mix ratio where the fitted area reaches the wild-type mean"),
+  mrow("area", "peak_ratio_all12", sens_all["peak"],
+       detail = "sensitivity: all 12 ratios included"),
+  mrow("area", "quadratic_r2_all12", sens_all["r2"],
+       detail = "sensitivity: all 12 ratios included"),
+  mrow("area", "peak_ratio_excl1000", sens_excl1000["peak"],
+       detail = "sensitivity: 1000:1 excluded"),
+  mrow("area", "quadratic_r2_excl1000", sens_excl1000["r2"],
+       detail = "sensitivity: 1000:1 excluded"),
+  mrow("area", "peak_ratio_excl500", sens_excl500["peak"],
+       detail = "sensitivity: 500:1 excluded"),
+  mrow("area", "quadratic_r2_excl500", sens_excl500["r2"],
+       detail = "sensitivity: 500:1 excluded"),
+  mrow("area", "loo_peak_min", min(loo),
+       detail = "minimum peak estimate leaving one ratio out"),
+  mrow("area", "loo_peak_max", max(loo),
+       detail = "maximum peak estimate leaving one ratio out"),
+  mrow("area", "levene_p", levene_p,
+       detail = "Levene test on log area across the 10 window ratios"),
+  mrow("area", "shapiro_p", shapiro_p,
+       detail = "Shapiro-Wilk test of the quadratic residuals"),
+  mrow("area", "max_cooks_d", max_cook,
+       detail = "largest Cook's distance in the quadratic fit"),
+  mrow("circularity", "model", NA,
+       detail = "quadratic in log2(ratio) on log circularity, ratios 1:3-100:1"),
+  mrow("circularity", "quadratic_r2", summary(m_circ)$r.squared,
+       detail = "fraction of log-circularity variance explained"),
+  mrow("circularity", "linear_r2", summary(m_circ_lin)$r.squared,
+       detail = "linear fit for comparison"),
+  mrow("circularity", "quadratic_term_p", anova(m_circ_lin, m_circ)$`Pr(>F)`[2],
+       detail = "test of adding the quadratic term"),
+  mrow("circularity", "minimum_ratio", circ_min_ratio,
+       detail = "ratio of the fitted circularity minimum"),
+  mrow("circularity", "fitted_min_circularity", circ_min,
+       detail = "fitted circularity at the minimum"),
+  mrow("circularity", "wildtype_circularity_mean", mean(wt_circ),
+       detail = "mean of the three wild-type dishes"),
+  mrow("circularity", "min_over_wildtype", circ_min / mean(wt_circ),
+       detail = "fitted minimum / wild-type mean"),
+  mrow("circularity", "fitted_circularity_1to3", fit_circ(1/3),
+       detail = "fitted value at 1:3"),
+  mrow("circularity", "fitted_circularity_100to1", fit_circ(100),
+       detail = "fitted value at 100:1"),
+  mrow("roundness", "model", NA,
+       detail = "quadratic in log2(ratio), ratios 1:3-100:1; secondary readout"),
+  mrow("roundness", "quadratic_r2", summary(m_round)$r.squared,
+       detail = "fraction of roundness variance explained"),
+  mrow("roundness", "linear_r2", summary(m_round_lin)$r.squared,
+       detail = "linear fit for comparison"),
+  mrow("roundness", "quadratic_term_p", anova(m_round_lin, m_round)$`Pr(>F)`[2],
+       detail = "test of adding the quadratic term"),
+  mrow("roundness", "ratio_one_way_r2", one_way_r2(win, "roundness", identity),
+       detail = "one-way ANOVA across the 10 window ratios"),
+  mrow("roundness", "fitted_max_ratio", round_max_ratio,
+       detail = "ratio of the fitted roundness maximum"),
+  mrow("roundness", "fitted_max_roundness", round_max,
+       detail = "fitted roundness at the maximum"),
+  mrow("roundness", "wildtype_roundness_mean", mean(wt_round),
+       detail = "mean of the three wild-type dishes"),
+  mrow("roundness", "fitted_roundness_1to3", fit_round(1/3),
+       detail = "fitted value at 1:3"),
+  mrow("roundness", "fitted_roundness_100to1", fit_round(100),
+       detail = "fitted value at 100:1")
+)
+
+model_out[c("estimate", "ci_low", "ci_high")] <-
+  lapply(model_out[c("estimate", "ci_low", "ci_high")], function(x) signif(x, 4))
+
+write.csv(model_out, "results/swarming_cocultures_ratio_model.csv",
+          row.names = FALSE, fileEncoding = "UTF-8")
+
+## ---- console checks ------------------------------------------------------
+
+cat("Welch comparisons of each mix ratio with wild type\n")
+print(area_t[, c("ratio_label", "n", "ratio", "ratio_low", "ratio_high",
+                 "p_raw", "p_holm")], row.names = FALSE, digits = 3)
+cat("\nCircularity\n")
+print(circ_t[, c("ratio_label", "ratio", "ratio_low", "ratio_high",
+                 "p_raw", "p_holm")], row.names = FALSE, digits = 3)
+cat("\nRoundness (mean difference)\n")
+print(round_t[, c("ratio_label", "estimate", "ci_low", "ci_high",
+                  "p_raw", "p_holm")], row.names = FALSE, digits = 3)
+
+cat("\nQuadratic area model, window 1:3-100:1\n")
+print(summary(m_quad))
+cat("Peak ratio:", round(peak_ratio, 2), ":1  95% CI",
+    paste(round(peak_ci, 2), collapse = "-"), "\n")
+cat("Peak area:", round(peak_area), " 95% CI",
+    paste(round(peak_val_ci), collapse = "-"), "\n")
+cat("Wild-type geometric mean:", round(wt_area_gm), "\n")
+cat("Fitted area reaches the wild-type mean between ratios",
+    round(wt_low, 2), "and", round(wt_high, 2), "\n")
+cat("One-way ratio R2:", round(one_way_r2(win, "area", log), 3),
+    " quadratic R2:", round(summary(m_quad)$r.squared, 3), "\n")
+cat("Sensitivity peaks: all 12 =", round(sens_all["peak"], 2),
+    "; excl 1000:1 =", round(sens_excl1000["peak"], 2),
+    "; excl 500:1 =", round(sens_excl500["peak"], 2), "\n")
+cat("Leave-one-ratio-out peaks:", paste(round(loo, 2), collapse = " "), "\n")
+
+cat("\nCircularity minimum at", round(circ_min_ratio, 2), ":1; fitted",
+    round(circ_min, 3), "vs wild type", round(mean(wt_circ), 3), "\n")
+cat("Roundness fitted maximum at", round(round_max_ratio, 2), ":1; fitted",
+    round(round_max, 3), "vs wild type", round(mean(wt_round), 3), "\n")
+
+cat("\nAssumption checks: Levene p =", signif(levene_p, 3),
+    "; Shapiro p =", signif(shapiro_p, 3),
+    "; max Cook's D =", round(max_cook, 3), "\n")
+
+## ---- figure --------------------------------------------------------------
+
+series_levels <- c("ΔrhlI:ΔlasI mix", "Wild type", "ΔlasI alone", "ΔrhlI alone")
+series_cols <- c("ΔrhlI:ΔlasI mix" = "#6250d6", "Wild type" = "#52514e",
+                 "ΔlasI alone" = "#2a78d6", "ΔrhlI alone" = "#eb6834")
+series_lty <- c("ΔrhlI:ΔlasI mix" = "solid", "Wild type" = "solid",
+                "ΔlasI alone" = "dashed", "ΔrhlI alone" = "dotted")
+
+ref <- data.frame(
+  series = factor(c("Wild type", "ΔlasI alone", "ΔrhlI alone"),
+                  levels = series_levels),
+  area = c(wt_area_gm,
+           exp(mean(log(coc$area[coc$culture == "ΔlasI"]))),
+           exp(mean(log(coc$area[coc$culture == "ΔrhlI"])))),
+  circularity = c(mean(wt_circ),
+                  mean(coc$circularity[coc$culture == "ΔlasI"]),
+                  mean(coc$circularity[coc$culture == "ΔrhlI"])),
+  roundness = c(mean(wt_round),
+                mean(coc$roundness[coc$culture == "ΔlasI"]),
+                mean(coc$roundness[coc$culture == "ΔrhlI"]))
+)
+
+mix$series <- factor("ΔrhlI:ΔlasI mix", levels = series_levels)
+
+pred_grid <- data.frame(x = seq(log2(1/3), log2(100), length.out = 200))
+pa <- predict(m_quad, newdata = pred_grid, interval = "confidence")
+pred_area <- data.frame(
+  ratio = 2^pred_grid$x,
+  fit = exp(pa[, "fit"]),
+  lwr = exp(pa[, "lwr"]),
+  upr = exp(pa[, "upr"]),
+  series = factor("ΔrhlI:ΔlasI mix", levels = series_levels)
+)
+pc <- predict(m_circ, newdata = pred_grid, interval = "confidence")
+pred_circ <- data.frame(
+  ratio = 2^pred_grid$x,
+  fit = exp(pc[, "fit"]),
+  lwr = exp(pc[, "lwr"]),
+  upr = exp(pc[, "upr"]),
+  series = factor("ΔrhlI:ΔlasI mix", levels = series_levels)
+)
+
+theme_swarm <- theme_minimal(base_size = 9) +
+  theme(
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_blank(),
+    panel.grid.major.y = element_line(colour = "#e1e0d9", linewidth = 0.3),
+    panel.background = element_rect(fill = "#fcfcfb", colour = NA),
+    plot.background = element_rect(fill = "#fcfcfb", colour = NA),
+    axis.line = element_line(colour = "#c3c2b7", linewidth = 0.4),
+    axis.ticks = element_line(colour = "#c3c2b7", linewidth = 0.4),
+    axis.text = element_text(colour = "#52514e", size = 8),
+    axis.text.x = element_text(angle = 0, hjust = 0.5, vjust = 1),
+    axis.title.y = element_text(colour = "#0b0b0b", size = 9.5),
+    axis.title.x = element_blank(),
+    legend.position = "bottom",
+    legend.direction = "horizontal",
+    legend.box = "horizontal",
+    legend.title = element_text(size = 8.5, colour = "#52514e"),
+    legend.text = element_text(size = 8.5, colour = "#52514e"),
+    legend.key.size = unit(10, "pt"),
+    legend.margin = margin(0, 0, 0, 0)
+  )
+
+x_scale <- scale_x_log10(
+  breaks = c(1/3, 1, 3, 10, 100, 1000),
+  labels = c("1:3", "1:1", "3:1", "10:1", "100:1", "1000:1"),
+  limits = c(0.2, 3000),
+  expand = c(0, 0)
+)
+
+p_area <- ggplot() +
+  geom_ribbon(data = pred_area, aes(x = ratio, ymin = lwr, ymax = upr),
+              fill = "#6250d6", alpha = 0.14, show.legend = FALSE) +
+  geom_line(data = pred_area, aes(x = ratio, y = fit, colour = series),
+            linewidth = 0.7) +
+  geom_hline(data = ref, aes(yintercept = area, colour = series, linetype = series),
+             linewidth = 0.5) +
+  geom_point(data = mix, aes(x = ratio, y = area, colour = series),
+             position = position_jitter(width = 0.012, height = 0, seed = 1),
+             size = 1.7, alpha = 0.85) +
+  geom_vline(xintercept = peak_ratio, linetype = "dotted",
+             colour = "#898781", linewidth = 0.35) +
+  annotate("text", x = peak_ratio * 1.12, y = 232000,
+           label = "peak 12:1 (95% CI 10–15:1)", hjust = 0,
+           size = 2.8, colour = "#52514e") +
+  scale_colour_manual(values = series_cols, name = "Culture") +
+  scale_linetype_manual(values = series_lty, name = "Culture") +
+  scale_y_log10(
+    breaks = c(1e4, 2e4, 5e4, 1e5, 2e5),
+    labels = c("10k", "20k", "50k", "100k", "200k"),
+    limits = c(6500, 270000),
+    expand = c(0, 0)
+  ) +
+  x_scale +
+  labs(y = "Colony area (imaging units, log scale)") +
+  theme_swarm
+
+p_circ <- ggplot() +
+  geom_ribbon(data = pred_circ, aes(x = ratio, ymin = lwr, ymax = upr),
+              fill = "#6250d6", alpha = 0.14, show.legend = FALSE) +
+  geom_line(data = pred_circ, aes(x = ratio, y = fit, colour = series),
+            linewidth = 0.7) +
+  geom_hline(data = ref,
+             aes(yintercept = circularity, colour = series, linetype = series),
+             linewidth = 0.5) +
+  geom_point(data = mix, aes(x = ratio, y = circularity, colour = series),
+             position = position_jitter(width = 0.012, height = 0, seed = 1),
+             size = 1.7, alpha = 0.85) +
+  scale_colour_manual(values = series_cols, name = "Culture") +
+  scale_linetype_manual(values = series_lty, name = "Culture") +
+  scale_y_continuous(
+    limits = c(0, 1),
+    breaks = c(0, 0.25, 0.5, 0.75, 1),
+    labels = c("0", "0.25", "0.5", "0.75", "1"),
+    expand = c(0, 0)
+  ) +
+  x_scale +
+  labs(y = "Circularity") +
+  theme_swarm
+
+p_round <- ggplot() +
+  geom_hline(data = subset(ref, series == "Wild type"),
+             aes(yintercept = roundness, colour = series, linetype = series),
+             linewidth = 0.5, show.legend = FALSE) +
+  geom_point(data = mix, aes(x = ratio, y = roundness, colour = series),
+             position = position_jitter(width = 0.012, height = 0, seed = 1),
+             size = 1.7, alpha = 0.85, show.legend = FALSE) +
+  scale_colour_manual(values = series_cols, name = "Culture") +
+  scale_linetype_manual(values = series_lty, name = "Culture") +
+  scale_y_continuous(
+    limits = c(0.4, 1.02),
+    breaks = c(0.4, 0.6, 0.8, 1.0),
+    labels = c("0.4", "0.6", "0.8", "1.0"),
+    expand = c(0, 0)
+  ) +
+  x_scale +
+  labs(y = "Roundness") +
+  theme_swarm
+
+fig <- (p_area | p_circ | p_round) +
+  plot_layout(guides = "collect", widths = c(1.15, 1, 1)) +
+  plot_annotation(
+    tag_levels = "A",
+    caption = paste(
+      "Points are individual dishes (n = 3 per condition); horizontal lines are alone-culture means.",
+      "\nCurves are quadratic fits in log2 ratio over 1:3–100:1 with 95% confidence bands;",
+      "the 500:1 and 1000:1 mixes lie outside the fitted window. Mix ratios read ΔrhlI:ΔlasI."
+    ),
+    theme = theme(
+      plot.tag = element_text(face = "bold", size = 11, colour = "#0b0b0b"),
+      plot.caption = element_text(size = 7.5, colour = "#898781", hjust = 0)
+    )
+  ) &
+  theme(legend.position = "bottom", legend.direction = "horizontal",
+        legend.box = "horizontal")
+
+ggsave("results/swarming_cocultures.png", fig,
+       width = 9.2, height = 4.6, dpi = 300, bg = "#fcfcfb")
+
+cat("\nWrote results/swarming_cocultures_summary.csv\n")
+cat("Wrote results/swarming_cocultures_ratio_model.csv\n")
+cat("Wrote results/swarming_cocultures.png\n")

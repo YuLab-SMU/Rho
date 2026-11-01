@@ -18,7 +18,10 @@ inspect what happened. The application gives those actions direct places:
 - **Projects** lists and searches available projects, names the folder each one works
   in, opens folders and creates a named project from selected source folders. It
   opens as one list with one primary action, and with no projects it shows what can
-  be started instead of an empty page.
+  be started instead of an empty page. A new service state also holds the study Rho
+  ships with: the application copies it into the projects folder once, under the name
+  it is listed with, and from then on it is an ordinary project the person reads,
+  edits, continues or removes ([example project](EXAMPLE-PROJECT-EPISODE.md)).
 - **Overview** opens with the answer board: the newest message that produced results,
   derived from the Graph. It shows the question and the answer, then the results by
   role. The figure or table the answer names leads, with the other results beside and

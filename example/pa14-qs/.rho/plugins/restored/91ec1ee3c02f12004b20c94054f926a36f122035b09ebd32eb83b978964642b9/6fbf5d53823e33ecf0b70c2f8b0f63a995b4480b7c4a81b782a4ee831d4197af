@@ -1,0 +1,4 @@
+"metric","comparison","scale","estimate","ci_low","ci_high","p_value"
+"colony area","rhl mutants vs las mutants","ratio",0.5,0.351,0.714,0.00149
+"circularity","rhl mutants vs las mutants","ratio",1.459,1.226,1.738,0.000699
+"roundness","rhl mutants vs las mutants","difference",0.063,-0.105,0.231,0.422

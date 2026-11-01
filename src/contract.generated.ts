@@ -5239,6 +5239,10 @@ export interface ConversationDecideOutput {
       omitted: number;
       partial: boolean;
     };
+    continued?: {
+      at: string;
+      earlier: string;
+    } | null;
   };
 }
 
@@ -5496,6 +5500,10 @@ export interface ConversationPermissionOutput {
       omitted: number;
       partial: boolean;
     };
+    continued?: {
+      at: string;
+      earlier: string;
+    } | null;
   };
 }
 
@@ -5785,6 +5793,10 @@ export interface ConversationReadOutput {
       omitted: number;
       partial: boolean;
     };
+    continued?: {
+      at: string;
+      earlier: string;
+    } | null;
   }[];
 }
 
@@ -6032,6 +6044,10 @@ export interface ConversationSendOutput {
       omitted: number;
       partial: boolean;
     };
+    continued?: {
+      at: string;
+      earlier: string;
+    } | null;
   };
 }
 
@@ -6486,6 +6502,10 @@ export interface ConversationStartOutput {
       omitted: number;
       partial: boolean;
     };
+    continued?: {
+      at: string;
+      earlier: string;
+    } | null;
   };
 }
 
@@ -6687,6 +6707,10 @@ export interface ConversationStopOutput {
       omitted: number;
       partial: boolean;
     };
+    continued?: {
+      at: string;
+      earlier: string;
+    } | null;
   };
 }
 

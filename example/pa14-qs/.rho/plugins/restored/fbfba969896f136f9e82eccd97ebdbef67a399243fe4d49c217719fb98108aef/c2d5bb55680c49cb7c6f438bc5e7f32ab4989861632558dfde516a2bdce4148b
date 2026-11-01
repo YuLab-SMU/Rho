@@ -1,0 +1,96 @@
+# Project notes
+
+## Swarming of single quorum-sensing mutants vs wild type
+<!-- rho:session c-91aa2e46b1ac1a6c -->
+
+### Question
+
+Does losing either quorum-sensing system (las via ΔlasI/ΔlasR, rhl via ΔrhlI/rhlR) make
+PA14 swarm worse than wild type? Compare each single mutant against wild type on colony
+area, quantify how big the difference is, and check whether colony shape (circularity,
+roundness) changes too.
+
+### Data & method
+
+- [data/swarming/single_cultures.csv](data/swarming/single_cultures.csv) — one dish per row: genotype, strain, replicate and the imaging software's `area`, `circularity` and `roundness`; three replicates for wild type and each of the four single mutants.
+- [analysis/swarming_single_mutants.R](analysis/swarming_single_mutants.R) — reads the CSV and compares each mutant with wild type by Welch t-test: log scale for area and circularity (effect sizes are ratios of geometric means) and raw scale for roundness (difference of means), with Holm adjustment across the four mutants within each metric. It also checks variance homogeneity, computes sensitivity analyses and draws the figure.
+
+### Key results
+
+- All four single mutants swarmed much less than wild type. Against a wild-type geometric mean area of 81,732, the ratios were 0.27 for ΔlasI (95% CI 0.13–0.57, −73%), 0.29 for ΔlasR (0.16–0.50, −72%), 0.15 for ΔrhlI (0.063–0.34, −85%) and 0.13 for rhlR- (0.091–0.19, −87%); every mutant–wild-type comparison had Holm-adjusted p ≤ 0.016. See [results/swarming_single_mutants_summary.csv](results/swarming_single_mutants_summary.csv).
+- The rhl mutants were the more severe loss: pooled across the two mutants of each system, rhl mutant colonies were half the area of las mutant colonies (ratio 0.50, 95% CI 0.35–0.71, p = 0.0015). See [results/swarming_system_contrast.csv](results/swarming_system_contrast.csv).
+- Colony shape changed sharply: circularity rose 5.2–8.2× above wild type (0.076 to 0.40–0.62; Holm-adjusted p ≤ 0.002 for all four mutants), so mutant colonies are far less irregular and dendritic, although still not circular (highest single dish 0.71). See [results/swarming_single_mutants_summary.csv](results/swarming_single_mutants_summary.csv).
+- Roundness did not change consistently (wild type 0.886; mutants 0.788–0.975; all Holm-adjusted p ≥ 0.41), so the shape change is in perimeter irregularity rather than colony elongation. See [results/swarming_single_mutants_summary.csv](results/swarming_single_mutants_summary.csv).
+- With three dishes per genotype the exact rank test cannot go below p = 0.1 for a 3 vs 3 comparison, so the inference rests on the log-scale Welch tests; under the strictest correction across all 12 comparisons, the ΔlasI area comparison becomes borderline (Holm p = 0.063) while every circularity result stays significant.
+
+![Colony area, circularity and roundness of wild type and the four single mutants](results/swarming_single_mutants.png)
+
+### Choices
+
+- Chose Welch t-tests on log area and log circularity, reporting ratios of geometric means with 95% CIs, and Holm adjustment within each metric. This respects the multiplicative spread of colony size and the unequal group variances (Levene p = 0.75 on log area, 0.72 on log circularity), and keeps each outcome's family at four mutant–wild-type comparisons. See [results/swarming_single_mutants_summary.csv](results/swarming_single_mutants_summary.csv).
+  - Alternative: pooled-variance t-tests reach the same conclusions (area Holm p = 0.0045–0.0050 for ΔlasI/ΔlasR/ΔrhlI and 0.00013 for rhlR-; circularity all Holm p ≤ 0.0005; roundness Holm p ≥ 0.21). Exact Wilcoxon rank-sum gives p = 0.1 for every mutant versus wild type, the smallest value possible with 3 vs 3 dishes, so a rank test cannot support significance at 0.05 in this design.
+- Chose Holm within each metric (four comparisons) as the primary correction; adjusting across all 12 comparisons instead leaves the circularity results significant (Holm p ≤ 0.017), keeps rhlR- area at 0.0079 but moves ΔlasR/ΔrhlI/ΔlasI area to 0.037/0.041/0.063, and leaves roundness unchanged. See [results/swarming_single_mutants_summary.csv](results/swarming_single_mutants_summary.csv).
+- Used circularity as the primary shape readout and roundness as a check on elongation (the usual reading of these imaging-software metrics; the data sheet does not give their formulas). The two disagree in a useful way: circularity changes strongly while roundness does not, which points to the colony perimeter rather than elongation. See [results/swarming_single_mutants_summary.csv](results/swarming_single_mutants_summary.csv).
+- Added a secondary comparison of rhl mutants against las mutants, pooling the two mutants of each system (6 vs 6 dishes). It is exploratory, not a pre-specified contrast; the per-mutant results show the same ordering. See [results/swarming_system_contrast.csv](results/swarming_system_contrast.csv).
+
+### Files
+
+- [analysis/swarming_single_mutants.R](analysis/swarming_single_mutants.R) — the analysis: data reading, Welch comparisons, assumption checks, sensitivity analyses and the figure; writes the three result files.
+- [results/swarming_single_mutants_summary.csv](results/swarming_single_mutants_summary.csv) — one row per genotype: area, circularity and roundness means and SDs, ratios or differences versus wild type with 95% CIs, and Holm-adjusted p-values.
+- [results/swarming_system_contrast.csv](results/swarming_system_contrast.csv) — rhl mutants versus las mutants for area, circularity and roundness.
+- [results/swarming_single_mutants.png](results/swarming_single_mutants.png) — three-panel figure of area, circularity and roundness by genotype.
+
+### To do
+
+- [x] Explore the swarming data and check distributions
+- [x] Write and run the R analysis
+- [x] Write figure and numeric table to results/
+
+## Co-culture rescue: does mixing ΔrhlI and ΔlasI restore swarming, and at which ratio?
+<!-- rho:session c-67f77cfebaba2cea -->
+
+### Question
+
+When ΔrhlI and ΔlasI are grown together, does swarming recover to wild-type levels, and
+does the recovery depend on the mixing ratio? I want the ratio at which colony area peaks,
+how far the peak is from wild type and from the poorly swarming extremes, and how much of
+the variation across ratios the ratio itself explains.
+
+### Data & method
+
+- [data/swarming/cocultures.csv](data/swarming/cocultures.csv) — one dish per row: alone cultures (wild type, ΔlasI, ΔrhlI) and ΔrhlI:ΔlasI mixes at twelve ratios from 1:3 to 1000:1, three dishes each, with `area`, `circularity` and `roundness`.
+- [analysis/swarming_cocultures.R](analysis/swarming_cocultures.R) — reads the CSV, compares each mix ratio with wild type (Welch t-tests on log area and log circularity, Holm across the twelve ratios), fits a quadratic in log2(ratio) over the rescue window with a cluster bootstrap CI, a one-way ANOVA across the ten window ratios, a peak-to-wild-type bootstrap that resamples both mix and wild-type dishes, and sensitivity fits.
+
+### Key results
+
+- Alone, both mutants swarmed poorly: against a wild-type geometric mean area of 108,686, ΔrhlI was 10,263 (0.094×) and ΔlasI 14,522 (0.134×). See [results/swarming_cocultures_summary.csv](results/swarming_cocultures_summary.csv).
+- Grown together, the mutants recovered wild-type swarming: the fitted peak area was about 14× the ΔrhlI-alone and 10× the ΔlasI-alone geometric mean. The fitted peak was at 12.3:1 ΔrhlI:ΔlasI (cluster bootstrap 95% CI 10.4–14.7:1) with a fitted area of 145,880 (132,127–161,011), 1.34× wild type (bootstrap 95% CI 0.99–1.71). The nearest observed mix (10:1) was 1.64× wild type (0.83–3.25, Welch p = 0.11), so the peak is statistically indistinguishable from wild type. See [results/swarming_cocultures_ratio_model.csv](results/swarming_cocultures_ratio_model.csv).
+- The ratio effect was strong and unimodal. Across the ten well-sampled ratios (1:3–100:1), ratio explained 93% of the variance in log area (one-way ANOVA F(9,20) = 29.5, p = 1.2 × 10⁻⁹); the quadratic fit had R² = 0.891 versus 0.364 for a linear fit, its quadratic term was p = 7.7 × 10⁻¹², and a cubic term added nothing (p = 0.24). The fitted peak was 8.7× the 1:3 value, 2.1× the 100:1 value and 14.5× the 500:1 value; fitted area reached wild-type level between 3.2:1 and 46.4:1. Residual diagnostics were acceptable (Levene p = 0.94 on log area across the ten ratios, Shapiro–Wilk p = 0.67, largest Cook's D = 0.18). See [results/swarming_cocultures_ratio_model.csv](results/swarming_cocultures_ratio_model.csv).
+- The low-ratio side was weakened but not resolved pairwise: 1:3, 1:2 and 1:1 mixes were 0.17× (95% CI 0.09–0.34), 0.25× (0.13–0.46) and 0.39× (0.21–0.72) wild type, but after Holm correction across the twelve ratios their p-values were 0.073, 0.078 and 0.121. The overall ratio test, not the pairwise tests, carries this part of the conclusion. See [results/swarming_cocultures_summary.csv](results/swarming_cocultures_summary.csv).
+- The high-ratio side ended in a cliff. At 500:1 all three dishes failed (0.09× wild type, 95% CI 0.05–0.18, Holm p = 0.037 — the only mix significantly below wild type) and the colonies matched ΔrhlI alone; 1000:1 was heterogeneous (0.34× wild type, 95% CI 0.06–2.14; one dish near failure, two partially rescued). These two ratios were outside the fitted window. See [results/swarming_cocultures_summary.csv](results/swarming_cocultures_summary.csv).
+- Shape agreed on the same optimum: circularity reached its minimum at 12.2:1 (fitted 0.050 versus wild type 0.061), with the 10:1 mix at 0.69× wild type (0.39–1.22, Holm p = 0.87), while 1:3, 1:2 and 500:1 were 6.4–13.6× wild type (Holm p ≤ 0.017). Roundness peaked at 12.2:1 (0.97 versus wild type 0.855), so peak colonies were large and irregular in perimeter but not elongated. See [results/swarming_cocultures_ratio_model.csv](results/swarming_cocultures_ratio_model.csv).
+
+![Colony area, circularity and roundness across ΔrhlI:ΔlasI mix ratios](results/swarming_cocultures.png)
+
+### Choices
+
+- Chose a quadratic in log2(ratio) over the 1:3–100:1 rescue window as the primary peak model. It gives a peak at 12.3:1 (95% CI 10.4–14.7), R² = 0.891, and leave-one-ratio-out peaks of 11.6–13.1, so the location is stable within the window. See [results/swarming_cocultures_ratio_model.csv](results/swarming_cocultures_ratio_model.csv).
+  - Alternative: including all twelve ratios gives a peak at 15.6:1 but the quadratic R² falls to 0.66 because the collapse at 500:1 is not quadratic; excluding only 500:1 shifts the peak to 22.4:1 (R² 0.75), and excluding only 1000:1 gives 11.2:1 (R² 0.93). The 1:3–100:1 window is the range where the smooth response is actually observed.
+- Chose Welch t-tests on log area and log circularity for each mix ratio versus wild type, with Holm correction across the twelve ratios, as a descriptive check. For area only the 500:1 difference survives correction, so the ratio effect in area is inferred from the overall model rather than the pairwise tests. See [results/swarming_cocultures_summary.csv](results/swarming_cocultures_summary.csv).
+  - Alternative: without correction the low ratios would be nominally significant (1:3 p = 0.0066, 1:2 p = 0.0078, 1:1 p = 0.013); the optimum and its CI do not depend on this choice, but the pairwise claim for the low-ratio decline would be stronger.
+- Chose circularity as the primary shape readout and roundness as secondary. Both extrema fall at 12.2:1, so the peak location does not depend on the shape metric, but the interpretation does: circularity returns to wild-type level at the peak while roundness overshoots it. See [results/swarming_cocultures_ratio_model.csv](results/swarming_cocultures_ratio_model.csv).
+  - Alternative: treating roundness as primary would suggest the peak colonies have "better than wild-type" shape; the area and circularity results support large, irregular colonies rather than a shape improvement.
+
+### Files
+
+- [analysis/swarming_cocultures.R](analysis/swarming_cocultures.R) — the analysis: data reading, Welch comparisons, quadratic model, bootstraps, sensitivity fits, assumption checks and the figure; writes the three result files.
+- [results/swarming_cocultures_summary.csv](results/swarming_cocultures_summary.csv) — one row per condition (wild type, ΔlasI, ΔrhlI and the twelve mixes): n, area/circularity/roundness means and SDs, ratios or differences versus wild type with 95% CIs, and Holm-adjusted p-values.
+- [results/swarming_cocultures_ratio_model.csv](results/swarming_cocultures_ratio_model.csv) — model fit, peak ratio and peak area with CIs, peak/wild-type ratio, fold changes, wild-type-level crossings, ratio R² and ANOVA p, sensitivity fits, assumption checks, and circularity/roundness extrema.
+- [results/swarming_cocultures.png](results/swarming_cocultures.png) — three-panel figure: area with the fitted curve and peak, circularity with its fitted curve, and roundness points; wild-type and single-mutant reference lines.
+
+### To do
+
+- [x] Check the co-culture data and the existing analysis script
+- [x] Run the analysis and validate the peak and ratio-effect estimates
+- [x] Write the figure and numeric table to results/
+- [x] Update the notes with the findings

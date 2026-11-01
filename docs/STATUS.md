@@ -27,6 +27,7 @@ human benefits are not established by existing Rho checks.
 | macOS 0.5.1 | Unsigned npm tarball/local WebUI selected; Core bundled explicitly | [Fixed tarball installed and exercised](PREVIEW-0.5.1.md) |
 | 0.5.2 candidate | 16 MB tarball for macOS arm64 and Linux x64/arm64, and a 12 MB Windows x64 one: one Core per platform (Core `c3dbeca`), Claude Code/Codex the person's own, all 12 plugins | [Packing, real Claude/Codex](PACKAGE-0.5.2-EPISODE.md); [offline install on four systems, Linux Notebook and Open folder](PLATFORMS-0.5.2-EPISODE.md); [Windows: Host lifetime and stop, installed checks](WINDOWS-0.5.2-EPISODE.md); x64 only under Rosetta; one four-platform tarball and the full 0.5.1 acceptance not done |
 | Independent researcher use | Unobserved | Trial guide in the episode; no usability claim |
+| Example project | `example/pa14-qs` ships with the application; a new state copies it into the projects folder once, as an ordinary editable project | [Episode](EXAMPLE-PROJECT-EPISODE.md) |
 | dsh-rho 0.0.1 | Native dsh 0.2.1-rc.5 analysis, captured CSV/SVG, selected-row question | Real model/browser loop; local tarball installed; restart/overwrite/crash preserved results and one analysis run; 5/5 adapter tests and type check |
 
 M0 retains Python/R highlighting, Markdown reading and native command exit/time/bounded

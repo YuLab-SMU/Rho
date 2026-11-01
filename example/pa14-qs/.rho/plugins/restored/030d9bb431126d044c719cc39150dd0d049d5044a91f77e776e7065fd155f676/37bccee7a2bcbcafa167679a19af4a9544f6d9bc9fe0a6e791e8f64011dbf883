@@ -1,0 +1,300 @@
+# Swarming of PA14 single quorum-sensing mutants vs wild type
+#
+# Reads data/swarming/single_cultures.csv and writes
+#   results/swarming_single_mutants_summary.csv  one row per genotype: descriptive
+#     statistics and each mutant's comparison against wild type
+#   results/swarming_system_contrast.csv         rhl mutants vs las mutants
+#   results/swarming_single_mutants.png          three-panel figure
+#
+# Run from the project root:  Rscript analysis/swarming_single_mutants.R
+#
+# Colony area and circularity are analysed on the log scale, so a difference in
+# means there is a ratio of geometric means; roundness is analysed on its raw
+# scale. Each mutant is compared with wild type by Welch t-test (unequal
+# variances), with Holm adjustment across the four mutants within each metric.
+
+suppressPackageStartupMessages({
+  library(dplyr)
+  library(ggplot2)
+  library(patchwork)
+})
+
+dir.create("results", showWarnings = FALSE)
+
+sw <- read.csv("data/swarming/single_cultures.csv", fileEncoding = "UTF-8")
+sw$genotype <- factor(sw$genotype,
+                      levels = c("Wildtype", "ΔlasI", "ΔlasR", "ΔrhlI", "rhlR-"))
+sw$system <- factor(
+  ifelse(sw$genotype == "Wildtype", "WT",
+         ifelse(sw$genotype %in% c("ΔlasI", "ΔlasR"), "las", "rhl")),
+  levels = c("WT", "las", "rhl")
+)
+
+## ---- comparisons against wild type ---------------------------------------
+
+welch_vs_wt <- function(df, var, transform = identity) {
+  wt <- transform(df[[var]][df$genotype == "Wildtype"])
+  muts <- setdiff(levels(df$genotype), "Wildtype")
+  out <- lapply(muts, function(g) {
+    x <- transform(df[[var]][df$genotype == g])
+    tt <- t.test(x, wt, var.equal = FALSE)
+    data.frame(
+      genotype = g,
+      estimate = unname(tt$estimate[1] - tt$estimate[2]),
+      ci_low   = unname(tt$conf.int[1]),
+      ci_high  = unname(tt$conf.int[2]),
+      df       = unname(tt$parameter),
+      p_raw    = tt$p.value
+    )
+  })
+  out <- do.call(rbind, out)
+  out$p_holm <- p.adjust(out$p_raw, method = "holm")
+  out
+}
+
+area_t <- welch_vs_wt(sw, "area", log)
+area_t$ratio      <- exp(area_t$estimate)
+area_t$ratio_low  <- exp(area_t$ci_low)
+area_t$ratio_high <- exp(area_t$ci_high)
+
+circ_t <- welch_vs_wt(sw, "circularity", log)
+circ_t$ratio      <- exp(circ_t$estimate)
+circ_t$ratio_low  <- exp(circ_t$ci_low)
+circ_t$ratio_high <- exp(circ_t$ci_high)
+
+round_t <- welch_vs_wt(sw, "roundness")
+
+## ---- descriptive statistics and main table -------------------------------
+
+desc <- sw %>%
+  group_by(genotype, system) %>%
+  summarise(
+    n = n(),
+    area_mean = mean(area), area_sd = sd(area),
+    area_geomean = exp(mean(log(area))),
+    circularity_mean = mean(circularity), circularity_sd = sd(circularity),
+    roundness_mean = mean(roundness), roundness_sd = sd(roundness),
+    .groups = "drop"
+  )
+
+tab <- desc
+take <- function(t, col) t[[col]][match(tab$genotype, t$genotype)]
+
+tab$area_ratio_vs_wt     <- take(area_t, "ratio")
+tab$area_ratio_ci_low    <- take(area_t, "ratio_low")
+tab$area_ratio_ci_high   <- take(area_t, "ratio_high")
+tab$area_change_pct      <- (tab$area_ratio_vs_wt - 1) * 100
+tab$area_p_holm          <- take(area_t, "p_holm")
+tab$circularity_ratio_vs_wt   <- take(circ_t, "ratio")
+tab$circularity_ratio_ci_low  <- take(circ_t, "ratio_low")
+tab$circularity_ratio_ci_high <- take(circ_t, "ratio_high")
+tab$circularity_p_holm        <- take(circ_t, "p_holm")
+tab$roundness_diff_vs_wt      <- take(round_t, "estimate")
+tab$roundness_diff_ci_low     <- take(round_t, "ci_low")
+tab$roundness_diff_ci_high    <- take(round_t, "ci_high")
+tab$roundness_p_holm          <- take(round_t, "p_holm")
+
+# Wild type is the reference row: ratios of 1 and no test.
+wt_row <- tab$genotype == "Wildtype"
+tab$area_ratio_vs_wt[wt_row]        <- 1
+tab$area_ratio_ci_low[wt_row]       <- 1
+tab$area_ratio_ci_high[wt_row]      <- 1
+tab$area_change_pct[wt_row]         <- 0
+tab$circularity_ratio_vs_wt[wt_row] <- 1
+tab$circularity_ratio_ci_low[wt_row]  <- 1
+tab$circularity_ratio_ci_high[wt_row] <- 1
+tab$roundness_diff_vs_wt[wt_row]      <- 0
+tab$roundness_diff_ci_low[wt_row]     <- 0
+tab$roundness_diff_ci_high[wt_row]    <- 0
+
+fmt <- function(x, digits) {
+  ifelse(is.na(x), "", formatC(ifelse(is.na(x), 0, x), format = "f", digits = digits))
+}
+fmt_p <- function(p) {
+  p <- ifelse(is.na(p), 0, p)
+  ifelse(is.na(p) | p == 0, "",
+         ifelse(p < 0.001, formatC(p, format = "e", digits = 1),
+                formatC(p, format = "f", digits = 3)))
+}
+
+summary_out <- data.frame(
+  genotype = tab$genotype,
+  system = tab$system,
+  n = tab$n,
+  area_mean = fmt(tab$area_mean, 0),
+  area_sd = fmt(tab$area_sd, 0),
+  area_geomean = fmt(tab$area_geomean, 0),
+  area_ratio_vs_wt = fmt(tab$area_ratio_vs_wt, 3),
+  area_ratio_ci_low = fmt(tab$area_ratio_ci_low, 3),
+  area_ratio_ci_high = fmt(tab$area_ratio_ci_high, 3),
+  area_change_pct = fmt(tab$area_change_pct, 1),
+  area_p_holm = fmt_p(tab$area_p_holm),
+  circularity_mean = fmt(tab$circularity_mean, 3),
+  circularity_sd = fmt(tab$circularity_sd, 3),
+  circularity_ratio_vs_wt = fmt(tab$circularity_ratio_vs_wt, 2),
+  circularity_ratio_ci_low = fmt(tab$circularity_ratio_ci_low, 2),
+  circularity_ratio_ci_high = fmt(tab$circularity_ratio_ci_high, 2),
+  circularity_p_holm = fmt_p(tab$circularity_p_holm),
+  roundness_mean = fmt(tab$roundness_mean, 3),
+  roundness_sd = fmt(tab$roundness_sd, 3),
+  roundness_diff_vs_wt = fmt(tab$roundness_diff_vs_wt, 3),
+  roundness_diff_ci_low = fmt(tab$roundness_diff_ci_low, 3),
+  roundness_diff_ci_high = fmt(tab$roundness_diff_ci_high, 3),
+  roundness_p_holm = fmt_p(tab$roundness_p_holm)
+)
+
+write.csv(summary_out, "results/swarming_single_mutants_summary.csv",
+          row.names = FALSE, fileEncoding = "UTF-8")
+
+## ---- secondary contrast: rhl mutants vs las mutants ----------------------
+
+system_contrast <- function(df, var, transform, metric, scale_label) {
+  las <- transform(df[[var]][df$system == "las"])
+  rhl <- transform(df[[var]][df$system == "rhl"])
+  tt <- t.test(rhl, las, var.equal = FALSE)
+  est <- unname(tt$estimate[1] - tt$estimate[2])
+  ratio <- scale_label == "ratio"
+  data.frame(
+    metric = metric,
+    comparison = "rhl mutants vs las mutants",
+    scale = scale_label,
+    estimate = if (ratio) exp(est) else est,
+    ci_low   = if (ratio) exp(unname(tt$conf.int[1])) else unname(tt$conf.int[1]),
+    ci_high  = if (ratio) exp(unname(tt$conf.int[2])) else unname(tt$conf.int[2]),
+    p_value  = tt$p.value
+  )
+}
+
+sc <- rbind(
+  system_contrast(sw, "area", log, "colony area", "ratio"),
+  system_contrast(sw, "circularity", log, "circularity", "ratio"),
+  system_contrast(sw, "roundness", identity, "roundness", "difference")
+)
+sc$estimate <- round(sc$estimate, 3)
+sc$ci_low <- round(sc$ci_low, 3)
+sc$ci_high <- round(sc$ci_high, 3)
+sc$p_value <- signif(sc$p_value, 3)
+
+write.csv(sc, "results/swarming_system_contrast.csv",
+          row.names = FALSE, fileEncoding = "UTF-8")
+
+## ---- assumption checks and sensitivity analyses --------------------------
+
+cat("Levene tests on the analysed scales\n")
+print(car::leveneTest(log(area) ~ genotype, sw))
+print(car::leveneTest(log(circularity) ~ genotype, sw))
+print(car::leveneTest(roundness ~ genotype, sw))
+
+cat("\nOne-way ANOVA on the analysed scales\n")
+print(summary(aov(log(area) ~ genotype, sw)))
+print(summary(aov(log(circularity) ~ genotype, sw)))
+print(summary(aov(roundness ~ genotype, sw)))
+
+cat("\nSensitivity: pooled-variance t-tests, Holm across the four mutants\n")
+for (v in c("area", "circularity", "roundness")) {
+  tr <- if (v == "roundness") identity else log
+  wt <- tr(sw[[v]][sw$genotype == "Wildtype"])
+  ps <- sapply(setdiff(levels(sw$genotype), "Wildtype"), function(g) {
+    t.test(tr(sw[[v]][sw$genotype == g]), wt, var.equal = TRUE)$p.value
+  })
+  cat(v, ":", paste(sprintf("%s=%.4g", names(ps), p.adjust(ps, "holm")),
+                    collapse = "  "), "\n")
+}
+
+cat("\nSensitivity: exact Wilcoxon rank-sum, each mutant vs wild type\n")
+for (g in setdiff(levels(sw$genotype), "Wildtype")) {
+  w <- wilcox.test(sw$area[sw$genotype == g],
+                   sw$area[sw$genotype == "Wildtype"], exact = TRUE)
+  cat(g, ": p =", format(w$p.value), "\n")
+}
+
+cat("\nSensitivity: Holm across all 12 comparisons\n")
+p12 <- c(area_t$p_raw, circ_t$p_raw, round_t$p_raw)
+names(p12) <- c(paste0("area:", area_t$genotype), paste0("circularity:", circ_t$genotype),
+                paste0("roundness:", round_t$genotype))
+print(sort(p.adjust(p12, method = "holm")))
+
+## ---- figure --------------------------------------------------------------
+
+cols <- c(WT = "#52514e", las = "#2a78d6", rhl = "#eb6834")
+sys_labs <- c(WT = "Wild type", las = "las mutants", rhl = "rhl mutants")
+
+theme_swarm <- theme_minimal(base_size = 9) +
+  theme(
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_blank(),
+    panel.grid.major.y = element_line(colour = "#e1e0d9", linewidth = 0.3),
+    panel.background = element_rect(fill = "white", colour = NA),
+    plot.background = element_rect(fill = "white", colour = NA),
+    axis.line = element_line(colour = "#c3c2b7", linewidth = 0.4),
+    axis.ticks = element_line(colour = "#c3c2b7", linewidth = 0.4),
+    axis.text = element_text(colour = "#52514e", size = 8),
+    axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
+    axis.title.y = element_text(colour = "#0b0b0b", size = 9.5),
+    axis.title.x = element_blank(),
+    legend.position = "bottom",
+    legend.direction = "horizontal",
+    legend.box = "horizontal",
+    legend.title = element_text(size = 8.5, colour = "#52514e"),
+    legend.text = element_text(size = 8.5, colour = "#52514e"),
+    legend.key.size = unit(9, "pt"),
+    legend.margin = margin(0, 0, 0, 0)
+  )
+
+base_panel <- function(var) {
+  ggplot(sw, aes(x = genotype, y = .data[[var]], colour = system)) +
+    geom_jitter(width = 0.12, height = 0, seed = 1, size = 1.7, alpha = 0.85) +
+    stat_summary(fun.data = mean_sdl, fun.args = list(mult = 1),
+                 geom = "errorbar", width = 0.15, linewidth = 0.45,
+                 show.legend = FALSE) +
+    stat_summary(fun = mean, geom = "point", aes(fill = system),
+                 shape = 21, size = 2.8, colour = "white", stroke = 0.7,
+                 show.legend = FALSE) +
+    scale_colour_manual(values = cols, labels = sys_labs,
+                        name = "Quorum-sensing system") +
+    scale_fill_manual(values = cols, labels = sys_labs,
+                      name = "Quorum-sensing system") +
+    scale_x_discrete(labels = c(Wildtype = "WT", "ΔlasI" = "ΔlasI",
+                                "ΔlasR" = "ΔlasR", "ΔrhlI" = "ΔrhlI",
+                                "rhlR-" = "rhlR-")) +
+    theme_swarm
+}
+
+p_area <- base_panel("area") +
+  scale_y_log10(breaks = c(1e4, 2e4, 5e4, 1e5),
+                labels = c("10k", "20k", "50k", "100k")) +
+  coord_cartesian(ylim = c(6500, 160000)) +
+  labs(y = "Colony area (imaging units, log scale)")
+
+p_circ <- base_panel("circularity") +
+  scale_y_continuous(limits = c(0, 1), breaks = c(0, 0.25, 0.5, 0.75, 1),
+                     labels = c("0", "0.25", "0.5", "0.75", "1"),
+                     expand = c(0, 0)) +
+  labs(y = "Circularity")
+
+p_round <- base_panel("roundness") +
+  scale_y_continuous(limits = c(0.55, 1.05), breaks = c(0.6, 0.7, 0.8, 0.9, 1),
+                     labels = c("0.6", "0.7", "0.8", "0.9", "1.0"),
+                     expand = c(0, 0)) +
+  labs(y = "Roundness")
+
+fig <- (p_area | p_circ | p_round) +
+  plot_layout(guides = "collect", widths = c(1.15, 1, 1)) +
+  plot_annotation(
+    tag_levels = "A",
+    caption = paste("Points are individual dishes (n = 3 per genotype); bars show mean ± SD.",
+                    "Colony area is on a log10 scale."),
+    theme = theme(
+      plot.tag = element_text(face = "bold", size = 11, colour = "#0b0b0b"),
+      plot.caption = element_text(size = 8, colour = "#898781", hjust = 0)
+    )
+  ) &
+  theme(legend.position = "bottom", legend.direction = "horizontal",
+        legend.box = "horizontal")
+
+ggsave("results/swarming_single_mutants.png", fig,
+       width = 9.2, height = 4.3, dpi = 300, bg = "white")
+
+cat("\nWrote results/swarming_single_mutants_summary.csv\n")
+cat("Wrote results/swarming_system_contrast.csv\n")
+cat("Wrote results/swarming_single_mutants.png\n")

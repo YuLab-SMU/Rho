@@ -250,7 +250,10 @@ const conversationTurn = response({ id: text, by: text, text: { type: 'string' }
   result: { anyOf: [response({ isError: { type: 'boolean' }, kind: { anyOf: [text, { type: 'null' }] }, reason: { anyOf: [text, { type: 'null' }] }, steps: { anyOf: [integer, { type: 'null' }] }, durationMs: { anyOf: [{ type: 'number' }, { type: 'null' }] }, costUsd: { anyOf: [{ type: 'number' }, { type: 'null' }] }, message: { anyOf: [{ type: 'string' }, { type: 'null' }] } }), { type: 'null' }] },
   problem: { anyOf: [{ type: 'string' }, { type: 'null' }] },
   // Project files that changed on disk while the message ran, compared at its start and end.
-  files: response({ changed: array(response({ path: text, change: { enum: ['added', 'modified', 'removed'] }, modifiedAt: { anyOf: [text, { type: 'null' }] }, bytes: { anyOf: [integer, { type: 'null' }] } })), omitted: integer, partial: { type: 'boolean' } }) }, ['id', 'by', 'text', 'sentAt', 'state', 'steps', 'omitted', 'problem']);
+  files: response({ changed: array(response({ path: text, change: { enum: ['added', 'modified', 'removed'] }, modifiedAt: { anyOf: [text, { type: 'null' }] }, bytes: { anyOf: [integer, { type: 'null' }] } })), omitted: integer, partial: { type: 'boolean' } }),
+  // The Agent session this message replaced, when the one before it had ended: what was said
+  // before carried over as the record Rho kept, not as a resent request.
+  continued: { anyOf: [response({ at: text, earlier: text }, ['at', 'earlier']), { type: 'null' }] } }, ['id', 'by', 'text', 'sentAt', 'state', 'steps', 'omitted', 'problem']);
 const observationSnapshot = response({
   project: contract.projectRecordSchema,
   catalog,

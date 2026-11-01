@@ -21,6 +21,7 @@
   },
   "files": [
     "dist",
+    "example",
     "protocol",
     "fixtures/states.json",
     "fixtures/README.md",

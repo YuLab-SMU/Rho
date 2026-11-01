@@ -1,0 +1,28 @@
+# Project notes
+
+## Swarming of single quorum-sensing mutants vs wild type
+<!-- rho:session c-91aa2e46b1ac1a6c -->
+
+### Question
+
+Does losing either quorum-sensing system (las via ΔlasI/ΔlasR, rhl via ΔrhlI/rhlR) make
+PA14 swarm worse than wild type? Compare each single mutant against wild type on colony
+area, quantify how big the difference is, and check whether colony shape (circularity,
+roundness) changes too.
+
+### Data & method
+
+- [data/swarming/single_cultures.csv](data/swarming/single_cultures.csv) — one dish per row: genotype, strain, replicate and the imaging software's `area`, `circularity` and `roundness`; three replicates for wild type and each of the four single mutants.
+- [analysis/swarming_single_mutants.R](analysis/swarming_single_mutants.R) — planned: reads the CSV, compares each mutant against wild type on area (log scale) and shape, writes a summary table and figure to `results/`.
+
+### Key results
+
+### Choices
+
+### Files
+
+### To do
+
+- [ ] Explore the swarming data and check distributions
+- [ ] Write and run the R analysis
+- [ ] Write figure and numeric table to results/

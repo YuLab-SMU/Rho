@@ -1570,6 +1570,31 @@
                 "partial"
               ],
               "additionalProperties": true
+            },
+            "continued": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "at": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "earlier": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "at",
+                    "earlier"
+                  ],
+                  "additionalProperties": true
+                },
+                {
+                  "type": "null"
+                }
+              ]
             }
           },
           "required": [

@@ -1,0 +1,212 @@
+# One-page summary figure for the PA14 quorum-sensing project.
+#
+# Reads the result tables already in results/ and draws one panel per project
+# question. No models are refitted here: the co-culture curve is redrawn from
+# the published quadratic estimates (peak, fitted area at 1:3 and at 100:1) in
+# results/swarming_cocultures_ratio_model.csv.
+#
+# Run from the project root:  Rscript analysis/summary_figure.R
+
+suppressPackageStartupMessages({
+  library(ggplot2)
+  library(patchwork)
+  library(scales)
+  library(tidyr)
+  library(dplyr)
+})
+
+single <- read.csv("results/swarming_single_mutants_summary.csv",
+                   stringsAsFactors = FALSE)
+coc <- read.csv("results/swarming_cocultures_summary.csv",
+                stringsAsFactors = FALSE)
+model <- read.csv("results/swarming_cocultures_ratio_model.csv",
+                  stringsAsFactors = FALSE)
+rna <- read.csv("results/rnaseq_de_summary.csv", stringsAsFactors = FALSE)
+
+get_model <- function(metric, quantity) {
+  model$estimate[model$metric == metric & model$quantity == quantity]
+}
+
+## ---- panel A: single mutants vs wild type --------------------------------
+
+single$genotype <- factor(single$genotype,
+                          levels = c("Wildtype", "ΔlasI", "ΔlasR",
+                                     "ΔrhlI", "rhlR-"))
+single$system <- factor(single$system, levels = c("WT", "las", "rhl"))
+wt_area <- single$area_geomean[single$genotype == "Wildtype"]
+
+fmt_ratio <- function(x) {
+  ifelse(x < 0.1, sprintf("%.3f", x), sprintf("%.2f", x + 1e-9))
+}
+single$ratio_label <- ifelse(
+  single$genotype == "Wildtype", "",
+  paste0(fmt_ratio(single$area_ratio_vs_wt), "×\n(",
+         fmt_ratio(single$area_ratio_ci_low), "–",
+         fmt_ratio(single$area_ratio_ci_high), ")")
+)
+
+pA <- ggplot(single, aes(genotype, area_geomean, fill = system)) +
+  geom_col(width = 0.7) +
+  geom_hline(yintercept = wt_area, linetype = "dashed", colour = "grey35") +
+  geom_text(data = subset(single, genotype != "Wildtype"),
+            aes(label = ratio_label), vjust = -0.2, size = 2.9,
+            lineheight = 0.9) +
+  scale_fill_manual(values = c(WT = "grey55", las = "#3288bd",
+                               rhl = "#e08214"), guide = "none") +
+  scale_y_continuous(labels = label_comma(),
+                     expand = expansion(mult = c(0, 0.10))) +
+  labs(title = "Single mutants vs wild type",
+       subtitle = "Colony area; labels: ratio vs wild type (95% CI)",
+       x = NULL, y = "Colony area (imaging units)") +
+  theme_bw(base_size = 9.5) +
+  theme(plot.title = element_text(face = "bold", size = 10),
+        plot.subtitle = element_text(size = 8, colour = "grey30"),
+        axis.text.x = element_text(size = 8.5),
+        panel.grid.minor = element_blank())
+
+## ---- panel B: co-culture ratio response ----------------------------------
+
+mix <- coc %>%
+  filter(culture == "ΔrhlI:ΔlasI", ratio_numeric != "") %>%
+  mutate(ratio = as.numeric(ratio_numeric),
+         x = log2(ratio),
+         in_window = ratio <= 100)
+
+peak_ratio <- get_model("area", "peak_ratio")
+peak_area <- get_model("area", "peak_area")
+peak_over_wt <- get_model("area", "peak_over_wildtype")
+fit_1_3 <- get_model("area", "fitted_area_1to3")
+fit_100_1 <- get_model("area", "fitted_area_100to1")
+wt_area_coc <- get_model("area", "wildtype_area_geomean")
+alone_rhl <- coc$area_geomean[coc$culture == "ΔrhlI"]
+alone_las <- coc$area_geomean[coc$culture == "ΔlasI"]
+
+# The reported quadratic in log2(ratio), anchored at its reported peak.
+x0 <- log2(peak_ratio)
+y0 <- log(peak_area)
+x1 <- log2(1 / 3)
+y1 <- log(fit_1_3)
+c2 <- (y1 - y0) / (x1 - x0)^2
+b2 <- -2 * c2 * x0
+a2 <- y0 + c2 * x0^2
+
+curve <- data.frame(x = seq(log2(1 / 3), log2(100), length.out = 200))
+curve$y <- exp(a2 + b2 * curve$x + c2 * curve$x^2)
+
+pB <- ggplot(mix, aes(x, area_geomean)) +
+  annotate("rect", xmin = -Inf, xmax = Inf,
+           ymin = alone_rhl, ymax = alone_las,
+           fill = "grey70", alpha = 0.18) +
+  geom_hline(yintercept = wt_area_coc, linetype = "dashed",
+             colour = "grey35") +
+  annotate("text", x = 9.8, y = wt_area_coc * 1.06,
+           label = "wild type", hjust = 1, size = 2.8, colour = "grey30") +
+  geom_line(data = curve, aes(x, y), colour = "#6a3d9a", linewidth = 1) +
+  geom_point(aes(shape = in_window), size = 2, colour = "black") +
+  annotate("segment", x = x0, xend = x0, y = 0, yend = peak_area,
+           linetype = "dotted", colour = "#6a3d9a") +
+  annotate("point", x = x0, y = peak_area, shape = 21, size = 4,
+           stroke = 1.1, colour = "#6a3d9a", fill = "white") +
+  annotate("text", x = x0 + 0.15, y = peak_area * 1.18,
+           label = paste0("peak ", sprintf("%.1f", peak_ratio), ":1\n",
+                          comma(peak_area), " (",
+                          sprintf("%.2f", peak_over_wt), "× wild type)"),
+           hjust = 0, size = 2.9, colour = "#4a2a6a") +
+  scale_shape_manual(values = c(`TRUE` = 16, `FALSE` = 1),
+                     breaks = c(TRUE, FALSE),
+                     labels = c("In fit window", "Outside fit"),
+                     name = NULL) +
+  scale_x_continuous(
+    breaks = log2(c(1 / 3, 1 / 2, 1, 2, 3, 4, 5, 10, 50, 100, 500, 1000)),
+    labels = c("1:3", "", "1:1", "", "3:1", "", "", "10:1", "",
+               "100:1", "", "1000:1")) +
+  scale_y_continuous(labels = label_comma(), limits = c(0, 210000),
+                     expand = expansion(mult = c(0, 0))) +
+  labs(title = "Co-culture rescue",
+       subtitle = "Geometric mean of three dishes at each mix ratio; curve: reported fit",
+       x = "ΔrhlI : ΔlasI ratio (log scale)",
+       y = "Colony area (imaging units)") +
+  theme_bw(base_size = 9.5) +
+  theme(plot.title = element_text(face = "bold", size = 10),
+        plot.subtitle = element_text(size = 8, colour = "grey30"),
+        legend.position = "bottom",
+        legend.margin = margin(0, 0, 0, 0),
+        panel.grid.minor = element_blank())
+
+## ---- panel C: genes changed per mutant and medium ------------------------
+
+mutant_lab <- c("ΔrhlI" = "ΔrhlI\n(97)",
+                "ΔlasI" = "ΔlasI\n(98)",
+                "ΔlasIΔrhlI" = "ΔlasIΔrhlI\n(99)")
+media_lab <- c("MMGluFeMinus" = "MMGlu Fe−",
+               "MMGluFePlus" = "MMGlu Fe+",
+               "Succinate" = "Succinate")
+
+rna$mutant <- factor(rna$mutant,
+                     levels = c("ΔrhlI", "ΔlasI", "ΔlasIΔrhlI"))
+rna$media <- factor(rna$media,
+                    levels = c("MMGluFeMinus", "MMGluFePlus", "Succinate"))
+rna$mutant_f <- factor(mutant_lab[as.character(rna$mutant)],
+                       levels = mutant_lab[c("ΔrhlI", "ΔlasI", "ΔlasIΔrhlI")])
+rna$media_f <- factor(media_lab[as.character(rna$media)],
+                      levels = media_lab[c("MMGluFeMinus", "MMGluFePlus",
+                                           "Succinate")])
+
+rna_long <- rna %>%
+  select(media_f, mutant_f, up, down) %>%
+  pivot_longer(c(up, down), names_to = "direction", values_to = "n")
+rna_long$direction <- factor(rna_long$direction,
+                             levels = c("up", "down"),
+                             labels = c("Up", "Down"))
+
+pC <- ggplot(rna_long, aes(mutant_f, n, fill = direction)) +
+  geom_col(width = 0.7) +
+  geom_text(data = rna,
+            aes(x = mutant_f, y = DE_FDR05_2fold,
+                label = DE_FDR05_2fold),
+            inherit.aes = FALSE, vjust = -0.3, size = 3) +
+  facet_wrap(~ media_f, nrow = 1) +
+  scale_fill_manual(values = c(Up = "#c0392b", Down = "#2c6fbb"),
+                    name = NULL) +
+  scale_y_continuous(labels = label_comma(),
+                     expand = expansion(mult = c(0, 0.10))) +
+  labs(title = "Transcriptome changes",
+       subtitle = "Genes changed (FDR < 0.05, |log2FC| ≥ 1); 5,828 genes tested",
+       x = NULL, y = "Genes changed") +
+  theme_bw(base_size = 9.5) +
+  theme(plot.title = element_text(face = "bold", size = 10),
+        plot.subtitle = element_text(size = 8, colour = "grey30"),
+        legend.position = "bottom",
+        legend.margin = margin(0, 0, 0, 0),
+        panel.grid.minor = element_blank())
+
+## ---- one page -------------------------------------------------------------
+
+caption_paragraphs <- c(
+  "A: bars are geometric means of three dishes; labels are ratios vs wild type (95% CI); dashed line is the wild-type geometric mean (81,732); pooled rhl vs las mutants: 0.50× (95% CI 0.35–0.71, p = 0.0015).",
+  "B: points are geometric means of three dishes at each mix ratio; the curve is the reported quadratic fit over 1:3–100:1; the large open circle is the fitted peak (12.3:1, 145,880, 1.34× wild type); the dashed line is wild type (108,686); the grey band spans the two single mutants alone (10,263 and 14,522); open points at 500:1 and 1000:1 are outside the fitted window.",
+  "C: genes with FDR < 0.05 and |log2FC| ≥ 1; media are MMGluFeMinus, MMGluFePlus and Succinate. Colony area is in imaging-software units and is compared only within this assay."
+)
+caption_text <- paste(
+  unlist(lapply(caption_paragraphs, function(x) strwrap(x, width = 155))),
+  collapse = "\n"
+)
+
+fig <- (pA | pB) / pC +
+  plot_layout(heights = c(1, 1.05)) +
+  plot_annotation(
+    title = "PA14 quorum sensing and swarming: summary of the three questions",
+    subtitle = "A: single mutants vs wild type.  B: co-culture rescue.  C: transcriptome changes.",
+    tag_levels = "A",
+    caption = caption_text,
+    theme = theme(
+      plot.title = element_text(face = "bold", size = 13),
+      plot.subtitle = element_text(size = 9, colour = "grey30"),
+      plot.caption = element_text(size = 7.4, colour = "grey35", hjust = 0),
+      plot.tag = element_text(face = "bold", size = 11)
+    )
+  )
+
+ggsave("results/summary.png", fig, width = 13, height = 10,
+       dpi = 300, bg = "white")
+cat("Wrote results/summary.png\n")

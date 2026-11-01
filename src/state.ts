@@ -7,7 +7,7 @@ import { atomicJson, confined, digest, readJson, requireThat, stateDirectory } f
 import type { AddedTo } from './agent-connect.js';
 export interface SourceFolder { id: string; root: string; name: string }
 export interface FolderSelection extends SourceFolder { principalId: string; expiresAt: number }
-export interface Project { id: string; root: string; openedAt: string; nativeSelected?: true; name?: string; sources?: SourceFolder[]; workspace?: true; visibilityRoot?: string; creation?: { id: string; digest: string; author: string } }
+export interface Project { id: string; root: string; openedAt: string; nativeSelected?: true; name?: string; sources?: SourceFolder[]; workspace?: true; visibilityRoot?: string; creation?: { id: string; digest: string; author: string }; example?: { version: string } }
 export interface Principal { id: string; tokenHash: string; projectId?: string; methods: string[]; kind?: 'browser'; profile?: 'layered-business' | 'layered-presentation'; pluginFilter?: string[]; projectRoot?: string; selectedProjects?: string[]; expiresAt?: string; label?: string; conversationId?: string; added?: AddedTo }
 export async function lease(directory: string) {
   // Best effort: say who holds it when the platform can tell us. Never a failure.
@@ -152,6 +152,21 @@ export class State {
     requireThat(!relative.split('/').some(p => ['.rho', '.git'].includes(p)), 'scope', 'Internal owner state is not a project.');
     const root = await confined(this.root, relative);
     return this.openRoot(root);
+  }
+  // The example Rho ships is registered like any project, with the name it is listed under and
+  // the version of the copy this folder is. It is not a different kind of project: the person
+  // reads, edits, continues and removes it as they do their own.
+  async openExample(project: Project) {
+    const root = await fs.realpath(project.root);
+    requireThat(root !== this.directory && !root.startsWith(this.directory + path.sep) && !this.directory.startsWith(root + path.sep) && root.startsWith(this.root + path.sep) && (await fs.stat(root)).isDirectory(), 'scope', 'The example project is registered inside the projects folder only.');
+    const id = digest(root).slice(0, 32);
+    const registered: Project = { ...project, id, root };
+    const earlier = this.projects.find(p => p.id === id);
+    if (earlier) return earlier;
+    await this.acquire(registered);
+    this.projects.push(registered);
+    await atomicJson(path.join(this.directory, 'projects.json'), this.projects);
+    return registered;
   }
   // Trusted native-dialog result only; never called with an HTTP-supplied path.
   async openSelected(root: string, principal: Principal, maxProjects: number) {

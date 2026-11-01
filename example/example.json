@@ -1,0 +1,13 @@
+{
+  "project": "pa14-qs",
+  "name": "PA14 quorum sensing",
+  "version": "0.5.2",
+  "models": [
+    "westlakehpc/deepseek-v4.1-flash[1m]"
+  ],
+  "curated": {
+    "modelCatalogues": 3,
+    "rewritten": 10,
+    "removed": "the models and providers this build machine's Agent offered, and the folder and host the build ran in"
+  }
+}

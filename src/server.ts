@@ -28,6 +28,7 @@ import { readOperation, type OperationRequest } from './operation-request.js';
 import { isRhoMethod } from './contract-runtime.js';
 import type { RhoMethod, RhoOutput } from './contract.generated.js';
 import { TaskRouting } from './task-routing.js';
+import { seedExampleProject, type ExampleSeed } from './example-project.js';
 import { exitWords, stopState } from './execution-facts.js';
 import { exportRun } from './run-export.js';
 import type { nativeActivityLimits, agentDeliveryLimits, RunContext } from '@rho-workspace/plugin-agent';
@@ -42,7 +43,7 @@ export interface NativeAdapterRegistration {
   proof: { kind: 'claude-code-init'; sessionId: string; clientVersion: string };
 }
 export const serviceLimits = { maxRequestBytes: 1024 * 1024, maxEventBytes: 65536, eventRetention: 256, maxSubscriptions: 8, maxQueue: 32, maxContexts: 128, maxBindings: 64, maxActivities: 256, maxContextBytes: 1024 * 1024, maxRetainedMetadataBytes: 32 * 1024 * 1024 };
-export interface ServiceConfig extends Partial<typeof serviceLimits>, Partial<typeof requestLimits>, PluginConfig { root: string; stateDir: string; coreBinary?: string; rscript: string; python?: string; ssh?: string; serverctl?: string; port?: number; nativeFolders?: Partial<typeof nativeFolderLimits>; workspace?: Partial<typeof workspaceLimits>; interactions?: Partial<typeof interactionLimits>; taskMap?: Partial<typeof taskMapLimits>; browser?: Partial<typeof browserLimits>; webRoot?: string; agentNativeActivity?: Partial<typeof nativeActivityLimits>; presentationWitness?: Partial<typeof presentationWitnessLimits>; visibility?: Partial<typeof visibilityLimits>; agentDelivery?: Partial<typeof agentDeliveryLimits>; deliveryTransportTimeoutMs?: number; claude?: string; agentBackend?: ConversationConfig['backend']; claudeAcp?: ConversationConfig['claudeAcp']; codex?: string; codexAcp?: ConversationConfig['codexAcp']; conversations?: Partial<typeof conversationLimits>; describe?: Partial<typeof describeLimits>; modelsDev?: { url?: string; maxBytes?: number; timeoutMs?: number; refreshMs?: number; retryMs?: number }; evidence?: Partial<typeof evidenceExportLimits>; connect?: Partial<typeof connectLimits> }
+export interface ServiceConfig extends Partial<typeof serviceLimits>, Partial<typeof requestLimits>, PluginConfig { root: string; stateDir: string; coreBinary?: string; rscript: string; python?: string; ssh?: string; serverctl?: string; port?: number; nativeFolders?: Partial<typeof nativeFolderLimits>; workspace?: Partial<typeof workspaceLimits>; interactions?: Partial<typeof interactionLimits>; taskMap?: Partial<typeof taskMapLimits>; browser?: Partial<typeof browserLimits>; webRoot?: string; example?: boolean; agentNativeActivity?: Partial<typeof nativeActivityLimits>; presentationWitness?: Partial<typeof presentationWitnessLimits>; visibility?: Partial<typeof visibilityLimits>; agentDelivery?: Partial<typeof agentDeliveryLimits>; deliveryTransportTimeoutMs?: number; claude?: string; agentBackend?: ConversationConfig['backend']; claudeAcp?: ConversationConfig['claudeAcp']; codex?: string; codexAcp?: ConversationConfig['codexAcp']; conversations?: Partial<typeof conversationLimits>; describe?: Partial<typeof describeLimits>; modelsDev?: { url?: string; maxBytes?: number; timeoutMs?: number; refreshMs?: number; retryMs?: number }; evidence?: Partial<typeof evidenceExportLimits>; connect?: Partial<typeof connectLimits> }
 const ajv = new Ajv({ allErrors: true, strict: false, allowUnionTypes: true });
 // The same timestamp check every published contract uses; an unknown format would be skipped silently.
 ajv.addFormat('date-time', { type: 'string', validate: isNativeTime });
@@ -180,6 +181,8 @@ function explainFailure(e: any): [string, string, Record<string, unknown>] {
 }
 export class RhoService {
   plugins: Plugins; state: State; bridge: CoreBridge; url = ''; adminToken = ''; server: http.Server;
+  // What the start did about the project Rho ships, if anything.
+  example: ExampleSeed | null = null;
   private queues = new Map<string, Promise<any>>();
   private queued = new Map<string, number>();
   private subscribers = new Set<{ projectId: string; principal: string; tokenHash: string; response: http.ServerResponse }>();
@@ -443,6 +446,9 @@ export class RhoService {
     await this.plugins.load();
     this.plugins.installUi(await installedWebEntries(this.config.webRoot), Object.keys(operations));
     await this.state.init();
+    // A person who starts Rho on a fresh state sees one finished study beside their own work.
+    // It is copied into the projects folder once and is otherwise an ordinary project.
+    this.example = await seedExampleProject(this.state, { enabled: this.config.example }).catch(() => null);
     for (const project of this.state.projects) if (project.sources) this.plugins.sourceFolders.set(project.id, project.sources);
     this.adminToken = randomBytes(32).toString('hex');
     this.state.principals = this.state.principals.filter(p => p.id !== 'operator');

@@ -78,6 +78,9 @@ interface Turn {
   descriptions?: FileDescription[]; descriptionsOmitted?: number; descriptionSpend?: Spend;
   contexts?: string[];
   decisions?: Decision[];
+  // An Agent session that has gone leaves the messages Rho kept. The next message then runs in a
+  // new session told what was said before, and the turn says which session it replaced.
+  continued?: { at: string; earlier: string };
 }
 // The person's word on an answer: use it, or it needs changes and why. It holds for the file
 // versions this message kept when it was given, and says nothing of later versions. Each new
@@ -199,6 +202,35 @@ function cut(text: string, maxBytes: number) {
   return { text: Buffer.from(text).subarray(0, maxBytes).toString('utf8').replace(/�+$/, ''), cut: true };
 }
 function titleOf(text: string) { const line = text.trim().split('\n')[0].trim(); return line.length > 80 ? line.slice(0, 79) + '…' : line; }
+// An Agent reports a session it no longer has, in its own words: the ACP load answers "Resource
+// not found", Claude Code says the session does not exist, and a load that cannot run at all says
+// so plainly. Only those are taken as a session that ended; anything else is a real failure.
+const sessionGone = /resource not found|session .*not found|no such session|unknown session|cannot load the original session|does not exist/i;
+function lostSession(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return sessionGone.test(message);
+}
+// What this conversation already said, for a new Agent session that inherits it: the person's
+// words and the Agent's own replies, newest last, within a fixed budget so a long conversation
+// cannot crowd out the message being sent now.
+export function earlierQuestions(turns: Turn[], limits: { maxTextBytes: number }, budget = 12_000) {
+  const said: string[] = [];
+  for (const turn of turns) {
+    const reply = turn.steps.filter(step => step.kind === 'text' && step.text).map(step => step.text!.trim()).join('\n').trim();
+    said.push('The person said: ' + turn.text.trim() + (reply ? '\nYou answered: ' + reply : ''));
+  }
+  let text = said.join('\n\n'), cutAt = false;
+  if (Buffer.byteLength(text) > budget) {
+    // Keep the most recent exchanges, the ones a follow-up is most likely to build on.
+    const lines = said.slice().reverse();
+    let kept: string[] = [];
+    for (const line of lines) { if (Buffer.byteLength([line, ...kept].join('\n\n')) > budget) { cutAt = true; break; } kept = [line, ...kept]; }
+    text = kept.join('\n\n');
+  }
+  if (!text) return '';
+  return 'This message continues a conversation in this project. The Agent session that ran it has ended, so this is a new session; what was said before is kept by Rho and given here'
+    + (cutAt ? ' (the earliest exchanges are left out for length)' : '') + ':\n\n' + text + '\n';
+}
 
 export class Conversations {
   limits: typeof conversationLimits;
@@ -774,7 +806,7 @@ export class Conversations {
     const wall = setTimeout(() => live.stop('wall-limit', 'rho'), this.limits.turnWallMs); wall.unref();
     const ticking = setInterval(() => void this.describe(live), this.describing.everyMs); ticking.unref();
     try {
-      const completion = await driver.run({ text: turn.text + (turn.contexts?.length ? '\n\nRead these exact frozen review contexts with context.read before responding: ' + turn.contexts.join(', ') + '. Reply with annotation.reply and explicit result resource versions.' : ''), signal: controller.signal,
+      const send = (utterance: string) => driver.run({ text: utterance, signal: controller.signal,
         session: identity => this.serial(project.id, async () => {
           requireThat(!identity.acpSessionId || !c.acpSessionId || identity.acpSessionId === c.acpSessionId, 'conflict', 'The original ACP session identity changed.');
           requireThat(!identity.nativeSessionId || !c.nativeSessionId || identity.nativeSessionId === c.nativeSessionId, 'conflict', 'The original native session identity changed.');
@@ -794,6 +826,30 @@ export class Conversations {
           try { return await answer; } finally { this.permissions.delete(key); }
         }
       });
+      const utterance = turn.text + (turn.contexts?.length ? '\n\nRead these exact frozen review contexts with context.read before responding: ' + turn.contexts.join(', ') + '. Reply with annotation.reply and explicit result resource versions.' : '');
+      // The Agent's session ended with its process: after Rho restarts, and on a machine that
+      // never ran the session a project was copied from. The messages Rho kept are the record, so
+      // the message runs in a new session told what was said before. Nothing is resent as a new
+      // request, and the turn names the session it replaced. An Agent reports a session it no
+      // longer has as a failed completion rather than a thrown request, so both are read alike.
+      const stale = (completion: { state?: string | null; problem?: string | null }) =>
+        !!c.acpSessionId && !controller.signal.aborted && completion.state === 'failed' && lostSession(completion.problem ?? '');
+      const again = async () => {
+        const earlier = c.acpSessionId!;
+        await this.retire(project.id + '/' + c.id);
+        c.acpSessionId = undefined; delete c.observation;
+        turn.continued = { at: now(), earlier }; turn.problem = null; this.schedule(project, c);
+        driver = await this.driver(project, c);
+        return send(earlierQuestions(c.turns.filter(t => t.id !== turn.id), this.limits) + '\n\n' + utterance);
+      };
+      let completion;
+      try {
+        completion = await send(utterance);
+        if (stale(completion)) completion = await again();
+      } catch (error) {
+        if (!c.acpSessionId || !lostSession(error) || controller.signal.aborted) throw error;
+        completion = await again();
+      }
       Object.assign(turn, completion); turn.retry = null; turn.endedAt = now();
     } finally { clearTimeout(wall); clearInterval(ticking); }
   }

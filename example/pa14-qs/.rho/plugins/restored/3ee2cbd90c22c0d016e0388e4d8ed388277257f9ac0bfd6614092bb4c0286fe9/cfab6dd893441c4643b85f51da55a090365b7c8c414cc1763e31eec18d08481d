@@ -1,0 +1,10 @@
+"comparison","media","strain","mutant","genes_tested","DE_FDR05","DE_FDR05_2fold","up","down","cooks_outliers"
+"MMGluFeMinus_97","MMGluFeMinus","97","ΔrhlI",5828,1506,389,209,180,5
+"MMGluFeMinus_98","MMGluFeMinus","98","ΔlasI",5828,1299,384,117,267,5
+"MMGluFeMinus_99","MMGluFeMinus","99","ΔlasIΔrhlI",5828,3483,1362,684,678,5
+"MMGluFePlus_97","MMGluFePlus","97","ΔrhlI",5828,1966,533,187,346,5
+"MMGluFePlus_98","MMGluFePlus","98","ΔlasI",5828,1730,461,135,326,5
+"MMGluFePlus_99","MMGluFePlus","99","ΔlasIΔrhlI",5828,3471,1345,549,796,5
+"Succinate_97","Succinate","97","ΔrhlI",5828,1988,416,38,378,5
+"Succinate_98","Succinate","98","ΔlasI",5828,3585,1087,371,716,5
+"Succinate_99","Succinate","99","ΔlasIΔrhlI",5828,3546,1166,386,780,5

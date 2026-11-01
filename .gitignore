@@ -11,6 +11,9 @@ __pycache__/
 *.tgz
 .worktrees/
 .rho/
+# The study Rho ships keeps the state its Agent work was recorded in: that is the
+# project. Every other .rho folder is a machine's own service and workspace state.
+!example/pa14-qs/.rho/
 .Rproj.user/
 .Rhistory
 .RData
