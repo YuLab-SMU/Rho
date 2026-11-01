@@ -272,7 +272,7 @@ inspect what happened. The application gives those actions direct places:
   down the stage's right edge beside the Agent panel, long pauses folded. Choosing a
   moment there, a part, or another version replays it: the views, the commands, the
   part and the conversation in the Agent panel all show the record as it stood then, to
-  the second, and a text file shows its version kept then, read only. Arranging the
+  the second, and a text file shows its version kept then, read only, or says that none was kept. Arranging the
   views saves the layout as `conversation-<id>`; later files join their role's place and
   files the person closed stay closed. A moment replayed still shows every view the work
   had then, also those closed. With every view closed, Lay out the work again lays them out

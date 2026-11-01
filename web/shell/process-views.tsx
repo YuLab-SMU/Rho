@@ -28,12 +28,15 @@ export function ProcessFrame({ view, process, client, snapshot, children }: { vi
           <button className="icon-button" aria-label={'Earlier version of ' + whole.title} disabled={shown <= 1} onClick={() => step(shown - 2)}><span className="flip"><Icon name="chevron" size={13} /></span></button>
           <button className="icon-button" aria-label={'Later version of ' + whole.title} disabled={process.at === null && shown >= all.length} onClick={() => step(shown)}><Icon name="chevron" size={13} /></button>
         </span>}
-      </> : <span>No version of this file was kept; it shows as it is now.</span>}
+      </> : <span>{process.at === null ? 'No version of this file was kept; it shows as it is now.' : 'No version of this file was kept.'}</span>}
     </div>
     {process.at !== null && live
       ? version ? <div className="process-replay-file"><Snapshot client={client} projectId={snapshot.project.id} resource={version.resource} path={path} /></div>
-        : <p className="process-note">The work had reached this file by {clock(process.at, true)}; its first version was kept at {clock(all[0].at, true)}.
+        : all.length ? <p className="process-note">The work had reached this file by {clock(process.at, true)}; its first version was kept at {clock(all[0].at, true)}.
           <button className="text-button" onClick={() => step(0)}>Go to {clock(all[0].at, true)}</button></p>
+        // A file the work touched without keeping a version: nothing shows it as it was then.
+        : <p className="process-note">The work had reached this file by {clock(process.at, true)}, but no version of it was kept, so it cannot be shown as it was then.
+          <button className="text-button" onClick={() => process.setAt(null)}>Show it now</button></p>
       : children}
   </div>;
 }

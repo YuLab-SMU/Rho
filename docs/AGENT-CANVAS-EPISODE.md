@@ -677,8 +677,8 @@ replayed moment showed only the views the person still had.
 
 ### Changed
 
-Rho only (`web/studio-process.tsx`, `web/shell/regions.tsx`, `web/shell/workspace.tsx`,
-`web/shell/shell.css`, `web/theme.css`):
+Rho only (`web/studio-process.tsx`, `web/shell/process-views.tsx`, `web/shell/regions.tsx`,
+`web/shell/workspace.tsx`, `web/shell/shell.css`, `web/theme.css`):
 
 - **A replay shows the work then.** A moment replayed shows every view the work had at
   that moment, also those the person closed; with none of theirs left it shows the work
@@ -690,6 +690,11 @@ Rho only (`web/studio-process.tsx`, `web/shell/regions.tsx`, `web/shell/workspac
   and opens the one chosen in that group. The one list of views a narrow stage shows has
   a + too, adding beside the view shown.
 - The close message is hidden during a replay, where its Undo would act on the present.
+- **A file with no kept version in a replay.** The user then pressed Play and the page
+  went white. A text file the work touched without a kept version (its capture was
+  refused) made its view read a first version that did not exist; it now says no version
+  was kept, so it cannot be shown as it was then, with Show it now. Showing closed views in
+  a replay made this far likelier to be met.
 
 ### Runs
 
@@ -697,13 +702,16 @@ Rho only (`web/studio-process.tsx`, `web/shell/regions.tsx`, `web/shell/workspac
 | --- | --- | --- | --- |
 | `f` | Closed: the message and the button. Replay: `airquality.csv`, `analysis.R` and Commands, the figure not yet made. The button laid out all four. One closed, then + was missing. | The notes and Agent panel left the stage under 640 px, and its one list had no +. | The list has a +. |
 | `g` | + listed `ozone.svg` and put it back. The entry sat centred, and the close message stayed on during the replay. | Add entries without a second label centred; the message ignored the replay. | Entries start at the left; no message in a replay. |
+| `replica` | A copy of the user's project and state under `work/studio-human/replica/`, paths rewritten, served apart. Play went white at 21:23:56: "Cannot read properties of undefined (reading 'at')". With the change it played to now, and at 21:23:59 `settings.local.json` said no version was kept. | Its capture had been refused (409), so it had no versions, and the replay note read the first one. | The note handles a file with none. |
 
 ### Checks
 
 - `acceptance:agent-canvas` adds one check: all five views of the conversation's
   Studio closed from their tabs, the message shown, a moment replayed showing the data
   read then, and Lay out the work again bringing back all five. It fails on the previous
-  build at the message and passed twice on this one (10/10).
+  build at the message and passed twice on this one (10/10), and again (10/10) after the
+  replay fix. The stand-in Agent's files all keep versions, so that fix was seen on the
+  replica only.
 - Against the separate browser build: frontend 14/14 twice (a first run failed reading
   the editor at once after a reload, a step this pass does not touch), objects passed;
   layout, shell-layout and conversation Studio tests 25/25, shell boundary 2/2, both type
