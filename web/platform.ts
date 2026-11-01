@@ -12,6 +12,6 @@ export const platform: Platform = platformKind(reported ?? navigator.platform);
 
 // Apple keyboards carry Command; everything else pairs Control with K.
 export const shortcut = platform === 'other' ? 'Ctrl K' : '⌘K';
-// Name the machine only where the copy is accurate. The folder chooser runs on a
-// Mac, but a browser tab on another system opens folders through its Agent.
+// Name the machine only where the copy is accurate: the folder chooser opens on the
+// machine Rho runs on, which a Mac reader can call this Mac.
 export const onPlatform = platform === 'macos' ? 'this Mac' : 'this computer';

@@ -12,7 +12,11 @@ const coreRoot = path.resolve(values['core-source']);
 const destination = path.resolve(values.destination ?? path.join(root, 'work/package-' + Date.now()));
 const stage = path.join(destination, 'stage');
 await fs.mkdir(destination, { recursive: true }); await fs.mkdir(stage);
+// On Windows npm is a .cmd shim that only a shell can start; npm's own CLI runs under this node
+// there: the one npm named when it started this script, else the one installed beside node.
+const npmCli = /npm-cli\.js$/.test(process.env.npm_execpath ?? '') ? process.env.npm_execpath : process.platform === 'win32' ? path.join(path.dirname(process.execPath), 'node_modules/npm/bin/npm-cli.js') : null;
 function run(command, args, cwd) {
+  if (command === 'npm' && npmCli) [command, args] = [process.execPath, [npmCli, ...args]];
   const p = spawnSync(command, args, { cwd, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 });
   if (p.status !== 0) throw new Error(command + ' failed: ' + p.stderr.slice(-2000));
   return p.stdout;

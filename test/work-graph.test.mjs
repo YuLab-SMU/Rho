@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildWorkGraph, foldVersions, laneLayout, layoutGraph, lineage } from '../dist/work-graph.js';
+import { buildWorkGraph, foldVersions, laneLayout, layoutGraph, lineage, projectPath } from '../dist/work-graph.js';
 
 const root = '/work/project';
 const kindOf = path => /\.R$/.test(path) ? 'code' : /\.svg$/.test(path) ? 'figures' : /^results\//.test(path) ? 'results' : /\.csv$/.test(path) ? 'data' : /\.md$/.test(path) ? 'notes' : null;
@@ -8,6 +8,19 @@ const at = s => new Date(Date.UTC(2026, 9, 27, 10, 0, s)).toISOString();
 const tool = (id, tool, s, detail, outcome = 'returned') => ({ kind: 'tool', id, tool, at: at(s), detail, outcome });
 const turn = (id, text, sent, ended, steps, state = 'completed') => ({ id, by: 'local', text, sentAt: at(sent), startedAt: at(sent), endedAt: ended === null ? null : at(ended), state, steps, model: 'sonnet' });
 const input = (turns, files) => ({ turns: turns.map(t => ({ conversationId: 'c1', conversationTitle: 'Ozone', agent: 'Claude Code', turn: t })), files, project: { root }, kindOf, now: Date.parse(at(200)) });
+
+test('a Windows path the Agent reports names the project file, in either case and as Git Bash writes it', () => {
+  const project = { root: 'C:\\Users\\Ana\\Ozone Study', sources: [{ id: 'raw', root: 'D:\\Data\\raw' }] };
+  assert.equal(projectPath('C:\\Users\\Ana\\Ozone Study\\data\\air.csv', project), 'data/air.csv');
+  assert.equal(projectPath('c:/users/ana/ozone study/results/fit.R', project), 'results/fit.R');
+  assert.equal(projectPath('/c/Users/Ana/Ozone Study/notes.md', project), 'notes.md');
+  assert.equal(projectPath('D:\\Data\\raw\\counts.tsv', project), '@raw/counts.tsv');
+  assert.equal(projectPath('data\\air.csv', project), 'data/air.csv');
+  assert.equal(projectPath('C:\\Users\\Ana\\other\\x.csv', project), null);
+  assert.equal(projectPath('C:\\Users\\Ana\\Ozone Study\\.rho\\rho\\events.json', project), null);
+  // A Unix root keeps its exact comparison: a one-letter folder at the top is not a drive.
+  assert.equal(projectPath('/c/proj/data.csv', { root: '/c/proj' }), 'data.csv');
+});
 
 test('a question links what its turn read, changed and ran, and what changed on disk while it ran', () => {
   const graph = buildWorkGraph(input([

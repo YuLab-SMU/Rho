@@ -78,7 +78,8 @@ test('one writer per service and project; failed startup releases its own locks'
   }
 });
 
-test('long native socket paths fail with an explicit condition before Host startup', async () => {
+// A Windows Host serves a named pipe, which has no such path limit.
+test('long native socket paths fail with an explicit condition before Host startup', { skip: process.platform === 'win32' && 'Windows Hosts serve named pipes' }, async () => {
   const root = await fs.mkdtemp(path.join(tmpdir(), 'rho-long-'));
   const project = path.join(root, 'project-' + 'x'.repeat(80)); await fs.mkdir(project);
   const { CoreBridge } = await import('../dist/bridge.js');

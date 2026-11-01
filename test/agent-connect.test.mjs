@@ -26,7 +26,9 @@ async function setup(extra = {}) {
   return { root, service, operator, person, project, calls, call: (method, body = {}) => person.call(method, { projectId: project.id, ...body }) };
 }
 
-test('the person adds Rho to their own Claude Code and Codex with each Agent\'s mcp add, and the grant is kept', async () => {
+// Windows starts a script only through a shell, so a stand-in client cannot be started there.
+const stand = { skip: process.platform === 'win32' && 'the stand-in client is a script' };
+test('the person adds Rho to their own Claude Code and Codex with each Agent\'s mcp add, and the grant is kept', stand, async () => {
   const s = await setup();
   try {
     const first = await s.call('session.connect', { agent: 'claude-code' });
@@ -52,7 +54,7 @@ test('the person adds Rho to their own Claude Code and Codex with each Agent\'s 
   } finally { await s.service.close(); }
 });
 
-test('a grant from rho --grant is the same Claude Code session, and only the person at this machine may add Rho', async () => {
+test('a grant from rho --grant is the same Claude Code session, and only the person at this machine may add Rho', stand, async () => {
   const s = await setup();
   try {
     // A connection written for another service address is replaced, not kept.
@@ -70,7 +72,7 @@ test('a grant from rho --grant is the same Claude Code session, and only the per
   } finally { await s.service.close(); }
 });
 
-test('an Agent that refuses, is missing or does not finish says so and leaves nothing marked added', async () => {
+test('an Agent that refuses, is missing or does not finish says so and leaves nothing marked added', stand, async () => {
   const s = await setup({ connect: { timeoutMs: 400 } });
   try {
     process.env.RHO_CONNECT_FAIL = '1';

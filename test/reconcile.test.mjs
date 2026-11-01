@@ -51,7 +51,9 @@ async function submit(agent, projectId, project) {
   });
 }
 
-test('a finished run reads as finished without an explicit observe', async () => {
+// Windows starts a script only through a shell, so the Core stand-in cannot be its Core there.
+const stand = { skip: process.platform === 'win32' && 'the Core stand-in is a script' };
+test('a finished run reads as finished without an explicit observe', stand, async () => {
   const f = await fixture();
   try {
     const submitted = await submit(f.agent, f.p.id, f.project);
@@ -62,7 +64,7 @@ test('a finished run reads as finished without an explicit observe', async () =>
   } finally { await f.cleanup(); }
 });
 
-test('an unanswered Host leaves the stored outcome unknown instead of inventing one', async () => {
+test('an unanswered Host leaves the stored outcome unknown instead of inventing one', stand, async () => {
   const f = await fixture();
   try {
     await submit(f.agent, f.p.id, f.project);

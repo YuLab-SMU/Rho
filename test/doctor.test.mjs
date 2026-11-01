@@ -3,8 +3,15 @@ import assert from 'node:assert/strict';
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
+import { spawnSync } from 'node:child_process';
 import { RhoService } from '../dist/server.js';
 import { CheckedClient as RhoClient } from './checked-client.mjs';
+
+// A folder this process may not write in. Windows ignores a folder's mode bits, so there this
+// user is denied adding files and folders to it, and the denial is removed again.
+const windows = process.platform === 'win32';
+const readOnly = dir => windows ? spawnSync('icacls', [dir, '/deny', process.env.USERNAME + ':(WD,AD)'], { stdio: 'ignore' }) : fs.chmod(dir, 0o500);
+const writable = dir => windows ? spawnSync('icacls', [dir, '/remove:d', process.env.USERNAME], { stdio: 'ignore' }) : fs.chmod(dir, 0o700).catch(() => {});
 
 // "Nothing happened" is not a diagnosis. doctor answers whether this project can do
 // work at all, and names the next action for whatever is wrong.
@@ -41,7 +48,7 @@ test('doctor turns a folder it may not write into the exact remedy', async () =>
   try {
     // A read-only project folder is the condition that produced "nothing happened"
     // after choosing a folder, with no error shown anywhere.
-    await fs.chmod(f.project, 0o500);
+    await readOnly(f.project);
     const report = await f.operator.call('project.doctor', { projectId: f.p.id });
     const write = report.checks.find(check => check.id === 'project-write');
     assert.equal(write.state, 'fail');
@@ -49,7 +56,7 @@ test('doctor turns a folder it may not write into the exact remedy', async () =>
     assert.match(write.remedy, /write access|sandbox/);
     assert.equal(report.ok, false);
   } finally {
-    await fs.chmod(f.project, 0o700).catch(() => {});
+    await writable(f.project);
     await f.cleanup();
   }
 });
@@ -91,7 +98,8 @@ test('an intent names the methods a task needs and what this session lacks', asy
   } finally { await f.cleanup(); }
 });
 
-test('a socket left by a dead Host is reported as stale, not as a working executor', async () => {
+// A Windows Host serves a named pipe, which leaves nothing behind when it dies.
+test('a socket left by a dead Host is reported as stale, not as a working executor', { skip: windows && 'Windows Hosts serve named pipes' }, async () => {
   const f = await fixture();
   try {
     // A socket file with nothing behind it: execution would block on a Host that is
@@ -127,17 +135,17 @@ test('an owner package that is selected but absent is named by the plugin check'
 test('several faults at once are all located by one doctor call', async () => {
   const f = await fixture();
   try {
-    // Three independent problems, as a broken environment would present them.
+    // Three independent problems, as a broken environment would present them. A Windows Host
+    // serves a named pipe and leaves no socket behind, so there are two.
     const socket = path.join(f.project, '.rho', 'host.sock');
-    await fs.mkdir(path.dirname(socket), { recursive: true });
-    await fs.writeFile(socket, '');
-    await fs.chmod(f.project, 0o500);
+    if (!windows) { await fs.mkdir(path.dirname(socket), { recursive: true }); await fs.writeFile(socket, ''); }
+    await readOnly(f.project);
     const started = Date.now();
     const report = await f.operator.call('project.doctor', { projectId: f.p.id });
     const elapsed = Date.now() - started;
     const failing = report.checks.filter(check => check.state !== 'ok').map(check => check.id).sort();
     // One call, every fault: a second round trip must not be needed to learn the rest.
-    assert.deepEqual(failing, ['core', 'project-write', 'rscript']);
+    assert.deepEqual(failing, windows ? ['project-write', 'rscript'] : ['core', 'project-write', 'rscript']);
     assert.equal(report.ok, false);
     for (const id of failing) {
       const check = report.checks.find(candidate => candidate.id === id);
@@ -145,7 +153,7 @@ test('several faults at once are all located by one doctor call', async () => {
     }
     assert.ok(elapsed < 10000, 'the diagnosis is one bounded call, not a scan');
   } finally {
-    await fs.chmod(f.project, 0o700).catch(() => {});
+    await writable(f.project);
     await f.cleanup();
   }
 });
@@ -153,7 +161,8 @@ test('several faults at once are all located by one doctor call', async () => {
 test('doctor names a missing Agent client, since the package carries none of its own', async () => {
   const root = await fs.mkdtemp(path.join(tmpdir(), 'rho-doctor-agents-'));
   await fs.mkdir(path.join(root, 'work')); await fs.mkdir(path.join(root, 'bin'));
-  await fs.writeFile(path.join(root, 'bin/codex'), '#!/bin/sh\n', { mode: 0o755 });
+  // A Windows program is named by its extension, and a file without one is none.
+  await fs.writeFile(path.join(root, windows ? 'bin/codex.cmd' : 'bin/codex'), '#!/bin/sh\n', { mode: 0o755 });
   const service = await new RhoService({ root, stateDir: path.join(root, '.service'), coreBinary: '/missing-core', rscript: '/missing-Rscript', claude: path.join(root, 'bin/claude'), codex: path.join(root, 'bin/codex') }).start();
   try {
     const operator = new RhoClient({ url: service.url, token: service.adminToken });
@@ -161,7 +170,7 @@ test('doctor names a missing Agent client, since the package carries none of its
     const report = await operator.call('project.doctor', { projectId: p.id });
     const agents = report.checks.find(check => check.id === 'agents');
     assert.equal(agents.state, 'warn');
-    assert.match(agents.detail, /^Claude Code was not found at .*bin\/claude\. .* Codex is installed\.$/);
+    assert.match(agents.detail, /^Claude Code was not found at .*bin[\\/]claude\. .* Codex is installed\.$/);
     assert.match(agents.remedy, /--claude/);
     assert.equal(report.ok, true, 'a missing client does not block native editing or review');
   } finally { await service.close(); await fs.rm(root, { recursive: true, force: true }); }

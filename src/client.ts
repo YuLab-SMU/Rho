@@ -52,7 +52,8 @@ export class RhoClient {
       const retained = JSON.parse(await fs.readFile(file, 'utf8'));
       const { operationId, ...content } = retained;
       requireThat(canonical(content) === canonical(input), 'conflict', 'Retained caller intent already contains different input; reconcile the original operation.');
-      const d = await fs.open(path.dirname(file), 'r'); try { await d.sync(); } finally { await d.close(); }
+      // Windows refuses to flush a directory (EPERM); NTFS journals the new name itself.
+      if (process.platform !== 'win32') { const d = await fs.open(path.dirname(file), 'r'); try { await d.sync(); } finally { await d.close(); } }
       return retained as Record<string, unknown> & { operationId: string };
     } finally { await fs.rm(temporary, { force: true }); }
   }

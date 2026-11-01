@@ -188,6 +188,7 @@ export class RhoService {
   private pickingFolder = false;
   private nativeAdapters = new Map<string, NativeAdapterRegistration>();
   private closing = false;
+  private closed = false;
   private feedbackTransports = new Map<string, FeedbackTransport>();
   // Conversations the local person starts here; Rho holds their input and runs Claude Code.
   conversations: Conversations;
@@ -801,7 +802,8 @@ export class RhoService {
         const r = executors.find(x => x.name === 'r');
         add('core', 'ok', `A Core Host is serving this project (${r?.program ?? 'no R executor'}).`);
         if (!r || r.program !== this.bridge.rscript) add('core-executor', 'warn', `The running Host's R executor is ${r?.program ?? 'absent'}, not ${this.bridge.rscript}.`, 'Stop that Host or start Rho with the same --rscript it was given.');
-      } else if (await fs.lstat(socket).then(() => true, () => false)) {
+      // A Windows Host serves a named pipe and leaves no socket behind.
+      } else if (process.platform !== 'win32' && await fs.lstat(socket).then(() => true, () => false)) {
         add('core', 'warn', `A socket remains at ${socket} but no Host answers.`, 'Stop the service that owned it, or remove the stale socket after inspecting the original requests.');
       } else if (!this.bridge.binary) add('core', b.intent === 'run-r' ? 'fail' : 'ok', 'Core is not selected. Native Agent tools are available; managed runs and Host activity need Core.', 'Select --core or RHO_CORE_BINARY when those capabilities are needed.');
       else add('core', 'ok', 'No Host is running; an explicitly selected managed operation starts one.');
@@ -1281,6 +1283,9 @@ export class RhoService {
   }
   private async events(p: Project) { return readJson<any>(path.join(await this.dataDir(p), 'events.json'), { cursor: 0, events: [] }); }
   async emit(p: Project, type: string, subject: string, principal?: string) {
+    // Once closed the project's state is released; a change noted late (a page's debounce) is
+    // not written after it, where it would race whoever removes or reopens the project next.
+    if (this.closed) return;
     let event: any;
     try {
       const retained = await this.events(p); event = { cursor: ++retained.cursor, type, subject, projectId: p.id, at: now(), ...(principal ? { principal } : {}) };
@@ -1344,6 +1349,9 @@ export class RhoService {
     // Live sessions end with Rho: their values live only in their processes.
     for (const host of this.kernels.values()) await host.close();
     for (const host of this.skillHosts.values()) await host.close();
+    // What the projects' queues already hold is written before their state is released.
+    while (this.queues.size) await Promise.allSettled([...this.queues.values()]);
+    this.closed = true;
     const shutdown = await this.bridge.close(); await this.state.close(); return shutdown;
   }
 }

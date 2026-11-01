@@ -5,7 +5,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { Ajv } from 'ajv';
 import { Fault, canonical, digest } from '@rho-workspace/plugin-contracts';
 import { AgentContext } from '@rho-workspace/plugin-agent';
@@ -159,12 +159,13 @@ test('hook helper crashes before or after stdout preserve emission uncertainty a
       await fs.writeFile(prelude, mode === 'before' ? "process.stdout.write = () => { process.kill(process.pid, 'SIGKILL'); return true; };" : "const write = process.stdout.write.bind(process.stdout); process.stdout.write = chunk => { write(chunk, () => process.kill(process.pid, 'SIGKILL')); return true; };");
       const hookEntry = fileURLToPath(import.meta.resolve('@rho-workspace/plugin-agent/claude-feedback-hook'));
       async function hook(crash = false) {
-        const child = spawn(process.execPath, [...(crash ? ['--import', prelude] : []), hookEntry], { env: { ...process.env, RHO_ADAPTER_CONNECTION: descriptor }, stdio: ['pipe', 'pipe', 'pipe'] });
+        const child = spawn(process.execPath, [...(crash ? ['--import', pathToFileURL(prelude).href] : []), hookEntry], { env: { ...process.env, RHO_ADAPTER_CONNECTION: descriptor }, stdio: ['pipe', 'pipe', 'pipe'] });
         let output = ''; child.stdout.on('data', data => output += data); child.stderr.resume();
         child.stdin.end(JSON.stringify({ session_id: a.registration.externalSessionId, hook_event_name: 'PostToolUse', tool_use_id: 'hook-boundary', tool_name: 'Read' }));
         const result = await once(child, 'exit'); return { result, output };
       }
-      const first = await hook(true); assert.equal(first.result[1], 'SIGKILL');
+      // A Windows process that ends itself has exit code 1 and no signal.
+      const first = await hook(true); assert.deepEqual(process.platform === 'win32' ? first.result : first.result[1], process.platform === 'win32' ? [1, null] : 'SIGKILL');
       if (mode === 'before') assert.equal(first.output, ''); else assert.ok(first.output.includes(s.delivery.deliveryId));
       assert.equal((await a.status()).queue.inboxReceipt.emission, 'attempt-recorded');
       assert.equal((await hook()).output, ''); assert.equal((await a.status()).queue.attempts, 1);

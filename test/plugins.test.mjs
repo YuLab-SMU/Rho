@@ -68,7 +68,8 @@ test('removing providers preserves drafts, native identity, table bytes and comp
     service = await new RhoService(config).start(); c = client();
     assert.equal((await c.call('data.page', { projectId: p.id, resource: ref, offset: 0, limit: 10 })).rows[0].id, '001');
     assert.equal((await c.call('document.undo', { projectId: p.id, documentId: d.id, expectedVersion: d.version })).content, '');
-    assert.equal(await fs.readFile(path.join(p.root, 'entries.txt'), 'utf8'), 'once\n');
+    // R writes text with \r\n line ends on Windows.
+    assert.equal((await fs.readFile(path.join(p.root, 'entries.txt'), 'utf8')).replace(/\r\n/g, '\n'), 'once\n');
     assert.equal((await c.call('capability.list', { projectId: p.id })).host.exitCode, 3);
   } finally { await service.close(); }
 });

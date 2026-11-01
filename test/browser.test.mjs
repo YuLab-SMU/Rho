@@ -2,11 +2,15 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { request } from 'node:http';
 import { RhoService } from '../dist/server.js';
 import { CheckedClient as RhoClient } from './checked-client.mjs';
 import { BrowserClient } from '../dist/browser.js';
+
+// Folders chosen outside the service root: under /private/tmp on macOS, which Windows has not.
+const windows = process.platform === 'win32';
+const temporary = prefix => windows ? path.join(tmpdir(), prefix) : '/private/tmp/' + prefix;
 
 async function fixture(options = {}) {
   const root = await fs.mkdtemp(path.join(tmpdir(), 'rho-browser-'));
@@ -37,12 +41,13 @@ test('one-use pairing grants a narrowed root, never operator/native/session auth
     // The browser tells an existing folder and a missing one apart from scope refusals.
     await assert.rejects(browser.call('project.create', { name: 'project 中文' }), e => e.error.kind === 'conflict');
     await assert.rejects(browser.call('project.open', { path: 'missing' }), e => e.error.kind === 'not_found');
-    assert.equal(grant.rootLabel, grant.root);
-    const home = process.env.HOME; process.env.HOME = f.root;
+    // Windows reads the home folder from USERPROFILE, and its temporary folder lies inside it.
+    assert.equal(grant.rootLabel, windows ? '~/' + path.relative(homedir(), grant.root).split(path.sep).join('/') : grant.root);
+    const home = process.env.HOME, profile = process.env.USERPROFILE; process.env.HOME = f.root; process.env.USERPROFILE = f.root;
     try {
       const labelled = await f.operator.call('session.browser.pair', { path: 'selected' });
       assert.equal((await (await f.pair(labelled.code)).json()).value.rootLabel, '~/selected');
-    } finally { process.env.HOME = home; }
+    } finally { process.env.HOME = home; process.env.USERPROFILE = profile; }
     assert.deepEqual((await browser.call('project.list', {})).map(p => p.id), [p.id]);
     for (const path of ['../outside', '..', '.rho', 'project 中文/.rho']) await assert.rejects(browser.call('project.open', { path }), e => e.error.kind === 'scope');
     await assert.rejects(browser.call('observation.snapshot', { projectId: outside.id }), e => e.error.kind === 'scope');
@@ -203,7 +208,7 @@ test('revocation is rechecked after receiving a request body, before a scoped op
 
 test('native folder selection grants only the selected project to that browser and survives restart', async () => {
   const f = await fixture({ nativeFolders: { maxProjects: 1 } });
-  const outside = await fs.mkdtemp('/private/tmp/rho-native-');
+  const outside = await fs.mkdtemp(temporary('rho-native-'));
   let restarted;
   try {
     const chosen = path.join(outside, 'project 中文 🧬'); await fs.mkdir(chosen);
@@ -241,7 +246,7 @@ test('native folder selection grants only the selected project to that browser a
 
 test('a folder the person at this machine chose stays in their list after a restart, and only theirs', async () => {
   const f = await fixture();
-  const outside = await fs.mkdtemp('/private/tmp/rho-native-local-');
+  const outside = await fs.mkdtemp(temporary('rho-native-local-'));
   let restarted;
   try {
     const chosen = path.join(outside, 'chosen'); await fs.mkdir(chosen);
@@ -260,7 +265,7 @@ test('a folder the person at this machine chose stays in their list after a rest
 
 test('native selection cancellation, concurrent windows, revocation and internal-state refusal grant nothing', async () => {
   const f = await fixture();
-  const outside = await fs.mkdtemp('/private/tmp/rho-native-revoke-');
+  const outside = await fs.mkdtemp(temporary('rho-native-revoke-'));
   let finish = () => {};
   try {
     const pairing = await f.service.browser.createPairing(), { value } = await (await f.pair(pairing.code)).json();
@@ -285,7 +290,7 @@ test('native selection cancellation, concurrent windows, revocation and internal
 });
 
 test('named projects combine source folders, allow duplicate display names and add sources without creating user directories', async () => {
-  const f = await fixture(); const source = await fs.mkdtemp('/private/tmp/rho-project-sources-'); let restarted;
+  const f = await fixture(); const source = await fs.mkdtemp(temporary('rho-project-sources-')); let restarted;
   try {
     const a = path.join(source, 'a'), b = path.join(source, 'b'), c = path.join(source, 'c');
     for (const root of [a, b, c]) { await fs.mkdir(root); await fs.writeFile(path.join(root, 'same.txt'), root.at(-1)); }

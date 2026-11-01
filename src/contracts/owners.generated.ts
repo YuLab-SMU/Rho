@@ -24697,7 +24697,7 @@ export const ownerContracts: OwnerContractSnapshot = {
   "provenance": {
     "documents": {
       "package": "@rho-workspace/plugin-documents",
-      "packageVersion": "0.4.9",
+      "packageVersion": "0.4.10",
       "entry": "./operations",
       "entryPath": "@rho-workspace/plugin-documents/dist/operations.js",
       "entrySha256": "a9b90047c1684ebd8369d899f86604c40a9cbe1beae37759042d22c090dae449",
@@ -24712,7 +24712,7 @@ export const ownerContracts: OwnerContractSnapshot = {
     },
     "files": {
       "package": "@rho-workspace/plugin-files",
-      "packageVersion": "0.5.0",
+      "packageVersion": "0.5.1",
       "entry": "./operations",
       "entryPath": "@rho-workspace/plugin-files/dist/operations.js",
       "entrySha256": "162741d5ccba765337744c1ed8695272cba0139c28e6b1e9bc47dc6d601bc4bc",
@@ -24722,7 +24722,7 @@ export const ownerContracts: OwnerContractSnapshot = {
     },
     "r": {
       "package": "@rho-workspace/plugin-r",
-      "packageVersion": "0.4.1",
+      "packageVersion": "0.4.2",
       "entry": "./operations",
       "entryPath": "@rho-workspace/plugin-r/dist/operations.js",
       "entrySha256": "cfb7ab9eb254d50d29db6f34c283fb79b00d65bd143331a29df85d15c64dfdd9",
@@ -24772,7 +24772,7 @@ export const ownerContracts: OwnerContractSnapshot = {
     },
     "agent": {
       "package": "@rho-workspace/plugin-agent",
-      "packageVersion": "0.4.24",
+      "packageVersion": "0.4.25",
       "entry": "./operations",
       "entryPath": "@rho-workspace/plugin-agent/dist/operations.js",
       "entrySha256": "08bb1c852cb89a17a2e307831ed2df5d6d16cbccaaf2971ec251bb9a1a34261f",
@@ -24782,7 +24782,7 @@ export const ownerContracts: OwnerContractSnapshot = {
     },
     "agent-feedback": {
       "package": "@rho-workspace/plugin-agent",
-      "packageVersion": "0.4.24",
+      "packageVersion": "0.4.25",
       "entry": "./feedback-contract",
       "entryPath": "@rho-workspace/plugin-agent/dist/feedback-contract.js",
       "entrySha256": "ecb1561d92b5953d2b786d29cfb57f6f8085d214dc1dec76f6e7bd7a5257cb75",
@@ -24792,7 +24792,7 @@ export const ownerContracts: OwnerContractSnapshot = {
     },
     "agent-native": {
       "package": "@rho-workspace/plugin-agent",
-      "packageVersion": "0.4.24",
+      "packageVersion": "0.4.25",
       "entry": "./contract",
       "entryPath": "@rho-workspace/plugin-agent/dist/contract.js",
       "entrySha256": "9e926081cb755a98d2b00d2a8488d8f4c6d25b3d5f1ec526d334ade633fe8a65",
@@ -24802,7 +24802,7 @@ export const ownerContracts: OwnerContractSnapshot = {
     },
     "agent-session": {
       "package": "@rho-workspace/plugin-agent",
-      "packageVersion": "0.4.24",
+      "packageVersion": "0.4.25",
       "entry": "./session-contract",
       "entryPath": "@rho-workspace/plugin-agent/dist/session-contract.js",
       "entrySha256": "bb5b118f965e208617781af3e8ad6b6739869bcc19f0092eab14468824693123",
@@ -24824,7 +24824,7 @@ export const ownerContracts: OwnerContractSnapshot = {
     },
     "console": {
       "package": "@rho-workspace/plugin-console",
-      "packageVersion": "0.3.0",
+      "packageVersion": "0.3.1",
       "entry": "./operations",
       "entryPath": "@rho-workspace/plugin-console/dist/operations.js",
       "entrySha256": "1c523dfc1dbc5e3e1ca67eb0439a48d3026e0977f8ef48f94f105f658b4a6ca9",
@@ -24834,7 +24834,7 @@ export const ownerContracts: OwnerContractSnapshot = {
     },
     "kernel": {
       "package": "@rho-workspace/plugin-kernel",
-      "packageVersion": "0.5.1",
+      "packageVersion": "0.5.2",
       "entry": "./operations",
       "entryPath": "@rho-workspace/plugin-kernel/dist/operations.js",
       "entrySha256": "112433cedbbea15d69b2547690c790902e41d3fc95020e73714de90207fdf9e1",
@@ -24854,7 +24854,7 @@ export const ownerContracts: OwnerContractSnapshot = {
     },
     "entry-files": {
       "package": "@rho-workspace/plugin-files",
-      "packageVersion": "0.5.0",
+      "packageVersion": "0.5.1",
       "entry": "./contract",
       "entryPath": "@rho-workspace/plugin-files/dist/contract.js",
       "entrySha256": "7be9bc400d57f7a7e67df1f1a086c477599bcea3fab39b95aa7ba535fc751063",
@@ -24886,7 +24886,7 @@ export const ownerContracts: OwnerContractSnapshot = {
     },
     "entry-r": {
       "package": "@rho-workspace/plugin-r",
-      "packageVersion": "0.4.1",
+      "packageVersion": "0.4.2",
       "entry": "./contract",
       "entryPath": "@rho-workspace/plugin-r/dist/contract.js",
       "entrySha256": "520e99ea2a8d20fd283a1bdb8c94ee53e0ea8e06ba0fdf7a7bffdbbbd40426f7",
@@ -24910,7 +24910,7 @@ export const ownerContracts: OwnerContractSnapshot = {
       "by": "@rho-workspace/plugin-r/contract#createExecutionInputSchema",
       "entry": "./contract",
       "package": "@rho-workspace/plugin-r",
-      "packageVersion": "0.4.1",
+      "packageVersion": "0.4.2",
       "declarationsDigest": "c270afffb78a76d719565bafe1d49852b505e95ad04a83e36c37612261eef5d3",
       "requirementsDigest": "691a45cb2ca01a630e8e7157ea63da07471ada74c5f90d5cee7b10a123d32c0c",
       "exports": {

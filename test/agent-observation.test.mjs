@@ -29,9 +29,11 @@ test('browser observes only its project and selected caller; reads never create 
     const connection = await service.agentConnection(project.id, 'default-grant', path.join(root, 'connection.json'));
     assert.ok(connection.methods.length <= layeredGrantLimits.maxMethods);
     assert.ok(connection.methods.every(m => !m.startsWith('agent.activity.')));
-    const socket = path.join(project.root, '.rho/host.sock');
+    let socket = path.join(project.root, '.rho/host.sock');
     host = spawn(binary, ['serve', '--project', project.root, '--state-dir', path.join(project.root, '.rho')], { stdio: ['ignore', 'pipe', 'ignore'] });
-    await once(host.stdout, 'data');
+    const ready = JSON.parse(String((await once(host.stdout, 'data'))[0]).split('\n')[0]).ready;
+    // A Windows Host serves the named pipe its ready line names, not a socket in its state folder.
+    if (process.platform === 'win32') socket = ready.socket;
     const core = (caller, method, args = [], value) => {
       const r = spawnSync(binary, [method, '--socket', socket, '--caller', caller, ...args], { input: value ? JSON.stringify(value) : undefined, encoding: 'utf8' });
       assert.equal(r.status, 0, r.stdout); return JSON.parse(r.stdout).value;

@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { fileURLToPath } from 'node:url';
 import { declarationSchema as file } from '@rho-workspace/plugin-files/contract';
 import { declarationSchema as table } from '@rho-workspace/plugin-tables/contract';
 import { declarationSchema as media } from '@rho-workspace/plugin-media/contract';
@@ -38,7 +39,7 @@ test('the wire vocabulary is the committed owner snapshot, not a second definiti
 test('a stale owner snapshot fails the generation check instead of drifting silently', async () => {
   // `--check` writes nothing; it compares the committed snapshot with the selected
   // owner entries and reports every difference it finds.
-  const { stdout } = await run(process.execPath, ['scripts/contract-owners.mjs', '--check'], { cwd: new URL('..', import.meta.url).pathname });
+  const { stdout } = await run(process.execPath, ['scripts/contract-owners.mjs', '--check'], { cwd: fileURLToPath(new URL('..', import.meta.url)) });
   assert.match(stdout, /Owner contract snapshot is current/);
 });
 

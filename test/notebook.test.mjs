@@ -9,7 +9,7 @@ import { RhoClient } from '../dist/client.js';
 async function setup(t) {
   const root = await fs.mkdtemp('/tmp/rho-notebook-');
   await fs.mkdir(path.join(root, 'project'));
-  const service = await new RhoService({ root, stateDir: path.join(root, '.service'), rscript: '/missing', python: process.env.RHO_PYTHON ?? 'python3' }).start();
+  const service = await new RhoService({ root, stateDir: path.join(root, '.service'), rscript: '/missing', python: process.env.RHO_PYTHON }).start();
   t.after(async () => { await service.close(); await fs.rm(root, { recursive: true, force: true }); });
   const admin = new RhoClient({ url: service.url, token: service.adminToken }), p = await admin.call('project.open', { path: 'project' }), person = new BrowserClient({ url: service.url });
   return { service, admin, p, root, call: (m, b = {}) => person.call(m, { projectId: p.id, ...b }) };

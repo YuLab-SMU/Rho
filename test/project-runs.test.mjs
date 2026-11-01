@@ -10,6 +10,8 @@ import { digest } from '@rho-workspace/plugin-contracts';
 
 // A person owns the project, so they may see what it is running. What they see is a
 // summary: enough to tell waiting from finished, never the submitted code.
+// Windows starts a script only through a shell, so the Core stand-in cannot be its Core there.
+const stand = { skip: process.platform === 'win32' && 'the Core stand-in is a script' };
 async function fixture() {
   const root = await fs.mkdtemp(path.join(tmpdir(), 'rho-runs-'));
   const state = path.join(root, '.service'), project = path.join(root, 'work');
@@ -36,7 +38,7 @@ value({ ok: false, error: { kind: 'usage', message: 'unsupported' } }, 1);
   return { root, project, service, p, operator, agent, cleanup: async () => { await service.close(); await fs.rm(root, { recursive: true, force: true }); } };
 }
 
-test('a person sees what the project is running, and never the submitted code', async () => {
+test('a person sees what the project is running, and never the submitted code', stand, async () => {
   const f = await fixture();
   try {
     const script = path.join(f.project, 'secret-analysis.R');
@@ -75,7 +77,7 @@ test('a person sees what the project is running, and never the submitted code', 
 // The reported defect: a failed run's "produced" column listed files its plan
 // declared, whether or not anything was written. A file on disk is still not a
 // verified artifact, so both facts have to be visible and neither may imply the other.
-test('a file on disk is reported as present, not as verified, when the run failed', async () => {
+test('a file on disk is reported as present, not as verified, when the run failed', stand, async () => {
   const f = await fixture();
   try {
     await f.agent.call('action.submit', {
@@ -101,7 +103,7 @@ test('a file on disk is reported as present, not as verified, when the run faile
   } finally { await f.cleanup(); }
 });
 
-test('a tab cannot pull another project runs through its own credential', async () => {
+test('a tab cannot pull another project runs through its own credential', stand, async () => {
   const f = await fixture();
   try {
     await fs.mkdir(path.join(f.root, 'other'));

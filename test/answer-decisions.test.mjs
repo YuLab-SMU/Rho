@@ -70,14 +70,16 @@ test('a person decides on an answer for the versions it kept; retries and later 
 
 test('the person runs and stops Console commands; an Agent may read them but never run one', async t => {
   const { service, admin, call, p, root } = await setup(t);
-  const run = await call('console.run', { command: 'echo made > made.txt; echo printed', changeId: 'c1' });
+  // The Console runs cmd.exe on Windows, whose echo ends a line with \r\n.
+  const windows = process.platform === 'win32', made = windows ? 'echo made> made.txt& echo printed' : 'echo made > made.txt; echo printed', line = windows ? '\r\n' : '\n';
+  const run = await call('console.run', { command: made, changeId: 'c1' });
   assert.equal(run.command.by, 'browser:local');
   let listed;
   for (let i = 0; i < 200; i++) { listed = await call('console.list', {}); if (listed.commands[0].state !== 'running') break; await new Promise(r => setTimeout(r, 20)); }
   assert.equal(listed.commands[0].state, 'exited'); assert.deepEqual(listed.commands[0].exit, { code: 0, signal: null });
-  assert.equal((await call('console.output', { commandId: run.command.commandId })).text, 'printed\n');
-  assert.equal(await fs.readFile(path.join(p.root, 'made.txt'), 'utf8'), 'made\n');
-  assert.equal((await call('console.run', { command: 'echo made > made.txt; echo printed', changeId: 'c1' })).command.commandId, run.command.commandId);
+  assert.equal((await call('console.output', { commandId: run.command.commandId })).text, 'printed' + line);
+  assert.equal(await fs.readFile(path.join(p.root, 'made.txt'), 'utf8'), 'made' + line);
+  assert.equal((await call('console.run', { command: made, changeId: 'c1' })).command.commandId, run.command.commandId);
   await assert.rejects(admin.call('console.run', { projectId: p.id, command: 'true', changeId: 'operator' }), e => e.error?.kind === 'unauthorized');
   const grant = path.join(root, 'agent.json');
   await assert.rejects(service.agentConnection(p.id, 'console-run', grant, ['console.run']), /operator-only|Unknown/);

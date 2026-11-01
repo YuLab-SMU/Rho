@@ -70,10 +70,12 @@ test('typed Fetch document calls preserve original requests after lost HTTP repl
   assert.deepEqual(f.native(), { starts: 0, dispatches: 0 });
   await f.s.close();
   const restarted = await new RhoService(f.config).start();
-  t.after(() => restarted.close());
-  const reconnected = new CheckedClient({ url: restarted.url, token: restarted.adminToken });
-  assert.deepEqual(await reconnected.call('document.undo', undo), undone);
-  assert.equal((await reconnected.call('document.read', { projectId: f.p.id, documentId: d.id })).revision, 3);
+  // Closed before the fixture removes its folder, which Windows refuses while a writer lock is held.
+  try {
+    const reconnected = new CheckedClient({ url: restarted.url, token: restarted.adminToken });
+    assert.deepEqual(await reconnected.call('document.undo', undo), undone);
+    assert.equal((await reconnected.call('document.read', { projectId: f.p.id, documentId: d.id })).revision, 3);
+  } finally { await restarted.close(); }
 });
 
 test('live editor bindings follow a buffer without changing exact-version bindings or protected layout', async t => {

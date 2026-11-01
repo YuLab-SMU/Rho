@@ -55,7 +55,9 @@ const catalog = { local: { models: {
   'reading-model': { id: 'reading-model', modalities: { input: ['text'] }, cost: { input: 1, output: 2 } },
   'liar-model': { id: 'liar-model', modalities: { input: ['text', 'image'] }, cost: { input: 1, output: 2 } } } } };
 
-test('while a message runs, its files get facts at once and a sentence: a figure as an image to a model that takes images, else from what made it', async () => {
+// Windows starts a script only through a shell, so a stand-in client cannot be started there.
+const stand = { skip: process.platform === 'win32' && 'the stand-in client is a script' };
+test('while a message runs, its files get facts at once and a sentence: a figure as an image to a model that takes images, else from what made it', stand, async () => {
   const root = await fs.mkdtemp('/tmp/rho-describe-turn-'); let service;
   const listing = http.createServer((_, res) => res.end(JSON.stringify(catalog)));
   await new Promise(r => listing.listen(0, '127.0.0.1', r));

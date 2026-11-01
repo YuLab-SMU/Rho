@@ -55,7 +55,7 @@ test('a run exports its script, outputs and provenance as ordinary files', { tim
     // Ordinary files under their own names: the script that ran, the unsaved text beside it, the outputs.
     assert.equal(String(await read('script/analysis.R')), script);
     assert.equal(String(await read('script/analysis.unsaved.R')), '# next idea\n' + script);
-    assert.match(String(await read('outputs/table.csv')), /^"id","value"\n"s1",1.5\n/);
+    assert.match(String(await read('outputs/table.csv')), /^"id","value"\r?\n"s1",1.5\r?\n/);
     assert.match(String(await read('outputs/figure.svg')), /^<svg /);
     const record = JSON.parse(String(await read('provenance.json')));
     assert.equal(record.complete, true); assert.equal(record.partial, true);

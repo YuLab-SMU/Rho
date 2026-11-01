@@ -55,7 +55,9 @@ async function fixture(root) {
   return { service, operator, p, person, starts, settled, running };
 }
 
-test('a conversation started in Rho keeps one identity per message and resumes its own session', async () => {
+// Windows starts a script only through a shell, so a stand-in client cannot be started there.
+const stand = { skip: process.platform === 'win32' && 'the stand-in client is a script' };
+test('a conversation started in Rho keeps one identity per message and resumes its own session', stand, async () => {
   const root = await fs.mkdtemp(path.join(tmpdir(), 'rho-conversation-'));
   let f = await fixture(root);
   try {
@@ -130,7 +132,7 @@ test('a conversation started in Rho keeps one identity per message and resumes i
   } finally { await f.service.close(); await fs.rm(root, { recursive: true, force: true }); }
 });
 
-test('a message Rho stopped observing stays unknown and is never sent again', async () => {
+test('a message Rho stopped observing stays unknown and is never sent again', stand, async () => {
   const root = await fs.mkdtemp(path.join(tmpdir(), 'rho-conversation-lost-'));
   let f = await fixture(root);
   try {

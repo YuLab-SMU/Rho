@@ -72,7 +72,7 @@ test('Rho keeps ACP message identities, one grant per connection and the origina
     const [plugin] = (await f.calls()).find(x => x.kind === 'session/new').plugins;
     assert.equal(plugin.type, 'local'); assert.equal(plugin.skipMcpDiscovery, true); assert.ok(plugin.path.startsWith(path.join(await fs.realpath(root), '.service', 'claude-plugins') + path.sep));
     const hooks = JSON.parse(await fs.readFile(path.join(plugin.path, 'hooks/hooks.json'), 'utf8')).hooks.PreToolUse;
-    assert.equal(hooks[0].matcher, 'Edit|Write|MultiEdit'); assert.match(hooks[0].hooks[0].command, /plugin-documents\/dist\/claude-hook\.js'$|documents\/dist\/claude-hook\.js'$/);
+    assert.equal(hooks[0].matcher, 'Edit|Write|MultiEdit'); assert.match(hooks[0].hooks[0].command, /plugin-documents[\\/]dist[\\/]claude-hook\.js'$|documents[\\/]dist[\\/]claude-hook\.js'$/);
     assert.match(await fs.readFile(path.join(plugin.path, 'skills/documents/SKILL.md'), 'utf8'), /^---\nname: documents\ndescription: "Change a project file/);
     const written = await fs.readdir(plugin.path, { recursive: true });
     for (const name of written.filter(n => n.endsWith('.json') || n.endsWith('.md'))) assert.ok(!(await fs.readFile(path.join(plugin.path, name), 'utf8')).includes(JSON.parse(grant).token));

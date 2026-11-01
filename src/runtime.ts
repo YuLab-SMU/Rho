@@ -4,7 +4,10 @@ import { fileURLToPath } from 'node:url';
 import { constants } from 'node:fs';
 import { Fault, requireThat } from '@rho-workspace/plugin-contracts';
 export async function executable(name: string, selected?: string) {
-  const candidates = selected ? [path.resolve(selected)] : (process.env.PATH ?? '').split(path.delimiter).filter(Boolean).map(p => path.join(p, name));
+  // A Windows program is a file with its extension (Rscript.exe, rho-core.exe), and what the
+  // person names may leave it out.
+  const named = (file: string) => process.platform === 'win32' && !path.extname(file) ? [file + '.exe'] : [file];
+  const candidates = selected ? named(path.resolve(selected)) : (process.env.PATH ?? '').split(path.delimiter).filter(Boolean).flatMap(p => named(path.join(p, name)));
   for (const file of candidates) {
     try { await fs.access(file, constants.X_OK); return await fs.realpath(file); } catch {}
   }

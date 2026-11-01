@@ -19,9 +19,20 @@ export async function lease(directory: string) {
     } catch { return null; }
   };
   const file = path.join(directory, 'service.lock');
+  // Name what is held and how to find the holder: "another service" told an
+  // operator nothing, and a second state directory looked like a broken service.
+  const held = () => requireThat(false, 'conflict', `Another Rho service holds ${directory}. Stop it, or select a different --state-dir. Its writer lock is ${file}.`, { stateDirectory: directory, lockFile: file, remedy: 'Stop the service that owns this state directory, or start this one with a different --state-dir.', holder: holder(file) });
+  await confined(directory, 'service.lock', true);
+  // Windows has no advisory lock a helper could hold (and its Python has no fcntl). A file opened
+  // without sharing (libuv's UV_FS_O_EXLOCK) refuses every other opener until its handle closes,
+  // and the system closes it when this process ends, a crash included.
+  if (process.platform === 'win32') {
+    const exclusive = 0x10000000;
+    const handle = await fs.open(file, fs.constants.O_RDWR | fs.constants.O_CREAT | exclusive, 0o600).catch((e: NodeJS.ErrnoException) => { if (e.code === 'EBUSY') held(); throw e; });
+    return async () => { await handle.close(); };
+  }
   // Kernel advisory lock on a stable inode, held by an owned helper until pipe
   // EOF. A service crash closes the pipe; no PID-reuse or stale-unlink race.
-  await confined(directory, 'service.lock', true);
   const helper = spawn(process.env.RHO_PYTHON ?? 'python3', ['-c', `import fcntl, os, sys
 fd=os.open(sys.argv[1], os.O_RDWR|os.O_CREAT|os.O_NOFOLLOW, 0o600)
 try: fcntl.flock(fd, fcntl.LOCK_EX|fcntl.LOCK_NB)
@@ -37,9 +48,7 @@ os.close(fd)
     helper.once('exit', code => {
       clearTimeout(timer);
       if (code === 9) {
-        // Name what is held and how to find the holder: "another service" told an
-        // operator nothing, and a second state directory looked like a broken service.
-        try { requireThat(false, 'conflict', `Another Rho service holds ${directory}. Stop it, or select a different --state-dir. Its writer lock is ${file}.`, { stateDirectory: directory, lockFile: file, remedy: 'Stop the service that owns this state directory, or start this one with a different --state-dir.', holder: holder(file) }); }
+        try { held(); }
         catch (e) { reject(e); }
       }
       else if (code !== 0) reject(new Error('Local writer lock is unavailable.'));

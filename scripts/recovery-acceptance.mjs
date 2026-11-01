@@ -4,7 +4,13 @@ import * as fs from 'node:fs/promises';
 import path from 'node:path';
 import assert from 'node:assert/strict';
 import { setTimeout } from 'node:timers/promises';
+import { spawnSync } from 'node:child_process';
 import { RhoService, RhoClient, native } from './support.mjs';
+// Ends the owned R process: its process group, or on Windows, which has none, its process tree.
+const end = pid => {
+  if (process.platform === 'win32') spawnSync('taskkill', ['/T', '/F', '/PID', String(pid)], { stdio: 'ignore' });
+  else try { process.kill(-pid, 'SIGTERM'); } catch (e) { if (e.code !== 'ESRCH') throw e; }
+};
 const root = path.resolve(process.argv[2] ?? 'work/recovery-' + Date.now());
 await fs.mkdir(root, { recursive: true, mode: 0o700 });
 const service = await new RhoService({ root, stateDir: path.join(root, 'state'), ...native, maxConcurrentActions: 1 }).start();
@@ -74,7 +80,7 @@ try {
   check('actual partial export restores bytes and provenance without starting a Host');
   // Separate, explicit cleanup of the owned R process group cannot establish
   // a retroactive native outcome for the lost Host's journal.
-  try { process.kill(-rPid, 'SIGTERM'); } catch (e) { if (e.code !== 'ESRCH') throw e; } rPid = undefined;
+  end(rPid); rPid = undefined;
   const z = await human.call('project.create', { name: 'cancel-project' });
   await fs.writeFile(path.join(z.root, 'sleep.R'), 'args <- commandArgs(TRUE)\nout <- args[[1]]\ncat("entry\\n", file=paste0(out,".entries.jsonl"), append=TRUE)\ndir.create(out)\nwriteLines("ready",file.path(out,"ready"))\nSys.sleep(600)\n');
   const script = await human.call('document.open', { projectId: z.id, path: 'sleep.R' });
@@ -87,7 +93,7 @@ try {
   report.status = 'passed';
 } catch (e) { report.status = 'failed'; report.failure = e.message; process.exitCode = 1; process.stdout.write(JSON.stringify({ failure: e.message }) + '\n'); }
 finally {
-  if (rPid) { try { process.kill(-rPid, 'SIGTERM'); } catch {} }
+  if (rPid) { try { end(rPid); } catch {} }
   report.shutdown = await service.close();
   await fs.writeFile(path.join(root, 'report.json'), JSON.stringify(report, null, 2) + '\n');
 }

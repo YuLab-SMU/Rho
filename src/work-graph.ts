@@ -12,12 +12,20 @@ import type { Holds } from './file-describer.js';
 export interface PathScope { root: string; sources?: ReadonlyArray<{ id: string; root: string }> | null }
 // A path the Agent reported, as the project names it: relative inside the project folder,
 // @<sourceId>/… inside a source folder, nothing anywhere else or in internal state.
+// A Windows path is absolute from its drive (C:\… or, in Git Bash, /c/…), and a folder there is
+// named with either case of its letters.
+const drive = (p: string) => /^[A-Za-z]:\//.test(p);
 export function projectPath(reported: string, project: PathScope): string | null {
   const value = reported.trim().replace(/\\/g, '/');
   if (!value) return null;
-  const inside = (root: string) => { const base = root.replace(/\/+$/, '') + '/'; return value.startsWith(base) ? value.slice(base.length) : null; };
+  const inside = (root: string) => {
+    const base = root.replace(/\\/g, '/').replace(/\/+$/, '') + '/';
+    if (!drive(base)) return value.startsWith(base) ? value.slice(base.length) : null;
+    const windows = /^\/[A-Za-z]\//.test(value) ? value[1] + ':' + value.slice(2) : value;
+    return windows.toLowerCase().startsWith(base.toLowerCase()) ? windows.slice(base.length) : null;
+  };
   let relative: string | null = null;
-  if (!value.startsWith('/')) relative = value.replace(/^\.\//, '');
+  if (!value.startsWith('/') && !drive(value)) relative = value.replace(/^\.\//, '');
   else {
     relative = inside(project.root);
     if (relative === null) for (const source of project.sources ?? []) {
