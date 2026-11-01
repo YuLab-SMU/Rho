@@ -91,6 +91,8 @@ completed. Waiting for the native Chat view switch resolved the observation; the
 same captured values were then verified. No analysis prompt was resent. Package
 assembly also caught nested AG Grid package metadata without adjacent licenses;
 notices now come from each actual bundled dependency root, including `ag-stack`.
+An installation-guide dry run also showed that `npm --prefix ... pack` selected
+the root application. The verified command now names `npm pack ./adapters/dsh-rho`.
 
 ## Verification and installation
 
@@ -126,6 +128,14 @@ address stays outside the repository. The fixture and native session history are
 retained in the disposable `/tmp/rho-dsh-prototype-03` directory. The package's
 composition manifest records exact bundle inputs and selected local overrides;
 it is not an official release attestation.
+
+The delivered package is `work/dsh-rho/package/dsh-rho-0.0.1.tgz`, SHA-256
+`4ffe8b2798d2d0ead6e558f9d26599bd63b1d5d0b7eecd54efa85684e5396266`.
+Final review keyed result choices and questions by original tool call as well as
+snapshot, so two presentations of identical bytes retain their own titles. The
+five tests and strict type check passed; the final tarball was installed again,
+and its table, figure, native draft insertion and original call ID were checked in
+the same session without resending analysis. The run count remained one.
 
 ## What this establishes and what remains
 

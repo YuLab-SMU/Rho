@@ -22,7 +22,7 @@ npm --prefix adapters/dsh-rho run build
 npm --prefix adapters/dsh-rho run check
 npm --prefix adapters/dsh-rho test
 mkdir -p work/dsh-rho/package
-npm --prefix adapters/dsh-rho pack --ignore-scripts --pack-destination "$PWD/work/dsh-rho/package"
+npm pack ./adapters/dsh-rho --ignore-scripts --pack-destination "$PWD/work/dsh-rho/package"
 ```
 
 The tarball bundles the selected Files, Tables, Media and Contracts code, the
