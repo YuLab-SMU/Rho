@@ -149,3 +149,20 @@ test('several faults at once are all located by one doctor call', async () => {
     await f.cleanup();
   }
 });
+
+test('doctor names a missing Agent client, since the package carries none of its own', async () => {
+  const root = await fs.mkdtemp(path.join(tmpdir(), 'rho-doctor-agents-'));
+  await fs.mkdir(path.join(root, 'work')); await fs.mkdir(path.join(root, 'bin'));
+  await fs.writeFile(path.join(root, 'bin/codex'), '#!/bin/sh\n', { mode: 0o755 });
+  const service = await new RhoService({ root, stateDir: path.join(root, '.service'), coreBinary: '/missing-core', rscript: '/missing-Rscript', claude: path.join(root, 'bin/claude'), codex: path.join(root, 'bin/codex') }).start();
+  try {
+    const operator = new RhoClient({ url: service.url, token: service.adminToken });
+    const p = await operator.call('project.open', { path: 'work' });
+    const report = await operator.call('project.doctor', { projectId: p.id });
+    const agents = report.checks.find(check => check.id === 'agents');
+    assert.equal(agents.state, 'warn');
+    assert.match(agents.detail, /^Claude Code was not found at .*bin\/claude\. .* Codex is installed\.$/);
+    assert.match(agents.remedy, /--claude/);
+    assert.equal(report.ok, true, 'a missing client does not block native editing or review');
+  } finally { await service.close(); await fs.rm(root, { recursive: true, force: true }); }
+});

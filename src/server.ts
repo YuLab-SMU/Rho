@@ -807,6 +807,17 @@ export class RhoService {
       else add('core', 'ok', 'No Host is running; an explicitly selected managed operation starts one.');
       const rscriptAvailable = await fs.access(this.bridge.rscript, fs.constants.X_OK).then(() => true, () => false);
       add('rscript', rscriptAvailable ? 'ok' : b.intent === 'run-r' ? 'fail' : 'warn', rscriptAvailable ? `R is available at ${this.bridge.rscript}.` : `The optional managed R entry is unavailable at ${this.bridge.rscript}. Native Agent tools remain available.`, rscriptAvailable ? '' : 'For managed R scripts, select an existing Rscript with --rscript or RHO_RSCRIPT.');
+      // Conversations drive the person's installed Claude Code or Codex; the package carries none.
+      const agentCommand = await import('@rho-workspace/plugin-agent/acp-command').catch(() => null);
+      if (agentCommand) {
+        const claude = this.config.claude ?? process.env.RHO_CLAUDE, codex = this.config.codex ?? process.env.RHO_CODEX;
+        const env = { ...process.env, ...(claude ? { CLAUDE_CODE_EXECUTABLE: claude } : {}), ...(codex ? { CODEX_PATH: codex } : {}) };
+        const preferred = this.config.agentBackend === 'codex-acp' ? 'codex' : 'claude', other = preferred === 'codex' ? 'claude' : 'codex';
+        const [missing, otherMissing] = [agentCommand.missingClient(preferred, env), agentCommand.missingClient(other, env)];
+        const name = { claude: 'Claude Code', codex: 'Codex' };
+        add('agents', missing ? 'warn' : 'ok', missing ? [missing, otherMissing ?? `${name[other]} is installed.`].join(' ') : otherMissing ? `${name[preferred]} is installed. ${otherMissing}` : 'Claude Code and Codex are installed.',
+          missing ? `Install ${name[preferred]}, or select its executable with --${preferred}.` : '');
+      }
       const runs = await requests.list(principal).catch(() => []);
       const unfinished = runs.filter(run => ['active', 'unobserved', 'unknown'].includes(run.execution));
       add('runs', unfinished.length ? 'warn' : 'ok', unfinished.length ? `${unfinished.length} run(s) have no settled outcome: ${unfinished.slice(0, 3).map(run => run.operationId).join(', ')}.` : 'No run needs attention.', unfinished.length ? 'Read each run with action.lookup before submitting anything again.' : '');
