@@ -151,8 +151,13 @@ Studio view saves its form with the page; one placed by running a script's line 
 control in a view's header: quiet words and icons, Run in the accent, one kind of switch, and a
 control only while it can act (Documents 0.4.9: Save with unsaved edits, Review with a selection,
 Highlight changes while Agent or disk edits remain). The Activity row joined the Studio bar, so
-the code starts 72 px higher at 1440 × 900, and tabs scroll before a selection's controls can move
-the view.
+the code starts 72 px higher at 1440 × 900.
+
+[By hand](AGENT-CANVAS-EPISODE.md#the-persons-own-hands-on-the-layout), the person now arranges
+Studio as the Agent does: the shown tab closes with ×, any tab with a middle click, Delete or its
+menu (close others, split, maximize), each close with Undo; each group's + adds a view into it;
+the strip beside a group's tabs drags the whole group beside or into another, or to a side of the
+page. Tabs narrow to icons before they hide, so a view's controls take a second row sooner.
 
 [Sources follow the project](SIMULATED-PROJECT-EPISODE.md#sources-that-follow-the-project):
 Variables lists the live sessions' values between Code and Results, each opening in Studio, and
@@ -244,16 +249,10 @@ Earlier observations remain in the [home/project](HOME-PROJECT-EPISODE.md), [sid
 
 ## Verification
 
-Baseline: Plugins 104/104 and Rho 223/223 with an explicit unchanged Core binary.
-The first full changed run passed Plugins 109/109 and Rho 227/228; an undeclared
-new CSS variable caused the application failure and was corrected. The second pass
-(answer board, decisions, Console, Agent 0.4.19) passed Rho 240/240. The process Studio
-pass first failed 244/245 on another undeclared CSS variable, which was corrected;
-Rho 245/245 and Plugins 117/117. The Notebook pass first failed Rho 257/260: two
-checks still held the 64-method limit and the plugin count, and the Skill's verify
-command was not an application script; corrected, Rho 261/261 and Plugins 132/132. The
-exploring pass first failed Rho 263/264, the Studio shell importing a module outside its
-allowed set, and ui:u2 also matched the New workspace row; corrected, Rho 264/264 and Plugins 132/132.
+From the baseline (Rho 223/223, Plugins 104/104, an explicit unchanged Core binary) to the
+exploring pass (Rho 264/264, Plugins 132/132), each pass that first failed did so on an
+undeclared CSS variable, a stale count or limit in a check, or a shell import outside its set,
+and passed once corrected; this page's Git history keeps each count.
 The project skills pass records Rho 271/274 and Plugins 151/151 in the [ledger](VERIFICATION.json),
 whose script keeps no log; run again with its log, Rho 273/274, the MCP v2 test cancelled at its
 30 s limit (it passed alone). The contract check and the pages (with a Skills step), ui:u2,
@@ -268,13 +267,14 @@ check and the sources, ui:u2, agent-canvas, graph, agent-page, agent-ui, review 
 acceptances passed; ui:u2 first failed counting the Overview's 3-row previews among the grid's
 reads, and now counts from the Table tab. The shell acceptance (editor focus at 390 px) and the
 interaction acceptance (a `/^workspace/` sidebar row) failed before the toolbar pass and remain
-open. Earlier passes (toolbars, two forms, four panes, value view, choices and Console, figures
-and cost, project notes, meaning layer, descriptions) ran Rho 249–269 and Plugins 120–134 with
-the same seven acceptances; this page's Git history keeps each count and failure.
-The [episode](REVIEW-EVIDENCE-EPISODE.md) records contract, browser and installed results.
-The fixed 0.5.1 candidate passed 230/230 with installed review/Graph/restart and both real
-clients ([preview](PREVIEW-0.5.1.md)).
-No failures are converted into passes by omitting the failed run.
+open. Earlier passes ran Rho 249–269 and Plugins 120–134 with the same seven acceptances;
+this page's Git history keeps each count and failure.
+The by-hand pass ran against a separate browser build, so as not to replace the one a running
+Rho served: layout tests 19/19, shell boundary 2/2, both type checks, and the frontend (14/14),
+agent-canvas, pages, objects and person-files acceptances passed; shell failed as above, also on
+the unchanged build. The full suite was not run. The [episode](REVIEW-EVIDENCE-EPISODE.md)
+records contract, browser and installed results; the fixed 0.5.1 candidate passed 230/230
+([preview](PREVIEW-0.5.1.md)). No failures are converted into passes by omitting the failed run.
 
 Automatic capture defaults: 8 MiB/snapshot, 64 snapshots and 32 MiB/turn, at most two
 workers/project, Files 512 MiB/1024 resources; export 512 MiB/128 files/4 MiB metadata,

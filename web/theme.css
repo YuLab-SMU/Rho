@@ -933,6 +933,8 @@ button.explore-in-one:hover:not(:disabled) { background: var(--color-hover); col
 
 /* Adding to a page of the person's own: the Notebook first, then files by kind. */
 .page-add { display: flex; flex-direction: column; gap: 10px; min-width: 280px; max-height: min(70vh, 560px); overflow-y: auto; text-align: left; }
+/* The list scrolls; its entries keep their height. */
+.page-add > *, .page-add-kind > * { flex-shrink: 0; }
 .page-add button { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 32px; padding: 5px 8px; border: 0; border-radius: 6px; background: transparent; color: var(--color-ink); font-size: 13px; font-weight: 400; text-align: left; }
 .page-add button:hover { background: var(--color-hover); }
 .page-add button > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

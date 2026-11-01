@@ -1,5 +1,5 @@
 import { BrowserApiError, type BrowserClient, type WorkspaceSnapshot } from '../src/browser.js';
-import { addAtEdge, addBeside, addWithRoom, type LayoutNode, type LayoutTree } from '../src/shell-layout.js';
+import { addAtEdge, addBeside, addInto, addWithRoom, type LayoutNode, type LayoutTree } from '../src/shell-layout.js';
 import { languageNames, loadCode, sourceCode, valueName, type Language } from '../src/explore-code.js';
 
 // Looking into a result in the live sessions the person shares with the Agent. A table loads
@@ -67,9 +67,12 @@ async function addToPage(client: BrowserClient, projectId: string, compositionId
     }
   }
 }
-// The Notebook beside a view, unless the page has one.
-export const addNotebook = (client: BrowserClient, projectId: string, compositionId: string, beside: string | null) =>
-  addToPage(client, projectId, compositionId, notebookOn, tree => withNotebook(tree, beside), 'notebook');
+// A view put into the group the person chose, as its last tab; an empty page takes it as its one view.
+const intoGroup = (view: LayoutNode, into: string) => (tree: LayoutTree | null): LayoutTree | null =>
+  tree ? addInto(tree, view as never, into, newId) : { rootId: 'root', nodes: [{ id: 'root', kind: 'group', children: [view.id] }, view] };
+// The Notebook beside a view, or in the group the person chose, unless the page has one.
+export const addNotebook = (client: BrowserClient, projectId: string, compositionId: string, beside: string | null, into?: string) =>
+  addToPage(client, projectId, compositionId, notebookOn, into ? intoGroup(notebookView(), into) : tree => withNotebook(tree, beside), 'notebook');
 
 // The sessions' variables, plots and data flow, and the servers they can run on, as views of
 // their own, one of each per page. Added to a page, the first takes a column along the page's
@@ -95,8 +98,8 @@ export function withSessionView(tree: LayoutTree | null, kind: SessionView): Lay
   const other = kind === 'plots' ? sessionViewOn('variables', tree.nodes) ?? sessionViewOn('flow', tree.nodes) ?? sessionViewOn('servers', tree.nodes) : sessionViewOn('plots', tree.nodes);
   return other ? addBeside(tree, view as never, other, kind === 'plots' ? 'bottom' : 'top', newId) : addAtEdge(tree, view as never, 'right', newId);
 }
-export const addSessionView = (client: BrowserClient, projectId: string, compositionId: string, kind: SessionView) =>
-  addToPage(client, projectId, compositionId, nodes => sessionViewOn(kind, nodes), tree => withSessionView(tree, kind), kind);
+export const addSessionView = (client: BrowserClient, projectId: string, compositionId: string, kind: SessionView, into?: string) =>
+  addToPage(client, projectId, compositionId, nodes => sessionViewOn(kind, nodes), into ? intoGroup(sessionView(kind), into) : tree => withSessionView(tree, kind), kind);
 
 // A value of a live session as a view: one per value on a page. A page's values share one group
 // of tabs. The first goes in a pane beside the Notebook when the Notebook's pane, on a stage

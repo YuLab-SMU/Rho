@@ -1,7 +1,7 @@
 import { useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import type { BrowserClient, CompositionSummary, WorkspaceSnapshot } from '../../src/browser.js';
-import { addBeside, closeView, dockView, groupNode, groupOf, moveTab, moveView, placeView, regions, resizeSplit, selectionScope, setViewProps, splitView, tabGroups, viewOrder, type LayoutNode, type LayoutTree, type Region } from '../../src/shell-layout.js';
+import { addBeside, closeView, dockView, groupNode, groupOf, moveGroup, moveTab, moveToEdge, moveView, placeView, regions, resizeSplit, selectionScope, setViewProps, splitView, tabGroups, viewOrder, type LayoutNode, type LayoutTree, type Region, type Side } from '../../src/shell-layout.js';
 import type { Command, CommandGroup } from '../commands.js';
 import { Icon } from '../icons.js';
 import { registry } from '../registry.js';
@@ -22,7 +22,8 @@ import { ProcessFrame } from './process-views.js';
 import { ShellContext } from '../shell-services.js';
 import type { ShellServices } from '../../src/ui-contract.js';
 import { boundResource } from '../executions.js';
-import { Slot, Split, TabGroup, place, unplace, useTabOverflow, type DropTarget, type TabDrag, type TabRender } from './regions.js';
+import { Slot, Split, TabGroup, place, unplace, useTabOverflow, type Dragged, type DropTarget, type TabDrag, type TabRender, type TabTools } from './regions.js';
+import type { MenuItem } from './menu.js';
 import './shell.css';
 
 type Tabs = Extract<Region, { kind: 'tabs' }>;
@@ -30,7 +31,7 @@ export const workspaceLimits = { minSplitPx: 640 };
 // The workspace shell: the owner's composition tree drawn as
 // splits and tab groups, owner views mounted within the rendering budget, and a slot for
 // what Rho adds above the work. It decides nothing about attention; useLive does.
-export function Workspace({ composition: recorded, snapshot, client, onAbout, contextTarget, principalId, onShowContext, feedbackContextActive, openView, onCommands, agentTarget, onShowAgent, presence, onPersonMoved, onConversation, onExplore, onObject, empty, prepared: given, onPrepare, bar = true, barTarget, attention = true, following = false, arrange = true }: { onConversation?: (id: string) => void; onExplore?: (path: string, language: Language) => void; onObject?: (language: Language, name: string) => void; empty?: ReactNode; prepared?: Prepared | null; onPrepare?: (prepared: Prepared | null) => void; following?: boolean; arrange?: boolean; bar?: boolean; barTarget?: HTMLElement | null; attention?: boolean; presence?: { viewId: string; label: string; verb: string; live: boolean } | null; onPersonMoved?: () => void; onCommands?: (group: CommandGroup | null) => void; composition: CompositionSummary; snapshot: WorkspaceSnapshot; client: BrowserClient; onAbout: (pluginId: string) => void; contextTarget: HTMLElement | null; principalId?: string; onShowContext: () => void; feedbackContextActive: boolean; mapChipTarget?: HTMLElement | null; openView?: string; agentTarget?: HTMLElement | null; onShowAgent?: () => void }) {
+export function Workspace({ composition: recorded, snapshot, client, onAbout, contextTarget, principalId, onShowContext, feedbackContextActive, openView, onCommands, agentTarget, onShowAgent, presence, onPersonMoved, onConversation, onExplore, onObject, empty, prepared: given, onPrepare, bar = true, barTarget, attention = true, following = false, arrange = true, addView }: { addView?: (into: string) => ReactNode; onConversation?: (id: string) => void; onExplore?: (path: string, language: Language) => void; onObject?: (language: Language, name: string) => void; empty?: ReactNode; prepared?: Prepared | null; onPrepare?: (prepared: Prepared | null) => void; following?: boolean; arrange?: boolean; bar?: boolean; barTarget?: HTMLElement | null; attention?: boolean; presence?: { viewId: string; label: string; verb: string; live: boolean } | null; onPersonMoved?: () => void; onCommands?: (group: CommandGroup | null) => void; composition: CompositionSummary; snapshot: WorkspaceSnapshot; client: BrowserClient; onAbout: (pluginId: string) => void; contextTarget: HTMLElement | null; principalId?: string; onShowContext: () => void; feedbackContextActive: boolean; mapChipTarget?: HTMLElement | null; openView?: string; agentTarget?: HTMLElement | null; onShowAgent?: () => void }) {
   // A conversation's Studio: its files' views show their versions, and a replay arranges nothing.
   const process = useProcess();
   const live = useLive(snapshot, recorded, client, principalId, !!process), layout = live.layout;
@@ -85,7 +86,12 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
   const focused = order.includes(focus) ? focus : order[0] ?? '';
   const groups = root ? tabGroups(root) : [];
   const narrow = narrowWindow || (tight && groups.length > 1);
-  const visible = narrow ? (focused ? [focused] : []) : groups.map(shown);
+  // One group shown alone over the stage, in this tab only, until the person restores the others
+  // or a view outside it is brought forward. The saved layout is unchanged.
+  const [maximized, setMaximized] = useState<string | null>(null);
+  const alone = !narrow && groups.length > 1 ? groups.find(g => g.id === maximized) ?? null : null;
+  useEffect(() => { if (alone && focused && !alone.views.includes(focused)) setMaximized(null); }, [focused]);
+  const visible = narrow ? (focused ? [focused] : []) : alone ? [shown(alone)] : groups.map(shown);
   // Divider positions the person set in this tab, until the owner's layout changes.
   const [weights, setWeights] = useState<{ version: number; values: Record<string, number[]> }>({ version: layout.version, values: {} });
   const own = weights.version === layout.version ? weights.values : {};
@@ -215,22 +221,73 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
     if (tree && allowed('composition.apply')) resizing.current = setTimeout(() => { const now = treeNow(); void writeLayout(now && resizeSplit(now, splitId, values)); }, 600);
   }
   useEffect(() => () => clearTimeout(resizing.current), []);
-  // A tab dragged to another place: the same one conditional write as a layout command, so
-  // the person and the Agent keep arranging one saved layout and either can undo.
-  const [dragging, setDragging] = useState<{ id: string; target: DropTarget | null } | null>(null);
-  function dropTab(target: DropTarget) {
-    const viewId = dragging?.id, view = viewId ? byId.get(viewId) : undefined;
+  // A tab or a whole group dragged to another place: the same one conditional write as a layout
+  // command, so the person and the Agent keep arranging one saved layout and either can undo.
+  const [dragging, setDragging] = useState<{ item: Dragged; target: DropTarget | null } | null>(null);
+  function dropDragged(target: DropTarget) {
+    const item = dragging?.item;
     setDragging(null);
-    if (!view || (target.zone === 'center' && groupOf(root, view.id)?.id === target.group)) return;
-    const now = treeNow(), ready = now && placeView(now, view, newId), owner = groupNode(target.group);
-    const next = ready && (target.zone === 'tab' ? moveTab(ready, view.id, owner, target.before, newId) : target.zone === 'center' ? moveTab(ready, view.id, owner, null, newId) : dockView(ready, view.id, owner, target.zone, newId));
+    const now = treeNow();
+    if (!item || !now) return;
+    let next: LayoutTree | null = null, bringing: string | undefined;
+    if (item.kind === 'group') {
+      const region = groups.find(g => g.id === item.id), from = groupNode(item.id);
+      if (!region) return;
+      bringing = shown(region);
+      next = 'edge' in target ? moveToEdge(now, from, target.edge, newId)
+        : moveGroup(now, from, groupNode(target.group), target.zone === 'tab' ? 'center' : target.zone, target.zone === 'tab' ? target.before : null, newId);
+    } else {
+      const view = byId.get(item.id);
+      if (!view || ('group' in target && target.zone === 'center' && groupOf(root, view.id)?.id === target.group)) return;
+      const ready = placeView(now, view, newId);
+      bringing = view.id;
+      next = !ready ? null : 'edge' in target ? moveToEdge(ready, view.id, target.edge, newId)
+        : target.zone === 'tab' ? moveTab(ready, view.id, groupNode(target.group), target.before, newId)
+        : target.zone === 'center' ? moveTab(ready, view.id, groupNode(target.group), null, newId)
+        : dockView(ready, view.id, groupNode(target.group), target.zone, newId);
+    }
     if (!next) return;
-    onPersonMoved?.(); show(view.id); void writeLayout(next);
+    onPersonMoved?.(); if (bringing) show(bringing); void writeLayout(next);
   }
-  const drag: TabDrag | undefined = tree && allowed('composition.apply') ? {
-    dragging: dragging?.id ?? null, target: dragging?.target ?? null,
-    start: id => setDragging({ id, target: null }), end: () => setDragging(null),
-    over: target => setDragging(d => d && { ...d, target }), drop: dropTab
+  const canArrange = !!tree && allowed('composition.apply');
+  const drag: TabDrag | undefined = canArrange ? {
+    dragging: dragging?.item ?? null, target: dragging?.target ?? null,
+    start: item => { setMaximized(null); setDragging({ item, target: null }); }, end: () => setDragging(null),
+    over: target => setDragging(d => d && { ...d, target }), drop: dropDragged
+  } : undefined;
+  // Closing a view the person chose: its node leaves the saved layout and its records, input and
+  // runs stay with their owners. Undo is offered until the layout changes again.
+  const [closed, setClosed] = useState<{ label: string; version: number } | null>(null);
+  useEffect(() => { if (closed && recorded.version > closed.version) setClosed(null); }, [recorded.version]);
+  useEffect(() => { if (!closed) return; const timer = setTimeout(() => setClosed(null), 10000); return () => clearTimeout(timer); }, [closed]);
+  async function closeViews(ids: string[], label: string) {
+    const now = treeNow();
+    let next = now;
+    for (const id of ids) { live.release(id); next = next && (closeView(next, id) ?? next); }
+    onPersonMoved?.();
+    if (next && next !== now && await writeLayout(next)) setClosed({ label, version: latest.current.version });
+  }
+  const closeTab = (id: string) => { const view = byId.get(id); if (view) void closeViews([id], title(view)); };
+  async function undoClose() {
+    const was = closed;
+    setClosed(null);
+    if (was && latest.current.version === was.version) await undoLayout();
+  }
+  // A tab's own menu: the commands of the Arrange menu for the tab it was opened on.
+  function tabMenu(id: string): MenuItem[] {
+    const view = byId.get(id), now = treeNow(), group = groupOf(root, id);
+    if (!view || !now || !group) return [];
+    const ready = placeView(now, view, newId), items: MenuItem[] = [{ id: 'close', label: 'Close', icon: 'close', keys: 'Del', run: () => closeTab(id) }];
+    const others = group.views.filter(other => other !== id);
+    if (others.length) items.push({ id: 'close-others', label: others.length === 1 ? 'Close the other tab' : `Close the ${others.length} other tabs`, icon: 'close', run: () => void closeViews(others, others.length === 1 ? title(byId.get(others[0])!) : `${others.length} views`) });
+    const split = (axis: 'horizontal' | 'vertical') => { const t = treeNow(), r = t && placeView(t, view, newId), next = r && splitView(r, id, axis, newId); if (next) { onPersonMoved?.(); show(id); void writeLayout(next); } };
+    if (ready && splitView(ready, id, 'horizontal', newId)) items.push({ id: 'split-right', label: 'Split right', icon: 'layout', run: () => split('horizontal') }, { id: 'split-down', label: 'Split down', icon: 'layout', run: () => split('vertical') });
+    if (groups.length > 1) items.push(alone ? { id: 'restore', label: 'Show every group', icon: 'restore', run: () => setMaximized(null) } : { id: 'maximize', label: 'Maximize this group', icon: 'fit', run: () => { show(id); setMaximized(group.id); } });
+    return items;
+  }
+  const toolsFor = (region: Tabs): TabTools | undefined => canArrange ? {
+    close: closeTab, menu: tabMenu, add: addView ? () => addView(groupNode(region.id)) : undefined,
+    movable: !alone && groups.length > 1, maximized: alone?.id === region.id, onMaximize: () => setMaximized(m => m === region.id ? null : region.id),
   } : undefined;
   // Eight mounted heavy entries is a rendering budget, never a buffer eviction: the views on
   // screen always render, then the most recently shown, then the rest in layout order. A view
@@ -333,7 +390,7 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
   const groupName = (id: string) => groups.length === 1 ? 'Views' : `Views ${groups.findIndex(g => g.id === id) + 1} of ${groups.length}`;
   const firstTitle = (region: Region): string => { const id = region.kind === 'tabs' ? shown(region) : viewOrder(region)[0]; return id ? title(byId.get(id)!) : 'view'; };
   const draw = (region: Region): ReactNode => region.kind === 'tabs'
-    ? <TabGroup key={region.id} group={region} name={groupName(region.id)} selected={shown(region)} onSelect={id => { if (id !== shown(region)) onPersonMoved?.(); show(id); }} onHeader={headerRef(region.id)} render={render} drag={drag} />
+    ? <TabGroup key={region.id} group={region} name={groupName(region.id)} selected={shown(region)} onSelect={id => { if (id !== shown(region)) onPersonMoved?.(); show(id); }} onHeader={headerRef(region.id)} render={render} drag={drag} tools={toolsFor(region)} />
     : <Split key={region.id} region={region} weights={own[region.id] ?? region.weights} onResize={values => resized(region.id, values)}
       label={i => `Resize ${firstTitle(region.children[i - 1])} and ${firstTitle(region.children[i])}`}>{region.children.map(draw)}</Split>;
   // The focused view's layout commands, offered in the command palette.
@@ -345,18 +402,18 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
       // A person's command promotes only this linked view into the saved tree. It keeps
       // its exact binding, and uses the same owner conditions as every other layout edit.
       const viewId = focused;
-      const offer = (id: string, label: string, change: (t: LayoutTree) => LayoutTree | null, before?: () => void) => {
+      const offer = (id: string, label: string, change: (t: LayoutTree) => LayoutTree | null) => {
         const placed = placeView(tree, view, newId);
-        if (placed && change(placed)) commands.push({ id, label, icon: id === 'layout-close' ? 'close' : 'layout', meta: name, run: () => {
+        if (placed && change(placed)) commands.push({ id, label, icon: 'layout', meta: name, run: () => {
           const now = treeNow(), ready = now && placeView(now, view, newId), next = ready && change(ready);
-          if (next) { before?.(); void writeLayout(next); }
+          if (next) void writeLayout(next);
         } });
       };
       offer('layout-split-right', 'Split right', t => splitView(t, viewId, 'horizontal', newId));
       offer('layout-split-down', 'Split down', t => splitView(t, viewId, 'vertical', newId));
       offer('layout-next', 'Move to the next group', t => moveView(t, viewId, 1, newId));
       offer('layout-previous', 'Move to the previous group', t => moveView(t, viewId, -1, newId));
-      offer('layout-close', 'Close view', t => closeView(t, viewId), () => live.release(viewId));
+      commands.push({ id: 'layout-close', label: 'Close view', icon: 'close', meta: name, run: () => closeTab(viewId) });
     }
     if (allowed('composition.undo') && (recorded as { history?: unknown[] }).history?.length) commands.push({ id: 'layout-undo', label: 'Undo layout change', icon: 'refresh', run: () => void undoLayout() });
     onCommands(commands.length ? { label: 'Layout', commands } : null);
@@ -368,7 +425,7 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
     const index = order.indexOf(focused), count = order.length;
     const next = { ArrowRight: (index + 1) % count, ArrowLeft: (index - 1 + count) % count, Home: 0, End: count - 1 }[event.key];
     if (next === undefined) return;
-    event.preventDefault(); show(order[next]); (event.currentTarget.children[next] as HTMLElement).focus();
+    event.preventDefault(); show(order[next]); event.currentTarget.querySelectorAll<HTMLElement>('[role=tab]')[next]?.focus();
   }
   const focusObject = live.screen?.views.find(v => v.id === focused)?.object ?? null;
   const toggleEvidence = () => { setEvidence(v => !v); onShowAgent?.(); live.act({ kind: 'reveal', target: evidence ? null : live.screen?.agent?.object ?? 'workspace' }); };
@@ -385,12 +442,25 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
       {!root ? empty ?? <div className="empty"><h2>No views in this layout</h2><p>The saved layout is empty. No view is created automatically.</p></div>
         : narrow ? <section className="shell-group">
           <div className="shell-tabbar"><div ref={narrowList} className="shell-tabs" role="tablist" aria-label="Views" onKeyDown={moveNarrow}>
-            {order.map((id, i) => <button key={id} id={tabId + i} role="tab" aria-selected={id === focused} aria-controls={tabId + 'panel'} tabIndex={id === focused ? 0 : -1} onClick={() => { if (id !== focused) onPersonMoved?.(); show(id); }}><span className="shell-tab-name">{title(byId.get(id)!)}</span></button>)}
+            {order.map((id, i) => <div key={id} className="shell-tab" data-closable={canArrange ? '' : undefined}>
+              <button id={tabId + i} role="tab" aria-selected={id === focused} aria-controls={tabId + 'panel'} tabIndex={id === focused ? 0 : -1} aria-keyshortcuts={canArrange ? 'Delete' : undefined} onClick={() => { if (id !== focused) onPersonMoved?.(); show(id); }}
+                onKeyDown={event => { if (event.key === 'Delete' && canArrange) { event.preventDefault(); closeTab(id); } }}><span className="shell-tab-name">{title(byId.get(id)!)}</span></button>
+              {canArrange && id === focused && <button className="shell-tab-close" tabIndex={-1} aria-hidden="true" title={'Close ' + title(byId.get(id)!)} onClick={() => closeTab(id)}><Icon name="close" size={12} stroke={2} /></button>}
+            </div>)}
           </div></div>
           <div className="shell-header-slot shell-header-narrow" ref={headerRef('narrow')} />
           {focused && <Slot key={focused} container={container(focused)} id={tabId + 'panel'} labelledBy={tabId + order.indexOf(focused)} />}
         </section>
-        : draw(root)}
+        : draw(alone ?? root)}
+      {/* While something is dragged, each side of the whole page takes it as a column or a row. */}
+      {drag?.dragging && !narrow && <div className="shell-edges" aria-hidden="true">
+        {(['left', 'right', 'top', 'bottom'] as Side[]).map(side => <div key={side} className="shell-edge" data-side={side} data-over={drag.target && 'edge' in drag.target && drag.target.edge === side ? '' : undefined}
+          onDragOver={event => { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; if (!(drag.target && 'edge' in drag.target && drag.target.edge === side)) drag.over({ edge: side }); }}
+          onDragLeave={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) drag.over(null); }}
+          onDrop={event => { event.preventDefault(); drag.drop({ edge: side }); }} />)}
+        {drag.target && 'edge' in drag.target && <div className="shell-edge-preview" data-side={drag.target.edge} />}
+      </div>}
+      {closed && <div className="shell-closed" role="status"><span>Closed {closed.label}</span><button className="shell-link" onClick={() => void undoClose()}>Undo</button><button className="shell-quiet" aria-label="Dismiss" onClick={() => setClosed(null)}><Icon name="close" size={13} /></button></div>}
       {[...seen.current].filter(id => byId.has(id)).map(id => createPortal(body(id), container(id), id))}
     </div>
   </section></ShellContext.Provider>;

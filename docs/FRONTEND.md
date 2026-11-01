@@ -1,6 +1,6 @@
 # Browser application
 
-Updated 2026-10-30. The frontend was reset at the user's request. Previous frontend
+Updated 2026-10-31. The frontend was reset at the user's request. Previous frontend
 plans, visual specifications, Paper references and appearance rulers have been
 removed from the working repository. Git retains their history; they do not govern
 this implementation. This document describes the current application, not another
@@ -334,13 +334,24 @@ inspect what happened. The application gives those actions direct places:
   and figures join their conversation's meaning row as they appear, in a row of its own
   when the notes have no section yet
   ([descriptions](SIMULATED-PROJECT-EPISODE.md#descriptions-while-the-work-goes-on)).
-- **Workspaces** hold real owner views in tabs and splits. Arrange views exposes
-  split, move, close and undo operations; the command palette offers the same actions.
-  A tab drags onto another group's tabs (a line marks the place), onto the middle of a
-  group to join it, or within a quarter of a group's side to open a pane there; the
-  tinted area shows where it lands. Each drop is one conditional write of the saved
-  layout, the same the commands and the Agent use, and Undo reverses it. Below 768 px
-  nothing drags ([episode](AGENT-CANVAS-EPISODE.md#arranging-views-the-person-drags-the-agent-writes)).
+- **Workspaces** hold real owner views in tabs and splits, which the person arranges by
+  hand. The shown tab has a close button; any tab closes with a middle click, Delete or
+  its menu, and a close names what it closed with Undo while the layout is as it left
+  it. A tab's menu (right click, the context-menu key or Shift+F10) closes it or the
+  group's other tabs, splits it right or down and maximizes its group. Each group's +
+  puts a view into that group from the same choices as Add view. A tab drags onto
+  another group's tabs (a line marks the place), onto the middle of a group to join it,
+  or within a quarter of a group's side to open a pane there; the empty strip beside a
+  group's tabs drags the whole group the same ways, keeping its tabs. While something
+  drags, each side of the page takes it as a column or row a third of the page.
+  Double-clicking that strip shows the group alone in this browser tab until Restore.
+  Tabs narrow to their icons before they scroll, the shown tab keeping its name, and a
+  view's controls take a second row when the group has no room for both. Each change is one
+  conditional write of the saved layout, the same the commands and the Agent use, and
+  Undo reverses it. Arrange views and the command palette offer split, move, close and
+  undo for the focused view. Below 768 px nothing drags
+  ([episode](AGENT-CANVAS-EPISODE.md#arranging-views-the-person-drags-the-agent-writes),
+  [by hand](AGENT-CANVAS-EPISODE.md#the-persons-own-hands-on-the-layout)).
   A stage narrower than 640 px, as when the notes and the Agent panel are open beside
   it, shows a layout of several groups one view at a time with all its tabs, as a phone
   does; the saved layout is unchanged. New workspace, under Studio in the sidebar and in
@@ -356,9 +367,10 @@ inspect what happened. The application gives those actions direct places:
   as its words beside a bar in the Agent's colour. A control is there while it can act: Save
   while the text has unsaved edits, Review selected text and Ask the Agent with a selection, the
   highlight while Agent or disk edits remain (Documents 0.4.9). A file with one language has one
-  Explore in R or Python button. The tabs give way to the controls down to 160 px, scrolling and
-  fading at the edge, so a control that comes with a selection does not move the view; below
-  that the controls take a row of their own. On the person's own page the Studio bar holds the
+  Explore in R or Python button. The tabs give way to the controls, narrowing to their icons,
+  down to room for the shown tab's name and every other tab's icon (168 px for one tab, 44 px
+  more for each other); below that the controls take a row of their own, and a control that
+  comes with a selection can then move the view. On the person's own page the Studio bar holds the
   Agent's latest object, held updates and Activity beside Add view, Notes and Arrange views; as
   it narrows, the object's state goes first, then the controls' names
   ([episode](SIMULATED-PROJECT-EPISODE.md#toolbars)).

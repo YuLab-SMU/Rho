@@ -257,19 +257,24 @@ export function addAtEdge(tree: LayoutTree, view: ViewDescription, side: Side, n
   if (!placed || leaves(placed.nodes, placed.rootId).length < 2) return placed;
   const next = copy(placed);
   detach(next, view.id);
-  const axis: Axis = side === 'left' || side === 'right' ? 'horizontal' : 'vertical', after = side === 'right' || side === 'bottom';
-  const pane: LayoutNode = { id: newId('group'), kind: 'group', children: [view.id] }, root = next.nodes.find(n => n.id === next.rootId)!;
+  const pane: LayoutNode = { id: newId('group'), kind: 'group', children: [view.id] };
   next.nodes.push(pane);
+  atEdge(next, pane.id, side, share, newId);
+  return tidy(next);
+}
+// Puts a detached pane along one side of the whole page, taking `share` of it.
+function atEdge(next: LayoutTree, pane: string, side: Side, share: number, newId: (kind: string) => string) {
+  const axis: Axis = side === 'left' || side === 'right' ? 'horizontal' : 'vertical', after = side === 'right' || side === 'bottom';
+  const root = next.nodes.find(n => n.id === next.rootId)!;
   if (isSplit(root) && root.presentation!.axis === axis) {
     const weights = [...(root.presentation!.weights ?? root.children!.map(() => 1))], weight = weights.reduce((a, b) => a + b, 0) * share / (1 - share);
-    if (after) { root.children!.push(pane.id); weights.push(weight); } else { root.children!.unshift(pane.id); weights.unshift(weight); }
+    if (after) { root.children!.push(pane); weights.push(weight); } else { root.children!.unshift(pane); weights.unshift(weight); }
     root.presentation = { ...root.presentation, weights };
   } else {
-    const split: LayoutNode = { id: newId('split'), kind: 'group', children: after ? [next.rootId, pane.id] : [pane.id, next.rootId], presentation: { mode: 'split', axis, weights: after ? [1 - share, share] : [share, 1 - share] } };
+    const split: LayoutNode = { id: newId('split'), kind: 'group', children: after ? [next.rootId, pane] : [pane, next.rootId], presentation: { mode: 'split', axis, weights: after ? [1 - share, share] : [share, 1 - share] } };
     next.nodes.push(split);
     next.rootId = split.id;
   }
-  return tidy(next);
 }
 // The part of the stage's width a view's pane has, from the weights of the side-by-side splits.
 export function paneShare(tree: LayoutTree, viewId: string) {
@@ -303,18 +308,83 @@ export function dockView(tree: LayoutTree, viewId: string, target: string, side:
   if (tabOwner(tree.nodes, viewId) === target && leaves(tree.nodes, target).length < 2) return null;
   const next = copy(tree);
   detach(next, viewId);
-  const axis: Axis = side === 'left' || side === 'right' ? 'horizontal' : 'vertical', after = side === 'right' || side === 'bottom';
   const pane: LayoutNode = { id: newId('group'), kind: 'group', children: [viewId] };
   next.nodes.push(pane);
+  beside(next, pane.id, target, side, newId);
+  return tidy(next);
+}
+// Puts a detached pane on one side of a tab group, sharing that group's space.
+function beside(next: LayoutTree, pane: string, target: string, side: Side, newId: (kind: string) => string) {
+  const axis: Axis = side === 'left' || side === 'right' ? 'horizontal' : 'vertical', after = side === 'right' || side === 'bottom';
   const holder = parentOf(next.nodes, target);
   if (holder && isSplit(holder) && holder.presentation!.axis === axis) {
     const index = holder.children!.indexOf(target), weights = [...(holder.presentation!.weights ?? holder.children!.map(() => 1))], half = (weights[index] ?? 1) / 2;
-    holder.children!.splice(after ? index + 1 : index, 0, pane.id); weights.splice(index, 1, half, half);
+    holder.children!.splice(after ? index + 1 : index, 0, pane); weights.splice(index, 1, half, half);
     holder.presentation = { ...holder.presentation, weights };
   } else {
-    const split: LayoutNode = { id: newId('split'), kind: 'group', children: after ? [target, pane.id] : [pane.id, target], presentation: { mode: 'split', axis, weights: [1, 1] } };
+    const split: LayoutNode = { id: newId('split'), kind: 'group', children: after ? [target, pane] : [pane, target], presentation: { mode: 'split', axis, weights: [1, 1] } };
     next.nodes.push(split);
     if (holder) holder.children = holder.children!.map(id => id === target ? split.id : id); else next.rootId = split.id;
   }
+}
+// Whether two trees draw the same panes in the same places, whatever their dividers.
+function sameShape(a: LayoutTree, b: LayoutTree) {
+  const shape = (tree: LayoutTree, id: string): unknown => {
+    const node = tree.nodes.find(n => n.id === id);
+    return !node || node.kind === 'view' ? id : [id, node.presentation?.mode === 'split' ? node.presentation.axis : 'tabs', (node.children ?? []).map(child => shape(tree, child))];
+  };
+  return JSON.stringify(shape(a, a.rootId)) === JSON.stringify(shape(b, b.rootId));
+}
+// A whole tab group moved by the person: its tabs join another group (last, or before one of
+// its tabs), or it keeps them as a pane on one side of that group. Their order is kept.
+export function moveGroup(tree: LayoutTree, from: string, to: string, zone: 'center' | Side, before: string | null, newId: (kind: string) => string): LayoutTree | null {
+  const groups = owners(tree), source = tree.nodes.find(n => n.id === from);
+  if (!source || from === to || from === tree.rootId || !groups.includes(from) || !groups.includes(to)) return null;
+  if (source.kind === 'view') return zone === 'center' ? moveTab(tree, from, to, before, newId) : dockView(tree, from, to, zone, newId);
+  const next = copy(tree);
+  detach(next, from);
+  if (zone !== 'center') {
+    beside(next, from, to, zone, newId);
+    const result = tidy(next);
+    return sameShape(tree, result) ? null : result;
+  }
+  const views = leaves(next.nodes, from), inner = new Set<string>();
+  const collect = (id: string) => { const node = next.nodes.find(n => n.id === id); if (node?.kind === 'group') { inner.add(id); node.children?.forEach(collect); } };
+  collect(from);
+  next.nodes = next.nodes.filter(n => !inner.has(n.id));
+  const into = next.nodes.find(n => n.id === to)!;
+  if (into.kind === 'group') {
+    const children = into.children ?? [];
+    const holder = before ? children.find(child => child === before || leaves(next.nodes, child).includes(before)) : undefined;
+    children.splice(holder ? children.indexOf(holder) : children.length, 0, ...views);
+    into.children = children;
+  } else {
+    const tabs: LayoutNode = { id: newId('group'), kind: 'group', children: before === to ? [...views, to] : [to, ...views] };
+    next.nodes.push(tabs);
+    const holder = parentOf(next.nodes, to);
+    if (holder) holder.children = holder.children!.map(id => id === to ? tabs.id : id); else next.rootId = tabs.id;
+  }
   return tidy(next);
+}
+// A view, or a whole tab group, moved into a pane along one side of the whole page: a column as
+// tall as the page, or a row as wide. A view leaves its tabs; a group keeps its own.
+export function moveToEdge(tree: LayoutTree, id: string, side: Side, newId: (kind: string) => string, share = 1 / 3): LayoutTree | null {
+  const node = tree.nodes.find(n => n.id === id);
+  if (!node || !parentOf(tree.nodes, id) || (node.kind !== 'view' && !owners(tree).includes(id))) return null;
+  const owner = tabOwner(tree.nodes, id);
+  if (owner !== id && leaves(tree.nodes, owner).length === 1) return moveToEdge(tree, owner, side, newId, share);
+  const next = copy(tree);
+  detach(next, id);
+  let pane = id;
+  if (!owners(tree).includes(id)) { const group: LayoutNode = { id: newId('group'), kind: 'group', children: [id] }; next.nodes.push(group); pane = group.id; }
+  atEdge(next, pane, side, share, newId);
+  const result = tidy(next);
+  return sameShape(tree, result) ? null : result;
+}
+// A view added by the person into the tab group they chose, as its last tab. When that group is
+// no longer there, the view goes where any linked view goes.
+export function addInto(tree: LayoutTree, view: ViewDescription, into: string, newId: (kind: string) => string): LayoutTree | null {
+  if (tree.nodes.some(n => n.id === view.id)) return null;
+  const placed = placeView(tree, view, newId);
+  return placed && (moveTab(placed, view.id, into, null, newId) ?? placed);
 }

@@ -1,4 +1,5 @@
 import { BrowserApiError, type BrowserClient, type WorkspaceSnapshot } from '../src/browser.js';
+import { addInto } from '../src/shell-layout.js';
 import { capturable } from './sources.js';
 
 // Opening a project file into a workspace: text becomes the one shared document buffer in
@@ -65,7 +66,7 @@ export async function viewFor(client: BrowserClient, snapshot: WorkspaceSnapshot
   return { side: 'code', node: { id: 'doc-' + document.id.slice(0, 12), kind: 'view', component: editor.id, version: editor.version, props: { title }, bindings: { document: { kind: 'live-document', documentId: document.id } } } };
 }
 
-function placed(current: { rootId?: string; nodes?: unknown[] } | null, view: Node, side: Side): { rootId: string; nodes: Node[] } | null {
+function placed(current: { rootId?: string; nodes?: unknown[] } | null, view: Node, side: Side, into?: string): { rootId: string; nodes: Node[] } | null {
   const nodes: Node[] = structuredClone((current?.nodes ?? []) as Node[]);
   let rootId = current?.rootId ?? 'root';
   if (nodes.some(n => n.id === view.id)) return null;
@@ -82,6 +83,8 @@ function placed(current: { rootId?: string; nodes?: unknown[] } | null, view: No
       return { rootId, nodes: [...nodes.filter(n => n.id !== older.id), view] };
     }
   }
+  // The person chose the group: it goes there as the last tab.
+  if (into && current?.rootId && nodes.length) return addInto({ rootId, nodes: nodes as never }, view as never, into, id => `${id}-${crypto.randomUUID().slice(0, 8)}`) as never;
   let root = byId(rootId);
   if (!root) { root = { id: rootId, kind: 'group', children: [] }; nodes.push(root); }
   // Code joins code and data and figures join data: first the group the Agent's work made for
@@ -123,7 +126,7 @@ function placed(current: { rootId?: string; nodes?: unknown[] } | null, view: No
 
 // Writes to one workspace go one at a time, each against the version the last one left.
 const queues = new Map<string, Promise<unknown>>();
-export function openInWorkspace(client: BrowserClient, snapshot: WorkspaceSnapshot, compositionId: string, target: string | ResourceTarget): Promise<{ compositionId: string; viewId: string } | null> {
+export function openInWorkspace(client: BrowserClient, snapshot: WorkspaceSnapshot, compositionId: string, target: string | ResourceTarget, into?: string): Promise<{ compositionId: string; viewId: string } | null> {
   const key = snapshot.project.id + '/' + compositionId;
   const run = (queues.get(key) ?? Promise.resolve()).catch(() => undefined).then(async () => {
     const made = await viewFor(client, snapshot, target);
@@ -136,7 +139,7 @@ export function openInWorkspace(client: BrowserClient, snapshot: WorkspaceSnapsh
       }) as { version: number; rootId?: string; nodes?: unknown[] } | null;
       const existing = (current?.nodes as Node[] | undefined)?.find(n => n.id === made.node.id);
       if (existing) return { compositionId, viewId: existing.id };
-      const next = placed(current, made.node, made.side);
+      const next = placed(current, made.node, made.side, into);
       if (!next) return { compositionId, viewId: made.node.id };
       try {
         await client.call('composition.apply', { projectId, compositionId, expectedVersion: current?.version ?? 0, changeId: 'open-' + crypto.randomUUID(), operations: [{ op: 'replace', rootId: next.rootId, nodes: next.nodes }] } as never);

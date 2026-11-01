@@ -181,6 +181,28 @@ writeLines(jsonlite::toJSON(list(schemaVersion=1L,complete=TRUE,artifacts=items)
   assert.equal(top.presentation?.axis, 'vertical');
   assert.deepEqual(top.children.map(id => saved.nodes.find(n => n.id === id).children), [['table', 'plot', 'notes'], ['code']]);
   passed('dragging a tab joins another group or opens a pane at a side, as the saved layout');
+  // The person's own arrangement: a tab's close button, with Undo; a view added from a group's +
+  // joins that group; the strip beside a group's tabs carries the whole group.
+  const groupTabs = () => page.locator('.shell-group').evaluateAll(groups => groups.map(g => [...g.querySelectorAll('[role=tab]')].map(t => t.textContent)));
+  const notesTab = page.locator('.shell-tab', { has: page.getByRole('tab', { name: 'Research notes', exact: true }) });
+  await notesTab.getByRole('tab').click(); await notesTab.locator('.shell-tab-close').click();
+  await poll(groupTabs, groups => !groups.flat().includes('Research notes'), 'the closed view leaves its group');
+  await page.locator('.shell-closed').getByRole('button', { name: 'Undo' }).click();
+  await poll(groupTabs, groups => groups[0].includes('Research notes'), 'Undo brings the closed view back to its group');
+  await page.locator('.shell-group').nth(1).locator('.shell-tab-add').click();
+  await page.locator('.floating-menu').getByRole('button', { name: /README\.md/ }).click();
+  await poll(groupTabs, groups => groups[1]?.includes('README.md'), "a view added from a group's + joins that group");
+  const strip = await page.locator('.shell-group').nth(1).locator('.shell-tabs-fill').boundingBox(), upper = await page.locator('.shell-group').first().locator('.shell-body').boundingBox();
+  await page.mouse.move(strip.x + strip.width / 2, strip.y + strip.height / 2); await page.mouse.down();
+  await page.mouse.move(strip.x + strip.width / 2 + 8, strip.y + 8, { steps: 3 });
+  await page.mouse.move(upper.x + upper.width * 0.95, upper.y + upper.height / 2, { steps: 10 });
+  await page.mouse.up();
+  await page.locator('.shell-split[data-axis="horizontal"]').waitFor();
+  const moved = await call('composition.read', { compositionId: 'Analysis' }), row = moved.nodes.find(n => n.id === moved.rootId);
+  assert.equal(row.presentation?.axis, 'horizontal');
+  assert.deepEqual((await groupTabs())[1], ['analysis.R', 'README.md']);
+  await page.screenshot({ path: path.join(evidence, 'group-moved-1440.png') });
+  passed('a person closes a view with Undo, adds one into a chosen group and moves a whole group');
   // The Agent panel's edge widens it; this browser keeps the width.
   await page.getByRole('button', { name: 'Agent panel', exact: true }).click();
   const side = page.locator('aside[aria-label="Agent panel"]'), narrowWidth = (await side.boundingBox()).width;

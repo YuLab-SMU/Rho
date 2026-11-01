@@ -1,6 +1,6 @@
 # Project sidebar and Agent canvas
 
-Updated 2026-10-27.
+Updated 2026-10-31.
 
 Later the same day the user asked for the canvas and the workspace to be one page. The
 Agent's files now open in the workspace the person shares with it, and the Graph shows
@@ -125,7 +125,7 @@ Annotations 0.4.4 only widens its optional Documents peer to include 0.4.3.
 - `npm run build` and `npm run check:contracts` passed (97 operations, 96 typed).
 - Rho unit tests: 202 tests; the full parallel run passed 201 and cancelled the
   known MCP v2 test at its 30 s limit, which passed alone (2/2, 16.4 s). See
-  [Status](STATUS.md#project-sidebar-workspace-and-graph) for the serial run.
+  [Status](STATUS.md#verification) for the serial run.
 - Rho-plugins: 90/90, including the new disk-following test (a changed line
   adopted as the span `{from: 12, to: 13}`, its before text readable, an unchanged
   file making no version, unsaved text kept with a save conflict, a non-UTF-8 file
@@ -549,3 +549,107 @@ asked the user to look.
 - The Agent cannot see the drawn result.
 - A drop computed on a layout older than the Agent's latest write is refused with a
   message and not retried.
+
+## The person's own hands on the layout
+
+### Question
+
+On 2026-10-31 the user said that in Studio the Agent opens and arranges views freely,
+but the person's operations were missing: adding a component, closing one, and moving
+the whole window of a tab group holding several. Moving one tab already worked. The
+pass is about what the person can do by hand.
+
+### Observed before
+
+A disposable project of five files (two CSVs, two figures, an R script and a README) on
+a separate service and browser build, with five files added through Add view
+(`tour2.mjs`), at 1440 × 900:
+
+- A tab had no close button. Closing meant Arrange views → Close view, which acted on
+  whichever view had focus last; the menu did not name it.
+- Add view put each file where Rho places it (code left, data and figures right). The
+  person could not choose the group.
+- A group could not move as a whole, and nothing made a full-height column at the
+  page's edge, as the previous pass's limits said.
+- In the right pane, the image view's controls took the tab row's space: `mtcars.png`
+  showed as "m" and `cars.png` was out of sight, with nothing saying it was there.
+- In the Add view menu the Notebook, Variables and Plots cards drew their second line
+  across their own borders.
+
+### Changed
+
+Rho only (`src/shell-layout.ts`, `web/shell/menu.tsx`, `web/shell/regions.tsx`,
+`web/shell/workspace.tsx`, `web/shell/shell.css`, `web/canvas.ts`, `web/explore.ts`,
+`web/main.tsx`, `web/theme.css`):
+
+- **Close.** The shown tab has a close button. Any tab closes with a middle click, with
+  Delete while it has focus, or from its menu. A close names what it closed, with Undo,
+  for 10 s and only while the layout is as the close left it; Undo then is the owner's
+  `composition.undo`. Close view in Arrange views and the palette now does the same.
+- **A tab's menu.** A right click, the context-menu key or Shift+F10 opens: Close, Close
+  the other tabs, Split right, Split down, Maximize this group.
+- **Add into a group.** Each group's + opens the same choices as Add view (the
+  Notebook, the sessions' views and the project's files) and puts the choice there as
+  the last tab (`addInto`). A view already on the page comes forward where it is.
+- **Move a whole group.** The empty strip beside a group's tabs drags the group, with
+  its tabs as the drag image. It drops where a tab does: onto another group's tabs or
+  its middle, where its tabs join that group in order, or within a quarter of a side,
+  where it becomes a pane there (`moveGroup`). A drop where it already is writes
+  nothing.
+- **The page's edges.** While a tab or a group drags, a line marks each side of the
+  stage. Over one, the column or row it would become is drawn, a third of the page
+  (`moveToEdge`). A view leaves its tabs; a group keeps its own.
+- **Maximize.** Double-clicking that strip, or the menu, shows the group alone in this
+  browser tab, with Restore. The saved layout is unchanged; a view brought forward
+  outside the group shows every group again.
+- **Tabs stay in view.** Tabs narrow to their icons before they scroll, and the shown
+  tab keeps its name. The tab row gives way to a view's controls only down to room for
+  every tab (168 px for one, 44 px more for each other); below that the controls take a
+  second row. The [toolbars pass](SIMULATED-PROJECT-EPISODE.md#toolbars) had let the
+  row shrink to 160 px whatever its tabs, so that a control coming with a selection would
+  not move the view; in a group of several tabs that now happens over a wider range of
+  widths, the price of keeping each tab where the person can see, close and drag it.
+- **The add list keeps its entries' height**, so the cards no longer overflow.
+
+Each change is one conditional `composition.apply` of the saved layout, as before. In a
+conversation's Studio, close, the menu and dragging act while it shows the present, not
+during a replay; the + is on the person's own pages only.
+
+### Runs
+
+Evidence: `work/studio-human/` (ignored by Git): `serve.mjs` starts the checked-out
+service with a separate browser build, `drive/tour*.mjs` drive it and `shots/` holds
+what each step drew. The person's own Rho running at the time was not touched.
+
+| Run | What happened | Cause | Change |
+| --- | --- | --- | --- |
+| `tour4` | Close buttons, the tab menu and the + menu worked. The right pane's tabs narrowed to "m…" and "c…" beside the table's controls, and the shown tab "mtcars_summary.c". | Tabs kept 84 px each and the tab row a fixed 160 px before the controls. | Tabs narrow to icons; the row keeps room for every tab. |
+| `tour5` | All four tabs showed, the controls on a second row. × closed `README.md` and said so; Undo brought it back; a middle click closed `cars.png`; Delete closed `mtcars.png`; + put `cars.png` into the left group and Variables into the right. | — | None. |
+| `tour6`, `tour7` | The right group dropped near the bottom of the left one went under it. Held over the stage's right edge, the column was drawn where the group already was, and that drop wrote nothing. Over the other group's middle, the group was tinted. | — | None. |
+| `tour8` | The strip's double-click showed one group, Restore both. Shift+F10 opened README.md's menu with Close focused; Split right made a third pane; Escape returned focus to the tab; Undo layout change took the split back. At 700 px the one list of tabs had lost its tab styling. | That list still used the old markup. | It uses the same tabs. |
+| `object` | Clicking the `Results` tab timed out: its hidden close button took the click. | A transparent close button still takes clicks. | The close button is on the shown tab only. |
+
+### Checks
+
+- `test/layout-commands.test.mjs` adds: a whole group under, left of, or into another
+  group (last, or before one of its tabs, or into a bare view), and nothing written
+  where it already is, onto itself, or for the page's only group; a view or a group to
+  each side of the page; a view added into a chosen group or, when that group is gone,
+  the last.
+- `acceptance:frontend` adds one check: × closes Research notes and Undo restores it,
+  the lower group's + adds `data/README.md` there, and its strip dragged to the upper
+  group's right side gives a side-by-side layout in the saved composition.
+- Run against the separate browser build: the layout tests 19/19 and shell boundary 2/2,
+  the service and web type checks, and the frontend (14/14), agent-canvas, pages,
+  objects and person-files acceptances passed. The shell acceptance failed at "focus kept
+  in the editor at 390", as it does with the unchanged build, as Status records.
+
+### Limits
+
+- A background tab has no close button of its own; it closes from its menu, a middle
+  click or Delete.
+- A group moves only by dragging: the keyboard and the palette have no group move, and
+  tabs still cannot be reordered from the keyboard.
+- Maximize lasts for the browser tab and is not saved.
+- No drag between workspaces, and none from Sources into Studio.
+- No person has used these yet; the runs show the paths work, not that they are easy.

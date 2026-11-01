@@ -13,18 +13,34 @@
 .shell-divider:focus-visible { outline-offset: -2px; }
 .shell-group { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; overflow: hidden; background: white; border: 1px solid var(--color-hairline); border-radius: 8px; }
 .shell-tabbar { display: flex; flex-wrap: wrap; align-items: center; flex: none; min-height: 42px; padding: 0 8px; border-bottom: 1px solid var(--color-hairline); }
-/* Tabs keep their names. Down to 160 px they give way to a view's own controls by scrolling, so
-   a control that comes with a selection does not push the view down; below that the controls
-   take a second row. */
-.shell-tabs { display: flex; align-self: stretch; align-items: stretch; flex: 1 1 160px; max-width: 100%; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+/* Beside the tabs: Add view and the empty strip that carries the whole group. The strip gives
+   way to a view's own controls down to room for the shown tab's name and every other tab's icon
+   (--tabs is the number of tabs); below that the controls take a second row. */
+.shell-tabstrip { display: flex; align-self: stretch; align-items: stretch; flex: 1 1 min(100%, calc(128px + (var(--tabs, 1) - 1) * 44px + 40px)); max-width: 100%; min-width: 0; }
+.shell-tabs { display: flex; align-items: stretch; flex: 0 1 auto; min-width: 0; overflow-x: auto; scrollbar-width: none; }
 /* A strip that scrolls fades where tabs go on, instead of a scrollbar that would add to its height. */
 .shell-tabs[data-overflow=end] { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); }
 .shell-tabs[data-overflow=start] { -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to left, #000 calc(100% - 28px), transparent); }
 .shell-tabs[data-overflow=both] { -webkit-mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent); }
-.shell-tabs button { flex: none; max-width: 260px; min-height: 40px; padding: 0 12px; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; font-size: 13px; font-weight: 400; color: var(--color-meta); white-space: nowrap; }
-.shell-tabs button:hover { background: var(--color-hover); }
-.shell-tabs button[aria-selected=true] { border-bottom-color: var(--color-accent); color: var(--color-accent-strong); font-weight: 600; }
-.shell-tabs button:focus-visible { outline-offset: -3px; }
+/* Tabs narrow before they scroll out of sight, down to their icons, so every tab of a group
+   stays in view; the one shown keeps its name and room for its close button. */
+.shell-tab { position: relative; display: flex; align-items: stretch; flex: 0 1 auto; min-width: 44px; max-width: 260px; border-bottom: 2px solid transparent; }
+.shell-tab:has([aria-selected=true]) { flex-shrink: 0; border-bottom-color: var(--color-accent); }
+.shell-tab:hover { background: var(--color-hover); }
+.shell-tab > [role=tab] { flex: 1 1 auto; justify-content: flex-start; min-width: 0; min-height: 40px; padding: 0 12px; border: 0; border-radius: 0; background: transparent; font-size: 13px; font-weight: 400; color: var(--color-meta); white-space: nowrap; }
+.shell-tab[data-closable]:has([aria-selected=true]) > [role=tab] { padding-right: 30px; }
+.shell-tab > [role=tab][aria-selected=true] { color: var(--color-accent-strong); font-weight: 600; }
+.shell-tab > [role=tab]:focus-visible { outline-offset: -3px; }
+.shell-tab-close { position: absolute; right: 6px; top: 50%; translate: 0 -50%; width: 20px; height: 20px; min-height: 0; padding: 0; border: 0; border-radius: 5px; background: transparent; color: var(--color-meta); }
+.shell-tab-close:hover { background: var(--color-pressed); color: var(--color-ink); }
+.shell-tab-add { flex: none; align-self: center; width: 28px; height: 28px; min-height: 0; margin-left: 4px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--color-meta); }
+.shell-tab-add:hover, .shell-tab-add[aria-expanded=true] { background: var(--color-hover); color: var(--color-ink); }
+/* One list of every view, as on a phone: its tabs keep their names and scroll. */
+.shell-tabbar > .shell-tabs { flex: 1 1 auto; }
+.shell-tabbar > .shell-tabs > .shell-tab { flex: none; min-width: 0; }
+.shell-tabs-fill { flex: 1 1 0; min-width: 12px; }
+.shell-tabs-fill[data-movable] { cursor: grab; }
+.shell-restore { flex: none; min-height: 28px; margin-left: 8px; padding: 4px 9px; gap: 5px; border: 0; border-radius: 6px; background: var(--color-accent-soft); color: var(--color-accent-strong); font-size: 12px; font-weight: 500; }
 .shell-tab-name { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .shell-header-slot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-left: auto; min-width: 0; }
 .shell-header-slot:not(:has(.shell-view-header > *)) { display: none; }
@@ -33,12 +49,9 @@
 .shell-panel, .shell-view, .shell-owner { display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; }
 /* A dragged tab: where it would go is drawn before it is dropped. */
 .shell-body { position: relative; display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; }
-.shell-tabs button { position: relative; }
-.shell-tabs button[data-dragging] { opacity: 0.45; }
-.shell-tabs button[data-drop=before]::before, .shell-tabs[data-drop=end]::after { content: ''; position: absolute; top: 7px; bottom: 7px; width: 2px; border-radius: 1px; background: var(--color-accent); pointer-events: none; }
-.shell-tabs button[data-drop=before]::before { left: -1px; }
-.shell-tabs[data-drop=end] { position: relative; }
-.shell-tabs[data-drop=end]::after { position: sticky; right: 0; flex: none; margin-left: 1px; }
+.shell-tab[data-dragging], .shell-group[data-dragging] > :is(.shell-tabbar, .shell-body) { opacity: 0.45; }
+.shell-tab[data-drop=before]::before { content: ''; position: absolute; top: 7px; bottom: 7px; left: -1px; width: 2px; border-radius: 1px; background: var(--color-accent); pointer-events: none; }
+.shell-tabstrip[data-drop=end] > .shell-tabs::after { content: ''; position: sticky; right: 0; flex: none; width: 2px; margin: 7px 0 7px 1px; border-radius: 1px; background: var(--color-accent); pointer-events: none; }
 .shell-drop { position: absolute; inset: 0; z-index: 6; }
 .shell-drop-preview { position: absolute; inset: 0; opacity: 0; border: 2px solid var(--color-accent); border-radius: 6px; background: color-mix(in srgb, var(--color-accent) 12%, transparent); pointer-events: none; transition: inset 0.08s ease, opacity 0.08s ease; }
 .shell-drop[data-zone] .shell-drop-preview { opacity: 1; }
@@ -47,6 +60,40 @@
 .shell-drop[data-zone=right] .shell-drop-preview { inset: 6px 6px 6px 50%; }
 .shell-drop[data-zone=top] .shell-drop-preview { inset: 6px 6px 50% 6px; }
 .shell-drop[data-zone=bottom] .shell-drop-preview { inset: 50% 6px 6px 6px; }
+/* Each side of the whole page while something is dragged: a line marks it, and over it the
+   column or row it would become is drawn. */
+.shell-stage { position: relative; }
+.shell-edges { position: absolute; inset: 0; z-index: 8; pointer-events: none; }
+.shell-edge { position: absolute; pointer-events: auto; }
+.shell-edge[data-side=left] { left: 0; top: 0; bottom: 0; width: 18px; }
+.shell-edge[data-side=right] { right: 0; top: 0; bottom: 0; width: 18px; }
+.shell-edge[data-side=top] { top: 0; left: 18px; right: 18px; height: 18px; }
+.shell-edge[data-side=bottom] { bottom: 0; left: 18px; right: 18px; height: 18px; }
+.shell-edge::after { content: ''; position: absolute; border-radius: 2px; background: var(--color-accent); opacity: 0.3; }
+.shell-edge:is([data-side=left], [data-side=right])::after { top: 16px; bottom: 16px; width: 3px; }
+.shell-edge[data-side=left]::after { left: 4px; }
+.shell-edge[data-side=right]::after { right: 4px; }
+.shell-edge:is([data-side=top], [data-side=bottom])::after { left: 0; right: 0; height: 3px; }
+.shell-edge[data-side=top]::after { top: 4px; }
+.shell-edge[data-side=bottom]::after { bottom: 4px; }
+.shell-edge[data-over]::after { opacity: 1; }
+.shell-edge-preview { position: absolute; border: 2px solid var(--color-accent); border-radius: 8px; background: color-mix(in srgb, var(--color-accent) 12%, transparent); pointer-events: none; }
+.shell-edge-preview[data-side=left] { left: 12px; top: 12px; bottom: 12px; width: calc((100% - 24px) / 3); }
+.shell-edge-preview[data-side=right] { right: 12px; top: 12px; bottom: 12px; width: calc((100% - 24px) / 3); }
+.shell-edge-preview[data-side=top] { top: 12px; left: 12px; right: 12px; height: calc((100% - 24px) / 3); }
+.shell-edge-preview[data-side=bottom] { bottom: 12px; left: 12px; right: 12px; height: calc((100% - 24px) / 3); }
+/* A closed view, with Undo while the layout is as the close left it. */
+.shell-closed { position: absolute; left: 50%; bottom: 24px; translate: -50% 0; z-index: 9; display: flex; align-items: center; gap: 4px; max-width: calc(100% - 48px); padding: 5px 6px 5px 14px; border-radius: 8px; background: var(--color-ink); color: white; font-size: 13px; box-shadow: 0 8px 24px #20392b33; }
+.shell-closed > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-right: 6px; }
+.shell-closed .shell-link { color: #9fdcbf; font-weight: 600; }
+.shell-closed .shell-quiet { color: #c9d3ce; }
+/* Menus over the page: a tab's commands, and what can be added into a group. */
+.floating-menu { position: fixed; z-index: 40; min-width: 200px; max-width: min(360px, calc(100vw - 16px)); overflow: auto; padding: 6px; background: white; border: 1px solid var(--color-hairline); border-radius: 9px; box-shadow: 0 8px 28px #20392b1a; }
+.floating-menu[role=menu] > button { width: 100%; justify-content: flex-start; gap: 9px; min-height: 32px; padding: 5px 9px; border: 0; background: transparent; font-size: 13px; font-weight: 400; }
+.floating-menu[role=menu] > button:hover, .floating-menu[role=menu] > button:focus-visible { background: var(--color-hover); }
+.floating-menu[role=menu] > button > span { flex: 1; text-align: left; }
+.floating-menu kbd { color: var(--color-meta); font-size: 11px; }
+.floating-menu.add-into { width: 360px; }
 @media (prefers-reduced-motion: reduce) { .shell-drop-preview { transition: none; } }
 .shell-panel { overflow: hidden; }
 .shell-owner { position: relative; }

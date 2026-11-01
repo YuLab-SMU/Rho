@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { addAtEdge, addBeside, addWithRoom, closeView, dockView, groupNode, moveTab, moveView, paneShare, placeView, regions, resizeSplit, splitView } from '../dist/shell-layout.js';
+import { addAtEdge, addBeside, addInto, addWithRoom, closeView, dockView, groupNode, moveGroup, moveTab, moveToEdge, moveView, paneShare, placeView, regions, resizeSplit, splitView } from '../dist/shell-layout.js';
 
 // Layout commands change the owner tree only, and the shell draws the result through the
 // same reading as any other composition. Each case states what the person sees afterwards.
@@ -163,4 +163,55 @@ test('a script, its console under it, and the sessions\' variables and plots in 
   // An empty page takes it as its one tab; a view already there is not added twice.
   assert.deepEqual(drawn(addAtEdge({ rootId: 'root', nodes: [{ id: 'root', kind: 'group', children: [] }] }, view('v'), 'right', id)), { kind: 'tabs', id: 'root', views: ['v'] });
   assert.equal(addAtEdge(four, view('plots'), 'right', id), null);
+});
+
+test('a whole tab group moves beside another group, or its tabs join it', () => {
+  // Three groups side by side: [a b] [c] [d e].
+  const three = splitView(splitView(tabs('a', 'b', 'c', 'd', 'e'), 'c', 'horizontal', id), 'd', 'horizontal', id);
+  const start = moveTab(three, 'e', groupNode(drawn(three).children[1].id), null, id), panes = () => drawn(start).children;
+  assert.deepEqual(panes().map(c => c.views), [['a', 'b'], ['d', 'e'], ['c']]);
+  const pair = groupNode(panes()[1].id), first = groupNode(panes()[0].id), lone = groupNode(panes()[2].id);
+  // Under the first group: a vertical split there, the group keeping its tabs and their order.
+  const under = drawn(moveGroup(start, pair, first, 'bottom', null, id));
+  assert.deepEqual(under.children.map(c => c.kind === 'split' ? [c.axis, c.children.map(g => g.views)] : c.views), [['vertical', [['a', 'b'], ['d', 'e']]], ['c']]);
+  // Its tabs join another group, last or before one of its tabs; the emptied pane closes.
+  assert.deepEqual(drawn(moveGroup(start, pair, first, 'center', null, id)).children.map(c => c.views), [['a', 'b', 'd', 'e'], ['c']]);
+  assert.deepEqual(drawn(moveGroup(start, pair, first, 'center', 'b', id)).children.map(c => c.views), [['a', 'd', 'e', 'b'], ['c']]);
+  // Into a pane that is one bare view, which becomes a tab group.
+  assert.deepEqual(drawn(moveGroup(start, pair, lone, 'center', null, id)).children.map(c => c.views), [['a', 'b'], ['c', 'd', 'e']]);
+  // Left of the first group: the order of panes changes, no split is nested.
+  const left = drawn(moveGroup(start, lone, first, 'left', null, id));
+  assert.equal(left.axis, 'horizontal'); assert.deepEqual(left.children.map(c => c.views), [['c'], ['a', 'b'], ['d', 'e']]);
+  // Where it already is, onto itself, or the page's only group: nothing to write.
+  assert.equal(moveGroup(start, pair, first, 'right', null, id), null);
+  assert.equal(moveGroup(start, pair, pair, 'left', null, id), null);
+  assert.equal(moveGroup(tabs('a', 'b'), 'root', 'root', 'left', null, id), null);
+  assert.equal(moveGroup(start, 'missing', first, 'left', null, id), null);
+});
+
+test('a view or a whole group moves to a side of the whole page', () => {
+  // [a] beside [b over c]: c to the bottom edge runs under both.
+  const pair = dockView(tabs('a', 'b', 'c'), 'b', 'root', 'right', id), start = dockView(pair, 'c', groupNode(drawn(pair).children[1].id), 'bottom', id);
+  const before = drawn(start);
+  assert.deepEqual([before.axis, before.children[0].views, before.children[1].children.map(g => g.views)], ['horizontal', ['a'], [['b'], ['c']]]);
+  const bottom = drawn(moveToEdge(start, 'c', 'bottom', id));
+  assert.equal(bottom.axis, 'vertical'); assert.deepEqual(bottom.children[1].views, ['c']);
+  assert.deepEqual(bottom.children[0].children.map(c => c.views), [['a'], ['b']]);
+  assert.ok(Math.abs(bottom.weights[1] / bottom.weights.reduce((x, y) => x + y, 0) - 1 / 3) < 1e-9);
+  // A view leaves its tabs for a column of its own; a group keeps its tabs.
+  const column = drawn(moveToEdge(tabs('a', 'b', 'c'), 'b', 'left', id));
+  assert.deepEqual(column.children.map(c => c.views), [['b'], ['a', 'c']]);
+  const group = groupNode(drawn(splitView(tabs('a', 'b', 'c'), 'c', 'horizontal', id)).children[0].id);
+  assert.deepEqual(drawn(moveToEdge(splitView(tabs('a', 'b', 'c'), 'c', 'horizontal', id), group, 'right', id)).children.map(c => c.views), [['c'], ['a', 'b']]);
+  // Already along that side, or alone on the page: nothing to write.
+  assert.equal(moveToEdge(splitView(tabs('a', 'b'), 'b', 'horizontal', id), 'b', 'right', id), null);
+  assert.equal(moveToEdge(tabs('a'), 'a', 'left', id), null);
+});
+
+test('a view the person adds goes into the group they chose', () => {
+  const split = splitView(tabs('a', 'b'), 'b', 'horizontal', id);
+  assert.deepEqual(drawn(addInto(split, view('v'), 'root', id)).children.map(c => c.views), [['a', 'v'], ['b']]);
+  // A group that is gone: where any linked view goes, the last group.
+  assert.deepEqual(drawn(addInto(split, view('v'), 'missing', id)).children.map(c => c.views), [['a'], ['b', 'v']]);
+  assert.equal(addInto(split, view('a'), 'root', id), null);
 });

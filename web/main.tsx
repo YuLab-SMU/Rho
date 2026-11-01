@@ -269,9 +269,9 @@ function App() {
     openIn(sharedWorkspace(), path);
   }
   // Opens a file in a workspace and shows it there, or says why it could not.
-  function openIn(workspace: string, path: string) {
+  function openIn(workspace: string, path: string, into?: string) {
     if (!snapshot) return;
-    openInWorkspace(client, snapshot, workspace, path).then(placed => placed ? layout(placed.compositionId, placed.viewId) : setNotice(path + ' · Rho has no viewer for this kind of file yet.'),
+    openInWorkspace(client, snapshot, workspace, path, into).then(placed => placed ? layout(placed.compositionId, placed.viewId) : setNotice(path + ' · Rho has no viewer for this kind of file yet.'),
       error => setNotice(path + ' · ' + (error instanceof Error ? error.message : 'It could not be opened.')));
   }
   useEffect(() => setPrepared(null), [project?.id]);
@@ -284,14 +284,14 @@ function App() {
       .then(id => layout(id), error => setNotice('A new workspace could not be made. ' + (error instanceof Error ? error.message : '')));
   }
   // The Notebook on a page of the person's own: beside what is there, or brought forward.
-  function notebookOnPage(page: string) {
+  function notebookOnPage(page: string, into?: string) {
     if (!snapshot) return;
-    addNotebook(client!, snapshot.project.id, page, null).then(id => layout(page, id), error => setNotice('The Notebook could not be added. ' + (error instanceof Error ? error.message : '')));
+    addNotebook(client!, snapshot.project.id, page, null, into).then(id => layout(page, id), error => setNotice('The Notebook could not be added. ' + (error instanceof Error ? error.message : '')));
   }
   // The sessions' variables or plots on a page of the person's own, or brought forward.
-  function sessionViewOnPage(page: string, kind: SessionView) {
+  function sessionViewOnPage(page: string, kind: SessionView, into?: string) {
     if (!snapshot) return;
-    addSessionView(client!, snapshot.project.id, page, kind).then(id => layout(page, id), error => setNotice(`The ${sessionTitles[kind]} view could not be added. ` + (error instanceof Error ? error.message : '')));
+    addSessionView(client!, snapshot.project.id, page, kind, into).then(id => layout(page, id), error => setNotice(`The ${sessionTitles[kind]} view could not be added. ` + (error instanceof Error ? error.message : '')));
   }
   // A table or a script explored from where it is shown: it opens on the person's workspace with
   // the Notebook beside it. A table loads into the session as a new value; a script waits in the
@@ -502,10 +502,12 @@ function App() {
   const here = screen === 'plugins' ? 'plugins' : screen !== 'project' ? '' : studioOpen ? 'studio:' + (composition?.compositionId ?? compositionId) : section === 'sources' ? 'sources:' + category : section === 'file' && shownFile ? 'file:' + shownFile.row + ':' + shownFile.key : section === 'documents' ? 'files' : section;
   const openConversation = (id: string) => { setSelectedConversation(id); setAgentOpen(true); setContext(false); };
   const sessions = !!snapshot && snapshot.catalog.plugins.some(p => p.id === 'kernel') && canExplore(snapshot);
-  const pageAdd = snapshot ? <PageAdd sources={sources} notebook={!sessions ? 'unavailable' : notebookOn(composition?.views) ? 'present' : 'absent'}
+  // What can be put on the page: where Rho places it, or into the group the person chose.
+  const addMenu = (into?: string) => snapshot ? <PageAdd sources={sources} notebook={!sessions ? 'unavailable' : notebookOn(composition?.views) ? 'present' : 'absent'}
     variables={!sessions ? 'unavailable' : sessionViewOn('variables', composition?.views) ? 'present' : 'absent'} plots={!sessions ? 'unavailable' : sessionViewOn('plots', composition?.views) ? 'present' : 'absent'} flow={!sessions ? 'unavailable' : sessionViewOn('flow', composition?.views) ? 'present' : 'absent'}
     servers={!sessions ? 'unavailable' : sessionViewOn('servers', composition?.views) ? 'present' : 'absent'}
-    onNotebook={() => notebookOnPage(shownId)} onSessionView={kind => sessionViewOnPage(shownId, kind)} onFile={path => openIn(shownId, path)} onAll={row => showSources(row)} /> : null;
+    onNotebook={() => notebookOnPage(shownId, into)} onSessionView={kind => sessionViewOnPage(shownId, kind, into)} onFile={path => openIn(shownId, path, into)} onAll={row => showSources(row)} /> : null;
+  const pageAdd = addMenu();
   const initials = project ? name(project).split(/[\s_.-]+/).filter(Boolean).slice(0, 2).map(w => [...w][0]!.toUpperCase()).join('') || 'P' : '';
   // The projects list has the application's own sidebar even while a project stays chosen.
   const inProject = !!project && screen !== 'home';
@@ -611,7 +613,7 @@ function App() {
                     workspace={{ onAbout: about, contextTarget: context ? contextSlot : null, principalId: connection.principalId, feedbackContextActive: feedbackContext, onShowContext: () => { setFeedbackContext(true); setContext(true); setAgentOpen(false); }, onCommands: setLayoutCommands, agentTarget: agentOpen ? agentSlot : null, onShowAgent: () => setAgentOpen(true), onPersonMoved: () => setFollowing(false), attention: false, onConversation: openConversation, onExplore: exploreFile, onObject: openObject, prepared, onPrepare: setPrepared }} /></Suspense>
                 : composition ? <Suspense fallback={<Loading text="Opening workspace…" />}><Workspace key={snapshot.project.id + composition.compositionId} composition={composition} snapshot={snapshot} client={client!} onAbout={about} contextTarget={context ? contextSlot : null} principalId={connection.principalId} feedbackContextActive={feedbackContext} onShowContext={() => { setFeedbackContext(true); setContext(true); setAgentOpen(false); }} openView={openView} onCommands={setLayoutCommands} agentTarget={agentOpen ? agentSlot : null} onShowAgent={() => setAgentOpen(true)} barTarget={barSlot}
                     presence={presence} onPersonMoved={() => setFollowing(false)} attention={false} following={followingHere && openFollowed}
-                    onConversation={openConversation} prepared={prepared} onPrepare={setPrepared}
+                    onConversation={openConversation} prepared={prepared} onPrepare={setPrepared} addView={arrangeable ? addMenu : undefined}
                     empty={arrangeable ? <div className="studio-empty page-empty"><span className="empty-symbol"><Icon name="layout" size={26} stroke={1.5} /></span><h2>This workspace is empty</h2><p>Put the Notebook here to work in the live R and Python sessions, or a project file to look at it beside them.</p>{pageAdd}</div> : undefined} /></Suspense>
                   : <StudioEmpty root={project.root} agent={agentNow} following={followingHere} onAgent={() => { setAgentOpen(true); setContext(false); }} onFiles={() => showSources('data')} />}
                 </div>

@@ -1,14 +1,21 @@
-import { useEffect, useLayoutEffect, useRef, type DragEvent, type KeyboardEvent, type PointerEvent, type ReactNode, type RefObject } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type DragEvent, type KeyboardEvent, type MouseEvent, type PointerEvent, type ReactNode, type RefObject } from 'react';
 import { resize, type Region, type Side } from '../../src/shell-layout.js';
+import { Icon } from '../icons.js';
+import { FloatingMenu, MenuItems, under, type MenuItem, type MenuPoint } from './menu.js';
 
 type Tabs = Extract<Region, { kind: 'tabs' }>;
 export interface TabRender { title: (id: string) => ReactNode; label: (id: string) => string; container: (id: string) => HTMLElement }
-// Where a dragged tab would go: among a group's tabs (before one, or last), into the group,
-// or into a pane of its own on one side of it.
-export type DropTarget = { group: string; zone: 'tab'; before: string | null } | { group: string; zone: 'center' | Side };
-export interface TabDrag { dragging: string | null; target: DropTarget | null; start(id: string): void; end(): void; over(target: DropTarget | null): void; drop(target: DropTarget): void }
+// What the person can do with a group's tabs besides choosing one: close a tab, open its menu,
+// add a view into the group, maximize the group, and move the whole group by its empty strip.
+export interface TabTools { close?: (id: string) => void; menu?: (id: string) => MenuItem[]; add?: () => ReactNode; movable?: boolean; maximized?: boolean; onMaximize?: () => void }
+// Where a dragged tab or group would go: among a group's tabs (before one, or last), into the
+// group, into a pane of its own on one side of it, or along one side of the whole page.
+export type DropTarget = { group: string; zone: 'tab'; before: string | null } | { group: string; zone: 'center' | Side } | { edge: Side };
+export type Dragged = { kind: 'view' | 'group'; id: string };
+export interface TabDrag { dragging: Dragged | null; target: DropTarget | null; start(dragged: Dragged): void; end(): void; over(target: DropTarget | null): void; drop(target: DropTarget): void }
 const dragType = 'application/x-rho-view';
-const same = (a: DropTarget | null, b: DropTarget) => !!a && a.group === b.group && a.zone === b.zone && (a.zone !== 'tab' || b.zone !== 'tab' || a.before === b.before);
+const same = (a: DropTarget | null, b: DropTarget) => JSON.stringify(a) === JSON.stringify(b);
+export const groupOfTarget = (target: DropTarget | null) => target && 'group' in target ? target.group : null;
 // The side nearest the pointer when it is within a quarter of the panel from that edge.
 function zoneAt(event: DragEvent<HTMLElement>): 'center' | Side {
   const box = event.currentTarget.getBoundingClientRect(), x = (event.clientX - box.left) / box.width, y = (event.clientY - box.top) / box.height;
@@ -60,49 +67,83 @@ export function useTabOverflow(ref: RefObject<HTMLElement | null>, selected: str
   useEffect(() => { ref.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' }); }, [ref, selected]);
 }
 
-// A tab group: arrows, Home and End move the selection and focus together (WAI-ARIA tabs).
-export function TabGroup({ group, name, selected, onSelect, onHeader, render, drag }: { group: Tabs; name: string; selected: string; onSelect: (id: string) => void; onHeader: (element: HTMLDivElement | null) => void; render: TabRender; drag?: TabDrag }) {
-  const list = useRef<HTMLDivElement>(null);
+// A tab group: arrows, Home and End move the selection and focus together (WAI-ARIA tabs);
+// Delete closes the tab with focus, and the context menu key or Shift+F10 opens its menu. The
+// tab shown has a close button; any tab closes from its menu or with a middle click, so a click
+// meant to show a tab never lands on a close button.
+export function TabGroup({ group, name, selected, onSelect, onHeader, render, drag, tools }: { group: Tabs; name: string; selected: string; onSelect: (id: string) => void; onHeader: (element: HTMLDivElement | null) => void; render: TabRender; drag?: TabDrag; tools?: TabTools }) {
+  const list = useRef<HTMLDivElement>(null), adder = useRef<HTMLButtonElement>(null);
+  const [menu, setMenu] = useState<{ kind: 'tab'; id: string; at: MenuPoint; from: HTMLElement } | { kind: 'add'; at: MenuPoint; from: HTMLElement } | null>(null);
   useTabOverflow(list, selected);
   const base = 'shell-' + group.id.replace(/[^A-Za-z0-9_-]/g, '_'), index = Math.max(0, group.views.indexOf(selected));
+  const tabElements = () => [...(list.current?.querySelectorAll<HTMLElement>('[role=tab]') ?? [])];
   function move(event: KeyboardEvent<HTMLDivElement>) {
     const count = group.views.length;
     const next = { ArrowRight: (index + 1) % count, ArrowLeft: (index - 1 + count) % count, Home: 0, End: count - 1 }[event.key];
     if (next === undefined) return;
     event.preventDefault(); onSelect(group.views[next]);
-    (list.current?.children[next] as HTMLElement | undefined)?.focus();
+    tabElements()[next]?.focus();
   }
+  function tabKey(event: KeyboardEvent<HTMLButtonElement>, id: string) {
+    if (event.key === 'Delete' && tools?.close) { event.preventDefault(); tools.close(id); }
+    else if ((event.key === 'ContextMenu' || (event.key === 'F10' && event.shiftKey)) && tools?.menu) { event.preventDefault(); setMenu({ kind: 'tab', id, at: under(event.currentTarget), from: event.currentTarget }); }
+  }
+  function tabMenu(event: MouseEvent<HTMLButtonElement>, id: string) {
+    if (!tools?.menu) return;
+    event.preventDefault(); setMenu({ kind: 'tab', id, at: { x: event.clientX, y: event.clientY }, from: event.currentTarget });
+  }
+  const closeMenu = (refocus: boolean) => { const from = menu?.from; setMenu(null); if (refocus && from?.isConnected) from.focus(); };
+  // A group cannot be dropped on itself.
+  const self = drag?.dragging?.kind === 'group' && drag.dragging.id === group.id;
   // Among the tabs, the drop goes before the first tab whose middle is past the pointer.
   function overTabs(event: DragEvent<HTMLDivElement>) {
-    if (!drag?.dragging) return;
+    if (!drag?.dragging || self) return;
     event.preventDefault(); event.dataTransfer.dropEffect = 'move';
-    const tabs = [...(list.current?.children ?? [])] as HTMLElement[];
+    const tabs = [...(list.current?.querySelectorAll<HTMLElement>('.shell-tab') ?? [])];
     const at = tabs.findIndex(tab => { const box = tab.getBoundingClientRect(); return event.clientX < box.left + box.width / 2; });
     const target: DropTarget = { group: group.id, zone: 'tab', before: at < 0 ? null : group.views[at] };
     if (!same(drag.target, target)) drag.over(target);
   }
   function overPanel(event: DragEvent<HTMLDivElement>) {
-    if (!drag?.dragging) return;
+    if (!drag?.dragging || self) return;
     event.preventDefault(); event.dataTransfer.dropEffect = 'move';
     const target: DropTarget = { group: group.id, zone: zoneAt(event) };
     if (!same(drag.target, target)) drag.over(target);
   }
-  const drop = (event: DragEvent<HTMLElement>) => { if (!drag?.dragging || drag.target?.group !== group.id) return; event.preventDefault(); drag.drop(drag.target); };
-  const here = drag?.target?.group === group.id ? drag.target : null;
-  return <section className="shell-group" data-group={group.id}>
+  const drop = (event: DragEvent<HTMLElement>) => { if (!drag?.dragging || !drag.target || groupOfTarget(drag.target) !== group.id) return; event.preventDefault(); drag.drop(drag.target); };
+  const here = drag?.target && 'group' in drag.target && drag.target.group === group.id ? drag.target : null;
+  const draggingView = drag?.dragging?.kind === 'view' ? drag.dragging.id : null;
+  // The strip beside the tabs carries the whole group: drag it to move the group, double-click
+  // it to maximize the group or bring the others back.
+  const movable = !!drag && !!tools?.movable;
+  return <section className="shell-group" data-group={group.id} data-dragging={self ? '' : undefined} data-maximized={tools?.maximized ? '' : undefined}>
     <div className="shell-tabbar">
-      <div ref={list} className="shell-tabs" role="tablist" aria-label={name} onKeyDown={move} onDragOver={overTabs} onDrop={drop} data-drop={here?.zone === 'tab' && here.before === null ? 'end' : undefined}>
-        {group.views.map((id, i) => <button key={id} id={base + '-tab-' + i} role="tab" aria-selected={id === selected} aria-controls={base + '-panel'} tabIndex={id === selected ? 0 : -1} title={render.label(id)} onClick={() => onSelect(id)}
-          draggable={!!drag} data-dragging={drag?.dragging === id ? '' : undefined} data-drop={here?.zone === 'tab' && here.before === id ? 'before' : undefined}
-          onDragStart={event => { if (!drag) return; event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData(dragType, id); drag.start(id); }} onDragEnd={() => drag?.end()}>{render.title(id)}</button>)}
+      <div className="shell-tabstrip" style={{ '--tabs': group.views.length } as CSSProperties} onDragOver={overTabs} onDrop={drop} data-drop={here?.zone === 'tab' && here.before === null ? 'end' : undefined}>
+        <div ref={list} className="shell-tabs" role="tablist" aria-label={name} onKeyDown={move}>
+          {group.views.map((id, i) => <div key={id} className="shell-tab" data-dragging={draggingView === id ? '' : undefined} data-drop={here?.zone === 'tab' && here.before === id ? 'before' : undefined} data-closable={tools?.close ? '' : undefined}>
+            <button id={base + '-tab-' + i} role="tab" aria-selected={id === selected} aria-controls={base + '-panel'} tabIndex={id === selected ? 0 : -1} title={render.label(id)} onClick={() => onSelect(id)}
+              onKeyDown={event => tabKey(event, id)} onContextMenu={event => tabMenu(event, id)} aria-keyshortcuts={tools?.close ? 'Delete' : undefined}
+              onMouseDown={event => { if (event.button === 1 && tools?.close) event.preventDefault(); }} onAuxClick={event => { if (event.button === 1 && tools?.close) { event.preventDefault(); tools.close(id); } }}
+              draggable={!!drag} onDragStart={event => { if (!drag) return; event.stopPropagation(); event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData(dragType, id); drag.start({ kind: 'view', id }); }} onDragEnd={() => drag?.end()}>{render.title(id)}</button>
+            {tools?.close && id === selected && <button className="shell-tab-close" tabIndex={-1} aria-hidden="true" title={'Close ' + render.label(id)} draggable={false} onClick={() => tools.close!(id)}><Icon name="close" size={12} stroke={2} /></button>}
+          </div>)}
+        </div>
+        {tools?.add && <button ref={adder} className="shell-tab-add" aria-label={'Add a view to ' + name} title="Add a view here" aria-haspopup="dialog" aria-expanded={menu?.kind === 'add'}
+          onClick={event => menu?.kind === 'add' ? setMenu(null) : setMenu({ kind: 'add', at: under(event.currentTarget), from: event.currentTarget })}><Icon name="plus" size={15} stroke={1.8} /></button>}
+        <div className="shell-tabs-fill" aria-hidden="true" data-movable={movable ? '' : undefined} title={movable ? 'Drag to move these views together. Double-click to maximize.' : tools?.maximized ? 'Double-click to show every group' : undefined}
+          draggable={movable} onDoubleClick={() => (movable || tools?.maximized) && tools?.onMaximize?.()}
+          onDragStart={event => { if (!movable) return; event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData(dragType, group.id); if (list.current) event.dataTransfer.setDragImage(list.current, 16, 16); drag!.start({ kind: 'group', id: group.id }); }} onDragEnd={() => drag?.end()} />
       </div>
       <div className="shell-header-slot" ref={onHeader} />
+      {tools?.maximized && <button className="shell-restore" title="Show every group again" onClick={tools.onMaximize}><Icon name="restore" size={14} />Restore</button>}
     </div>
     <div className="shell-body">
       <Slot key={selected} container={render.container(selected)} id={base + '-panel'} labelledBy={base + '-tab-' + index} />
-      {drag?.dragging && <div className="shell-drop" data-zone={here && here.zone !== 'tab' ? here.zone : undefined} onDragOver={overPanel} onDrop={drop} aria-hidden="true"
+      {drag?.dragging && !self && <div className="shell-drop" data-zone={here && here.zone !== 'tab' ? here.zone : undefined} onDragOver={overPanel} onDrop={drop} aria-hidden="true"
         onDragLeave={event => { if (here && !event.currentTarget.contains(event.relatedTarget as Node | null)) drag.over(null); }}><div className="shell-drop-preview" /></div>}
     </div>
+    {menu?.kind === 'tab' && tools?.menu && <FloatingMenu at={menu.at} anchor={menu.from} label={render.label(menu.id)} onClose={closeMenu}><MenuItems items={tools.menu(menu.id)} /></FloatingMenu>}
+    {menu?.kind === 'add' && tools?.add && <FloatingMenu at={menu.at} anchor={adder.current} label={'Add a view to ' + name} role="dialog" className="add-into" onClose={closeMenu}>{tools.add()}</FloatingMenu>}
   </section>;
 }
 
