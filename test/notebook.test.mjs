@@ -31,6 +31,10 @@ test('the person and their Agent share a live session; only the person ends it',
   assert.match(made.cell.by, /^agent:/);
   const mine = await call('kernel.run', { language: 'python', code: 'shared + 1', changeId: 'p1', waitMs: 30000 });
   assert.equal(mine.cell.by, 'browser:local');
+  // The timeline reads who ran each cell from the read the plugin names for it.
+  const catalog = await call('capability.list');
+  assert.equal(catalog.plugins.find(entry => entry.id === 'kernel').timeline, 'kernel.events');
+  assert.deepEqual((await call('kernel.events')).events.map(e => [e.by, e.label, e.outcome]), [['browser:local', 'shared + 1', 'done'], [made.cell.by, 'Define a value', 'done']]);
   assert.equal(mine.cell.sessionId, made.cell.sessionId, 'the person runs in the Agent\'s session');
   assert.equal(mine.cell.outputs[0].text, '42\n');
   // Both read the same value as the session holds it.

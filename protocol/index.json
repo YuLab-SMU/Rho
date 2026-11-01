@@ -155,8 +155,8 @@
     "capability.list": {
       "summary": "Read registered actions and components. Does not start R or a Core Host.",
       "path": "operations/capability.list.json",
-      "bytes": 23153,
-      "sha256": "a293cc558cfc3ebc7508dac293852cdbccba7806d65422a254e97f677c7dec9e"
+      "bytes": 23255,
+      "sha256": "8fcc56faff6e2c4102945d8a532c987dabbc69f1833371cf8c1f149dbec92dda"
     },
     "capability.resolve": {
       "summary": "Fetch selected relevant Skills with complete owner contracts, whole objects only. Pages pin catalog/bundle/caller; knownRefs only reuse currently available immutable bodies.",
@@ -187,6 +187,12 @@
       "path": "operations/composition.undo.json",
       "bytes": 25368,
       "sha256": "fadd401c6a5a98ea5c66755603bccd36353566875acf8a29fd7d75ec8cc2bc64"
+    },
+    "console.events": {
+      "summary": "Who ran each Console command and when, newest first, for the timeline: the folder, how it ended and its first line. No output.",
+      "path": "operations/console.events.json",
+      "bytes": 2383,
+      "sha256": "ec13a8f53af030e391d068874c6110e7c62cf4f4368f63595a8fde0659e144f2"
     },
     "console.list": {
       "summary": "The commands run from the Console, newest first, with how each ended as Rho observed it: an exit code or signal, a requested stop, still continuing outside Rho, or unknown.",
@@ -428,6 +434,12 @@
       "bytes": 8788,
       "sha256": "eb10497e17d14eca90237d20bde0eaad9296a7c50a39f285b899c06878d73ebc"
     },
+    "kernel.events": {
+      "summary": "Who ran each cell of the live sessions and when, newest first, for the timeline: its language and place, how it ended and its purpose or first line. No code or output.",
+      "path": "operations/kernel.events.json",
+      "bytes": 2423,
+      "sha256": "fba1e5d703441d2cb304456a0cca96dc479ca93459b9f23dbec70fa750499d03"
+    },
     "kernel.inspect": {
       "summary": "One value of a live session, as its session describes it: what kind of thing it is (a table, a model, a vector, a list, a function or a value), short facts, and one page of its rows, elements or parts, each part with the code that reaches it. Never starts a session or waits for a cell: while a cell runs or waits the answer is busy. A reading that takes too long is interrupted.",
       "path": "operations/kernel.inspect.json",
@@ -521,8 +533,8 @@
     "observation.snapshot": {
       "summary": "observation.snapshot",
       "path": "operations/observation.snapshot.json",
-      "bytes": 164681,
-      "sha256": "f374989e2105abab3218a0a5f3019659df3abff420174afc9e74e3e61ecdad63"
+      "bytes": 164799,
+      "sha256": "fef370d64dcba4404895bf12a2af45885eab0a305b1a97a96d174ea80319978e"
     },
     "project.create": {
       "summary": "project.create",
@@ -671,8 +683,8 @@
     "session.grant": {
       "summary": "session.grant",
       "path": "operations/session.grant.json",
-      "bytes": 4708,
-      "sha256": "8f860dcfcbdc620d696bca0f85cfc30aa0b3ee10437ed741861b13f8934af127"
+      "bytes": 4767,
+      "sha256": "95564602b9006b5fe960bad93460916c1461f9578766d2fd95a1bccfd866b7a4"
     },
     "skill.list": {
       "summary": "List the application and enabled provider Skills shipped in the selected package. Skills guide discovery but do not grant authorization.",

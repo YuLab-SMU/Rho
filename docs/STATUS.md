@@ -1,6 +1,6 @@
 # Rho status
 
-Updated: 2026-10-31.
+Updated: 2026-11-01.
 
 ## Current focus
 
@@ -176,9 +176,8 @@ there, in run order, with lines from each value to the cells that read it, value
 and reads made stale. An HTML file opens as its page (HTML 0.1.0) in a sandboxed frame with no
 network, with its project styles, scripts and images. In bix-46 (R, a DESeqResults object) both
 answers matched; the phylogenetics files of bix-58/60 (Python, ClipKIT run in the session) gave
-bix-60's 19 only for five of the ten trees and did not reproduce bix-58. The runs found and fixed an
-S4 value listed as changed by printing, scope and rerun errors in what a cell read, and unrecorded
-folders.
+bix-60's 19 only for five of the ten trees and did not reproduce bix-58. The runs fixed an S4 value
+listed as changed by printing, scope and rerun errors in what a cell read, and unrecorded folders.
 
 [Live sessions on a server](REMOTE-EPISODE.md): R and Python can run in a folder on a server
 that ssh reaches as the person's own setup does (Notebook 0.2.0). A place names the ssh
@@ -224,6 +223,14 @@ the notes, and new Agents followed them (step 1 again 5/5). A rule an Agent wide
 recording carried over too; the guidance now keeps the person's terms. Seed skills and records
 from failures are not built.
 
+[Timeline events](TIMELINE-EVENTS-EPISODE.md): a plugin names a read of who did what and when
+(Notebook 0.5.0 `kernel.events`, Console 0.3.0 `console.events`); the Graph, the Overview and a
+conversation's Studio place its events by principal: the person's cells and commands in a lane
+named You, an Agent's cells in its conversation's, others in Outside Rho. The Notebook keeps its
+name: in four runs of the person's "在notebook 中演示一下ggplot2", Agents used the shared R session.
+The conversation that made a Quarto file began before the Notebook existed and could not be
+replayed. Agents now read that "in the notebook" means Rho's sessions, untested on old histories.
+
 ## Existing application
 
 - Projects opens selected folders and manages finite source folders. Sources counts
@@ -254,23 +261,18 @@ Earlier observations remain in the [home/project](HOME-PROJECT-EPISODE.md), [sid
 
 ## Verification
 
-From the baseline (Rho 223/223, Plugins 104/104, an explicit unchanged Core binary) to the
-exploring pass (Rho 264/264, Plugins 132/132), each pass that first failed did so on an
-undeclared CSS variable, a stale count or limit in a check, or a shell import outside its set,
-and passed once corrected; this page's Git history keeps each count.
-Later passes (project skills, the Overview's Notebook, lab study, servers' skills, remote sessions,
-Data flow, Sources) recorded Rho 268–273 of 269–274 and Plugins 134–151; each miss was the MCP v2
-test at its 30 s limit or a cleanup race (`.rho`, `ENOTEMPTY`), passing alone. Their contract checks and the pages, ui:u2, person-files, agent-canvas,
-graph, agent-page, agent-ui, sources and review acceptances passed. The shell acceptance (editor
-focus at 390 px) and the interaction acceptance (a `/^workspace/` sidebar row) failed before the
-toolbar pass and remain open; this page's Git history keeps each count and failure.
-The by-hand and closed-views passes ran their focused tests and acceptances on a separate browser
-build. The plugin views pass records Rho 264/267 and Plugins 161/161 in the [ledger](VERIFICATION.json):
-MCP v2 at its limit and a Console test's `.rho` cleanup race, each passing alone. A first run also
-caught the `--tabs` variable the by-hand pass left undeclared and a catalog check by id that two
-`rho.object` versions broke; both were fixed and pass. On a separate browser build
-a browser episode of the six views and both command lines, pages, agent-canvas 10/10, frontend
-14/14 and objects passed; shell failed as above. The [episode](REVIEW-EVIDENCE-EPISODE.md)
+Passes from the baseline (Rho 223/223, Plugins 104/104, an explicit unchanged Core binary) to
+Sources recorded up to Rho 273/274 and Plugins 151. Each first failure was an undeclared CSS
+variable, a stale count or limit in a check or a shell import, then fixed; each later miss was the
+MCP v2 test at its 30 s limit or a `.rho` cleanup race (`ENOTEMPTY`), passing alone. Their pages,
+ui:u2, person-files, agent-canvas, graph, agent-page, agent-ui, sources and review acceptances
+passed. The shell (editor focus at 390 px) and interaction (a `/^workspace/` sidebar row)
+acceptances failed before the toolbar pass and remain open; Git history keeps each count.
+The by-hand, closed-views and plugin views passes (Rho 264/267, Plugins 161/161, those two misses;
+pages, agent-canvas, frontend and objects passed, shell as above) ran on a separate browser build.
+The timeline events pass records Rho 267/269 and Plugins 163/163 in the [ledger](VERIFICATION.json),
+the same two misses passing alone; graph, frontend, pages and agent-canvas 10/10 passed, the last
+once its replay click moved from a fixed pixel to the first read mark. The [episode](REVIEW-EVIDENCE-EPISODE.md)
 records contract, browser and installed results; the fixed 0.5.1 candidate passed 230/230
 ([preview](PREVIEW-0.5.1.md)). No failures are converted into passes by omitting the failed run.
 

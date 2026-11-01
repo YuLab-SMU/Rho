@@ -1,6 +1,6 @@
 # Browser application
 
-Updated 2026-10-31. The frontend was reset at the user's request. Previous frontend
+Updated 2026-11-01. The frontend was reset at the user's request. Previous frontend
 plans, visual specifications, Paper references and appearance rulers have been
 removed from the working repository. Git retains their history; they do not govern
 this implementation. This document describes the current application, not another
@@ -37,7 +37,10 @@ inspect what happened. The application gives those actions direct places:
   kept, and the board names results it does not cover and files changed since.
   Earlier answers are chosen from a menu. Below the board come a count for each kind
   of step (asked, read, edited, ran, changed on disk, answered), which is also the
-  legend and filter of the Graph's timeline below it, one lane per conversation.
+  legend and filter of the Graph's timeline below it: one lane per conversation, the
+  person's own lane above them and one for callers outside Rho below
+  ([timeline events](TIMELINE-EVENTS-EPISODE.md)). A project where only the person has
+  worked shows the same strip as What you did.
   Without conversations, the results show as pictures, newest first: the newest at
   twice the size, then two or five more, with the rest in Files. A side column draws
   each workspace as its panes, opens the shared notes, and lists the files the
@@ -269,7 +272,9 @@ inspect what happened. The application gives those actions direct places:
   (`studioLimits`). A file's view says which kept version it shows, with earlier and later.
   The parts of the work sit in a chip in the Studio bar, named by the Agent's own words
   between steps or by what the steps did, with rounds of editing and running; time runs
-  down the stage's right edge beside the Agent panel, long pauses folded. Choosing a
+  down the stage's right edge beside the Agent panel, long pauses folded, with the cells and
+  commands its Agent and the person ran since it began, and a moment at one of them brings
+  the Notebook or Commands view forward. Choosing a
   moment there, a part, or another version replays it: the views, the commands, the
   part and the conversation in the Agent panel all show the record as it stood then, to
   the second, and a text file shows its version kept then, read only, or says that none was kept. Arranging the
@@ -314,7 +319,11 @@ inspect what happened. The application gives those actions direct places:
   file is a separate action, and replay hides captures later than its cursor. The timeline
   below gives each conversation a lane and each step a block coloured by kind (asked,
   read, edited, ran, changed on disk, answered), lanes with the same title carrying
-  their start time; the legend counts and filters them,
+  their start time. What the plugins record joins it: each plugin may name a read of
+  who did what and when (Notebook cells, Console commands), and each event goes to the
+  lane of whoever did it: You, the conversation whose Agent did it, or Outside Rho.
+  Every stretch of time is wide enough for its steps before the rest is shared by
+  duration, so a minute of cells beside days of messages stays readable. The legend counts and filters them,
   refused or unknown steps are marked, pauses fold to a short gap, and the work
   replays at 1×, 2× or 4×. While the Agent works the Graph stays and follows it; a
   step waiting for the person's choice turns amber and is answered there. Card labels
@@ -472,7 +481,8 @@ command's name; the row's details keep what ran.
 `src/work-graph.ts` builds the Graph from `conversation.read` records (a finished
 message keeps the project files that changed on disk while it ran) and the folder walk
 (`project.entries` gives each file's `modifiedAt`), and lays each message out as a row; `web/graph.tsx` draws it, the inspector, the timeline and the
-Overview's `WorkStrip`. `src/answer-board.ts` derives the Overview's answer board from
+Overview's `WorkStrip`. `web/timeline-events.ts` reads each plugin's `timeline` read named in
+the catalog, and `src/timeline-events.ts` places its events in lanes by principal. `src/answer-board.ts` derives the Overview's answer board from
 the same graph: `answerBoard` gives each file and command of a message a role,
 `boardThreads` keeps a later question that made no results with the answer it asks
 about, and `src/asking.ts` writes and reads back what a question was asked about.
@@ -603,8 +613,8 @@ the edited text on disk in the open editor, that nothing else opened there, the 
 page's record of the turn and a file it names shown in place, that Follow opens the
 conversation's Studio, marked in the sidebar's sessions, with its data, script,
 commands, output, parts and timeline, that
-a moment chosen on the timeline shows the views and the conversation as they were then,
-that the answer board is led by the figure the turn made, with the next question and its
+a moment chosen on the timeline at the work's first read shows the views and the
+conversation as they were then, that the answer board is led by the figure the turn made, with the next question and its
 answer under it, and overflow at 1024/390. Evidence goes to
 `work/agent-canvas-acceptance/` by default.
 

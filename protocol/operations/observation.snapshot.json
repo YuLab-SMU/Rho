@@ -203,6 +203,10 @@
                     "minLength": 1
                   }
                 },
+                "timeline": {
+                  "type": "string",
+                  "minLength": 1
+                },
                 "listing": {
                   "type": "object",
                   "additionalProperties": false,

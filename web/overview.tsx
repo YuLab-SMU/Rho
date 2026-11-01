@@ -222,7 +222,8 @@ export function ProjectOverview({ project, snapshot, client, section, notesText 
       {files && !!snapshot.conversations?.length && <AnswerBoard client={client} snapshot={snapshot} files={files} notesText={notesText} onConversation={id => onAgent(id)} onPath={path => onPath?.(path)} onExplore={onExplore} onConsole={turn => onConsole ? onConsole(turn) : onSection('console')} onGraph={() => onSection('graph')} />}
       <div className={'project-columns' + (side ? '' : ' single')}>
         <div className="project-primary">
-          {files && boarded && <Suspense fallback={null}><WorkStrip client={client} snapshot={snapshot} files={files} onOpen={() => onSection('graph')} onConversations={() => onSection('agent')} /></Suspense>}
+          {/* What was done over time: the Agents' conversations and the person's cells and commands. */}
+          {files && <Suspense fallback={null}><WorkStrip client={client} snapshot={snapshot} files={files} onOpen={() => onSection('graph')} onConversations={() => onSection('agent')} /></Suspense>}
           {/* With conversations, the board above shows each answer's results; Files keeps them all. */}
           {(!boarded || (!figures.length && artifacts.length > 0)) && <section className="project-section figures-section"><div className="section-heading"><h2>Results &amp; figures{figures.length > 0 && <span className="section-count">{figures.length}</span>}</h2><button className="text-button" onClick={() => onSection('files')}>All files <Icon name="chevron" size={12} /></button></div>
             {figures.length ? <ul className={'figure-grid count-' + shownFigures + (shownFigures >= 3 ? ' featured' : '')}>{figures.slice(0, shownFigures).map(item => <li key={item.key}>

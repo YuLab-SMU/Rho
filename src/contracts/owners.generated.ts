@@ -18520,6 +18520,107 @@ export const ownerContracts: OwnerContractSnapshot = {
     },
     "console": {
       "operationContracts": {
+        "console.events": {
+          "effect": "read",
+          "inputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "limit": {
+                "maximum": 500,
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "required": [],
+            "type": "object"
+          },
+          "outputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "events": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "action": {
+                      "enum": [
+                        "run"
+                      ]
+                    },
+                    "by": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "endedAt": {
+                      "anyOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "id": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "label": {
+                      "maxLength": 200,
+                      "type": "string"
+                    },
+                    "outcome": {
+                      "enum": [
+                        "running",
+                        "done",
+                        "failed",
+                        "stopped",
+                        "unknown"
+                      ]
+                    },
+                    "startedAt": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "where": {
+                      "anyOf": [
+                        {
+                          "maxLength": 120,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "by",
+                    "action",
+                    "label",
+                    "where",
+                    "startedAt",
+                    "endedAt",
+                    "outcome"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "omitted": {
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "events",
+              "omitted"
+            ],
+            "type": "object"
+          },
+          "requires": []
+        },
         "console.list": {
           "effect": "read",
           "inputSchema": {
@@ -19165,6 +19266,107 @@ export const ownerContracts: OwnerContractSnapshot = {
     },
     "kernel": {
       "operationContracts": {
+        "kernel.events": {
+          "effect": "read",
+          "inputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "limit": {
+                "maximum": 500,
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "required": [],
+            "type": "object"
+          },
+          "outputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "events": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "action": {
+                      "enum": [
+                        "run"
+                      ]
+                    },
+                    "by": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "endedAt": {
+                      "anyOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "id": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "label": {
+                      "maxLength": 200,
+                      "type": "string"
+                    },
+                    "outcome": {
+                      "enum": [
+                        "running",
+                        "done",
+                        "failed",
+                        "stopped",
+                        "unknown"
+                      ]
+                    },
+                    "startedAt": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "where": {
+                      "anyOf": [
+                        {
+                          "maxLength": 120,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "by",
+                    "action",
+                    "label",
+                    "where",
+                    "startedAt",
+                    "endedAt",
+                    "outcome"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "omitted": {
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "events",
+              "omitted"
+            ],
+            "type": "object"
+          },
+          "requires": []
+        },
         "kernel.inspect": {
           "effect": "read",
           "inputSchema": {
@@ -24622,22 +24824,22 @@ export const ownerContracts: OwnerContractSnapshot = {
     },
     "console": {
       "package": "@rho-workspace/plugin-console",
-      "packageVersion": "0.2.0",
+      "packageVersion": "0.3.0",
       "entry": "./operations",
       "entryPath": "@rho-workspace/plugin-console/dist/operations.js",
-      "entrySha256": "98d45ada88d73afa451a7367f2752054dc4817f2a17a977ae3e7cf243a2fd5cf",
+      "entrySha256": "1c523dfc1dbc5e3e1ca67eb0439a48d3026e0977f8ef48f94f105f658b4a6ca9",
       "exports": {
-        "operationContracts": "3e4024720d41605e740d7fd6e0b39df2e6c69c8303acd39a3821b91b6ed5a967"
+        "operationContracts": "7de05a78f91d96eba1885e78df3f2e62bc636545315ab06203f216f92068d9c0"
       }
     },
     "kernel": {
       "package": "@rho-workspace/plugin-kernel",
-      "packageVersion": "0.4.0",
+      "packageVersion": "0.5.0",
       "entry": "./operations",
       "entryPath": "@rho-workspace/plugin-kernel/dist/operations.js",
-      "entrySha256": "a16f526ef5a4ff90f6ce20c2202c9e52a5540897685358277d2b1d5cd0906d38",
+      "entrySha256": "112433cedbbea15d69b2547690c790902e41d3fc95020e73714de90207fdf9e1",
       "exports": {
-        "operationContracts": "bd4fee0813c46e823fc0604adbcbe738542e7782d1863504320133c04cd8c28d"
+        "operationContracts": "fa78820498bf291d0e59a0aa1d0d0ef997add03c5cfec9f7288e737d1ed086f4"
       }
     },
     "skills": {

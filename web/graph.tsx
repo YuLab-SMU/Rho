@@ -16,7 +16,9 @@ import { AgentMarkdown } from './markdown.js';
 import { OwnerView } from './shell/owner.js';
 import { readPreview, type Preview } from './previews.js';
 import { useTurns } from './work-turns.js';
-import { clock, failed, kindOfAction, span, timelineKinds, type TimelineKind } from './timeline-kinds.js';
+import { clock, failed, kindOfAction, span, stretchSizes, timelineKinds, type TimelineKind } from './timeline-kinds.js';
+import { markCaption, type EventMark, type Who } from '../src/timeline-events.js';
+import { useEventMarks } from './timeline-events.js';
 import { layered, type GraphLayer } from '../src/meaning-graph.js';
 import { modelName } from '../src/file-describer.js';
 import { costText, seen } from './holds.js';
@@ -96,6 +98,7 @@ export function WorkGraph({ initialResource, client, snapshot, files, agentNow, 
   onAbout: (pluginId: string) => void; onAgent: (conversationId?: string) => void;
 }) {
   const { turns, problem, loading, omitted } = useTurns(client, snapshot);
+  const { marks } = useEventMarks(client, snapshot);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => { if (!agentNow?.running) return; const timer = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer); }, [agentNow?.running]);
   const graphFiles = useMemo(() => files.files.map(f => ({ path: f.path, bytes: f.bytes, modifiedAt: f.modifiedAt, category: f.category })), [files.files]);
@@ -339,7 +342,7 @@ export function WorkGraph({ initialResource, client, snapshot, files, agentNow, 
       {selectedNode && <Inspector key={selectedNode.id} node={cursor !== null && (selectedNode.capturedAt ?? 0) > cursor ? { ...selectedNode, resource: undefined, gap: 'This snapshot was captured after the selected replay time.' } : selectedNode} graph={graph} byId={byId} client={client} snapshot={snapshot} principalId={principalId} workspace={workspace}
         onStudio={onStudio} onAbout={onAbout} onAgent={onAgent} onSelect={id => choose(id, true)} onTrace={trace} agentOf={agentOf} process={process} traces={meaning.layer.traces} onClose={() => setSelected(null)} />}
     </div>
-    {graph.events.length > 0 && <Timeline graph={graph} cursor={cursor} playing={playing} running={!!agentNow?.running} speed={speed} onSpeed={setSpeed}
+    {(graph.events.length > 0 || marks.length > 0) && <Timeline graph={graph} marks={marks} cursor={cursor} playing={playing} running={!!agentNow?.running} speed={speed} onSpeed={setSpeed}
       onCursor={at => { setPlaying(false); setCursor(at); }} onPlay={() => { if (playing) setPlaying(false); else { if (cursor !== null && cursor >= times.at(-1)!) setCursor(null); setPlaying(true); } }} />}
   </section>;
 }
@@ -592,12 +595,15 @@ function Choice({ waiting, client, projectId }: { waiting: NonNullable<GraphNode
 // Ticks a reader can tell apart: the shortest step that leaves this much room between labels.
 const tickSteps = [10e3, 30e3, 60e3, 120e3, 300e3, 600e3, 900e3, 1800e3, 3600e3, 7200e3, 21600e3];
 
-// What happened when, one lane per conversation: each message a band, each action a block in its
-// kind's colour, refused or unknown ones marked. A pause longer than half a minute is folded to a
-// fixed gap that says how long it was. Pointing at a block names it; pressing moves the playhead.
-function Timeline({ graph, cursor, playing, running, speed, onSpeed, onCursor, onPlay, compact = false }: { graph: Graph; cursor: number | null; playing: boolean; running: boolean; speed: number; onSpeed: (speed: number) => void; onCursor: (at: number | null) => void; onPlay: () => void; compact?: boolean }) {
+// What happened when, one lane per conversation and one for each other doer the plugins name (the
+// person's cells and commands): each message a band, each action a block in its kind's colour,
+// refused, failed or unknown ones marked. A pause longer than half a minute is folded to a fixed
+// gap that says how long it was. Pointing at a block names it; pressing moves the playhead.
+type Block = { key: string; at: number; lane: number; kind: TimelineKind; failed: boolean; event?: GraphEvent; mark?: EventMark };
+const markEnds: Partial<Record<EventMark['outcome'], string>> = { failed: 'Failed', stopped: 'Stopped', unknown: 'Outcome unknown' };
+function Timeline({ graph, marks = [], cursor, playing, running, speed, onSpeed, onCursor, onPlay, compact = false }: { graph: Graph; marks?: EventMark[]; cursor: number | null; playing: boolean; running: boolean; speed: number; onSpeed: (speed: number) => void; onCursor: (at: number | null) => void; onPlay: () => void; compact?: boolean }) {
   const track = useRef<HTMLDivElement>(null), [width, setWidth] = useState(600);
-  const [hover, setHover] = useState<{ event: GraphEvent; x: number; lane: number } | null>(null), [only, setOnly] = useState<TimelineKind | null>(null);
+  const [hover, setHover] = useState<{ block: Block; x: number; lane: number } | null>(null), [only, setOnly] = useState<TimelineKind | null>(null);
   useLayoutEffect(() => {
     const element = track.current;
     if (!element) return;
@@ -605,27 +611,37 @@ function Timeline({ graph, cursor, playing, running, speed, onSpeed, onCursor, o
     observer.observe(element); setWidth(element.clientWidth);
     return () => observer.disconnect();
   }, []);
-  // Bands that overlap are one stretch of time; between stretches a fixed gap stands for the pause.
+  // Bands that overlap are one stretch of time, the plugins' events with the messages; between
+  // stretches a fixed gap stands for the pause.
   const stretches = useMemo(() => {
-    const sorted = [...graph.turns].sort((a, b) => a.start - b.start), out: Array<{ start: number; end: number; turns: typeof sorted }> = [];
-    for (const t of sorted) { const last = out.at(-1); if (last && t.start <= last.end + 30000) { last.end = Math.max(last.end, t.end); last.turns.push(t); } else out.push({ start: t.start, end: Math.max(t.end, t.start + 1000), turns: [t] }); }
+    const spans = [...graph.turns.map(t => ({ start: t.start, end: t.end })), ...marks.map(m => ({ start: m.at, end: m.end }))].sort((a, b) => a.start - b.start), out: Array<{ start: number; end: number }> = [];
+    for (const t of spans) { const last = out.at(-1); if (last && t.start <= last.end + 30000) last.end = Math.max(last.end, t.end); else out.push({ start: t.start, end: Math.max(t.end, t.start + 1000) }); }
     return out;
-  }, [graph.turns]);
-  // One lane per conversation, in the order they began.
+  }, [graph.turns, marks]);
+  // One lane per conversation, in the order they began; the person's own lane above them and
+  // anyone else's below.
   const lanes = useMemo(() => {
-    const out: Array<{ id: string; title: string; agent: string; turns: typeof graph.turns }> = [];
+    const out: Array<{ id: string; title: string; agent: string; who: Who; start: number; turns: typeof graph.turns }> = [];
     for (const t of [...graph.turns].sort((a, b) => a.start - b.start)) {
       const lane = out.find(l => l.id === t.conversationId);
-      if (lane) lane.turns.push(t); else out.push({ id: t.conversationId, title: t.title, agent: t.agent, turns: [t] });
+      if (lane) lane.turns.push(t); else out.push({ id: t.conversationId, title: t.title, agent: t.agent, who: 'conversation', start: t.start, turns: [t] });
     }
-    return out;
-  }, [graph.turns]);
-  const laneOf = useMemo(() => new Map(graph.turns.map(t => [t.id, lanes.findIndex(l => l.id === t.conversationId)])), [graph.turns, lanes]);
+    for (const m of marks) if (!out.some(l => l.id === m.lane)) out.push({ id: m.lane, title: m.laneTitle, agent: m.agent ?? '', who: m.who, start: m.at, turns: [] });
+    const rank = (who: Who) => who === 'person' ? 0 : who === 'conversation' ? 1 : 2;
+    return out.sort((a, b) => rank(a.who) - rank(b.who) || a.start - b.start);
+  }, [graph.turns, marks]);
+  const laneIndex = useMemo(() => new Map(lanes.map((l, i) => [l.id, i])), [lanes]);
+  // Every block on the lanes, oldest first: the conversations' steps and the plugins' events.
+  const blocks = useMemo((): Block[] => {
+    const laneOf = new Map(graph.turns.map(t => [t.id, laneIndex.get(t.conversationId) ?? 0]));
+    return [...graph.events.map(e => ({ key: e.key, at: e.at, lane: laneOf.get(e.turn) ?? 0, kind: kindOfAction(e.action), failed: failed(e), event: e })),
+      ...marks.map(m => ({ key: m.key, at: m.at, lane: laneIndex.get(m.lane) ?? 0, kind: kindOfAction(m.action), failed: m.failed, mark: m }))].sort((a, b) => a.at - b.at);
+  }, [graph.events, graph.turns, marks, laneIndex]);
   const gap = 44, usable = Math.max(100, width - gap * Math.max(0, stretches.length - 1));
-  const weights = stretches.map(s => Math.sqrt(s.end - s.start)), total = weights.reduce((a, b) => a + b, 0) || 1;
+  const widths = stretchSizes(stretches, blocks, usable);
   const offsets: number[] = []; let x = 0;
-  stretches.forEach((s, i) => { offsets.push(x); x += usable * weights[i] / total + gap; });
-  const widthOf = (i: number) => usable * weights[i] / total;
+  stretches.forEach((_, i) => { offsets.push(x); x += widths[i] + gap; });
+  const widthOf = (i: number) => widths[i];
   const toX = (at: number) => {
     const found = stretches.findIndex(s => at <= s.end), i = found < 0 ? stretches.length - 1 : found;
     const s = stretches[i], w = widthOf(i);
@@ -635,13 +651,13 @@ function Timeline({ graph, cursor, playing, running, speed, onSpeed, onCursor, o
     for (let i = stretches.length - 1; i >= 0; i--) if (px >= offsets[i]) { const s = stretches[i], w = widthOf(i); return s.start + Math.min(1, Math.max(0, (px - offsets[i]) / w)) * (s.end - s.start); }
     return stretches[0]?.start ?? 0;
   };
-  const events = graph.events, last = events.at(-1)?.at ?? 0;
-  const index = cursor === null ? events.length : events.filter(e => e.at <= cursor).length;
+  const last = blocks.at(-1)?.at ?? 0;
+  const index = cursor === null ? blocks.length : blocks.filter(b => b.at <= cursor).length;
   const laneHeight = 24, lanesTop = 0;
   function scrub(event: ReactPointerEvent<HTMLDivElement>) {
     const element = event.currentTarget, box = element.getBoundingClientRect();
     element.setPointerCapture(event.pointerId); setHover(null);
-    const set = (clientX: number) => { const at = fromX(clientX - box.left); const nearest = events.reduce((best, e) => Math.abs(e.at - at) < Math.abs(best.at - at) ? e : best, events[0]); onCursor(Math.abs(toX(nearest.at) - (clientX - box.left)) < 8 ? nearest.at : at); };
+    const set = (clientX: number) => { const at = fromX(clientX - box.left); const nearest = blocks.reduce((best, b) => Math.abs(b.at - at) < Math.abs(best.at - at) ? b : best, blocks[0]); onCursor(Math.abs(toX(nearest.at) - (clientX - box.left)) < 8 ? nearest.at : at); };
     set(event.clientX);
     const move = (e: PointerEvent) => set(e.clientX);
     const stop = () => { element.removeEventListener('pointermove', move); element.removeEventListener('pointerup', stop); element.removeEventListener('pointercancel', stop); };
@@ -651,20 +667,20 @@ function Timeline({ graph, cursor, playing, running, speed, onSpeed, onCursor, o
   function point(event: ReactPointerEvent<HTMLDivElement>) {
     if (event.buttons) return;
     const box = event.currentTarget.getBoundingClientRect(), px = event.clientX - box.left, lane = Math.floor((event.clientY - box.top - lanesTop) / laneHeight);
-    let best: GraphEvent | null = null, distance = 7;
-    for (const e of events) { if (laneOf.get(e.turn) !== lane) continue; const d = Math.abs(toX(e.at) - px); if (d < distance) { best = e; distance = d; } }
-    setHover(best ? { event: best, x: toX(best.at), lane } : null);
+    let best: Block | null = null, distance = 7;
+    for (const b of blocks) { if (b.lane !== lane) continue; const d = Math.abs(toX(b.at) - px); if (d < distance) { best = b; distance = d; } }
+    setHover(best ? { block: best, x: toX(best.at), lane } : null);
   }
   function keys(event: ReactKeyboardEvent<HTMLDivElement>) {
     const at = cursor ?? last;
-    const step = event.key === 'ArrowRight' ? events.find(e => e.at > at)?.at ?? null : event.key === 'ArrowLeft' ? [...events].reverse().find(e => e.at < at)?.at ?? events[0].at : event.key === 'Home' ? events[0].at : event.key === 'End' ? null : undefined;
+    const step = event.key === 'ArrowRight' ? blocks.find(b => b.at > at)?.at ?? null : event.key === 'ArrowLeft' ? [...blocks].reverse().find(b => b.at < at)?.at ?? blocks[0].at : event.key === 'Home' ? blocks[0].at : event.key === 'End' ? null : undefined;
     if (step === undefined) return;
     event.preventDefault(); onCursor(step);
   }
   const head = cursor === null ? width : toX(cursor);
   const duration = graph.turns.reduce((sum, t) => sum + (t.end - t.start), 0);
-  const counts = timelineKinds.map(k => ({ ...k, count: events.filter(e => (k.actions as readonly string[]).includes(e.action)).length })).filter(k => k.count > 0);
-  const refused = events.filter(failed).length;
+  const counts = timelineKinds.map(k => ({ ...k, count: blocks.filter(b => b.kind === k.key).length })).filter(k => k.count > 0);
+  const refused = blocks.filter(b => b.failed).length, conversations = lanes.filter(l => l.who === 'conversation').length, yours = marks.filter(m => m.who === 'person').length;
   // Each stretch's ticks, at the shortest step that leaves 72 px between labels.
   const ticks = stretches.flatMap((s, i) => {
     const w = widthOf(i), length = s.end - s.start, step = tickSteps.find(t => w * t / length >= 72) ?? tickSteps.at(-1)!;
@@ -673,11 +689,13 @@ function Timeline({ graph, cursor, playing, running, speed, onSpeed, onCursor, o
     return out.map(tick => ({ ...tick, label: clock(tick.at, step < 60e3) }));
   });
   const pauses = stretches.slice(1).map((s, i) => ({ x: offsets[i + 1] - gap, length: s.start - stretches[i].end }));
+  const nodes = useMemo(() => new Map(graph.nodes.map(n => [n.id, n])), [graph.nodes]);
   const Frame = compact ? 'div' : 'footer';
+  const summary = [graph.turns.length ? `${graph.turns.length} ${graph.turns.length === 1 ? 'message' : 'messages'} · ${span(duration)}` : '', conversations > 1 ? `${conversations} conversations` : '', yours ? `${yours} by you` : ''].filter(Boolean).join(' · ');
   return <Frame className={'graph-timeline' + (compact ? ' compact' : '') + (only ? ' only-' + only : '')} aria-label="Timeline">
     <div className="tl-head">
       {!compact && <button className="graph-play" aria-label={playing ? 'Pause' : 'Play the work from the start'} onClick={onPlay}><Icon name={playing ? 'pause' : 'run'} size={16} /></button>}
-      <div className="graph-timeline-text"><strong>{events.filter(e => e.action !== 'ask' && e.action !== 'answer').length} actions</strong><span>{graph.turns.length} {graph.turns.length === 1 ? 'message' : 'messages'} · {span(duration)}{lanes.length > 1 ? ` · ${lanes.length} conversations` : ''}</span></div>
+      <div className="graph-timeline-text"><strong>{blocks.filter(b => b.kind !== 'ask' && b.kind !== 'answer').length} actions</strong><span>{summary}</span></div>
       <div className="tl-legend" role="group" aria-label="Show one kind of action">
         {counts.map(k => <button key={k.key} className={'tl-kind ' + k.key} aria-pressed={only === k.key} onClick={() => setOnly(only === k.key ? null : k.key)}><i aria-hidden="true" /><span>{k.label}</span><small>{k.count}</small></button>)}
         {refused > 0 && <span className="tl-kind failed"><i aria-hidden="true" /><span>Failed, refused or unknown</span><small>{refused}</small></span>}
@@ -690,26 +708,30 @@ function Timeline({ graph, cursor, playing, running, speed, onSpeed, onCursor, o
       </>}
     </div>
     <div className="tl-body">
-      <ol className="tl-names" aria-label="Conversations">
+      <ol className="tl-names" aria-label="Who did it">
         {lanes.map(l => {
           // Conversations that share a title lead with when they started, which a cut name still shows.
-          const brand = brandOf(l.agent), twin = lanes.some(o => o !== l && o.title === l.title), name = twin && l.turns[0] ? clock(l.turns[0].start) + ' · ' + l.title : l.title;
-          return <li key={l.id} title={name}>{brand ? <BrandMark brand={brand} size={13} /> : <Icon name="chat" size={13} />}<span>{name}</span></li>;
+          const brand = l.who === 'conversation' ? brandOf(l.agent) : null, twin = l.who === 'conversation' && lanes.some(o => o !== l && o.title === l.title), name = twin && l.turns[0] ? clock(l.turns[0].start) + ' · ' + l.title : l.title;
+          return <li key={l.id} title={name} data-who={l.who}>{brand ? <BrandMark brand={brand} size={13} /> : <Icon name={l.who === 'person' ? 'person' : l.who === 'other' ? 'monitor' : 'chat'} size={13} />}<span>{name}</span></li>;
         })}
       </ol>
       <div className="tl-plot">
-        <div ref={track} className="graph-track" {...(compact ? { role: 'img', 'aria-label': `${events.length} steps over ${lanes.length} ${lanes.length === 1 ? 'conversation' : 'conversations'}` } : { role: 'slider', tabIndex: 0, 'aria-label': 'When', 'aria-valuemin': 0, 'aria-valuemax': events.length, 'aria-valuenow': index,
-          'aria-valuetext': cursor === null ? 'Now · everything' : `${clock(cursor, true)} · ${index} of ${events.length}`, onPointerDown: scrub, onKeyDown: keys })} onPointerMove={point} onPointerLeave={() => setHover(null)}
+        <div ref={track} className="graph-track" {...(compact ? { role: 'img', 'aria-label': `${blocks.length} steps over ${lanes.length} ${lanes.length === 1 ? 'lane' : 'lanes'}` } : { role: 'slider', tabIndex: 0, 'aria-label': 'When', 'aria-valuemin': 0, 'aria-valuemax': blocks.length, 'aria-valuenow': index,
+          'aria-valuetext': cursor === null ? 'Now · everything' : `${clock(cursor, true)} · ${index} of ${blocks.length}`, onPointerDown: scrub, onKeyDown: keys })} onPointerMove={point} onPointerLeave={() => setHover(null)}
           style={{ height: lanes.length * laneHeight } as CSSProperties}>
           {lanes.map((l, lane) => <div key={l.id} className="tl-lane" style={{ top: lane * laneHeight, height: laneHeight }}>
             {l.turns.map(t => <span key={t.id} className={'tl-band' + (t.running ? ' running' : '')} style={{ left: toX(t.start), width: Math.max(4, toX(t.end) - toX(t.start)) }} />)}
+            {/* Outside a conversation, each event is its own band, as long as it ran. */}
+            {l.who !== 'conversation' && marks.filter(m => m.lane === l.id).map(m => <span key={m.key} className={'tl-band' + (m.outcome === 'running' ? ' running' : '')} style={{ left: toX(m.at), width: Math.max(4, toX(m.end) - toX(m.at)) }} />)}
           </div>)}
           {pauses.map((p, i) => <span key={i} className="tl-fold" style={{ left: p.x, width: gap, height: lanes.length * laneHeight }} aria-hidden="true" />)}
-          {events.map(e => <i key={e.key} className={'graph-tick tl-block ' + kindOfAction(e.action) + (failed(e) ? ' failed' : '') + (cursor !== null && e.at > cursor ? ' later' : '') + (hover?.event.key === e.key ? ' hot' : '')}
-            style={{ left: toX(e.at), top: (laneOf.get(e.turn) ?? 0) * laneHeight + 5 }} />)}
+          {blocks.map(b => <i key={b.key} className={'graph-tick tl-block ' + b.kind + (b.failed ? ' failed' : '') + (cursor !== null && b.at > cursor ? ' later' : '') + (hover?.block.key === b.key ? ' hot' : '')}
+            style={{ left: toX(b.at), top: b.lane * laneHeight + 5 }} />)}
           <span className="graph-head-line" style={{ left: head, height: lanes.length * laneHeight + 22 }}>{cursor !== null && <time>{clock(cursor, true)}</time>}</span>
           {hover && <div className="tl-tip" style={{ left: Math.min(Math.max(hover.x, 110), width - 110), top: hover.lane * laneHeight }} role="tooltip">
-            <time>{clock(hover.event.at, true)}</time><span>{caption(hover.event, new Map(graph.nodes.map(n => [n.id, n])))}</span>{failed(hover.event) && <small>{outcomes[hover.event.outcome!]}</small>}
+            <time>{clock(hover.block.at, true)}</time>
+            {hover.block.event ? <><span>{caption(hover.block.event, nodes)}</span>{hover.block.failed && <small>{outcomes[hover.block.event.outcome!]}</small>}</>
+              : hover.block.mark && <><span>{markCaption(hover.block.mark)}</span>{markEnds[hover.block.mark.outcome] && <small>{markEnds[hover.block.mark.outcome]}</small>}</>}
           </div>}
         </div>
         <div className="tl-axis" aria-hidden="true">
@@ -725,18 +747,20 @@ function Timeline({ graph, cursor, playing, running, speed, onSpeed, onCursor, o
 // the Graph. It reads the conversations as the Graph does, and shows nothing until they are read.
 export function WorkStrip({ client, snapshot, files, onOpen, onConversations }: { initialResource?: {id:string;version:string}|null; client: BrowserClient; snapshot: WorkspaceSnapshot; files: ProjectFiles; onOpen: () => void; onConversations: () => void }) {
   const { turns, loading } = useTurns(client, snapshot);
+  const { marks } = useEventMarks(client, snapshot);
   const graph = useMemo(() => buildWorkGraph({ turns, files: files.files.map(f => ({ path: f.path, bytes: f.bytes, modifiedAt: f.modifiedAt, category: f.category })), project: snapshot.project, kindOf, now: Date.now() }),
     [turns, files.files, snapshot.project]);
-  if (loading || !graph.events.length) return null;
+  if (loading || (!graph.events.length && !marks.length)) return null;
   const files_ = graph.nodes.filter(n => n.kind === 'file' && n.events.some(e => e.action === 'edit' || e.action === 'write' || e.action === 'changed')).length;
-  const last = graph.events.at(-1)!.at, days = Math.round((new Date().setHours(0, 0, 0, 0) - new Date(last).setHours(0, 0, 0, 0)) / 864e5);
+  const last = Math.max(graph.events.at(-1)?.at ?? 0, marks.at(-1)?.at ?? 0), days = Math.round((new Date().setHours(0, 0, 0, 0) - new Date(last).setHours(0, 0, 0, 0)) / 864e5);
   const lastWords = (days === 0 ? 'today' : days === 1 ? 'yesterday' : new Date(last).toLocaleDateString()) + ' at ' + clock(last);
-  const conversations = snapshot.conversations?.length ?? 0;
+  const conversations = snapshot.conversations?.length ?? 0, yours = marks.some(m => m.who === 'person');
+  const title = !graph.events.length ? 'What you did' : yours ? 'What you and the Agent did' : 'What the Agent did';
   return <section className="project-section work-strip" aria-labelledby="work-strip-title">
     {/* Questions and commands are counted by the kinds under the heading; the line keeps the rest. */}
-    <div className="section-heading"><div><h2 id="work-strip-title">What the Agent did</h2>
-      <p className="work-strip-line"><button className="text-button" onClick={onConversations}>{conversations} {conversations === 1 ? 'conversation' : 'conversations'}</button> · {files_} {files_ === 1 ? 'file' : 'files'} changed · last {lastWords}</p></div>
-      <button className="text-button" onClick={onOpen}>Open the Graph <Icon name="chevron" size={12} /></button></div>
-    <Timeline graph={graph} cursor={null} playing={false} running={false} speed={1} onSpeed={() => undefined} onCursor={() => undefined} onPlay={() => undefined} compact />
+    <div className="section-heading"><div><h2 id="work-strip-title">{title}</h2>
+      <p className="work-strip-line">{conversations > 0 && <><button className="text-button" onClick={onConversations}>{conversations} {conversations === 1 ? 'conversation' : 'conversations'}</button> · {files_} {files_ === 1 ? 'file' : 'files'} changed · </>}last {lastWords}</p></div>
+      {graph.events.length > 0 && <button className="text-button" onClick={onOpen}>Open the Graph <Icon name="chevron" size={12} /></button>}</div>
+    <Timeline graph={graph} marks={marks} cursor={null} playing={false} running={false} speed={1} onSpeed={() => undefined} onCursor={() => undefined} onPlay={() => undefined} compact />
   </section>;
 }

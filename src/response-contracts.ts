@@ -176,6 +176,8 @@ export const capabilityCatalogSchema = { ...obj({
   version: text,
   configuration: obj({ version: integer, enabled: { type: 'array', items: text, maxItems: 32 }, retainedReceipts: integer, retainedFromVersion: positive, maxReceipts: integer }, ['version', 'enabled']),
   plugins: { type: 'array', maxItems: 16, items: { ...obj({ id: text, package: text, version: text, requires: { type: 'array', items: text }, selected: { type: 'boolean' }, packagePresent: { type: 'boolean' }, projectEnabled: { type: 'boolean' }, dependenciesSatisfied: { type: 'boolean' }, uiRenderable: { type: 'boolean' }, state: { enum: ['available', 'unavailable'] }, reason: text, missing: { type: 'array', items: text },
+    // The plugin's read whose events (who did what, when) the timeline draws.
+    timeline: text,
     // The catalog also carries the owner's own presentation/listing hints and its
     // bounded native availability; those are owner vocabulary, so they stay open.
     // A reduced installation lists fewer entries, so each listing section is optional.

@@ -34,7 +34,7 @@ const entries = {
   skills: () => import('@rho-workspace/plugin-skills')
 };
 export type PluginId = keyof typeof entries;
-export const selectedPluginVersions: Record<keyof typeof entries, string> = { documents: '0.4.7', files: '0.5.0', r: '0.4.1', requirements: '0.4.0', tables: '0.5.0', media: '0.4.0', charts: '0.4.0', annotations: '0.5.2', agent: '0.4.19', console: '0.2.0', kernel: '0.4.0', skills: '0.1.0' };
+export const selectedPluginVersions: Record<keyof typeof entries, string> = { documents: '0.4.7', files: '0.5.0', r: '0.4.1', requirements: '0.4.0', tables: '0.5.0', media: '0.4.0', charts: '0.4.0', annotations: '0.5.2', agent: '0.4.19', console: '0.3.0', kernel: '0.5.0', skills: '0.1.0' };
 export const pluginIds = Object.keys(entries) as PluginId[];
 type Modules = { [K in PluginId]: Awaited<ReturnType<typeof entries[K]>> };
 export interface PluginConfig {
@@ -91,6 +91,9 @@ export class Plugins {
           (this.modules as any)[id] = module;
           status.version = module.plugin.version;
           status.presentation = module.plugin.presentation;
+          // The read whose events the timeline draws, when the plugin names one of its own reads.
+          const timeline = (module.plugin as { timeline?: string }).timeline;
+          if (timeline && module.plugin.operations.some(o => o.method === timeline && o.effect === 'read')) status.timeline = timeline;
           status.requires = [...module.plugin.requires];
           status.listing = {
             skills: module.plugin.skills.map(({ content, ...skill }) => skill),

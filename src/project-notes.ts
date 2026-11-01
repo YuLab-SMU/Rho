@@ -30,6 +30,7 @@ export function notesInstructions(conversationId: string, options: { notebook?: 
     '- Add each finding and choice when you have it, and update the section as results, files or to-dos change.',
     ...(options.notebook ? [
       'Rho keeps a live R session and a live Python session for this project, which the person watches on its Notebook page and runs cells in too.',
+      '- When the person asks for something in the notebook, or in the R or Python session, they mean these sessions on Rho\'s Notebook page, not a Jupyter, Quarto or R Markdown notebook, unless they name such a file.',
       '- Run exploratory code there instead of Rscript -e, python3 -c or a throwaway script: find kernel.run with rho_index and rho_resolve once, then call it with rho_call, giving language "r" or "python", the code, a short purpose that says what the cell is for, and waitMs (for example 120000) to wait for it to finish.',
       '- What a cell defines stays for your next cells, so load data once and build on it. kernel.read shows the cells, including any the person ran, and the variables.',
       '- To look at a value without adding a cell, call kernel.inspect with its language and name: it gives a page of a table, a model\'s fit and coefficients, or a list\'s parts, with the code that reaches each part.',

@@ -163,10 +163,12 @@ try {
   await shot('06-conversation-studio');
   passed('Follow opens the conversation\'s own Studio: its data, script, commands and output by role, its parts above and its time beside the conversation');
 
-  // Pressing the top of the timeline shows that moment in the views and the conversation together.
+  // Pressing the timeline at the work's first read shows that moment in the views and the
+  // conversation together.
   await until(() => page.locator('.agent-chip').count(), n => n === 0, 'the follow-up ending', 40000);
   const track = await page.locator('.side-tl-track').boundingBox();
-  await page.mouse.click(track.x + track.width / 2, track.y + 10);
+  const firstRead = async () => { const box = await page.locator('.side-tl-mark.read').first().boundingBox(); return box.y + box.height / 2; };
+  await page.mouse.click(track.x + track.width / 2, await firstRead());
   await page.locator('.conversation-replay').waitFor();
   await until(tabs, list => !list.some(tab => tab.name === 'ozone.svg' || tab.name === 'notes.md'), 'later files absent at the replayed moment');
   assert.equal(await page.locator('.conversation-turns > li').filter({ hasText: 'Now read the notes.' }).count(), 0, 'the later message is absent from the conversation then');
@@ -183,7 +185,7 @@ try {
     await until(tabs, list => list.length < count, 'a view closed');
   }
   await page.getByRole('heading', { name: 'Every view of this work is closed' }).waitFor();
-  await page.mouse.click(track.x + track.width / 2, track.y + 10);
+  await page.mouse.click(track.x + track.width / 2, await firstRead());
   await until(tabs, list => list.some(tab => tab.name === 'airquality.csv'), 'the replayed moment showing the data the work had read then');
   await page.getByRole('button', { name: 'Back to now' }).click();
   await page.getByRole('button', { name: 'Lay out the work again' }).click();

@@ -5,7 +5,7 @@
 // value an accepted response carries. The service, the Node client and the browser
 // client are all written against these types; runtime validation stays with Ajv.
 //
-// Contract identity: apiVersion 2.0, schemaVersion 2, 131 operations.
+// Contract identity: apiVersion 2.0, schemaVersion 2, 133 operations.
 export interface RhoOperationError {
   kind:
     | 'invalid'
@@ -3396,6 +3396,7 @@ export interface CapabilityListOutput {
     state: 'available' | 'unavailable';
     reason?: string;
     missing?: string[];
+    timeline?: string;
     listing?: {
       /**
        * @maxItems 64
@@ -4568,6 +4569,25 @@ export interface CompositionUndoOutput {
   witnessState?: 'retained' | 'expired' | 'pending';
   commitVersion?: number;
   currentVersion?: number;
+}
+
+export interface ConsoleEventsInput {
+  projectId: string;
+  limit?: number;
+}
+
+export interface ConsoleEventsOutput {
+  events: {
+    action: 'run';
+    by: string;
+    endedAt: string | null;
+    id: string;
+    label: string;
+    outcome: 'running' | 'done' | 'failed' | 'stopped' | 'unknown';
+    startedAt: string;
+    where: string | null;
+  }[];
+  omitted: number;
 }
 
 export interface ConsoleListInput {
@@ -8015,6 +8035,25 @@ export interface InteractionSelectionSetOutput {
   };
 }
 
+export interface KernelEventsInput {
+  projectId: string;
+  limit?: number;
+}
+
+export interface KernelEventsOutput {
+  events: {
+    action: 'run';
+    by: string;
+    endedAt: string | null;
+    id: string;
+    label: string;
+    outcome: 'running' | 'done' | 'failed' | 'stopped' | 'unknown';
+    startedAt: string;
+    where: string | null;
+  }[];
+  omitted: number;
+}
+
 export interface KernelInspectInput {
   projectId: string;
   language: 'r' | 'python';
@@ -8703,6 +8742,7 @@ export interface ObservationSnapshotOutput {
       state: 'available' | 'unavailable';
       reason?: string;
       missing?: string[];
+      timeline?: string;
       listing?: {
         /**
          * @maxItems 64
@@ -11287,6 +11327,7 @@ export interface SessionGrantInput {
     | 'composition.put'
     | 'composition.read'
     | 'composition.undo'
+    | 'console.events'
     | 'console.list'
     | 'console.output'
     | 'console.run'
@@ -11313,6 +11354,7 @@ export interface SessionGrantInput {
     | 'feedback.submit'
     | 'interaction.selection.read'
     | 'interaction.selection.set'
+    | 'kernel.events'
     | 'kernel.inspect'
     | 'kernel.interrupt'
     | 'kernel.place.check'
@@ -13334,6 +13376,7 @@ export interface RhoOperations {
   "composition.put": { input: CompositionPutInput; output: CompositionPutOutput };
   "composition.read": { input: CompositionReadInput; output: CompositionReadOutput };
   "composition.undo": { input: CompositionUndoInput; output: CompositionUndoOutput };
+  "console.events": { input: ConsoleEventsInput; output: ConsoleEventsOutput };
   "console.list": { input: ConsoleListInput; output: ConsoleListOutput };
   "console.output": { input: ConsoleOutputInput; output: ConsoleOutputOutput };
   "console.run": { input: ConsoleRunInput; output: ConsoleRunOutput };
@@ -13374,6 +13417,7 @@ export interface RhoOperations {
   "feedback.submit": { input: FeedbackSubmitInput; output: FeedbackSubmitOutput };
   "interaction.selection.read": { input: InteractionSelectionReadInput; output: InteractionSelectionReadOutput };
   "interaction.selection.set": { input: InteractionSelectionSetInput; output: InteractionSelectionSetOutput };
+  "kernel.events": { input: KernelEventsInput; output: KernelEventsOutput };
   "kernel.inspect": { input: KernelInspectInput; output: KernelInspectOutput };
   "kernel.interrupt": { input: KernelInterruptInput; output: KernelInterruptOutput };
   "kernel.place.check": { input: KernelPlaceCheckInput; output: KernelPlaceCheckOutput };
@@ -13442,5 +13486,5 @@ export type RhoInput<M extends RhoMethod> = RhoOperations[M]['input'];
 export type RhoOutput<M extends RhoMethod> = RhoOperations[M]['output'];
 
 /** The names a caller may pass to protocol.describe / protocol.validate. */
-export const rhoMethods = ["action.cancel","action.export","action.list","action.lookup","action.observe","action.output","action.retry","action.submit","agent.activity.capture","agent.activity.outputs","agent.activity.read","annotation.create","annotation.decide","annotation.list","annotation.read","annotation.reply","artifact.check","binding.activity","binding.activity.append","binding.close","binding.list","binding.open","capability.configure","capability.index","capability.list","capability.resolve","composition.apply","composition.put","composition.read","composition.undo","console.list","console.output","console.run","console.stop","context.create","context.read","conversation.configure","conversation.decide","conversation.delete","conversation.list","conversation.permission","conversation.read","conversation.restore","conversation.send","conversation.settings.check","conversation.settings.read","conversation.settings.update","conversation.start","conversation.stop","conversation.trash","data.compare","data.page","data.plot","document.abandonSave","document.change.read","document.edit","document.history","document.open","document.read","document.revert","document.save","document.undo","document.undoOwn","evidence.export","evidence.preview","feedback.read","feedback.status","feedback.submit","interaction.selection.read","interaction.selection.set","kernel.inspect","kernel.interrupt","kernel.place.check","kernel.place.copy","kernel.place.list","kernel.place.set","kernel.places","kernel.plot","kernel.read","kernel.run","kernel.server.skill","kernel.servers","kernel.stop","media.describe","object.read","observation.snapshot","project.create","project.createWorkspace","project.doctor","project.entries","project.list","project.open","project.openFile","project.pick","project.runs","project.source.add","project.source.pick","project.work.read","protocol.describe","protocol.validate","requirements.check","requirements.prepare","resource.capture","resource.list","resource.read","resource.register","selection.set","session.browser.pair","session.browser.revoke","session.connect","session.grant","skill.list","skill.read","skills.change","skills.list","skills.read","skills.undo","task.map.declare","task.map.present","task.map.read","task.map.respond","task.routing.put","view.close","view.observations.read","view.observe","view.protection.set","workspace.enhance","workspace.export","workspace.observe","workspace.restore","workspace.save"] as const satisfies readonly RhoMethod[];
+export const rhoMethods = ["action.cancel","action.export","action.list","action.lookup","action.observe","action.output","action.retry","action.submit","agent.activity.capture","agent.activity.outputs","agent.activity.read","annotation.create","annotation.decide","annotation.list","annotation.read","annotation.reply","artifact.check","binding.activity","binding.activity.append","binding.close","binding.list","binding.open","capability.configure","capability.index","capability.list","capability.resolve","composition.apply","composition.put","composition.read","composition.undo","console.events","console.list","console.output","console.run","console.stop","context.create","context.read","conversation.configure","conversation.decide","conversation.delete","conversation.list","conversation.permission","conversation.read","conversation.restore","conversation.send","conversation.settings.check","conversation.settings.read","conversation.settings.update","conversation.start","conversation.stop","conversation.trash","data.compare","data.page","data.plot","document.abandonSave","document.change.read","document.edit","document.history","document.open","document.read","document.revert","document.save","document.undo","document.undoOwn","evidence.export","evidence.preview","feedback.read","feedback.status","feedback.submit","interaction.selection.read","interaction.selection.set","kernel.events","kernel.inspect","kernel.interrupt","kernel.place.check","kernel.place.copy","kernel.place.list","kernel.place.set","kernel.places","kernel.plot","kernel.read","kernel.run","kernel.server.skill","kernel.servers","kernel.stop","media.describe","object.read","observation.snapshot","project.create","project.createWorkspace","project.doctor","project.entries","project.list","project.open","project.openFile","project.pick","project.runs","project.source.add","project.source.pick","project.work.read","protocol.describe","protocol.validate","requirements.check","requirements.prepare","resource.capture","resource.list","resource.read","resource.register","selection.set","session.browser.pair","session.browser.revoke","session.connect","session.grant","skill.list","skill.read","skills.change","skills.list","skills.read","skills.undo","task.map.declare","task.map.present","task.map.read","task.map.respond","task.routing.put","view.close","view.observations.read","view.observe","view.protection.set","workspace.enhance","workspace.export","workspace.observe","workspace.restore","workspace.save"] as const satisfies readonly RhoMethod[];
 export type RhoInputFor<M extends RhoMethod> = RhoOperations[M]['input'];

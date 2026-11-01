@@ -11,7 +11,9 @@ import { askedAbout } from '../src/asking.js';
 import { capturable, kindOf, type ProjectFiles } from './sources.js';
 import { agentName, type AgentNow } from './agent-now.js';
 import { ProcessContext, studioViewId as viewId, type Process } from './process-context.js';
-import { clock, failed, kindOfAction, span } from './timeline-kinds.js';
+import { clock, failed, kindOfAction, span, stretchSizes } from './timeline-kinds.js';
+import { conversationMarks, markCaption, type EventMark } from '../src/timeline-events.js';
+import { useEventMarks } from './timeline-events.js';
 import { processComposition } from './canvas.js';
 import { Icon } from './icons.js';
 import { Workspace } from './shell/workspace.js';
@@ -79,15 +81,19 @@ function StepsChip({ turns, then, root, at, onAt }: { turns: GraphTurn[]; then: 
   </details>;
 }
 
-// Time runs down the side, beside the conversation: each step a mark in its kind's colour, long
-// pauses folded to a short gap that says how long they were. Pressing or dragging moves the
-// moment shown; Play steps through it; Now returns to the work as it is.
-function SideTimeline({ events, spans, at, playing, speed, running, onAt, onPlay, onSpeed }: {
-  events: GraphEvent[]; spans: Array<{ start: number; end: number }>; at: number | null; playing: boolean; speed: number; running: boolean;
+// Time runs down the side, beside the conversation: each step a mark in its kind's colour, the
+// person's cells and commands among the Agent's steps, long pauses folded to a short gap that says
+// how long they were. Pressing or dragging moves the moment shown; Play steps through it; Now
+// returns to the work as it is.
+type Point = { key: string; at: number; kind: ReturnType<typeof kindOfAction>; failed: boolean; label: string };
+function SideTimeline({ steps, marks, spans, at, playing, speed, running, onAt, onPlay, onSpeed }: {
+  steps: GraphEvent[]; marks: EventMark[]; spans: Array<{ start: number; end: number }>; at: number | null; playing: boolean; speed: number; running: boolean;
   onAt: (at: number | null) => void; onPlay: () => void; onSpeed: () => void;
 }) {
   const track = useRef<HTMLDivElement>(null), [height, setHeight] = useState(400);
-  const [hover, setHover] = useState<{ event: GraphEvent; y: number } | null>(null);
+  const [hover, setHover] = useState<{ event: Point; y: number } | null>(null);
+  const events = useMemo((): Point[] => [...steps.map(e => ({ key: e.key, at: e.at, kind: kindOfAction(e.action), failed: failed(e), label: e.label })),
+    ...marks.map(m => ({ key: m.key, at: m.at, kind: kindOfAction(m.action), failed: m.failed, label: markCaption(m) }))].sort((a, b) => a.at - b.at), [steps, marks]);
   useLayoutEffect(() => {
     const element = track.current; if (!element) return;
     const observer = new ResizeObserver(() => setHeight(element.clientHeight)); observer.observe(element); setHeight(element.clientHeight);
@@ -99,13 +105,13 @@ function SideTimeline({ events, spans, at, playing, speed, running, onAt, onPlay
     return out;
   }, [spans]);
   const gap = 26, pad = 8, usable = Math.max(60, height - pad * 2 - gap * Math.max(0, stretches.length - 1));
-  const weights = stretches.map(s => Math.sqrt(s.end - s.start)), total = weights.reduce((a, b) => a + b, 0) || 1;
+  const sizes = stretchSizes(stretches, events, usable, 8, 96);
   const offsets: number[] = []; let y = pad;
-  stretches.forEach((_, i) => { offsets.push(y); y += usable * weights[i] / total + gap; });
-  const size = (i: number) => usable * weights[i] / total;
+  stretches.forEach((_, i) => { offsets.push(y); y += sizes[i] + gap; });
+  const size = (i: number) => sizes[i];
   const toY = (t: number) => { const found = stretches.findIndex(s => t <= s.end), i = found < 0 ? stretches.length - 1 : found, s = stretches[i]; return s ? offsets[i] + Math.min(size(i), Math.max(0, (t - s.start) / (s.end - s.start) * size(i))) : pad; };
   const fromY = (py: number) => { for (let i = stretches.length - 1; i >= 0; i--) if (py >= offsets[i]) { const s = stretches[i]; return s.start + Math.min(1, Math.max(0, (py - offsets[i]) / size(i))) * (s.end - s.start); } return stretches[0]?.start ?? 0; };
-  const nearest = (py: number) => events.reduce<GraphEvent | null>((best, e) => !best || Math.abs(toY(e.at) - py) < Math.abs(toY(best.at) - py) ? e : best, null);
+  const nearest = (py: number) => events.reduce<Point | null>((best, e) => !best || Math.abs(toY(e.at) - py) < Math.abs(toY(best.at) - py) ? e : best, null);
   function scrub(event: ReactPointerEvent<HTMLDivElement>) {
     const element = event.currentTarget, box = element.getBoundingClientRect();
     element.setPointerCapture(event.pointerId); setHover(null);
@@ -145,7 +151,7 @@ function SideTimeline({ events, spans, at, playing, speed, running, onAt, onPlay
       onPointerDown={scrub} onPointerMove={point} onPointerLeave={() => setHover(null)} onKeyDown={keys}>
       {stretches.map((s, i) => <span key={i} className="side-tl-stretch" style={{ top: offsets[i], height: size(i) }} aria-hidden="true"><small>{clock(s.start)}</small></span>)}
       {pauses.map((p, i) => <span key={i} className="side-tl-fold" style={{ top: p.y, height: gap }} title={'A pause of ' + span(p.length)} aria-hidden="true"><small>{span(p.length)}</small></span>)}
-      {events.map(e => <i key={e.key} className={'side-tl-mark ' + kindOfAction(e.action) + (failed(e) ? ' failed' : '') + (at !== null && e.at > at ? ' later' : '')} style={{ top: toY(e.at) }} aria-hidden="true" />)}
+      {events.map(e => <i key={e.key} className={'side-tl-mark ' + e.kind + (e.failed ? ' failed' : '') + (at !== null && e.at > at ? ' later' : '')} style={{ top: toY(e.at) }} aria-hidden="true" />)}
       {head !== null && <span className="side-tl-head" style={{ top: head }} aria-hidden="true"><small>{clock(at!, true)}</small></span>}
       {hover && <span className="side-tl-hover" style={{ top: hover.y }}>{hover.event.label} · {clock(hover.event.at, true)}</span>}
     </div>
@@ -172,6 +178,11 @@ export function ProcessStudio({ client, snapshot, files, conversationId, notesTe
   const every = useMemo(() => studioFiles(whole), [whole]), shown = useMemo(() => studioAt(every, at), [every, at]);
   const events = useMemo(() => whole.events.filter(e => Number.isFinite(e.at)).sort((a, b) => a.at - b.at), [whole]);
   const running = !!summary && summary.state === 'running';
+  // What the plugins say this conversation's Agent did, and the person since it began.
+  const { marks: everyMark } = useEventMarks(client, snapshot);
+  const since = whole.turns.length ? Math.min(...whole.turns.map(t => t.start)) : null;
+  const marks = useMemo(() => since === null ? [] : conversationMarks(everyMark, conversationId, since), [everyMark, conversationId, since]);
+  const moments = useMemo(() => [...events.map(e => e.at), ...marks.map(m => m.at)].sort((a, b) => a - b), [events, marks]);
 
   // Text files open in the one shared buffer their editor owns; a table or figure with no kept
   // version is captured as it is now, only while the work is shown as it is now.
@@ -232,15 +243,15 @@ export function ProcessStudio({ client, snapshot, files, conversationId, notesTe
   const signature = JSON.stringify(tree) + ':' + (saved?.version ?? 0);
   const composition = useMemo((): CompositionSummary | null => tree ? { ...(saved ?? {}), compositionId, version: saved?.version ?? 0, rootId: tree.rootId, nodes: tree.nodes as never, views: tree.nodes.filter(n => n.kind === 'view') as never } : null, [signature]);
 
-  // Replay steps through the conversation's marks; at the end it returns to now.
+  // Replay steps through the conversation's marks and the person's; at the end it returns to now.
   useEffect(() => {
     if (!playing) return;
-    const index = at === null ? 0 : events.findIndex(e => e.at > at);
-    if (index < 0 || index >= events.length) { onPlaying(false); onAt(null); return; }
-    const pace = Math.min(processLimits.stepMs, Math.max(processLimits.minStepMs, 12000 / Math.max(1, events.length))) / speed;
-    const timer = setTimeout(() => onAt(events[index].at), at === null ? 0 : pace);
+    const index = at === null ? 0 : moments.findIndex(t => t > at);
+    if (index < 0 || index >= moments.length) { onPlaying(false); onAt(null); return; }
+    const pace = Math.min(processLimits.stepMs, Math.max(processLimits.minStepMs, 12000 / Math.max(1, moments.length))) / speed;
+    const timer = setTimeout(() => onAt(moments[index]), at === null ? 0 : pace);
     return () => clearTimeout(timer);
-  }, [playing, at, events, speed]);
+  }, [playing, at, moments, speed]);
 
   // What comes forward: a file the person asked for here, else the one the work was on at the
   // moment shown: the Agent's newest file while following now, or the step at the replay moment.
@@ -253,7 +264,11 @@ export function ProcessStudio({ client, snapshot, files, conversationId, notesTe
   const latest = at === null ? null : [...events].reverse().find(e => e.at <= at && e.action !== 'capture');
   const step = latest && ([...events].reverse().find(e => e.at <= at! && e.at >= Math.floor(latest.at / 1000) * 1000 && (e.action === 'write' || e.action === 'edit')) ?? latest);
   const stepNode = step ? graph.nodes.find(n => n.id === step.node) : null;
-  const working = live ? (live.latest?.step.operation?.startsWith('kernel.') && views.has(studioIds.session) ? studioIds.session : live.latest?.action === 'execute' ? studioIds.console : forPath(live.files.at(-1)?.path)) : stepNode ? (stepNode.kind === 'run' ? studioIds.console : forPath(stepNode.path)) : undefined;
+  // A cell or command at the moment shown, no earlier than that step, brings its own view forward.
+  const markThen = at === null ? null : [...marks].reverse().find(m => m.at <= at) ?? null;
+  const markView = markThen && (!latest || markThen.at >= latest.at) ? (markThen.source.startsWith('kernel.') ? studioIds.session : studioIds.console) : undefined;
+  const working = live ? (live.latest?.step.operation?.startsWith('kernel.') && views.has(studioIds.session) ? studioIds.session : live.latest?.action === 'execute' ? studioIds.console : forPath(live.files.at(-1)?.path))
+    : markView && views.has(markView) ? markView : stepNode ? (stepNode.kind === 'run' ? studioIds.console : forPath(stepNode.path)) : undefined;
   const openView = (chosen && views.has(chosen) ? chosen : undefined) ?? (following || at !== null ? working : undefined);
   useEffect(() => { setChosen(null); }, [at === null, conversationId]);
   const presence = live && working && views.has(working) ? { viewId: working, label: live.title, verb: working === studioIds.console ? 'Running' : live.files.at(-1)?.verb ?? 'Working', live: live.latest?.outcome === 'requested' } : null;
@@ -296,7 +311,7 @@ export function ProcessStudio({ client, snapshot, files, conversationId, notesTe
             <h2>{loading ? 'Reading the conversation…' : running ? (summary ? agentName(summary.client) : 'The Agent') + ' is starting' : 'Nothing to show yet'}</h2>
             <p>{running ? 'The data it reads, the code it writes, the commands it runs and the results they make appear here as it works.' : 'This conversation has not read or made any project files.'}</p></div>}
       </div>
-      {events.length > 0 && <SideTimeline events={events} spans={whole.turns} at={at} playing={playing} speed={speed} running={running}
+      {moments.length > 0 && <SideTimeline steps={events} marks={marks} spans={[...whole.turns, ...marks.map(m => ({ start: m.at, end: m.end }))]} at={at} playing={playing} speed={speed} running={running}
         onAt={next => { onPlaying(false); onAt(next); }} onPlay={() => onPlaying(!playing)} onSpeed={() => onSpeed(speed === 4 ? 1 : speed * 2)} />}
     </div>
     {stepsTarget && createPortal(<StepsChip turns={turns} then={shownTurns} root={snapshot.project.root} at={at} onAt={next => { onPlaying(false); onAt(next); }} />, stepsTarget)}

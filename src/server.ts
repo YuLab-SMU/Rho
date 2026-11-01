@@ -981,6 +981,7 @@ export class RhoService {
       const runner = this.consoleFor(p);
       if (method === 'console.run') return { command: await runner.run({ command: b.command, cwd: b.cwd, changeId: b.changeId, by: principal.id }) };
       if (method === 'console.list') return runner.list(b.limit);
+      if (method === 'console.events') return runner.events(b.limit);
       if (method === 'console.output') return runner.output(b.commandId, b.offset, b.maxBytes);
       if (method === 'console.stop') return { command: await runner.stop(b.commandId, principal.id) };
     }
@@ -992,6 +993,7 @@ export class RhoService {
       const host = this.kernelFor(p);
       if (method === 'kernel.run') return host.run({ language: b.language, code: b.code, purpose: b.purpose, changeId: b.changeId, by: principal.id, waitMs: b.waitMs, place: b.place });
       if (method === 'kernel.read') return host.read(b.limit, b.cellId);
+      if (method === 'kernel.events') return host.events(b.limit);
       if (method === 'kernel.inspect') return host.inspect({ language: b.language, name: b.name, path: b.path, offset: b.offset, limit: b.limit, sort: b.sort });
       if (method === 'kernel.plot') return host.plot(b.cellId, b.plot);
       if (method === 'kernel.interrupt') return host.interrupt(b.cellId, principal.id);

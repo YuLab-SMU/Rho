@@ -1,0 +1,107 @@
+{
+  "method": "kernel.events",
+  "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "projectId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "limit": {
+        "maximum": 500,
+        "minimum": 1,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "projectId"
+    ],
+    "type": "object"
+  },
+  "outputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "events": {
+        "items": {
+          "additionalProperties": false,
+          "properties": {
+            "action": {
+              "enum": [
+                "run"
+              ]
+            },
+            "by": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "endedAt": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "label": {
+              "maxLength": 200,
+              "type": "string"
+            },
+            "outcome": {
+              "enum": [
+                "running",
+                "done",
+                "failed",
+                "stopped",
+                "unknown"
+              ]
+            },
+            "startedAt": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "where": {
+              "anyOf": [
+                {
+                  "maxLength": 120,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "by",
+            "action",
+            "label",
+            "where",
+            "startedAt",
+            "endedAt",
+            "outcome"
+          ],
+          "type": "object"
+        },
+        "type": "array"
+      },
+      "omitted": {
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "events",
+      "omitted"
+    ],
+    "type": "object"
+  },
+  "description": "Who ran each cell of the live sessions and when, newest first, for the timeline: its language and place, how it ended and its purpose or first line. No code or output."
+}
