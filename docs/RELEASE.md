@@ -29,7 +29,9 @@ and official release are separate outcomes.
 
 The first product delivery uses an npm package and local WebUI. The backend
 assembly uses `@rho-workspace/local` 0.1.0 and bundles the exact selected Core
-binary, Plugins package and production dependencies. The packer emits immutable
+binary, Plugins package and production dependencies. From 0.5.2 the Agent clients
+are not among them: conversations drive the person's installed Claude Code or Codex,
+and the adapters' optional platform binaries are left out. The packer emits immutable
 source/tree, input, lock and artifact digests; installed acceptance runs outside
 the source checkouts. See [assembly instructions](HEADLESS.md#budgets-verification-and-assembly)
 and [accepted scope](BACKEND-ACCEPTANCE.md).
@@ -118,3 +120,25 @@ component inventory and outside-checkout checks.
 The [review episode](REVIEW-EVIDENCE-EPISODE.md) describes capability evidence and
 separate offline-reader acceptance. No public npm, signing or Rho-releases action
 is included. Independent researcher observation remains a separate follow-up.
+
+## Version 0.5.2 candidate
+
+The form is still an unsigned npm tarball with a local WebUI on macOS arm64, an explicitly
+selected digest-checked Core, and an installation that downloads nothing. The Agent clients
+are no longer in it. Conversations and the external relay drive the person's installed
+Claude Code or Codex (`--claude`/`--codex`, `RHO_CLAUDE`/`RHO_CODEX`, else `PATH`). A
+missing client is named, not replaced. Rho pins the ACP adapters; the client versions are
+the person's. The tarball fell from 274,921,791 to 12,753,572 bytes. The packer writes
+`SHA256SUMS` beside the tarball and its composition.
+
+```sh
+shasum -a 256 -c SHA256SUMS
+npm install --prefix "$HOME/rho-0.5.2" --omit=dev --ignore-scripts /absolute/rho-workspace-local-0.5.2.tgz
+"$HOME/rho-0.5.2/node_modules/.bin/rho" --root "$HOME/rho-projects" --state-dir "$HOME/.rho-0.5.2" --open
+```
+
+The [episode](PACKAGE-0.5.2-EPISODE.md) records the candidate, its offline installation,
+real Claude and Codex conversations, and open items. It has not had the full 0.5.1
+acceptance. No registry publication, GitHub release or signing was performed. At this
+size, a GitHub Release asset installed with `npm install --prefix DIR URL` is the next
+distribution step to select.

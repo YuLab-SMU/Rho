@@ -25,6 +25,7 @@ human benefits are not established by existing Rho checks.
 | Graph | Exact captured refs and capture times, current-file action separate, honest reported/named/observed links, bounded focus | Same-path versions and 160-node-cap regressions; old records show gaps |
 | Offline evidence | Preview one review and explicit refs; static reader/original files/manifest; read-only verifier | Service closed/project moved; four browser widths; tamper detection |
 | macOS 0.5.1 | Unsigned npm tarball/local WebUI selected; Core bundled explicitly | [Fixed tarball installed and exercised](PREVIEW-0.5.1.md) |
+| 0.5.2 candidate | 12 MB tarball: Core bundled, Claude Code/Codex the person's own, all 12 plugins | [Offline install, smoke, real Claude/Codex](PACKAGE-0.5.2-EPISODE.md); not the full 0.5.1 acceptance |
 | Independent researcher use | Unobserved | Trial guide in the episode; no usability claim |
 | dsh-rho 0.0.1 | Native dsh 0.2.1-rc.5 analysis, captured CSV/SVG, selected-row question | Real model/browser loop; local tarball installed; restart/overwrite/crash preserved results and one analysis run; 5/5 adapter tests and type check |
 
@@ -262,19 +263,19 @@ Earlier observations remain in the [home/project](HOME-PROJECT-EPISODE.md), [sid
 ## Verification
 
 Passes from the baseline (Rho 223/223, Plugins 104/104, an explicit unchanged Core binary) to
-Sources recorded up to Rho 273/274 and Plugins 151. Each first failure was an undeclared CSS
-variable, a stale count or limit in a check or a shell import, then fixed; each later miss was the
-MCP v2 test at its 30 s limit or a `.rho` cleanup race (`ENOTEMPTY`), passing alone. Their pages,
-ui:u2, person-files, agent-canvas, graph, agent-page, agent-ui, sources and review acceptances
-passed. The shell (editor focus at 390 px) and interaction (a `/^workspace/` sidebar row)
-acceptances failed before the toolbar pass and remain open; Git history keeps each count.
-The by-hand, closed-views and plugin views passes (Rho 264/267, Plugins 161/161, those two misses;
-pages, agent-canvas, frontend and objects passed, shell as above) ran on a separate browser build.
-The timeline events pass records Rho 267/269 and Plugins 163/163 in the [ledger](VERIFICATION.json),
-the same two misses passing alone; graph, frontend, pages and agent-canvas 10/10 passed, the last
-once its replay click moved from a fixed pixel to the first read mark. The [episode](REVIEW-EVIDENCE-EPISODE.md)
-records contract, browser and installed results; the fixed 0.5.1 candidate passed 230/230
-([preview](PREVIEW-0.5.1.md)). No failures are converted into passes by omitting the failed run.
+Sources recorded up to Rho 273/274 and Plugins 151. Each first failure was an undeclared CSS variable,
+a stale count or limit in a check or a shell import, then fixed; each later miss was the MCP v2 test
+at its 30 s limit or a `.rho` cleanup race (`ENOTEMPTY`), passing alone. Their pages, ui:u2,
+person-files, agent-canvas, graph, agent-page, agent-ui, sources and review acceptances passed. The
+shell (editor focus at 390 px) and interaction (a `/^workspace/` sidebar row) acceptances failed
+before the toolbar pass and remain open; Git history keeps each count. The by-hand, closed-views and
+plugin views passes (Rho 264/267, Plugins 161/161, those two misses; pages, agent-canvas, frontend
+and objects passed, shell as above) ran on a separate browser build.
+The timeline events pass recorded Rho 267/269 and Plugins 163/163 (the same two misses); graph, frontend,
+pages and agent-canvas 10/10 passed, the last once its replay click moved to the first read mark.
+The [episode](REVIEW-EVIDENCE-EPISODE.md) records contract, browser and installed results; the fixed
+0.5.1 candidate passed 230/230 ([preview](PREVIEW-0.5.1.md)). No failure is omitted to make a pass.
+The 0.5.2 packaging pass records Rho 269/270 and Plugins 165/165 in the [ledger](VERIFICATION.json).
 
 Automatic capture defaults: 8 MiB/snapshot, 64 snapshots and 32 MiB/turn, at most two
 workers/project, Files 512 MiB/1024 resources; export 512 MiB/128 files/4 MiB metadata,
@@ -283,14 +284,13 @@ and uncertainty ([Headless](HEADLESS.md#retained-review-evidence)).
 
 ## Scope and follow-up
 
-The product target is local WebUI on macOS arm64. Windows/Linux folder picking,
-POSIX locks, executable discovery, packaging and installation need their own
-portability acceptance. No cloud/account/team/billing, native shell, automatic
-runtime download, public npm publication or signed release is included.
-[Release](RELEASE.md) separates source, fixed composition, installation and future
-signed distribution. Offline evidence is not a workspace restore or executable
-analysis format. Existing archives preserve owner fields within their stated scope
-and reject older collaboration formats that would lose state.
+The product target is local WebUI on macOS arm64. Windows/Linux folder picking, POSIX locks,
+executable discovery, packaging and installation need their own portability acceptance. No
+cloud/account/team/billing, native shell, automatic runtime download, public npm publication or
+signed release is included. From 0.5.2 the person installs the Agent clients; Rho pins their ACP
+adapters. [Release](RELEASE.md) separates source, fixed composition, installation and future signed
+distribution. Offline evidence is not a workspace restore or executable analysis format. Existing
+archives keep owner fields in their scope and reject older collaboration formats that would lose state.
 
 The withdrawn 2026-10-25 frontend guidance and the [2026-10-26 design commission](design/2026-10-26/index.html)
 are not requirements or templates for these screens. Current work

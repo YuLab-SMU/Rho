@@ -40,6 +40,7 @@ were withdrawn on 2026-10-25; Git keeps their history.
 | [Collaboration](COLLABORATION.md) | Conditional compositions, selections, feedback and recovery |
 | [Development](DEVELOPMENT.md) | Stages, iterations, analyzing results, owner workflow and checks |
 | [macOS 0.5.1 preview](PREVIEW-0.5.1.md) | Fixed unsigned artifact, selected components, installation, acceptance and limits |
+| [Packing 0.5.2](PACKAGE-0.5.2-EPISODE.md) | The 12 MB candidate without bundled Agent clients: what 0.5.1 carried, owner changes, a missing client named, offline installation, real Claude/Codex runs and open items |
 | [Release](RELEASE.md) | Source publication and distribution |
 | [Research positioning](https://github.com/YuLab-SMU/Rho-paper) | Purpose-driven scientific workspaces: plugin capabilities, material and view composition, human understanding and Agent context; the paper and its annotated positioning record live in the Rho-paper project (written in Chinese) |
 
