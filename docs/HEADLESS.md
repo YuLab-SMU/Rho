@@ -39,13 +39,14 @@ it. Missing browser renderers do not disable the headless protocol.
 The selected baseline is macOS arm64, Node 22.22.3 (engine range
 `>=22.22.0 <23`), npm 10.9.8, Python 3 with `fcntl`, and Rscript 4.5.2.
 The unsigned local tarball contains Plugins and the selected digest-checked Core
-binary. R and any project-selected packages are external prerequisites.
+binary. R and any project-selected packages are external prerequisites, and so are
+the Agent clients: conversations drive the person's installed Claude Code or Codex.
 The service, documents, declared files and saved resource readers work without R.
 An unavailable Rscript returns an unknown dependency probe and prevents managed R execution.
 Other platforms and npm registry publication are unverified.
 
 ```sh
-npm install --prefix /absolute/install /absolute/rho-workspace-local-0.5.1.tgz
+npm install --prefix /absolute/install /absolute/rho-workspace-local-0.5.2.tgz
 /absolute/install/node_modules/.bin/rho \
   --root /absolute/projects --state-dir /absolute/service-state
 ```
@@ -139,8 +140,11 @@ interactive permission choices are needed. Configuration changes do not migrate
 sessions. See the [ACP episode](ACP-EPISODE.md) for limits and recovery semantics.
 
 `--agent-backend codex-acp` selects Codex as the service default; `--codex PATH` /
-`RHO_CODEX` optionally selects its native CLI. Otherwise the pinned official
-`@agentclientprotocol/codex-acp` 2.3.0 uses its bundled Codex 0.164.0. Native provider
+`RHO_CODEX` optionally selects its native CLI, otherwise `codex` on `PATH`, just as
+`--claude` / `RHO_CLAUDE` or `claude` on `PATH` selects Claude Code. The pinned official
+adapters (`@agentclientprotocol/codex-acp` 2.3.0, written against Codex 0.164.0, and
+`claude-agent-acp` 0.97.0) drive that installed client; the packed application omits
+their optional bundled native clients. Native provider
 configuration stays with Codex (`CODEX_CONFIG` and its native config); Rho does not
 copy Claude credentials to Codex. The Westlake acceptance harness supplies an
 isolated native configuration with `tools.update_plan.enabled=true` and
@@ -369,7 +373,7 @@ RHO_CORE_BINARY=/absolute/rho-core npm run recovery
 RHO_CORE_BINARY=/absolute/rho-core npm run agent
 npm run pack:local -- --core /absolute/rho-core \
   --core-source /absolute/Rho-core --plugins /absolute/Rho-plugins
-node scripts/install-acceptance.mjs /absolute/rho-workspace-local-0.5.1.tgz \
+node scripts/install-acceptance.mjs /absolute/rho-workspace-local-0.5.2.tgz \
   /absolute/ordinary-project /absolute/paired-project
 ```
 
@@ -380,7 +384,12 @@ owned Hosts. [Read-only fixtures](../fixtures/README.md) cannot be replayed.
 The packer rejects dirty selected build inputs unless explicitly recording
 `--allow-dirty`, builds the Node owners, stages production dependencies and
 Core, and checks that project recipes/native R scripts and the old aggregate
-package are absent. `--select-plugins documents,files` builds a reduced artifact
+package are absent. Its plugin list must equal the application's runtime selection.
+Production dependencies install with `--omit=optional`, which leaves out only the
+Agent adapters' platform-specific Claude Code and Codex binaries; a native Agent
+client found in the package fails packing, and the installed smoke check fails if
+npm fetched one. Notebook's R and Python runners are its only packed `.R`/`.py`
+inputs. The packer writes `SHA256SUMS` beside the tarball and composition. `--select-plugins documents,files` builds a reduced artifact
 with other capability packages physically absent. A separate
 `--select-plugins files,r` artifact exercises exported object reads with no editor
 or dependency checker installed. `scripts/plugin-install-acceptance.mjs` accepts

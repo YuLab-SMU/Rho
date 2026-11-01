@@ -23,6 +23,10 @@ try {
   await fs.mkdir(install); await fs.mkdir(projects);
   const t = Date.now(), npm = spawnSync('npm', ['install', '--prefix', install, '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund', tarball], { cwd: root, env, encoding: 'utf8' });
   assert.equal(npm.status, 0, 'npm install failed: ' + npm.stderr.slice(-2000)); report.timings.installMs = Date.now() - t;
+  // Agent clients stay the person's installation: npm must not fetch the adapters' native clients.
+  const natives = spawnSync('find', [install, '-type', 'd', '(', '-path', '*/node_modules/@openai/codex-*', '-o', '-path', '*/node_modules/@anthropic-ai/claude-agent-sdk-*', ')', '-prune', '-print'], { encoding: 'utf8' }).stdout.trim();
+  assert.equal(natives, '', 'The installation obtained a native Agent client: ' + natives);
+  report.installedKiB = Number(spawnSync('du', ['-sk', install], { encoding: 'utf8' }).stdout.split('\t')[0]);
   const pkg = path.join(install, 'node_modules/@rho-workspace/local');
   const manifest = JSON.parse(await fs.readFile(path.join(pkg, 'vendor/composition.json'), 'utf8'));
   report.core = { located: 'vendor/rho-core', platform: manifest.platform, artifactSha256: manifest.core?.artifactSha256 };
