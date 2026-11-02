@@ -269,9 +269,24 @@ The tag's release publishes the candidate CI tested for that commit, or runs CI 
 kept one. The 0.5.2 candidates recorded earlier were never published, and a version cannot be
 published twice.
 
+The user asked to publish on 2026-11-02, and `v0.5.2` was pushed on `0de1c6e4`. Release
+[41386982061](https://github.com/YuLab-SMU/Rho/actions/runs/41386982061) found CI run 41385314640,
+verified its candidate `cf6f492d…` and then skipped Publish: the CI job it did not need was skipped,
+and a job's implicit `success()` skips everything after a skipped job. The rehearsals had not shown
+this, because a rehearsal skips Publish anyway. `212d1289` makes Publish check Verify's result, and
+the tag, which had published nothing, was moved there after CI passed on it.
+
+Release [41387607313](https://github.com/YuLab-SMU/Rho/actions/runs/41387607313) found CI run
+41387094779 and verified candidate `2eb34912…` (commit `212d1289`, installed on all four platforms).
+`npm publish` signed the provenance statement and entered it in the public transparency log
+([sigstore 3637630891](https://search.sigstore.dev/?logIndex=3637630891)), then the registry refused
+with `EOTP`: the token authenticated, but publishing needs a one-time password. Nothing was published.
+A token that bypasses two-factor authentication for publishing is needed; then the failed job can
+be rerun on the same tag.
+
 ## Not done
 
-- Publication, a GitHub Release, signing.
+- Publication (refused for a one-time password), a GitHub Release, signing.
 - Rho's suite on Linux arm64; only the installation runs there.
 - Real Agent conversations in CI. The suite uses stand-ins; on Windows the 11 stand-ins written as
   Unix scripts are skipped.
