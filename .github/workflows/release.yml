@@ -1,0 +1,112 @@
+# Publishes a v* tag's commit to npm without building it again: the candidate is the one a
+# successful CI run on main packed from that commit and installed on all four platforms. When
+# no such run has a candidate (a documentation-only commit, or an expired artifact), CI runs here
+# first. Run by hand on main, it rehearses everything but the publication.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  find:
+    name: Find the tested candidate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      run: ${{ steps.find.outputs.run }}
+    steps:
+      - id: find
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          run=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$GITHUB_SHA&status=success&per_page=100" \
+            -q '[.workflow_runs[] | select(.head_branch == "main" and (.event == "push" or .event == "workflow_dispatch"))] | sort_by(.run_started_at) | last | .id // empty')
+          if [ -n "$run" ] && [ "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run/artifacts" -q '[.artifacts[] | select(.name == "candidate" and (.expired | not))] | length')" = 1 ]; then
+            echo "CI run $run built, tested and installed $GITHUB_SHA."
+          else
+            echo "No successful CI run on main kept a candidate of $GITHUB_SHA; CI runs here first."; run=
+          fi
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+
+  ci:
+    name: CI
+    needs: find
+    if: needs.find.outputs.run == ''
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
+  verify:
+    name: Verify the candidate
+    needs: [find, ci]
+    if: ${{ !cancelled() && needs.find.result == 'success' && (needs.ci.result == 'success' || needs.ci.result == 'skipped') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      run: ${{ env.CANDIDATE_RUN }}
+      tarball: ${{ steps.check.outputs.tarball }}
+      version: ${{ steps.check.outputs.version }}
+      dist-tag: ${{ steps.check.outputs.dist-tag }}
+    env:
+      CANDIDATE_RUN: ${{ needs.find.outputs.run || github.run_id }}
+      RELEASE_TAG: ${{ github.event_name == 'push' && github.ref_name || '' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { path: Rho, sparse-checkout: scripts/release-check.mjs, sparse-checkout-cone-mode: false, persist-credentials: false }
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with: { name: candidate, path: candidate, run-id: '${{ env.CANDIDATE_RUN }}', github-token: '${{ github.token }}' }
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with: { pattern: 'install-*', merge-multiple: true, path: installs, run-id: '${{ env.CANDIDATE_RUN }}', github-token: '${{ github.token }}' }
+      - id: check
+        run: node Rho/scripts/release-check.mjs candidate installs >> "$GITHUB_OUTPUT"
+
+  publish:
+    name: Publish to npm
+    needs: verify
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    # NPM_TOKEN is a repository secret that only this job names. The environment records each
+    # publication as a deployment; at the user's choice it has no required reviewer.
+    environment: npm
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with: { node-version: '22', registry-url: 'https://registry.npmjs.org', package-manager-cache: false }
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with: { name: candidate, path: candidate, run-id: '${{ needs.verify.outputs.run }}', github-token: '${{ github.token }}' }
+      - name: Publish
+        working-directory: candidate
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          sha256sum -c SHA256SUMS
+          npm publish "./${{ needs.verify.outputs.tarball }}" --access public --provenance --tag "${{ needs.verify.outputs.dist-tag }}"
+      - name: Record the publication
+        working-directory: candidate
+        run: |
+          {
+            echo "Published \`@rho-workspace/rho@${{ needs.verify.outputs.version }}\` (dist-tag \`${{ needs.verify.outputs.dist-tag }}\`) from CI run ${{ needs.verify.outputs.run }}."
+            echo
+            echo '```'
+            cat SHA256SUMS
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
