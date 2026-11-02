@@ -42,6 +42,8 @@ createInterface({input:process.stdin}).on('line',line=>{
       update({sessionUpdate:'tool_call_update',toolCallId:'cmd',status:'completed',_meta:{terminal_exit:{terminal_id:'cmd',exit_code:0,signal:null}}});active=null;reply({stopReason:'end_turn'});},140);
   }
   if(text==='drop')return process.exit(7);
+  if(text==='limit'){active=null;return out({id:r.id,error:{code:-32603,message:'Reached maximum number of turns (64)'}});}
+  if(text==='gone-prompt'){active=null;return out({id:r.id,error:{code:-32603,message:'session not found'}});}
   if(text==='wait')return;
   if(text==='permission'){permission=r.id;out({id:'permission',method:'session/request_permission',params:{sessionId:'kept-session',toolCall:{toolCallId:'write',title:'Write notes',rawInput:{file_path:'notes.txt'}},options:[{optionId:'yes',kind:'allow_once',name:'Allow once'},{optionId:'no',kind:'reject_once',name:'Reject'}]}});return;}
   active=null;return reply({stopReason:'end_turn'});
@@ -63,6 +65,43 @@ async function setup(root, budgets = {}) {
   };
 }
 const ended = r => r.turns.at(-1).state !== 'running';
+test('a confirmed Agent turn limit can be continued once as a linked new message; unknown and stale turns cannot', async () => {
+  const root = await fs.mkdtemp(path.join(shortTemp, 'rho-acp-limit-')); let f = await setup(root);
+  try {
+    const first = await f.call('conversation.start', { changeId: 'limit-first', text: 'limit' }), id = first.conversation.conversationId;
+    const limited = await f.wait(id, ended);
+    assert.equal(limited.turns[0].state, 'failed');
+    assert.match(limited.turns[0].problem, /Reached maximum number of turns \(64\)/);
+    assert.equal(limited.conversation.turnLimit, true, JSON.stringify(limited.turns[0].problem));
+    const original = (await f.record(id)).turns[0];
+    await f.service.close(); f = await setup(root);
+    assert.equal((await f.call('conversation.read', { conversationId: id })).conversation.turnLimit, true);
+    assert.equal((await f.calls()).filter(x => x.kind === 'process').length, 1, 'reading does not start an Agent');
+    const next = { conversationId: id, changeId: 'continue-limit', continuationOf: original.id, text: 'Continue unfinished work.' };
+    await f.call('conversation.send', next); await f.wait(id, r => r.turns.length === 2 && ended(r));
+    await f.call('conversation.send', next);
+    const record = await f.record(id);
+    assert.equal(record.turns[0].changeId, original.changeId);
+    assert.equal(record.turns[1].continuationOf, original.id);
+    assert.equal((await f.calls()).filter(x => x.kind === 'session/prompt').length, 2, 'a repeated continuation identity does not send twice');
+    assert.match((await f.calls()).filter(x => x.kind === 'session/prompt').at(-1).text, /Original task:\nlimit/);
+    await assert.rejects(f.call('conversation.send', { ...next, changeId: 'stale-continuation' }), e => e.error.kind === 'condition');
+    await f.call('conversation.send', { conversationId: id, changeId: 'lost', text: 'drop' }); await f.wait(id, ended);
+    await assert.rejects(f.call('conversation.send', { conversationId: id, changeId: 'unknown-continuation', continuationOf: 't3', text: 'Continue unfinished work.' }), e => e.error.kind === 'condition');
+  } finally { await f.service.close(); await fs.rm(root, { recursive: true, force: true }); }
+});
+test('a session error after a prompt was sent never automatically sends it in a new session', async () => {
+  const root = await fs.mkdtemp(path.join(shortTemp, 'rho-acp-sent-')); let f = await setup(root);
+  try {
+    const started = await f.call('conversation.start', { changeId: 'sent-once', text: 'gone-prompt' });
+    const id = started.conversation.conversationId;
+    const result = await f.wait(id, ended);
+    assert.equal(result.turns[0].state, 'unknown');
+    assert.equal((await f.calls()).filter(x => x.kind === 'session/prompt').length, 1);
+    assert.equal((await f.calls()).filter(x => x.kind === 'session/new').length, 1);
+    assert.equal(result.turns[0].continued, undefined);
+  } finally { await f.service.close(); await fs.rm(root, { recursive: true, force: true }); }
+});
 test('Rho keeps ACP message identities, one grant per connection and the original session across loss/restart', async () => {
   const root = await fs.mkdtemp(path.join(shortTemp, 'rho-acp-ledger-')); let f = await setup(root);
   try {

@@ -1,5 +1,10 @@
 import type { RhoOutput } from './contract.generated.js';
 
+// Only an explicit Agent limit report qualifies; an unknown outcome never does.
+export function agentTurnLimit(turn: { state: string; problem?: string | null; result?: { kind?: string | null; reason?: string | null } | null }) {
+  return turn.state === 'failed' && (turn.result?.kind === 'error_max_turns' || turn.result?.reason === 'max_turn_requests' || /^(?:Internal error: )?Reached maximum number of turns \(\d+\)\.?$/i.test(turn.problem ?? ''));
+}
+
 // ACP events are not chat bubbles. This model turns a retained conversation turn
 // into the meaning a person reads: prose the Agent wrote, one line per action it
 // took, and the few results that need a choice. Technical identity stays behind

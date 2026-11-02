@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { BrowserApiError, type BrowserClient, type WorkspaceSnapshot } from '../src/browser.js';
 import type { RhoOutput } from '../src/contract.generated.js';
-import { activitySummary, conversationBlocks, currentPlanEntry, durationText, stepDuration, type Activity, type AgentAction, type Block } from '../src/conversation-presentation.js';
+import { agentTurnLimit, activitySummary, conversationBlocks, currentPlanEntry, durationText, stepDuration, type Activity, type AgentAction, type Block } from '../src/conversation-presentation.js';
 import { projectName } from './home.js';
 import { AgentMarkdown, CopyButton } from './markdown.js';
 import { agentLabel, backendOf, modelSetting, split, useAgentSettings, valueName, type SettingValue } from './agent-settings.js';
@@ -22,7 +22,7 @@ import { clock as clockAt } from './timeline-kinds.js';
 type Read = RhoOutput<'conversation.read'>;
 type Turn = Read['turns'][number];
 type Observation = Read['observation'];
-type Pending = { kind: 'start' | 'send'; changeId: string; text: string; conversationId?: string; backend?: 'claude-acp' | 'codex-acp' };
+type Pending = { kind: 'start' | 'send'; changeId: string; text: string; conversationId?: string; continuationOf?: string; backend?: 'claude-acp' | 'codex-acp' };
 const stored = (key: string) => { try { return sessionStorage.getItem(key); } catch { return null; } };
 const store = (key: string, value: string | null) => { try { if (value === null) sessionStorage.removeItem(key); else sessionStorage.setItem(key, value); return true; } catch { return false; } };
 const clock = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
@@ -46,15 +46,15 @@ function ending(turn: Turn) {
     if (turn.retry) return `The model provider returned ${turn.retry.status ?? 'an error'}; the Agent is retrying${turn.retry.attempt ? ` (attempt ${turn.retry.attempt}${turn.retry.of ? ' of ' + turn.retry.of : ''})` : ''}.`;
     return 'Agent is working…';
   }
-  if (turn.state === 'completed') return 'Done' + (turn.result?.durationMs ? ' in ' + seconds(turn.result.durationMs) : '');
+  if (turn.state === 'completed') return 'Agent finished this reply' + (turn.result?.durationMs ? ' in ' + seconds(turn.result.durationMs) : '') + '.';
   if (turn.state === 'stopped') {
-    if (turn.result?.reason === 'cancelled') return 'Turn cancelled. Steps already taken stay done; unfinished tools may still be running.';
     const reason = turn.stop?.reason;
     return reason === 'person' ? 'Stopped. Steps already taken stay done.' : reason === 'closing' ? 'Stopped when Rho closed. Steps already taken stay done.'
-      : reason === 'wall-limit' ? 'Stopped: this message ran longer than Rho allows for one message.' : reason === 'identity' ? turn.problem ?? 'Stopped.' : 'Stopped: the Agent wrote more than Rho keeps for one message.';
+      : reason === 'wall-limit' ? 'Stopped: this message ran longer than Rho allows for one message.' : reason === 'identity' ? turn.problem ?? 'Stopped.'
+      : reason === 'output-limit' || reason === 'line-limit' ? 'Stopped: the Agent wrote more than Rho keeps for one message.' : 'Turn cancelled. Steps already taken stay done; unfinished tools may still be running.';
   }
   if (turn.state === 'failed') {
-    if (turn.result?.kind === 'error_max_turns') return 'Stopped at the step limit for one message. Ask it to continue.';
+    if (agentTurnLimit(turn)) return 'The Agent reached its turn limit. The analysis may be unfinished.';
     const message = turn.result?.message ?? turn.problem ?? '';
     return repeats(message, turn) ? 'Not answered.' : 'Not answered. ' + message;
   }
@@ -135,9 +135,9 @@ function BlockView({ block }: { block: Block }) {
     : <ActivityRun activities={block.activities} running={block.running} summary={block.summary} />;
 }
 
-function TurnView({ turn, running, observation, projectRoot, choose, choosing, askAgain, at }: {
+function TurnView({ turn, running, observation, projectRoot, choose, choosing, askAgain, continueWork, at }: {
   turn: Turn; running: boolean; observation?: Observation; projectRoot?: string; at?: number | null;
-  choose(turnId: string, permissionId: string, optionId: string): void; choosing: string | null; askAgain(text: string): void;
+  choose(turnId: string, permissionId: string, optionId: string): void; choosing: string | null; askAgain(text: string): void; continueWork?: () => void;
 }) {
   const blocks = conversationBlocks(turn, observation, projectRoot);
   const elapsed = useElapsed(running, turn.startedAt ?? turn.sentAt, at);
@@ -169,6 +169,7 @@ function TurnView({ turn, running, observation, projectRoot, choose, choosing, a
     </details>}
     {answer.map(block => <BlockView key={block.key} block={block} />)}
     {turn.continued && <p className="turn-note">The Agent session this conversation had been using had ended, so this message ran in a new one, told what was said here before.</p>}
+    {turn.continuationOf && <p className="turn-note">Continues {turn.continuationOf} after the Agent reached its turn limit.</p>}
     {turn.omitted > 0 && <p className="turn-note">{turn.omitted} later {turn.omitted === 1 ? 'step was' : 'steps were'} not kept.</p>}
     {running && at == null && turn.permissions?.filter(p => p.state === 'pending').map(permission => <div key={permission.id} className="turn-permission" role="group" aria-label="Agent permission">
       <p className="permission-caption"><span aria-hidden="true" />Needs your choice</p>
@@ -180,7 +181,8 @@ function TurnView({ turn, running, observation, projectRoot, choose, choosing, a
       <p className={'turn-ending ' + turn.state} role={turn.state === 'running' ? 'status' : undefined}>{running && <span className="turn-spinner" aria-hidden="true" />}{ending(turn)}{running && elapsed !== null && <span className="turn-elapsed" aria-hidden="true"> · {liveTime(elapsed)}</span>}</p>
       <span className="turn-meta">{model && <span className="turn-model" title={model}>{split(model).name}</span>}<span title={new Date(turn.sentAt).toLocaleString()}>{clock(turn.sentAt)}</span></span>
       {!running && answerText && <CopyButton text={answerText} label="Copy answer" />}
-      {turn.state === 'failed' && !running && <button className="text-button" onClick={() => askAgain(turn.text)}>Ask again</button>}
+      {continueWork && <button className="text-button" onClick={continueWork}>Continue unfinished work</button>}
+      {turn.state === 'failed' && !running && !agentTurnLimit(turn) && <button className="text-button" onClick={() => askAgain(turn.text)}>Ask again</button>}
     </div>
   </li>;
 }
@@ -291,8 +293,8 @@ function ConversationSwitcher({ list, openId, title, brand, onOpen, onAll }: {
 
 // replayAt shows the open conversation as it stood at that moment, in step with its Studio;
 // onStarted names the conversation a message went to once the service has it.
-export function AgentConversation({ snapshot, client, selectedId, onSelected, onSent, onStarted, onClose, onAll, replayOf, replayAt: replaying = null, onNow }: {
-  snapshot: WorkspaceSnapshot; client: BrowserClient; selectedId?: string | null; onSelected?: () => void; onSent?: () => void; onStarted?: (conversationId: string) => void; onClose?: () => void; onAll?: () => void;
+export function AgentConversation({ snapshot, client, selectedId, onSelected, onOpen, onSent, onStarted, onClose, onAll, replayOf, replayAt: replaying = null, onNow }: {
+  snapshot: WorkspaceSnapshot; client: BrowserClient; selectedId?: string | null; onSelected?: () => void; onOpen?: (id: string | null) => void; onSent?: () => void; onStarted?: (conversationId: string) => void; onClose?: () => void; onAll?: () => void;
   replayOf?: string | null; replayAt?: number | null; onNow?: () => void;
 }) {
   const projectId = snapshot.project.id, openKey = 'rho.conversation.open.v1:' + projectId;
@@ -320,7 +322,7 @@ export function AgentConversation({ snapshot, client, selectedId, onSelected, on
     let current = true;
     client.call('conversation.read', { projectId, conversationId: openId, limit: 50 }).then(value => { if (current) { setRead(value); setProblem(''); } }, error => {
       if (!current) return;
-      if (error instanceof BrowserApiError && error.error.kind === 'not_found') { open(null); return; }
+      if (error instanceof BrowserApiError && error.error.kind === 'not_found') { open(null); setProblem('This conversation is not available in this project. Nothing was started.'); return; }
       setProblem('This conversation could not be read. It is kept; refresh to try again.');
     });
     return () => { current = false; };
@@ -348,7 +350,7 @@ export function AgentConversation({ snapshot, client, selectedId, onSelected, on
       seen.current = version; setUnseen(false);
     } else if (seen.current !== version) setUnseen(true);
   }, [read?.conversation.version, openId, following, replayAt]);
-  function open(id: string | null) { setOpenId(id); store(openKey, id); setProblem(''); setFollowing(true); setUnseen(false); }
+  function open(id: string | null) { setOpenId(id); store(openKey, id); onOpen?.(id); setProblem(''); setFollowing(true); setUnseen(false); }
   function edit(text: string) { setDraft(text); if (!store(draftKey, text)) setProblem('This draft could not be stored. Send or copy it before closing this panel.'); }
   function askAgain(text: string) { setFollowing(true); edit(text); input.current?.focus(); }
   const last = read?.turns.at(-1), answering = !!openId && (last?.state === 'running' || summary?.state === 'running');
@@ -360,16 +362,16 @@ export function AgentConversation({ snapshot, client, selectedId, onSelected, on
     try {
       const reply = next.kind === 'start'
         ? await client.call('conversation.start', { projectId, changeId: next.changeId, text: next.text, ...(next.backend ? { backend: next.backend } : {}) })
-        : await client.call('conversation.send', { projectId, conversationId: next.conversationId!, changeId: next.changeId, text: next.text });
+        : await client.call('conversation.send', { projectId, conversationId: next.conversationId!, changeId: next.changeId, text: next.text, ...(next.continuationOf ? { continuationOf: next.continuationOf } : {}) });
       setPending(null); store(pendingKey, null);
-      store(draftKey, null); setDraft('');
+      if (!next.continuationOf) { store(draftKey, null); setDraft(''); }
       onStarted?.(reply.conversation.conversationId);
       if (next.kind === 'start') open(reply.conversation.conversationId);
       else setRead(current => current && current.conversation.conversationId === reply.conversation.conversationId ? { ...current, conversation: reply.conversation, turns: [...current.turns.filter(t => t.id !== reply.turn.id), reply.turn] } : current);
     } catch (error) {
       if (error instanceof BrowserApiError) {
         // Refused: nothing was started. The words go back into the box.
-        setPending(null); store(pendingKey, null); setDraft(next.text); store(draftKey, next.text); setProblem(error.message);
+        setPending(null); store(pendingKey, null); if (!next.continuationOf) { setDraft(next.text); store(draftKey, next.text); } setProblem(error.message);
       } else setUnconfirmed(true);
     } finally { setBusy(false); }
   }
@@ -378,6 +380,12 @@ export function AgentConversation({ snapshot, client, selectedId, onSelected, on
     if (!text) return;
     setFollowing(true); setUnseen(false); onSent?.();
     void deliver(openId ? { kind: 'send', conversationId: openId, changeId: 'm-' + crypto.randomUUID(), text } : { kind: 'start', changeId: 'm-' + crypto.randomUUID(), text });
+  }
+  function continueWork(turn: Turn) {
+    if (!openId || busy || pending || answering || !agentTurnLimit(turn)) return;
+    setFollowing(true); setUnseen(false); onSent?.();
+    void deliver({ kind: 'send', conversationId: openId, changeId: 'm-' + crypto.randomUUID(), continuationOf: turn.id,
+      text: 'Continue the unfinished work from the original task. First inspect the retained results and the state of any work that may still be running. Do not repeat completed actions merely to recover context. Finish what remains and report any uncertainty.' });
   }
   // A setting of the open conversation, for its next messages.
   async function configure(configId: string, value: SettingValue) {
@@ -415,7 +423,7 @@ export function AgentConversation({ snapshot, client, selectedId, onSelected, on
     {openId && replayAt !== null && <p className="conversation-replay" role="status"><Icon name="restore" size={13} />Replaying · <strong>{clockAt(replayAt, true)}</strong>{onNow && <button className="small-button" onClick={onNow}>Back to now</button>}</p>}
     {openId ? <ol className="conversation-turns" aria-label="Messages">
       {(read?.first ?? 0) > 0 && <li className="turn-note">{read!.first} earlier {read!.first === 1 ? 'message is' : 'messages are'} kept but not shown.</li>}
-      {read && turns?.map((turn, i) => <TurnView key={turn.id} turn={turn} at={replayAt} running={turn.state === 'running' && i === turns.length - 1} observation={read.observation} projectRoot={snapshot.project.root} choosing={choosing} askAgain={askAgain} choose={(turnId, permissionId, optionId) => {
+      {read && turns?.map((turn, i) => <TurnView key={turn.id} turn={turn} at={replayAt} running={turn.state === 'running' && i === turns.length - 1} observation={read.observation} projectRoot={snapshot.project.root} choosing={choosing} askAgain={askAgain} continueWork={replayAt === null && turn.id === last?.id && agentTurnLimit(turn) && !waiting && !busy ? () => continueWork(turn) : undefined} choose={(turnId, permissionId, optionId) => {
         setChoosing(permissionId); setProblem('');
         void client.call('conversation.permission', { projectId, conversationId: openId!, turnId, permissionId, optionId }).then(reply => {
           setRead(current => current ? { ...current, conversation: reply.conversation, turns: current.turns.map(t => t.id === reply.turn.id ? reply.turn : t) } : current);

@@ -7,7 +7,7 @@ Updated: 2026-11-02.
 The selected work includes the [dsh-rho prototype](DSH-RHO-EPISODE.md): native dsh analysis,
 reused table/figure views and a selected-row question in the same conversation. Result review,
 historical evidence, macOS 0.5.1 and the offline reader retain their [episode](REVIEW-EVIDENCE-EPISODE.md).
-Native tools remain normal; Core is optional. No Core execution behavior changed.
+Native tools remain normal; Core is optional. No Core execution behavior changed. [P3 continuity](P3-CONTINUITY-EPISODE.md) reproduced a 64-turn stop and continued it after reopening; the restarted Notebook's in-memory state did not survive, and four native choices remained.
 
 The [research method proposal](https://github.com/YuLab-SMU/Rho-paper) centers on purpose-driven
 composition: selecting materials, arranging related views and operations, and carrying their
@@ -46,7 +46,7 @@ commands, Review (Annotations 0.5.2) offers questions and kept results as choice
 a folder chosen in the system dialog stays in the local person's list across
 restarts, and a tab on this machine names its principal again, so the person's own
 edits read "You". Row questions on an ordinary CSV still need an identity choice (a declared
-key column or a row position within one exact version); pages have no addresses yet.
+key column or a row position within one exact version); projects and conversations now have addresses, while other pages do not.
 
 Its [second pass](SIMULATED-PROJECT-EPISODE.md#second-pass) moved review onto the
 answer. The Overview leads with an answer board derived from the Graph: results by

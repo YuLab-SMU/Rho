@@ -165,6 +165,12 @@
               ]
             }
           },
+          "turnLimit": {
+            "type": "boolean"
+          },
+          "waitingPermission": {
+            "type": "boolean"
+          },
           "usage": {
             "anyOf": [
               {

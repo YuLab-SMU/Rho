@@ -85,7 +85,7 @@ export const operations: Record<string, any> = { ...base.operations,
   'media.describe': obj({ ...project, resource: ref }),
   // A conversation the person starts in Rho: their words, under a request identity they hold.
   'conversation.start': obj({ ...project, changeId, text: { type: 'string', minLength: 1, maxLength: 16384 }, backend: agentBackend, config: choices, contexts: { ...array(digest), maxItems: 8 } }, ['projectId', 'changeId', 'text']),
-  'conversation.send': obj({ ...project, conversationId: changeId, changeId, text: { type: 'string', minLength: 1, maxLength: 16384 }, contexts: { ...array(digest), maxItems: 8 } }, ['projectId','conversationId','changeId','text']),
+  'conversation.send': obj({ ...project, conversationId: changeId, changeId, text: { type: 'string', minLength: 1, maxLength: 16384 }, contexts: { ...array(digest), maxItems: 8 }, continuationOf: changeId }, ['projectId','conversationId','changeId','text']),
   'conversation.permission': obj({ ...project, conversationId: changeId, turnId: changeId, permissionId: changeId, optionId: { type: 'string', minLength: 1, maxLength: 256 } }),
   'conversation.stop': obj({ ...project, conversationId: changeId, turnId: changeId }),
   'conversation.decide': obj({ ...project, conversationId: changeId, turnId: changeId, changeId, decision: { enum: ['accepted', 'needs-changes'] }, note: { type: 'string', maxLength: 4096 } }, ['projectId', 'conversationId', 'turnId', 'changeId', 'decision']),
@@ -211,7 +211,7 @@ const catalog = { ...contract.capabilityCatalogSchema };
 // Agent and adapter, the last model, the person's choices, reported usage and cost, the session
 // identity and whether it is in the trash.
 const conversationSummary = response({ conversationId: text, title: text, client: text, principal: { anyOf: [text, { type: 'null' }] }, createdAt: text, updatedAt: text, version: integer, turns: integer, state: { enum: ['idle', 'running', 'completed', 'failed', 'stopped', 'unknown'] }, lastAt: text,
-  backend: text, agentTitle: { anyOf: [text, { type: 'null' }] }, adapter: { anyOf: [response({ name: text, version: text }, ['name']), { type: 'null' }] }, model: { anyOf: [text, { type: 'null' }] }, config: choices,
+  backend: text, agentTitle: { anyOf: [text, { type: 'null' }] }, adapter: { anyOf: [response({ name: text, version: text }, ['name']), { type: 'null' }] }, model: { anyOf: [text, { type: 'null' }] }, config: choices, turnLimit: { type: 'boolean' }, waitingPermission: { type: 'boolean' },
   usage: { anyOf: [response({ used: { type: 'number', minimum: 0 }, size: { type: 'number', minimum: 0 }, cost: { anyOf: [response({ amount: { type: 'number' }, currency: text }), { type: 'null' }] } }), { type: 'null' }] },
   costUsd: { anyOf: [{ type: 'number' }, { type: 'null' }] }, sessionId: { anyOf: [text, { type: 'null' }] }, trashedAt: { anyOf: [text, { type: 'null' }] } },
   ['conversationId', 'title', 'client', 'principal', 'createdAt', 'updatedAt', 'version', 'turns', 'state', 'lastAt']);
@@ -253,7 +253,7 @@ const conversationTurn = response({ id: text, by: text, text: { type: 'string' }
   files: response({ changed: array(response({ path: text, change: { enum: ['added', 'modified', 'removed'] }, modifiedAt: { anyOf: [text, { type: 'null' }] }, bytes: { anyOf: [integer, { type: 'null' }] } })), omitted: integer, partial: { type: 'boolean' } }),
   // The Agent session this message replaced, when the one before it had ended: what was said
   // before carried over as the record Rho kept, not as a resent request.
-  continued: { anyOf: [response({ at: text, earlier: text }, ['at', 'earlier']), { type: 'null' }] } }, ['id', 'by', 'text', 'sentAt', 'state', 'steps', 'omitted', 'problem']);
+  continued: { anyOf: [response({ at: text, earlier: text }, ['at', 'earlier']), { type: 'null' }] }, continuationOf: text }, ['id', 'by', 'text', 'sentAt', 'state', 'steps', 'omitted', 'problem']);
 const observationSnapshot = response({
   project: contract.projectRecordSchema,
   catalog,
@@ -411,7 +411,7 @@ export const descriptions = {
   'binding.activity.append': 'Registered native adapter only: retain original CLI tool and artifact-ready observations. This does not execute, validate, or present artifacts.',
   'task.routing.put': 'Control plane only: conditionally assign one task and business binding to this project without starting a native session.',
   'conversation.start': 'Person at this machine only: start a conversation with the selected Claude Code or Codex Agent in this project. Rho selects the Agent plugin backend, attaches this project\'s MCP grant and records the message before sending it. Without backend or config, the person\'s saved Agent and settings are used and recorded with the conversation. A repeated changeId with the same text returns the original conversation and starts nothing.',
-  'conversation.send': 'Person at this machine only: send the next message to a conversation started in Rho, which resumes the same Agent session. Refused while the previous message is being answered. A repeated changeId with the same text returns the original message.',
+  'conversation.send': 'Person at this machine only: send the next message to a conversation started in Rho. A continuationOf links a new message to the latest confirmed Agent turn-limit stop; the original request is not resent. Refused while the previous message is being answered. A repeated changeId with the same input returns the original message.',
   'conversation.decide': 'Person at this machine only: say to use an answer, or that it needs changes and why. The decision holds for the file versions that message kept when it was given and says nothing of later versions. A new decision supersedes the one before; none is removed. Refused while the Agent is still answering.',
   'conversation.stop': 'Person at this machine only: ask the original Agent to stop answering one message. ACP cancellation is confirmed by the original prompt response; a lost connection keeps the outcome unknown. Legacy CLI conversations confirm process exit. Steps already taken stay done.',
   'conversation.permission': 'Person at this machine only: record an offered choice for a pending Agent permission request. The original request identity is retained; repeated identical choices do not respond twice.',

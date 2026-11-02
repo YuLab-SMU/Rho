@@ -6,7 +6,7 @@ import type { RhoOutput } from '../src/contract.generated.js';
 import { buildWorkGraph, foldVersions, type GraphNode, type WorkGraph } from '../src/work-graph.js';
 import { boardThreads, commandGist, type BoardItem } from '../src/answer-board.js';
 import { askText, askedAbout, type Asking } from '../src/asking.js';
-import { durationText } from '../src/conversation-presentation.js';
+import { agentTurnLimit, durationText } from '../src/conversation-presentation.js';
 import { useTurns } from './work-turns.js';
 import { kindOf, type ProjectFiles } from './sources.js';
 import { readPreview, readTable, readText, type Preview, type TablePage } from './previews.js';
@@ -164,7 +164,7 @@ function Verdict({ record, graph, shown, onDecide, onNeedsChanges }: { record: T
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState('');
   useEffect(() => { setChanging(false); setWriting(false); setProblem(''); }, [record.id, last?.changeId]);
-  if (record.state === 'running') return null;
+  if (record.state === 'running' || (agentTurnLimit(record) && !last)) return null;
   const since = last ? last.results.filter(r => { const node = graph.nodes.find(n => n.kind === 'file' && n.path === r.path); return !!node?.modifiedAt && Date.parse(node.modifiedAt) > Date.parse(last.at) + 1000; }) : [];
   // Results on the board of which this message kept no version: the decision cannot name them.
   const uncovered = last ? shown.filter(path => !last.results.some(r => r.path === path)) : [];
@@ -287,7 +287,7 @@ export function AnswerBoard({ client, snapshot, files, notesText = '', onConvers
     <header className="board-head">
       <div className="board-ask">
         <h2 id="board-title" title={question.text}>{question.title}</h2>
-        <p className="board-meta"><span className={'work-state ' + (question.state ?? '')}>{ended[question.state ?? ''] ?? question.state}</span>
+        <p className="board-meta"><span className={'work-state ' + (question.state ?? '')}>{record && agentTurnLimit(record) ? 'Turn limit reached' : ended[question.state ?? ''] ?? question.state}</span>
           {record && <> · {day(record.endedAt ?? record.sentAt)}{record.endedAt && took(record.startedAt ?? record.sentAt, record.endedAt) ? ' · took ' + took(record.startedAt ?? record.sentAt, record.endedAt) : ''}</>}
           {now && <> · <span className={'board-live' + (live?.waiting ? ' waiting' : '')} title={now}>{now}</span></>}
           {askingNow && <> · <button className="text-button board-live" onClick={() => document.getElementById('board-follow-' + askingNow.id)?.scrollIntoView({ block: 'center', behavior: 'smooth' })}>Answering “{askingNow.title}”</button></>}</p>

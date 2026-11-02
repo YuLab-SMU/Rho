@@ -233,14 +233,14 @@
     "conversation.configure": {
       "summary": "Person at this machine only: change one setting the Agent offers (model, effort, mode…) for the next messages of a conversation started in Rho. An open session changes now; otherwise the choice is applied when the session next opens. Refused while a message is being answered.",
       "path": "operations/conversation.configure.json",
-      "bytes": 19966,
-      "sha256": "15c9b62b29402307275384ce70251bd84659155b6358c5081b7ba04af5fc70e4"
+      "bytes": 20110,
+      "sha256": "a92723b3e054d81050be0edb5531b2f4621d30c4d3b8712c91959355d3a33cf7"
     },
     "conversation.decide": {
       "summary": "Person at this machine only: say to use an answer, or that it needs changes and why. The decision holds for the file versions that message kept when it was given and says nothing of later versions. A new decision supersedes the one before; none is removed. Refused while the Agent is still answering.",
       "path": "operations/conversation.decide.json",
-      "bytes": 33581,
-      "sha256": "89ae999014def48dcbe84f90298efec5f8c95a62eefdfc985f9e2d98175ecac7"
+      "bytes": 33825,
+      "sha256": "366b88fc2102cd7ea25aa753c5e8f17780a2d78269a4e152786a97b0a0c22dc6"
     },
     "conversation.delete": {
       "summary": "Person at this machine only: delete Rho's record of a conversation in the trash. The Agent's own session files are not touched. Repeating the request that started it is then refused.",
@@ -251,32 +251,32 @@
     "conversation.list": {
       "summary": "Person at this machine only: list the conversations started in Rho in this project, or those in its trash, with each one's Agent, last model, choices and reported usage. Reading starts nothing.",
       "path": "operations/conversation.list.json",
-      "bytes": 6611,
-      "sha256": "9475ea23d252b4c3ead89e195579ddc146bd5273f3e96b4db3a9db595ce7448e"
+      "bytes": 6767,
+      "sha256": "44c0fcaaf3b0775db9d3f969218a0b9516ea4d55f79d6d9737c34be368bda7a1"
     },
     "conversation.permission": {
       "summary": "Person at this machine only: record an offered choice for a pending Agent permission request. The original request identity is retained; repeated identical choices do not respond twice.",
       "path": "operations/conversation.permission.json",
-      "bytes": 33400,
-      "sha256": "1559d623bf014ed1a193082820e277bc9550c079dc222c5f1c2e55c74d6fde79"
+      "bytes": 33644,
+      "sha256": "85bc65c9209d43a75b49542d10f5d82c2998307ef2f8b3727a94ec6ae1bffc56"
     },
     "conversation.read": {
       "summary": "Read a conversation started in Rho: the person's messages, the Agent's visible text and tool steps, and how each message ended. Reading starts and resumes nothing.",
       "path": "operations/conversation.read.json",
-      "bytes": 48500,
-      "sha256": "a841834e3c7b0647bda45d7b6f71778811c45cebd79032863145a5097ab8f8da"
+      "bytes": 48752,
+      "sha256": "0ae9de68afa2da8419f5d723eca3f2ea8db9d1e0936a8dd1e92284d8bcc27805"
     },
     "conversation.restore": {
       "summary": "Person at this machine only: return a conversation from the trash to the project's conversations, within the project's conversation limit.",
       "path": "operations/conversation.restore.json",
-      "bytes": 6117,
-      "sha256": "52c32c58b785c567fe92a5b8dcc740f77bbb9f5537701132b94c3894b551a160"
+      "bytes": 6261,
+      "sha256": "282449bc3f84125f2e6d37ec391596aa03e666b1fac06774454cd830aa9d69e4"
     },
     "conversation.send": {
-      "summary": "Person at this machine only: send the next message to a conversation started in Rho, which resumes the same Agent session. Refused while the previous message is being answered. A repeated changeId with the same text returns the original message.",
+      "summary": "Person at this machine only: send the next message to a conversation started in Rho. A continuationOf links a new message to the latest confirmed Agent turn-limit stop; the original request is not resent. Refused while the previous message is being answered. A repeated changeId with the same input returns the original message.",
       "path": "operations/conversation.send.json",
-      "bytes": 33496,
-      "sha256": "2e42200dd9d9ab3e67b57474f633bf04b14a550819b97c5172dd23cd312828f1"
+      "bytes": 33931,
+      "sha256": "031bbfe0e76b4e932969743953f7664a283b85b75dc3fe55fca6af45ac4d1e4c"
     },
     "conversation.settings.check": {
       "summary": "Person at this machine only: start the chosen Agent in this project to read the settings it offers, then remove that session and end the process. No message is sent; one check per Agent runs at a time.",
@@ -299,20 +299,20 @@
     "conversation.start": {
       "summary": "Person at this machine only: start a conversation with the selected Claude Code or Codex Agent in this project. Rho selects the Agent plugin backend, attaches this project's MCP grant and records the message before sending it. Without backend or config, the person's saved Agent and settings are used and recorded with the conversation. A repeated changeId with the same text returns the original conversation and starts nothing.",
       "path": "operations/conversation.start.json",
-      "bytes": 34057,
-      "sha256": "21900c1c07d43a2b67483a018da973e354e0a0a8f487ec0afc2a400d2a41d498"
+      "bytes": 34301,
+      "sha256": "7b3bebe1b356c46abd4c51687658a9ba1461dcb969f4aa206fe70506576f32d2"
     },
     "conversation.stop": {
       "summary": "Person at this machine only: ask the original Agent to stop answering one message. ACP cancellation is confirmed by the original prompt response; a lost connection keeps the outcome unknown. Legacy CLI conversations confirm process exit. Steps already taken stay done.",
       "path": "operations/conversation.stop.json",
-      "bytes": 33227,
-      "sha256": "903168c347e8cd4c0eb9a6269bae5a79a97e2f48f5766017ca161180efd66b9f"
+      "bytes": 33471,
+      "sha256": "0755e7ba9a7c1a516d0158f0f53656f1635970ab767b0455fe786fdb1535c441"
     },
     "conversation.trash": {
       "summary": "Person at this machine only: move a conversation that is not being answered to the trash. It is kept whole and not continued until restored; an idle connection to its Agent ends.",
       "path": "operations/conversation.trash.json",
-      "bytes": 6155,
-      "sha256": "75a64f2f43b9972f71d82a24e808e41f108994aa4a584f2e51fa83490596d11d"
+      "bytes": 6299,
+      "sha256": "8ecc3aaf8da2cc307b65e7015a17ae1ec096451859a06721d884e1d519cb4540"
     },
     "data.compare": {
       "summary": "Join two explicit table versions using declared keys, namespaces, fields and join policy. Scientific comparability remains the project responsibility.",
@@ -533,8 +533,8 @@
     "observation.snapshot": {
       "summary": "observation.snapshot",
       "path": "operations/observation.snapshot.json",
-      "bytes": 164874,
-      "sha256": "afba91c8758f429f5195331fcff376e48d3ced42f8de6f083b0022ecbd375322"
+      "bytes": 165030,
+      "sha256": "ee71c0bf7b912ad38bbbfc3ad5a797f1306f1eb821cdc30819d24b5d86e0867d"
     },
     "project.create": {
       "summary": "project.create",

@@ -34,12 +34,21 @@ const SkillsPage = lazy(() => import('./skills.js').then(module => ({ default: m
 const ProcessStudio = lazy(() => import('./studio-process.js').then(module => ({ default: module.ProcessStudio })));
 
 const sessionKey = 'rho.browser.session.v1', projectKey = 'rho.browser.project.v1';
+// Addresses identify retained records, never credentials or an instruction to run work.
+function address(projectId?: string | null, conversationId?: string | null) {
+  const url = new URL(location.href);
+  const fragment = new URLSearchParams(url.hash.slice(1));
+  if (projectId) fragment.set('project', projectId); else fragment.delete('project');
+  if (projectId && conversationId) fragment.set('conversation', conversationId); else fragment.delete('conversation');
+  url.hash = fragment.toString();
+  history.replaceState(null, '', url.pathname + url.search + url.hash);
+}
 // Opening this page on this machine is the access: the service answers a same-origin request as
 // the local person, so there is no link, code or credential to carry. A narrower, expiring link
 // stays available for a shared or subfolder-scoped tab; only then does the fragment hold a code,
 // which no request or Referer carries.
 const linked = new URLSearchParams(location.hash.slice(1)), linkCode = linked.get('pair');
-if (linkCode !== null) history.replaceState(null, '', location.pathname + location.search);
+if (linkCode !== null) { linked.delete('pair'); history.replaceState(null, '', location.pathname + location.search + (linked.size ? '#' + linked.toString() : '')); }
 let linkRedeemed = false;
 // The service records that person as `browser:local`; naming it here lets owners tell their own
 // changes and undo from another tab's.
@@ -141,7 +150,7 @@ function App() {
     if (accessEnded(e)) { useLocalAccess('That link is no longer valid. This tab uses this machine. Reconnecting only reads again.'); return; }
     setPhase('offline'); setOfflineAt(at => at ?? new Date()); setError(humanError(e));
   }
-  function chooseProject(next: ProjectSummary, restoreLayout = false) {
+  function chooseProject(next: ProjectSummary, restoreLayout = false, updateAddress = true) {
     if (next.id !== project?.id) { setSnapshot(null); setCompositionId(''); setPluginId(''); setFollowing(false); }
     // The project opens on its own question, not on whichever layout was last open:
     // a person arriving should see what the work is and where it stands.
@@ -150,6 +159,7 @@ function App() {
     const retainedReview = restoreLayout && sessionStorage.getItem('rho.review.open:' + connection?.principalId + ':' + next.id) === 'true';
     setReviewId(''); setReviewAnchor(null); setSection(retainedReview ? 'review' : 'overview'); setOverview(retainedReview || !retainedLayout); if (retainedLayout) setCompositionId(retainedLayout); setPluginReturn(false);
     sessionStorage.setItem(projectKey, next.id); setProject(next); setScreen('project');
+    if (updateAddress) address(next.id);
     if (matchMedia('(max-width: 767px)').matches) setNavigation(false);
   }
   useEffect(() => {
@@ -167,9 +177,14 @@ function App() {
     setPhase('connecting');
     client.call('project.list', {}, abort.signal).then(list => {
       setProjects(list);
-      const retained = list.find(p => p.id === sessionStorage.getItem(projectKey));
+      const params = new URLSearchParams(location.hash.slice(1)), requestedProject = params.get('project'), requestedConversation = params.get('conversation');
+      const retained = list.find(p => p.id === (requestedProject ?? sessionStorage.getItem(projectKey)));
       // An open project's observation reports the connection; otherwise this read does.
-      if (retained && !current.current) chooseProject(retained, true);
+      if (retained && !current.current) {
+        chooseProject(retained, true, !requestedProject);
+        if (requestedProject && requestedConversation && !link) { setSelectedConversation(requestedConversation); setAgentOpen(true); }
+      }
+      else if (requestedProject && !current.current) { setNotice('This project is not available to this tab. No conversation was opened.'); live(); }
       else if (!current.current) live();
     }).catch(e => { if (!abort.signal.aborted) lost(e); });
     return () => abort.abort();
@@ -352,7 +367,7 @@ function App() {
   }
   function plugins() { setFollowing(false); setPluginId(''); setPluginReturn(false); setScreen('plugins'); }
   function about(id: string) { setPluginId(id); setPluginReturn(true); setScreen('plugins'); }
-  function goHome() { remember(); setFollowing(false); setScreen('home'); setHomeFocus(true); }
+  function goHome() { remember(); setFollowing(false); setScreen('home'); setHomeFocus(true); address(); }
   function remember() { if (project && screen !== 'home') places.current.set(project.id, { screen, overview, section, category, shownFile, compositionId, pluginId }); }
   // Switching between projects keeps each one where the person left it in this tab; choosing a
   // project from the list still opens it on its Overview.
@@ -544,7 +559,7 @@ function App() {
   const agentContents = <>
     {(link || !snapshot) && <div className="drawer-heading"><h2>Agent</h2><button className="icon-button" aria-label="Close Agent" onClick={closeAgent}><Icon name="close" size={18} /></button></div>}
     {snapshot && (link ? <AgentRequest key={snapshot.project.id} snapshot={snapshot} principalId={connection.principalId ?? 'local'} />
-      : <AgentConversation key={snapshot.project.id} snapshot={snapshot} client={client} selectedId={selectedConversation} onSelected={() => setSelectedConversation(null)} onSent={() => { if (!studioOpen) follow(undefined, false); }} onStarted={id => { if (shownProcess) follow(id, true); }}
+      : <AgentConversation key={snapshot.project.id} snapshot={snapshot} client={client} selectedId={selectedConversation} onSelected={() => setSelectedConversation(null)} onOpen={id => address(snapshot.project.id, id)} onSent={() => { if (!studioOpen) follow(undefined, false); }} onStarted={id => { if (shownProcess) follow(id, true); }}
         replayOf={processConversation(shownId)} replayAt={studioOpen ? replay.at : null} onNow={() => setReplay(r => ({ ...r, at: null, playing: false }))}
         onClose={closeAgent} onAll={() => { showSection('agent'); if (narrow) setAgentOpen(false); }} />)}
     <div ref={setAgentSlot} className="agent-slot" />

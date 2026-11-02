@@ -185,6 +185,12 @@
               ]
             }
           },
+          "turnLimit": {
+            "type": "boolean"
+          },
+          "waitingPermission": {
+            "type": "boolean"
+          },
           "usage": {
             "anyOf": [
               {
@@ -1202,6 +1208,10 @@
                 "type": "null"
               }
             ]
+          },
+          "continuationOf": {
+            "type": "string",
+            "minLength": 1
           }
         },
         "required": [

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { BrowserClient, WorkspaceSnapshot } from '../src/browser.js';
 import type { RhoOutput } from '../src/contract.generated.js';
-import { conversationBlocks, type Activity } from '../src/conversation-presentation.js';
+import { agentTurnLimit, conversationBlocks, type Activity } from '../src/conversation-presentation.js';
 import { commandFiles, projectPath } from './agent-now.js';
 import { kindOf } from './sources.js';
 import { AgentMarkdown } from './markdown.js';
@@ -94,7 +94,7 @@ function TurnWork({ turn, snapshot, observation, exists, onPath }: { turn: Turn;
     </div>
     {failure ? <p className="work-problem" role="note"><Icon name="info" size={15} />{failure}</p>
       : did.answer ? <Answer text={did.answer} streaming={turn.state === 'running'} /> : null}
-    <p className="work-ending"><span className={'work-state ' + turn.state}>{ended[turn.state] ?? turn.state}</span>{turn.state !== 'running' && took(turn.startedAt ?? turn.sentAt, turn.endedAt) && <> · took {took(turn.startedAt ?? turn.sentAt, turn.endedAt)}</>}{turn.model && <span title={turn.model}> · {valueName(modelSetting(observation?.config?.options), turn.model)}</span>}</p>
+    <p className="work-ending"><span className={'work-state ' + turn.state}>{agentTurnLimit(turn) ? 'Turn limit reached' : ended[turn.state] ?? turn.state}</span>{turn.state !== 'running' && took(turn.startedAt ?? turn.sentAt, turn.endedAt) && <> · took {took(turn.startedAt ?? turn.sentAt, turn.endedAt)}</>}{turn.model && <span title={turn.model}> · {valueName(modelSetting(observation?.config?.options), turn.model)}</span>}</p>
   </li>;
 }
 

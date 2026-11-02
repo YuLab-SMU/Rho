@@ -1,7 +1,7 @@
 import { projectPath, commandFiles, buildWorkGraph } from './work-graph.js';
 import { notesInstructions, projectNotesPath } from './project-notes.js';
 import { addSpend, describeLimits, describable, fileFacts, figureContext, raster, type Cost, type FileDescription, type MadeStep, type Spend, type Strategy } from './file-describer.js';
-import { toolActivity } from './conversation-presentation.js';
+import { agentTurnLimit, toolActivity } from './conversation-presentation.js';
 import {privateEvidencePath, type CapturePort, type TurnEvidence} from './evidence-capture.js';
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
@@ -81,6 +81,8 @@ interface Turn {
   // An Agent session that has gone leaves the messages Rho kept. The next message then runs in a
   // new session told what was said before, and the turn says which session it replaced.
   continued?: { at: string; earlier: string };
+  // An explicit new message linked to a previous, confirmed Agent limit.
+  continuationOf?: string;
 }
 // The person's word on an answer: use it, or it needs changes and why. It holds for the file
 // versions this message kept when it was given, and says nothing of later versions. Each new
@@ -163,7 +165,7 @@ interface Summary {
   // What a list shows without reading each record: the Agent's own name for the session, the
   // Agent and its adapter, the last model, the person's choices, what the session reported
   // using and costing, its session identity and whether it is in the trash.
-  listed?: 1; backend?: string; agentTitle?: string | null; adapter?: { name: string; version?: string } | null; model?: string | null; config?: Choices;
+  listed?: 1 | 2; turnLimit?: boolean; waitingPermission?: boolean; backend?: string; agentTitle?: string | null; adapter?: { name: string; version?: string } | null; model?: string | null; config?: Choices;
   usage?: { used: number; size: number; cost: { amount: number; currency: string } | null } | null; costUsd?: number | null; sessionId?: string | null; trashedAt?: string | null;
 }
 interface Index { format: 1; conversations: Summary[]; deleted?: Array<{ conversationId: string; changeId: string; requestDigest: string; deletedAt: string; deletedBy: string }> }
@@ -278,7 +280,7 @@ export class Conversations {
     const last = c.turns.at(-1), usage = c.observation?.usage;
     const costs = c.turns.map(t => t.result?.costUsd).filter((v): v is number => typeof v === 'number');
     return { conversationId: c.id, changeId: c.changeId, requestDigest: c.requestDigest, title: c.title, client: c.client, principal: c.principal, createdAt: c.createdAt, updatedAt: c.updatedAt, version: c.version, turns: c.turns.length, state: last?.state ?? 'idle', lastAt: last?.endedAt ?? last?.sentAt ?? c.createdAt,
-      listed: 1, backend: c.backend ?? 'claude-cli', agentTitle: c.observation?.info?.title ?? null, adapter: c.adapter ?? null, model: [...c.turns].reverse().find(t => t.model)?.model ?? null, config: c.config ?? {},
+      listed: 2, turnLimit: !!last && agentTurnLimit(last), waitingPermission: last?.state === 'running' && !!last.permissions?.some(p => p.state === 'pending'), backend: c.backend ?? 'claude-cli', agentTitle: c.observation?.info?.title ?? null, adapter: c.adapter ?? null, model: [...c.turns].reverse().find(t => t.model)?.model ?? null, config: c.config ?? {},
       usage: usage ? { used: usage.used, size: usage.size, cost: usage.cost ?? null } : null, costUsd: costs.length ? costs.reduce((a, b) => a + b, 0) : null,
       sessionId: c.acpSessionId ?? c.nativeSessionId ?? null, trashedAt: c.trashedAt ?? null };
   }
@@ -310,7 +312,7 @@ export class Conversations {
   private listed(project: Project, s: Summary) {
     const live = [...this.live.values()].some(x => x.project.id === project.id && x.conversation.id === s.conversationId);
     const { changeId, requestDigest, listed, ...shown } = s;
-    return { ...shown, state: s.state === 'running' && !live ? 'unknown' : s.state };
+    return { ...shown, state: s.state === 'running' && !live ? 'unknown' : s.state, waitingPermission: live && !!s.waitingPermission };
   }
   private message(text: string) {
     requireThat(typeof text === 'string' && text.trim().length > 0, 'invalid', 'Write a message first.');
@@ -328,15 +330,15 @@ export class Conversations {
   // The project's conversations, or those in its trash.
   async list(project: Project, input: { trashed?: boolean } = {}) {
     let index = await this.index(project);
-    if (index.conversations.some(s => !s.listed)) index = await this.serial(project.id, () => this.relist(project));
+    if (index.conversations.some(s => s.listed !== 2)) index = await this.serial(project.id, () => this.relist(project));
     return index.conversations.filter(s => !!s.trashedAt === !!input.trashed).map(s => this.listed(project, s)).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   }
   // Summaries written before lists carried their fields are rebuilt from the records once.
   private async relist(project: Project) {
     const index = await this.index(project);
-    if (!index.conversations.some(s => !s.listed)) return index;
-    const conversations = await Promise.all(index.conversations.map(async s => s.listed ? s
-      : await this.load(project, s.conversationId).then(c => this.summary(c), () => ({ ...s, listed: 1 as const }))));
+    if (!index.conversations.some(s => s.listed !== 2)) return index;
+    const conversations = await Promise.all(index.conversations.map(async s => s.listed === 2 ? s
+      : await this.load(project, s.conversationId).then(c => this.summary(c), () => ({ ...s, listed: 2 as const }))));
     const next = { ...index, conversations };
     await atomicJson(path.join(await this.folder(project), 'index.json'), next);
     return next;
@@ -445,8 +447,8 @@ export class Conversations {
       return this.reply(project, c, turn);
     });
   }
-  async send(project: Project, by: string, input: { conversationId: string; changeId: string; text: string; contexts?: string[] }) {
-    const text = this.message(input.text), requestDigest = digest(canonical({ text, ...(input.contexts?.length ? { contexts: input.contexts } : {}) }));
+  async send(project: Project, by: string, input: { conversationId: string; changeId: string; text: string; contexts?: string[]; continuationOf?: string }) {
+    const text = this.message(input.text), requestDigest = digest(canonical({ text, ...(input.contexts?.length ? { contexts: input.contexts } : {}), ...(input.continuationOf ? { continuationOf: input.continuationOf } : {}) }));
     return this.serial(project.id, async () => {
       const c = await this.load(project, input.conversationId), existing = c.turns.find(t => t.changeId === input.changeId);
       if (existing) {
@@ -455,6 +457,7 @@ export class Conversations {
       }
       requireThat(!c.trashedAt, 'conflict', 'This conversation is in the trash. Restore it to continue.');
       const last = c.turns.at(-1);
+      if (input.continuationOf) requireThat(last?.id === input.continuationOf && agentTurnLimit(last), 'condition', 'That message is not the latest confirmed Agent turn-limit stop. Nothing was continued.');
       requireThat(!last || last.state !== 'running' || !this.liveTurn(project, c, last), 'conflict', 'The Agent is still answering the previous message. Wait for it, or stop it, before sending another.');
       if (last?.state === 'running' && last.pid) {
         let alive = false; try { process.kill(last.pid, 0); alive = true; } catch {}
@@ -466,6 +469,7 @@ export class Conversations {
       for (const old of c.turns) if (old.state === 'running') Object.assign(old, this.view(project, c, old));
       for (const id of input.contexts ?? []) await this.ports.context?.(project, id);
       const turn = this.turn(input.changeId, requestDigest, by, text, c.turns.length + 1);
+      if (input.continuationOf) turn.continuationOf = input.continuationOf;
       if (input.contexts?.length) turn.contexts = [...input.contexts];
       c.turns.push(turn);
       await this.write(project, c);
@@ -806,11 +810,12 @@ export class Conversations {
     const wall = setTimeout(() => live.stop('wall-limit', 'rho'), this.limits.turnWallMs); wall.unref();
     const ticking = setInterval(() => void this.describe(live), this.describing.everyMs); ticking.unref();
     try {
+      let attached = false;
       const send = (utterance: string) => driver.run({ text: utterance, signal: controller.signal,
         session: identity => this.serial(project.id, async () => {
           requireThat(!identity.acpSessionId || !c.acpSessionId || identity.acpSessionId === c.acpSessionId, 'conflict', 'The original ACP session identity changed.');
           requireThat(!identity.nativeSessionId || !c.nativeSessionId || identity.nativeSessionId === c.nativeSessionId, 'conflict', 'The original native session identity changed.');
-          Object.assign(c, identity); c.confirmed = true; await this.write(project, c);
+          Object.assign(c, identity); c.confirmed = true; await this.write(project, c); attached = true;
         }),
         event: event => this.observe(live, event),
         permission: async request => {
@@ -826,14 +831,14 @@ export class Conversations {
           try { return await answer; } finally { this.permissions.delete(key); }
         }
       });
-      const utterance = turn.text + (turn.contexts?.length ? '\n\nRead these exact frozen review contexts with context.read before responding: ' + turn.contexts.join(', ') + '. Reply with annotation.reply and explicit result resource versions.' : '');
+      const utterance = turn.text + (turn.continuationOf ? '\n\nOriginal task:\n' + c.turns[0].text : '') + (turn.contexts?.length ? '\n\nRead these exact frozen review contexts with context.read before responding: ' + turn.contexts.join(', ') + '. Reply with annotation.reply and explicit result resource versions.' : '');
       // The Agent's session ended with its process: after Rho restarts, and on a machine that
       // never ran the session a project was copied from. The messages Rho kept are the record, so
       // the message runs in a new session told what was said before. Nothing is resent as a new
       // request, and the turn names the session it replaced. An Agent reports a session it no
       // longer has as a failed completion rather than a thrown request, so both are read alike.
       const stale = (completion: { state?: string | null; problem?: string | null }) =>
-        !!c.acpSessionId && !controller.signal.aborted && completion.state === 'failed' && lostSession(completion.problem ?? '');
+        !!c.acpSessionId && !attached && !controller.signal.aborted && completion.state === 'failed' && lostSession(completion.problem ?? '');
       const again = async () => {
         const earlier = c.acpSessionId!;
         await this.retire(project.id + '/' + c.id);
@@ -846,8 +851,11 @@ export class Conversations {
       try {
         completion = await send(utterance);
         if (stale(completion)) completion = await again();
+        else if (attached && completion.state === 'failed' && lostSession(completion.problem ?? '')) {
+          completion = { ...completion, state: 'unknown', problem: 'The Agent reported that its session was unavailable after this message was sent. The outcome is unknown; the message was not sent again.' };
+        }
       } catch (error) {
-        if (!c.acpSessionId || !lostSession(error) || controller.signal.aborted) throw error;
+        if (!c.acpSessionId || attached || !lostSession(error) || controller.signal.aborted) throw error;
         completion = await again();
       }
       Object.assign(turn, completion); turn.retry = null; turn.endedAt = now();

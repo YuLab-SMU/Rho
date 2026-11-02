@@ -4938,6 +4938,8 @@ export interface ConversationConfigureOutput {
     config?: {
       [k: string]: string | boolean;
     };
+    turnLimit?: boolean;
+    waitingPermission?: boolean;
     usage?: {
       used: number;
       size: number;
@@ -5069,6 +5071,8 @@ export interface ConversationDecideOutput {
     config?: {
       [k: string]: string | boolean;
     };
+    turnLimit?: boolean;
+    waitingPermission?: boolean;
     usage?: {
       used: number;
       size: number;
@@ -5243,6 +5247,7 @@ export interface ConversationDecideOutput {
       at: string;
       earlier: string;
     } | null;
+    continuationOf?: string;
   };
 }
 
@@ -5286,6 +5291,8 @@ export interface ConversationListOutput {
     config?: {
       [k: string]: string | boolean;
     };
+    turnLimit?: boolean;
+    waitingPermission?: boolean;
     usage?: {
       used: number;
       size: number;
@@ -5330,6 +5337,8 @@ export interface ConversationPermissionOutput {
     config?: {
       [k: string]: string | boolean;
     };
+    turnLimit?: boolean;
+    waitingPermission?: boolean;
     usage?: {
       used: number;
       size: number;
@@ -5504,6 +5513,7 @@ export interface ConversationPermissionOutput {
       at: string;
       earlier: string;
     } | null;
+    continuationOf?: string;
   };
 }
 
@@ -5536,6 +5546,8 @@ export interface ConversationReadOutput {
     config?: {
       [k: string]: string | boolean;
     };
+    turnLimit?: boolean;
+    waitingPermission?: boolean;
     usage?: {
       used: number;
       size: number;
@@ -5797,6 +5809,7 @@ export interface ConversationReadOutput {
       at: string;
       earlier: string;
     } | null;
+    continuationOf?: string;
   }[];
 }
 
@@ -5827,6 +5840,8 @@ export interface ConversationRestoreOutput {
     config?: {
       [k: string]: string | boolean;
     };
+    turnLimit?: boolean;
+    waitingPermission?: boolean;
     usage?: {
       used: number;
       size: number;
@@ -5850,6 +5865,7 @@ export interface ConversationSendInput {
    * @maxItems 8
    */
   contexts?: string[];
+  continuationOf?: string;
 }
 
 export interface ConversationSendOutput {
@@ -5874,6 +5890,8 @@ export interface ConversationSendOutput {
     config?: {
       [k: string]: string | boolean;
     };
+    turnLimit?: boolean;
+    waitingPermission?: boolean;
     usage?: {
       used: number;
       size: number;
@@ -6048,6 +6066,7 @@ export interface ConversationSendOutput {
       at: string;
       earlier: string;
     } | null;
+    continuationOf?: string;
   };
 }
 
@@ -6332,6 +6351,8 @@ export interface ConversationStartOutput {
     config?: {
       [k: string]: string | boolean;
     };
+    turnLimit?: boolean;
+    waitingPermission?: boolean;
     usage?: {
       used: number;
       size: number;
@@ -6506,6 +6527,7 @@ export interface ConversationStartOutput {
       at: string;
       earlier: string;
     } | null;
+    continuationOf?: string;
   };
 }
 
@@ -6537,6 +6559,8 @@ export interface ConversationStopOutput {
     config?: {
       [k: string]: string | boolean;
     };
+    turnLimit?: boolean;
+    waitingPermission?: boolean;
     usage?: {
       used: number;
       size: number;
@@ -6711,6 +6735,7 @@ export interface ConversationStopOutput {
       at: string;
       earlier: string;
     } | null;
+    continuationOf?: string;
   };
 }
 
@@ -6741,6 +6766,8 @@ export interface ConversationTrashOutput {
     config?: {
       [k: string]: string | boolean;
     };
+    turnLimit?: boolean;
+    waitingPermission?: boolean;
     usage?: {
       used: number;
       size: number;
@@ -9867,6 +9894,8 @@ export interface ObservationSnapshotOutput {
     config?: {
       [k: string]: string | boolean;
     };
+    turnLimit?: boolean;
+    waitingPermission?: boolean;
     usage?: {
       used: number;
       size: number;

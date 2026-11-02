@@ -149,17 +149,17 @@ function ConversationRow({ client, snapshot, summary, settings, expanded, onTogg
   }
   return <li className={'conv-row' + (expanded ? ' open' : '') + (running ? ' running' : '')}>
     <div className="conv-line">
-      <button className="conv-toggle" aria-expanded={expanded} onClick={onToggle}>
+      <button className="conv-toggle" onClick={() => onContinue(summary.conversationId)}>
         <BrandMark brand={brandOf(summary.client)} size={20} />
         <span className="conv-text">
           <span className="conv-title">{title}</span>
           <span className="conv-meta">{meta.map((part, i) => <span key={i} title={i === 1 ? named.modelFull : undefined}>{part}</span>)}
-            {stateNames[summary.state] && <span className={'conv-state ' + summary.state}>{running && <span className="pulse-dot" aria-hidden="true" />}{stateNames[summary.state]}</span>}</span>
+            {(stateNames[summary.state] || summary.turnLimit) && <span className={'conv-state ' + summary.state}>{running && <span className="pulse-dot" aria-hidden="true" />}{summary.turnLimit ? 'Turn limit reached' : summary.waitingPermission ? 'Needs your choice' : stateNames[summary.state]}</span>}</span>
         </span>
       </button>
       <Usage summary={summary} />
       <div className="conv-actions">
-        <button className="conv-continue" onClick={() => onContinue(summary.conversationId)}>{running ? 'Follow' : 'Continue'}</button>
+        <button className="conv-continue" onClick={() => onContinue(summary.conversationId)}>{running ? 'Follow' : 'Open'}</button>
         <button className="icon-button" aria-label={'Export ' + title + ' as Markdown'} title="Export as Markdown" disabled={exporting} onClick={() => void exportIt()}><Icon name="download" size={16} /></button>
         <button className="icon-button" aria-label={'Move ' + title + ' to the trash'} title={running ? 'Stop the Agent before moving this to the trash' : 'Move to the trash'} disabled={running} onClick={onTrash}><Icon name="trash" size={16} /></button>
         <button className="icon-button conv-chevron" aria-label={(expanded ? 'Hide' : 'Show') + ' details of ' + title} aria-expanded={expanded} onClick={onToggle}><Icon name="chevron" size={15} /></button>

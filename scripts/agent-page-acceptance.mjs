@@ -45,6 +45,7 @@ createInterface({input:process.stdin}).on('line',line=>{
  if(r.method==='session/cancel'){const id=waiting.get(p.sessionId);if(id!==undefined){waiting.delete(p.sessionId);out({id,result:{stopReason:'cancelled'}});}return;}
  if(r.method!=='session/prompt')return;
  const text=p.prompt[0].text;
+ if(text==='limit')return out({id:r.id,error:{code:-32603,message:'Reached maximum number of turns (64)'}});
  if(text==='wait'){waiting.set(p.sessionId,r.id);return;}
  if(!codex)update({sessionUpdate:'session_info_update',title:'Ozone summary by month'});
  update({sessionUpdate:'tool_call',toolCallId:'t'+Math.random(),title:'Read',kind:'read',status:'completed',rawInput:{file_path:process.cwd()+'/data/ozone.csv'},locations:[{path:process.cwd()+'/data/ozone.csv'}]});
@@ -176,6 +177,27 @@ if (process.env.RHO_CONNECT_FAIL && !process.argv.includes('remove')) { process.
   await shot('02-conversations');
   passed('conversations are rows with the Agent\'s title, model, effort, context and cost, found by search and by Agent');
 
+  // Opening a row is a read. Its address can restore the same record in an independent tab.
+  await row.locator('.conv-toggle').click();
+  await page.locator('aside[aria-label="Agent panel"] .conversation-turns').waitFor();
+  const address = new URL(page.url());
+  const fragment = new URLSearchParams(address.hash.slice(1));
+  assert.equal(fragment.get('project'), opened.id);
+  assert.equal(fragment.get('conversation'), first);
+  const freshContext = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const fresh = await freshContext.newPage();
+  await fresh.goto(address.href);
+  await fresh.locator('aside[aria-label="Agent panel"] .conversation-turns').waitFor().catch(async error => {
+    await fresh.screenshot({ path: path.join(evidence, 'fresh-tab-failed.png') });
+    console.log('Fresh tab:', (await fresh.locator('body').innerText()).slice(0, 3000), 'URL:', fresh.url());
+    throw error;
+  });
+  await fresh.locator('aside[aria-label="Agent panel"]').getByText('Summarize ozone by month.', { exact: true }).waitFor();
+  assert.equal((await call('conversation.read', { conversationId: first })).turns.length, 2, 'opening did not send a message');
+  await freshContext.close();
+  await page.locator('aside[aria-label="Agent panel"]').getByRole('button', { name: 'Close Agent' }).click();
+  passed('a conversation row opens its record, and its address restores it in a new tab without sending');
+
   // A row opens to its facts and what it did; it exports as Markdown.
   await row.getByRole('button', { name: /^Show details of / }).click();
   const facts = Object.fromEntries(await row.locator('.conv-facts dt').evaluateAll(dts => dts.map(dt => [dt.textContent, dt.nextElementSibling.textContent])));
@@ -245,6 +267,18 @@ if (process.env.RHO_CONNECT_FAIL && !process.argv.includes('remove')) { process.
   assert.equal(await outside.locator('.connect-step.warn').count(), 1);
   assert.equal((await call('observation.snapshot')).agents.some(agent => agent.label === 'Codex'), false);
   passed('Outside Rho adds Rho to Claude Code with its own mcp add and shows its first call; a refused Codex leaves no access');
+
+  const limitedId = (await call('conversation.start', { changeId: 'page-limit', text: 'limit', backend: 'claude-acp' })).conversation.conversationId;
+  await ended(limitedId);
+  const limitedContext = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const limitedPage = await limitedContext.newPage();
+  await limitedPage.goto(service.url + '/#project=' + opened.id + '&conversation=' + limitedId);
+  await limitedPage.locator('.board-meta').getByText('Turn limit reached').waitFor();
+  await limitedPage.getByRole('button', { name: 'Continue unfinished work' }).waitFor();
+  assert.equal(await limitedPage.getByText('Will you use this answer?').count(), 0, 'an interrupted message is not presented as an answer awaiting acceptance');
+  await limitedPage.screenshot({ path: path.join(evidence, '04c-limit.png') });
+  await limitedContext.close();
+  passed('the overview and reopened conversation identify the Agent turn limit');
 
   for (const width of [1024, 390]) {
     await page.setViewportSize({ width, height: width === 390 ? 844 : 768 });
