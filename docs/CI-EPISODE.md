@@ -297,6 +297,36 @@ and `rho --help` printed its usage. `npm audit signatures` stopped at the bundle
 not separate registry packages (404 for `@rho-workspace/plugin-documents@0.4.10`). The placeholder
 version stays in the registry.
 
+## A new user on Ubuntu
+
+On 2026-11-02 the user asked to install as a new user on a Linux host. A fresh OrbStack machine,
+Ubuntu 24.04.5 arm64 with only Python 3.12.3, followed what the npm page offers: its README, which
+still says to install a packed tarball and that registry publication has not been performed, and names
+no Node, R or Agent requirement.
+
+| Step | What happened |
+| --- | --- |
+| `sudo apt install nodejs npm` | Node 18.19.1, npm 9.2.0 (116 s with the index update) |
+| `npm install -g @rho-workspace/rho` | EACCES: the global prefix is root's |
+| `sudo npm install -g @rho-workspace/rho` | Installed in 7 s with one `EBADENGINE` warning (needs Node `>=22.22.0 <23`); `rho` on PATH, four Cores |
+| `rho` | Usage, exit 2 |
+| `rho --root ~/rho-projects --state-dir ~/.rho-state` | One JSON ready line; `rscript` named `Rscript` though none was installed; the example project copied in |
+| Projects page and the example project | Rendered from the Mac's browser through OrbStack's port forwarding; Overview, Agent and Notebook showed the example's recorded work |
+| R cell, no R | "Rscript was not found. Install R, or name the program where the application is started." The cell is also headed "R session started" |
+| Agent message, no Claude Code | "Not answered. Claude Code was not found on PATH (claude). Install it, or select its executable." The unanswered question became a Studio entry |
+| `sudo apt install r-base` | R 4.3.3 in 27 s; Rho picked it up without a restart |
+| R cell | "The live R session needs the R package jsonlite. Install it with install.packages("jsonlite")." Non-interactive `install.packages` cannot write the system library; interactive R created a personal library and built jsonlite 2.0.0 from source in 7 s |
+| R cells | `summary`, the example's swarming data and a box plot ran in 0.1 s each; the plot drew "Δ" correctly but the cell printed eight `mbcsToSbcs` conversion warnings |
+| Python cell | Python 3.12.3 ran at once |
+
+Opening the project always requested `PA14 quorum sensing/analysis/summary_figure.R` and got
+`not_found`: the example's recorded conversations name files from the folder above the project
+(`PA14 quorum sensing/analysis/…`), as the Agent saw them when they were recorded. The same records
+show the author's model (`westlakehpc/deepseek-v4.1-flash`), costs ($12.93) and command wrapper
+(`rtk ls …`). Everything above ran on Node 18, which the package does not support; nothing observed
+failed for a reason tied to it, and Node 22 was not tried here. Claude Code and Codex were not
+installed or signed in.
+
 ## Not done
 
 - A GitHub Release and signing.
