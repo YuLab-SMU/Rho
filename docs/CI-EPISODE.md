@@ -228,8 +228,8 @@ about a minute, the suite 110 s against 51 s on Linux) and the Windows installat
 again before publishing.
 
 `b2d5f401` changed that. CI skips documentation alone, apart from the shipped pages and the Status and
-ledger a test reads; a Core commit is built once and then taken from the cache; test jobs cache npm
-downloads; the R probe prints only on failure. A tag runs `release.yml`, which reuses the tested
+ledger a test reads; a Core commit is built once and then taken from the cache; the R probe prints
+only on failure. A tag runs `release.yml`, which reuses the tested
 candidate of its commit. Turning off Windows Defender's real-time scanning on the runners was also
 proposed, to shorten the offline install; the permission check stopped it, and it is left to the user.
 
@@ -238,6 +238,20 @@ Cores once more to fill the cache and passed every job in 6 min 30 s. A rehearsa
 [41384593699](https://github.com/YuLab-SMU/Rho/actions/runs/41384593699), found that run, verified its
 candidate `36914452…` against the commit, the run and the four installation reports, and ended after
 19 s without publishing.
+
+The documentation-only commit `e1905b8c` started no CI run. A rehearsal on it,
+[41384736475](https://github.com/YuLab-SMU/Rho/actions/runs/41384736475), found no tested candidate,
+ran CI inside the release with every Core from the cache (8 to 17 s) and verified the new candidate
+after 5 min 30 s. In that run npm's download cache saved nothing: the Plugins built in 40, 34 and 51 s
+against 27, 38 and 51 s before, and restoring the cache took 7 to 9 s, so `0de1c6e4` removed it and
+checks the generated contracts only on Linux, where they are the same as elsewhere.
+
+Run [41385314640](https://github.com/YuLab-SMU/Rho/actions/runs/41385314640) on `0de1c6e4` passed every
+job in 5 min 46 s. The Cores took 6 to 17 s and the tests began 20 s into the run instead of 64 s. The
+longest path is now Pack (109 s) and then the Windows installation (210 s), whose offline install of
+the 5,250-file package took 134 s, against 91 to 97 s in runs 7 and 8 and 6 to 15 s elsewhere. The
+same runner's Linux job ranged from 144 to 240 s between runs with no change to it, so single-run
+differences of that size are noise.
 
 ## Publication
 
@@ -251,8 +265,8 @@ Nothing has been published. A `v*` tag needs:
    is not visible from GitHub; the first publication shows it.
 3. The version in `package.json`, pushed, and that commit tagged `v<version>`.
 
-The tag's run builds, tests, packs and installs as any other, then publishes the candidate it
-tested. The 0.5.2 candidates recorded earlier were never published, and a version cannot be
+The tag's release publishes the candidate CI tested for that commit, or runs CI first when no run
+kept one. The 0.5.2 candidates recorded earlier were never published, and a version cannot be
 published twice.
 
 ## Not done
@@ -268,7 +282,9 @@ published twice.
 
 - In a project whose path holds `%OS%`, R run by Core on Windows ends with `0xC0000005`, as R does
   there when started directly. Whether Core should hand R a path it reads safely is not decided.
-- The offline install takes 94 to 179 s on the Windows runner against 5 to 12 s elsewhere.
+- The offline install takes 91 to 179 s on the Windows runner against 5 to 15 s elsewhere, and is
+  now the longest part of a run. Whether Windows Defender's scanning of the 5,250 files causes it
+  was not measured.
 - `engines` names Node 22 only. A person with Node 24 installs with npm's engine warning; no
   installation on Node 24 has been checked.
 - The candidate digest changes with every commit, since the composition names the commit; whether
