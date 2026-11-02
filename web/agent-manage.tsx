@@ -15,9 +15,9 @@ type Listed = RhoOutput<'conversation.list'>['conversations'][number];
 type Tab = 'conversations' | 'agents' | 'outside';
 
 const tabKey = 'rho.agent.tab.v1';
-const backendOf = (summary: Pick<Summary, 'backend' | 'client'>): Backend | null => summary.backend === 'codex-acp' || summary.backend === 'claude-acp' ? summary.backend : summary.client === 'codex' ? 'codex-acp' : summary.backend === 'claude-cli' ? null : 'claude-acp';
-const agentOf = (client: string) => client === 'codex' ? 'Codex' : 'Claude Code';
-const brandOf = (client: string) => client === 'codex' ? 'codex' as const : 'claude-code' as const;
+const backendOf = (summary: Pick<Summary, 'backend' | 'client'>): Backend | null => summary.backend === 'codex-acp' || summary.backend === 'claude-acp' || summary.backend === 'acp' ? summary.backend : summary.client === 'codex' ? 'codex-acp' : summary.client === 'acp' ? 'acp' : summary.backend === 'claude-cli' ? null : 'claude-acp';
+const agentOf = (client: string) => client === 'codex' ? 'Codex' : client === 'acp' ? 'ACP Agent' : 'Claude Code';
+const brandOf = (client: string) => client === 'codex' ? 'codex' as const : client === 'acp' ? 'deepseek' as const : 'claude-code' as const;
 export function tokens(n: number) { return n < 1000 ? String(Math.round(n)) : n < 1e6 ? (n / 1000).toFixed(n < 1e4 ? 1 : 0).replace(/\.0$/, '') + 'K' : (n / 1e6).toFixed(1).replace(/\.0$/, '') + 'M'; }
 export function money(amount: number, currency = 'USD') {
   const sign = currency === 'USD' ? '$' : currency + ' ';
@@ -280,7 +280,7 @@ function AgentRow({ which, state, open, onToggle }: { which: Backend; state: Age
     : { tone: 'idle', text: 'Not asked yet' };
   return <li className={'agent-row' + (open ? ' open' : '') + (isDefault ? ' default' : '')}>
     <div className="agent-row-head">
-      <span className="agent-row-mark"><BrandMark brand={which === 'codex-acp' ? 'codex' : 'claude-code'} size={26} /></span>
+      <span className="agent-row-mark"><BrandMark brand={which === 'codex-acp' ? 'codex' : which === 'acp' ? 'deepseek' : 'claude-code'} size={26} /></span>
       <div className="agent-row-name">
         <div><strong>{agent}</strong>{version && <span className="agent-row-version">{version}</span>}{isDefault && <span className="agent-default">Default</span>}</div>
         <span className={'agent-row-status ' + status.tone} role={status.tone === 'failed' ? 'alert' : undefined}><span className="status-dot" aria-hidden="true" />{status.text}</span>

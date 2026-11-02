@@ -95,7 +95,7 @@ export function SettingsMenu({ agent, options, values, allowDefault, disabled, d
         <div className="menu-head"><button data-item className="menu-back" aria-label="Back" title="Back" onClick={back}><Icon name="back" size={14} /></button><span>{view.kind === 'agent' ? 'Agent' : option ? labelOf(option) : ''}</span></div>
         {view.kind === 'agent' && agents ? <div className="menu-choices" role="radiogroup" aria-label="Agent">{backends.map(which => <button key={which} data-item role="radio" aria-checked={which === agents.current} className="menu-choice"
           onClick={() => { if (which !== agents.current) agents.choose(which); back(); }}>
-          <BrandMark brand={which === 'codex-acp' ? 'codex' : 'claude-code'} size={14} /><span className="menu-choice-text">{agentLabel[which]}</span>{which === agents.current && <Icon name="check" size={14} />}
+          <BrandMark brand={which === 'codex-acp' ? 'codex' : which === 'acp' ? 'deepseek' : 'claude-code'} size={14} /><span className="menu-choice-text">{agentLabel[which]}</span>{which === agents.current && <Icon name="check" size={14} />}
         </button>)}</div>
           : option && option === model && model.values?.length ? <ModelList option={model} value={chosen(model) as string | null ?? (allowDefault ? null : model.current as string)} agent={agent} allowDefault={allowDefault}
             onChoose={value => pick(model, value)} onEscape={back} />

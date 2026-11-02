@@ -22,7 +22,7 @@ import { clock as clockAt } from './timeline-kinds.js';
 type Read = RhoOutput<'conversation.read'>;
 type Turn = Read['turns'][number];
 type Observation = Read['observation'];
-type Pending = { kind: 'start' | 'send'; changeId: string; text: string; conversationId?: string; continuationOf?: string; backend?: 'claude-acp' | 'codex-acp' };
+type Pending = { kind: 'start' | 'send'; changeId: string; text: string; conversationId?: string; continuationOf?: string; backend?: 'claude-acp' | 'codex-acp' | 'acp' };
 const stored = (key: string) => { try { return sessionStorage.getItem(key); } catch { return null; } };
 const store = (key: string, value: string | null) => { try { if (value === null) sessionStorage.removeItem(key); else sessionStorage.setItem(key, value); return true; } catch { return false; } };
 const clock = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });

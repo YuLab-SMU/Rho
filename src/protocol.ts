@@ -33,7 +33,9 @@ const array = (items: any) => ({ type: 'array', items });
 const response = (properties: Record<string, any>, required = Object.keys(properties)) => ({ type: 'object', properties, required, additionalProperties: true });
 const changeId = { type: 'string', pattern: '^[A-Za-z0-9._:@-]{1,128}$' };
 const identity = changeId;
-const agentBackend = { enum: ['claude-acp', 'codex-acp'] };
+// 'acp' is a generic ACP agent: the operator names its command (--acp-command), so Rho
+// supports any ACP v1 implementation without a per-agent adapter.
+const agentBackend = { enum: ['claude-acp', 'codex-acp', 'acp'] };
 const outsideAgent = { enum: ['claude-code', 'codex'] };
 const addedTo = response({ agent: outsideAgent, name: text, scope: { enum: ['folder', 'user'] }, at: text });
 const choiceText = { type: 'string', minLength: 1, maxLength: 512 }, choiceValue = { anyOf: [choiceText, { type: 'boolean' }] };
@@ -97,7 +99,7 @@ export const operations: Record<string, any> = { ...base.operations,
   // The person's Agent and its settings (model, effort, mode…) among those the Agent offers.
   'conversation.configure': obj({ ...project, conversationId: changeId, configId: choiceText, value: choiceValue }),
   'conversation.settings.read': obj(project),
-  'conversation.settings.update': obj({ ...project, expectedVersion: integer, backend: { anyOf: [agentBackend, { type: 'null' }] }, choices: obj({ 'claude-acp': choices, 'codex-acp': choices }, []), describe: obj({ enabled: { type: 'boolean' } }, ['enabled']) }, ['projectId', 'expectedVersion']),
+  'conversation.settings.update': obj({ ...project, expectedVersion: integer, backend: { anyOf: [agentBackend, { type: 'null' }] }, choices: obj({ 'claude-acp': choices, 'codex-acp': choices, 'acp': choices }, []), describe: obj({ enabled: { type: 'boolean' } }, ['enabled']) }, ['projectId', 'expectedVersion']),
   'conversation.settings.check': obj({ ...project, backend: agentBackend }),
   // Claude Code or Codex running outside Rho, given this project and told how to start Rho's MCP server.
   'session.connect': obj({ ...project, agent: outsideAgent })
@@ -218,8 +220,8 @@ const conversationSummary = response({ conversationId: text, title: text, client
 const sessionObservation = ownerSchema('agent-session', 'sessionObservationSchema');
 // What one Agent offered, from a check or a conversation's first session, and the person's choices.
 const offered = response({ at: text, source: { enum: ['check', 'conversation'] }, adapter: { anyOf: [response({ name: text, version: text }, ['name']), { type: 'null' }] }, options: array(ownerSchema('agent-session', 'configOptionSchema')), omitted: integer });
-const agentSettings = response({ version: integer, updatedAt: { anyOf: [text, { type: 'null' }] }, backend: { anyOf: [agentBackend, { type: 'null' }] }, serviceBackend: { enum: ['claude-acp', 'codex-acp', 'claude-cli'] },
-  choices: response({ 'claude-acp': choices, 'codex-acp': choices }, []), offered: response({ 'claude-acp': offered, 'codex-acp': offered }, []), checking: array(agentBackend),
+const agentSettings = response({ version: integer, updatedAt: { anyOf: [text, { type: 'null' }] }, backend: { anyOf: [agentBackend, { type: 'null' }] }, serviceBackend: { enum: ['claude-acp', 'codex-acp', 'claude-cli', 'acp'] },
+  choices: response({ 'claude-acp': choices, 'codex-acp': choices, 'acp': choices }, []), offered: response({ 'claude-acp': offered, 'codex-acp': offered, 'acp': offered }, []), checking: array(agentBackend),
   // Whether a model describes the files a message writes; the facts are read either way.
   describe: response({ enabled: { type: 'boolean' } }) }, ['version', 'updatedAt', 'backend', 'serviceBackend', 'choices', 'offered', 'checking']);
 // A tool step keeps its original identity, the Agent's bounded human title, its ACP

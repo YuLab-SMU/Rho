@@ -281,26 +281,26 @@
     "conversation.settings.check": {
       "summary": "Person at this machine only: start the chosen Agent in this project to read the settings it offers, then remove that session and end the process. No message is sent; one check per Agent runs at a time.",
       "path": "operations/conversation.settings.check.json",
-      "bytes": 10406,
-      "sha256": "74ee39f903133e83692938e2795a7a9122600d7f74c310ca2d8caff8e0fe13b6"
+      "bytes": 14555,
+      "sha256": "0aba6e7c8dc96f20aa20db2bea94238d370774450c70a19cabdec344a2eda88e"
     },
     "conversation.settings.read": {
       "summary": "Person at this machine only: read the Agent and settings chosen for new conversations and what each Agent last offered. Reading starts nothing.",
       "path": "operations/conversation.settings.read.json",
-      "bytes": 10228,
-      "sha256": "3906be056a7cba43823b1fa4aecc72400f4b6d8f8cb71a0e8e829ae6e68a9797"
+      "bytes": 14360,
+      "sha256": "04d5f1cf71ee88946dc0bbe7bef7d3864e6cc6e705304b98e19ad2351c999ca7"
     },
     "conversation.settings.update": {
       "summary": "Person at this machine only: choose the Agent and its settings for new conversations, among the values that Agent last offered, and whether a model describes the files a message writes. A stale expectedVersion is refused.",
       "path": "operations/conversation.settings.update.json",
-      "bytes": 12007,
-      "sha256": "010379d16cd1a1861f826f0f5ee88493667988f6dd06927ff0be72f93308a1a8"
+      "bytes": 16639,
+      "sha256": "20612281dff10b3a2f121be5a060f5e996dd7e2ccf5f2b06406bae87a85bc1ed"
     },
     "conversation.start": {
       "summary": "Person at this machine only: start a conversation with the selected Claude Code or Codex Agent in this project. Rho selects the Agent plugin backend, attaches this project's MCP grant and records the message before sending it. Without backend or config, the person's saved Agent and settings are used and recorded with the conversation. A repeated changeId with the same text returns the original conversation and starts nothing.",
       "path": "operations/conversation.start.json",
-      "bytes": 34301,
-      "sha256": "7b3bebe1b356c46abd4c51687658a9ba1461dcb969f4aa206fe70506576f32d2"
+      "bytes": 34318,
+      "sha256": "b691ed1d000206bbaa65289e7e255d53fc5552ace1ad180b4f4d8cf2020bbb96"
     },
     "conversation.stop": {
       "summary": "Person at this machine only: ask the original Agent to stop answering one message. ACP cancellation is confirmed by the original prompt response; a lost connection keeps the outcome unknown. Legacy CLI conversations confirm process exit. Steps already taken stay done.",

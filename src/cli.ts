@@ -12,10 +12,25 @@ function openBrowser(target: string) {
   const [command, args] = process.platform === 'darwin' ? ['open', [target]] : process.platform === 'win32' ? ['cmd', ['/c', 'start', '""', target]] : ['xdg-open', [target]];
   spawn(command, args, { stdio: 'ignore', detached: true }).on('error', () => process.stderr.write('Could not open a browser. Open openUrl from the output instead.\n')).unref();
 }
+// A generic ACP agent is any program that speaks ACP v1 over stdio. Its command is either a
+// JSON argv array (safest for paths with spaces) or a simple command line.
+function parseAcpCommand(spec: string | undefined): { file: string; args: string[] } {
+  const text = (spec ?? '').trim();
+  if (!text) throw new Error('--agent-backend acp needs --acp-command: a JSON argv array such as \'["/usr/bin/node","/path/agent.js"]\', or a command line.');
+  if (text.startsWith('[')) {
+    let parts: unknown;
+    try { parts = JSON.parse(text); } catch { throw new Error('--acp-command is not valid JSON.'); }
+    if (!Array.isArray(parts) || !parts.length || parts.some(x => typeof x !== 'string')) throw new Error('--acp-command JSON must be a non-empty array of strings.');
+    return { file: parts[0] as string, args: parts.slice(1) as string[] };
+  }
+  const parts = (text.match(/"[^"]*"|'[^']*'|\S+/g) ?? []).map(p => p.replace(/^(["'])(.*)\1$/, '$2'));
+  if (!parts.length) throw new Error('--acp-command is empty.');
+  return { file: parts[0], args: parts.slice(1) };
+}
 const usage = `Verify a read-only evidence package:
   rho --verify-evidence PATH
 Start Rho:
-  rho --root PROJECTS_DIRECTORY --state-dir SERVICE_STATE [--core ABSOLUTE_CORE_BINARY] [--rscript ABSOLUTE_RSCRIPT] [--python PYTHON] [--ssh SSH] [--serverctl SERVERCTL] [--claude CLAUDE_CODE_BINARY] [--codex CODEX_BINARY] [--agent-backend claude-acp|codex-acp|claude-cli] [--port 0] [--limits JSON_FILE] [--plugins documents,files,...] [--example on|off] [--open]
+  rho --root PROJECTS_DIRECTORY --state-dir SERVICE_STATE [--core ABSOLUTE_CORE_BINARY] [--rscript ABSOLUTE_RSCRIPT] [--python PYTHON] [--ssh SSH] [--serverctl SERVERCTL] [--claude CLAUDE_CODE_BINARY] [--codex CODEX_BINARY] [--agent-backend claude-acp|codex-acp|claude-cli|acp] [--acp-command JSON_ARGV] [--port 0] [--limits JSON_FILE] [--plugins documents,files,...] [--example on|off] [--open]
 A narrower browser link (optional):
   rho --pair PRIVATE_CONNECTION_FILE [--root PROJECTS_RELATIVE_DIRECTORY] [--open]
 Give an Agent access to one project, and the command that adds it to Claude Code:
@@ -31,7 +46,7 @@ narrower, expiring link for one folder.
 PRIVATE_CONNECTION_FILE is the connectionFile the running service printed; it and every
 connection file are credentials.
 `;
-const options = { example: { type: 'string' }, 'verify-evidence': { type: 'string' }, acp: { type: 'string' }, 'acp-agent': { type: 'string' }, root: { type: 'string' }, 'state-dir': { type: 'string' }, core: { type: 'string' }, rscript: { type: 'string' }, python: { type: 'string' }, ssh: { type: 'string' }, serverctl: { type: 'string' }, claude: { type: 'string' }, codex: { type: 'string' }, 'agent-backend': { type: 'string' }, port: { type: 'string' }, limits: { type: 'string' }, plugins: { type: 'string' }, pair: { type: 'string' }, open: { type: 'boolean' },
+const options = { example: { type: 'string' }, 'verify-evidence': { type: 'string' }, acp: { type: 'string' }, 'acp-agent': { type: 'string' }, root: { type: 'string' }, 'state-dir': { type: 'string' }, core: { type: 'string' }, rscript: { type: 'string' }, python: { type: 'string' }, ssh: { type: 'string' }, serverctl: { type: 'string' }, claude: { type: 'string' }, codex: { type: 'string' }, 'agent-backend': { type: 'string' }, 'acp-command': { type: 'string' }, port: { type: 'string' }, limits: { type: 'string' }, plugins: { type: 'string' }, pair: { type: 'string' }, open: { type: 'boolean' },
   grant: { type: 'string' }, project: { type: 'string' }, session: { type: 'string' }, mcp: { type: 'string' }, help: { type: 'boolean', short: 'h' } } as const;
 let parsed;
 try { parsed = parseArgs({ options }); }
@@ -85,14 +100,15 @@ if (values.acp) {
   if (Object.keys(limits).some(k => !allowed.has(k))) throw new Error('Unknown service budget in --limits file.');
   const { RhoService } = await import('./server.js'), { runtime } = await import('./runtime.js');
   const agentBackend = values['agent-backend'] ?? process.env.RHO_AGENT_BACKEND ?? 'claude-acp';
-  if (!['claude-acp', 'codex-acp', 'claude-cli'].includes(agentBackend)) throw new Error('Choose --agent-backend claude-acp, codex-acp or claude-cli.');
+  if (!['claude-acp', 'codex-acp', 'claude-cli', 'acp'].includes(agentBackend)) throw new Error('Choose --agent-backend claude-acp, codex-acp, claude-cli or acp.');
+  const acpCommand = agentBackend === 'acp' ? parseAcpCommand(values['acp-command'] ?? process.env.RHO_ACP_COMMAND) : undefined;
   // A Core that cannot be used (none for this platform, a changed digest) is read by a person.
   const native = await runtime(values.core, values.rscript).catch(e => { process.stderr.write((e instanceof Error ? e.message : String(e)) + '\n'); process.exit(1); });
   // A person starting Rho sees the project it ships with; a composition that starts a service
   // for its own work says so itself and is left alone.
   if (values.example !== undefined && !['on', 'off'].includes(values.example)) throw new Error('Choose --example on or off.');
   const example = values.example !== 'off';
-  const service = await new RhoService({ example, ...limits, root: path.resolve(values.root), stateDir: path.resolve(values['state-dir']), ...native, agentBackend: agentBackend as 'claude-acp' | 'codex-acp' | 'claude-cli', codex: values.codex ?? process.env.RHO_CODEX ?? 'codex', claude: values.claude ?? process.env.RHO_CLAUDE ?? 'claude', python: values.python ?? process.env.RHO_PYTHON, ssh: values.ssh ?? process.env.RHO_SSH, serverctl: values.serverctl ?? process.env.RHO_SERVERCTL, port: Number(values.port ?? 0), ...(values.plugins !== undefined ? { plugins: values.plugins ? values.plugins.split(',') as PluginId[] : [] } : {}) }).start();
+  const service = await new RhoService({ example, ...limits, root: path.resolve(values.root), stateDir: path.resolve(values['state-dir']), ...native, agentBackend: agentBackend as 'claude-acp' | 'codex-acp' | 'claude-cli' | 'acp', acpCommand, codex: values.codex ?? process.env.RHO_CODEX ?? 'codex', claude: values.claude ?? process.env.RHO_CLAUDE ?? 'claude', python: values.python ?? process.env.RHO_PYTHON, ssh: values.ssh ?? process.env.RHO_SSH, serverctl: values.serverctl ?? process.env.RHO_SERVERCTL, port: Number(values.port ?? 0), ...(values.plugins !== undefined ? { plugins: values.plugins ? values.plugins.split(',') as PluginId[] : [] } : {}) }).start();
   // The narrow conclusion a person needs on one line: what was selected, where state
   // lives, and how to open it. It stays inside `ready` so a parser reading line one is
   // unaffected. Opening this url on this machine is the access; no link is minted.

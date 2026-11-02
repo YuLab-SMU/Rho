@@ -43,7 +43,7 @@ export interface NativeAdapterRegistration {
   proof: { kind: 'claude-code-init'; sessionId: string; clientVersion: string };
 }
 export const serviceLimits = { maxRequestBytes: 1024 * 1024, maxEventBytes: 65536, eventRetention: 256, maxSubscriptions: 8, maxQueue: 32, maxContexts: 128, maxBindings: 64, maxActivities: 256, maxContextBytes: 1024 * 1024, maxRetainedMetadataBytes: 32 * 1024 * 1024 };
-export interface ServiceConfig extends Partial<typeof serviceLimits>, Partial<typeof requestLimits>, PluginConfig { root: string; stateDir: string; coreBinary?: string; rscript: string; python?: string; ssh?: string; serverctl?: string; port?: number; nativeFolders?: Partial<typeof nativeFolderLimits>; workspace?: Partial<typeof workspaceLimits>; interactions?: Partial<typeof interactionLimits>; taskMap?: Partial<typeof taskMapLimits>; browser?: Partial<typeof browserLimits>; webRoot?: string; example?: boolean; agentNativeActivity?: Partial<typeof nativeActivityLimits>; presentationWitness?: Partial<typeof presentationWitnessLimits>; visibility?: Partial<typeof visibilityLimits>; agentDelivery?: Partial<typeof agentDeliveryLimits>; deliveryTransportTimeoutMs?: number; claude?: string; agentBackend?: ConversationConfig['backend']; claudeAcp?: ConversationConfig['claudeAcp']; codex?: string; codexAcp?: ConversationConfig['codexAcp']; conversations?: Partial<typeof conversationLimits>; describe?: Partial<typeof describeLimits>; modelsDev?: { url?: string; maxBytes?: number; timeoutMs?: number; refreshMs?: number; retryMs?: number }; evidence?: Partial<typeof evidenceExportLimits>; connect?: Partial<typeof connectLimits> }
+export interface ServiceConfig extends Partial<typeof serviceLimits>, Partial<typeof requestLimits>, PluginConfig { root: string; stateDir: string; coreBinary?: string; rscript: string; python?: string; ssh?: string; serverctl?: string; port?: number; nativeFolders?: Partial<typeof nativeFolderLimits>; workspace?: Partial<typeof workspaceLimits>; interactions?: Partial<typeof interactionLimits>; taskMap?: Partial<typeof taskMapLimits>; browser?: Partial<typeof browserLimits>; webRoot?: string; example?: boolean; agentNativeActivity?: Partial<typeof nativeActivityLimits>; presentationWitness?: Partial<typeof presentationWitnessLimits>; visibility?: Partial<typeof visibilityLimits>; agentDelivery?: Partial<typeof agentDeliveryLimits>; deliveryTransportTimeoutMs?: number; claude?: string; agentBackend?: ConversationConfig['backend']; claudeAcp?: ConversationConfig['claudeAcp']; acpCommand?: ConversationConfig['acpCommand']; codex?: string; codexAcp?: ConversationConfig['codexAcp']; conversations?: Partial<typeof conversationLimits>; describe?: Partial<typeof describeLimits>; modelsDev?: { url?: string; maxBytes?: number; timeoutMs?: number; refreshMs?: number; retryMs?: number }; evidence?: Partial<typeof evidenceExportLimits>; connect?: Partial<typeof connectLimits> }
 const ajv = new Ajv({ allErrors: true, strict: false, allowUnionTypes: true });
 // The same timestamp check every published contract uses; an unknown format would be skipped silently.
 ajv.addFormat('date-time', { type: 'string', validate: isNativeTime });
@@ -361,7 +361,7 @@ export class RhoService {
       // The same project grant `rho --grant` gives, under this conversation's own principal.
       grant: async (project, conversation) => {
         const session = 'rho:' + conversation.id, file = path.join(this.state.directory, 'agent-' + digest(project.id + ':' + session) + '.json');
-        await this.agentConnection(project.id, session, file, undefined, undefined, 'layered-business', { label: (conversation.client === 'codex' ? 'Codex' : 'Claude Code') + ' in Rho', conversationId: conversation.id });
+        await this.agentConnection(project.id, session, file, undefined, undefined, 'layered-business', { label: (conversation.client === 'codex' ? 'Codex' : conversation.client === 'acp' ? 'ACP agent' : 'Claude Code') + ' in Rho', conversationId: conversation.id });
         return { file, principal: 'agent:' + digest(project.id + ':' + session).slice(0, 32) };
       },
       directory: project => this.dataDir(project),
@@ -426,7 +426,7 @@ export class RhoService {
           return { text: said.text, model: said.model, cost: callCost(said, listed ? await this.modelFacts(listed).catch(() => null) : null) };
         }
       } : {}
-    }, config.claude, config.conversations, { backend: config.agentBackend, claudeAcp: config.claudeAcp, codex: config.codex, codexAcp: config.codexAcp, settingsFile: path.join(this.state.directory, 'agent-settings.json') });
+    }, config.claude, config.conversations, { backend: config.agentBackend, claudeAcp: config.claudeAcp, acpCommand: config.acpCommand, codex: config.codex, codexAcp: config.codexAcp, settingsFile: path.join(this.state.directory, 'agent-settings.json') });
     this.conversations.describing = { ...describeLimits, ...config.describe };
     this.folderPicker = new NativeFolderPicker({ ...nativeFolderLimits, ...config.nativeFolders });
     this.server = http.createServer((req, res) => void this.handle(req, res));
@@ -817,7 +817,11 @@ export class RhoService {
       add('rscript', rscriptAvailable ? 'ok' : b.intent === 'run-r' ? 'fail' : 'warn', rscriptAvailable ? `R is available at ${this.bridge.rscript}.` : `The optional managed R entry is unavailable at ${this.bridge.rscript}. Native Agent tools remain available.`, rscriptAvailable ? '' : 'For managed R scripts, select an existing Rscript with --rscript or RHO_RSCRIPT.');
       // Conversations drive the person's installed Claude Code or Codex; the package carries none.
       const agentCommand = await import('@rho-workspace/plugin-agent/acp-command').catch(() => null);
-      if (agentCommand) {
+      if (this.config.agentBackend === 'acp') {
+        const cmd = this.config.acpCommand;
+        add('agents', cmd?.file ? 'ok' : 'warn', cmd?.file ? `A generic ACP agent is configured (${cmd.file} ${cmd.args.join(' ')}).` : 'No ACP agent command is configured.',
+          cmd?.file ? '' : 'Start Rho with --agent-backend acp --acp-command <argv> or RHO_ACP_COMMAND.');
+      } else if (agentCommand) {
         const claude = this.config.claude ?? process.env.RHO_CLAUDE, codex = this.config.codex ?? process.env.RHO_CODEX;
         const env = { ...process.env, ...(claude ? { CLAUDE_CODE_EXECUTABLE: claude } : {}), ...(codex ? { CODEX_PATH: codex } : {}) };
         const preferred = this.config.agentBackend === 'codex-acp' ? 'codex' : 'claude', other = preferred === 'codex' ? 'claude' : 'codex';

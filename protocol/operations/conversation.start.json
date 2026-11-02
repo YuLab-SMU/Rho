@@ -20,7 +20,8 @@
       "backend": {
         "enum": [
           "claude-acp",
-          "codex-acp"
+          "codex-acp",
+          "acp"
         ]
       },
       "config": {

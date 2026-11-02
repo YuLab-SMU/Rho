@@ -67,7 +67,7 @@ type StopReason = 'person' | 'closing' | 'wall-limit' | 'output-limit' | 'line-l
 // A tool step also keeps when it started (see observe); its `at` is its latest report.
 type Step = ConversationStep & { startedAt?: string };
 interface Permission extends AgentPermission { state: 'pending' | 'selected' | 'cancelled'; selected?: string }
-export interface ConversationConfig { settingsFile?: string; backend?: 'claude-acp' | 'codex-acp' | 'claude-cli'; codex?: string; codexAcp?: Omit<CodexAcpOptions, 'cwd' | 'mcpServers' | 'limits' | 'sessionId' | 'codex' | 'observation' | 'observe'>; claudeAcp?: Omit<ClaudeAcpOptions, 'cwd' | 'mcpServers' | 'limits' | 'sessionId' | 'claude' | 'observation' | 'observe'> }
+export interface ConversationConfig { settingsFile?: string; backend?: 'claude-acp' | 'codex-acp' | 'claude-cli' | 'acp'; acpCommand?: { file: string; args: string[] }; codex?: string; codexAcp?: Omit<CodexAcpOptions, 'cwd' | 'mcpServers' | 'limits' | 'sessionId' | 'codex' | 'observation' | 'observe'>; claudeAcp?: Omit<ClaudeAcpOptions, 'cwd' | 'mcpServers' | 'limits' | 'sessionId' | 'claude' | 'observation' | 'observe'> }
 interface Turn {
   id: string; changeId: string; requestDigest: string; by: string; text: string; sentAt: string;
   state: 'running' | 'completed' | 'failed' | 'stopped' | 'unknown'; startedAt: string | null; endedAt: string | null; pid: number | null; model: string | null;
@@ -144,8 +144,8 @@ function compare(before: Disk, after: Disk, limit: number): NonNullable<Turn['fi
   return { changed: changed.slice(0, limit), omitted: Math.max(0, changed.length - limit), partial };
 }
 interface Conversation {
-  format: 1 | 2; backend?: 'claude-acp' | 'codex-acp' | 'claude-cli'; acpSessionId?: string; adapter?: { name: string; version?: string }; protocolVersion?: number; id: string; changeId: string; requestDigest: string; createdAt: string; createdBy: string; updatedAt: string; version: number;
-  client: 'claude-code' | 'codex'; nativeSessionId: string | null; confirmed: boolean; principal: string | null; title: string; turns: Turn[];
+  format: 1 | 2; backend?: 'claude-acp' | 'codex-acp' | 'claude-cli' | 'acp'; acpSessionId?: string; adapter?: { name: string; version?: string }; protocolVersion?: number; id: string; changeId: string; requestDigest: string; createdAt: string; createdBy: string; updatedAt: string; version: number;
+  client: 'claude-code' | 'codex' | 'acp'; nativeSessionId: string | null; confirmed: boolean; principal: string | null; title: string; turns: Turn[];
   observation?: SessionObservation;
   // The person's choices among the settings this conversation's Agent offers, applied each
   // time its session is opened.
@@ -154,8 +154,8 @@ interface Conversation {
   // and not continued until restored.
   trashedAt?: string | null; trashedBy?: string | null;
 }
-type Backend = 'claude-acp' | 'codex-acp';
-const backends: Backend[] = ['claude-acp', 'codex-acp'];
+type Backend = 'claude-acp' | 'codex-acp' | 'acp';
+const backends: Backend[] = ['claude-acp', 'codex-acp', 'acp'];
 type Choices = Record<string, string | boolean>;
 // What one Agent offered when a session last opened without the person's choices: a check
 // (an explicit action that starts the Agent and sends nothing) or a conversation's first session.
@@ -255,7 +255,7 @@ export class Conversations {
   constructor(private ports: ConversationPorts, public binary = 'claude', limits: Partial<typeof conversationLimits> = {}, private config: ConversationConfig = {}) {
     this.limits = { ...conversationLimits, ...limits };
     for (const key of ['maxCaptureFiles','maxCaptureBytes','maxSnapshotBytes','maxCaptureConcurrent'] as const) requireThat(Number.isSafeInteger(this.limits[key]) && this.limits[key]>0 && this.limits[key]<=conversationLimits[key], 'invalid', 'Capture budgets must be positive integers no greater than the supported defaults.', {limit:key,maximum:conversationLimits[key]});
-    requireThat(!config.backend || ['claude-acp', 'codex-acp', 'claude-cli'].includes(config.backend), 'invalid', 'Choose claude-acp, codex-acp or claude-cli.');
+    requireThat(!config.backend || ['claude-acp', 'codex-acp', 'claude-cli', 'acp'].includes(config.backend), 'invalid', 'Choose claude-acp, codex-acp, claude-cli or acp.');
   }
 
   private serial<T>(key: string, run: () => Promise<T>) {
@@ -442,7 +442,7 @@ export class Conversations {
       const saved = await this.readSettings();
       const backend = input.backend ?? saved.backend ?? this.config.backend ?? 'claude-acp';
       const config = backend === 'claude-cli' ? undefined : input.config ?? saved.choices[backend];
-      const at = now(), c: Conversation = { format: 2, backend, id: 'c-' + randomBytes(8).toString('hex'), changeId: input.changeId, requestDigest, createdAt: at, createdBy: by, updatedAt: at, version: 0, client: backend === 'codex-acp' ? 'codex' : 'claude-code', nativeSessionId: backend === 'claude-cli' ? randomUUID() : null, confirmed: false, principal: null, title: titleOf(text), turns: [], ...(config && Object.keys(config).length ? { config } : {}) };
+      const at = now(), c: Conversation = { format: 2, backend, id: 'c-' + randomBytes(8).toString('hex'), changeId: input.changeId, requestDigest, createdAt: at, createdBy: by, updatedAt: at, version: 0, client: backend === 'codex-acp' ? 'codex' : backend === 'acp' ? 'acp' : 'claude-code', nativeSessionId: backend === 'claude-cli' ? randomUUID() : null, confirmed: false, principal: null, title: titleOf(text), turns: [], ...(config && Object.keys(config).length ? { config } : {}) };
       for (const id of input.contexts ?? []) await this.ports.context?.(project, id);
       const turn = this.turn(input.changeId, requestDigest, by, text, 1);
       if (input.contexts?.length) turn.contexts = [...input.contexts];
@@ -489,7 +489,7 @@ export class Conversations {
     this.choices({ [input.configId]: input.value });
     return this.serial(project.id, async () => {
       const c = await this.load(project, input.conversationId), last = c.turns.at(-1);
-      requireThat(c.backend === 'claude-acp' || c.backend === 'codex-acp', 'unavailable', 'This conversation\'s Agent has no settings Rho can change.');
+      requireThat(c.backend === 'claude-acp' || c.backend === 'codex-acp' || c.backend === 'acp', 'unavailable', 'This conversation\'s Agent has no settings Rho can change.');
       requireThat(!c.trashedAt, 'conflict', 'This conversation is in the trash. Restore it to change its settings.');
       requireThat(!last || last.state !== 'running' || !this.liveTurn(project, c, last), 'conflict', 'The Agent is answering. Change its settings after this message.');
       const driver = this.drivers.get(project.id + '/' + c.id)?.driver;
@@ -566,9 +566,9 @@ export class Conversations {
     return this.settings();
   }
   private async inspect(project: Project, backend: Backend) {
-    const { ClaudeAcpConversation, CodexAcpConversation } = await import('@rho-workspace/plugin-agent/conversation');
+    const { ClaudeAcpConversation, CodexAcpConversation, GenericAcpConversation } = await import('@rho-workspace/plugin-agent/conversation');
     const common = { cwd: project.root, mcpServers: [], limits: this.limits };
-    const driver = backend === 'codex-acp' ? new CodexAcpConversation({ ...this.config.codexAcp, ...common, codex: this.config.codex }) : new ClaudeAcpConversation({ preferred: claudePreferred, ...this.config.claudeAcp, ...common, claude: this.binary });
+    const driver = backend === 'codex-acp' ? new CodexAcpConversation({ ...this.config.codexAcp, ...common, codex: this.config.codex }) : backend === 'acp' ? new GenericAcpConversation({ ...common, command: this.config.acpCommand! }) : new ClaudeAcpConversation({ preferred: claudePreferred, ...this.config.claudeAcp, ...common, claude: this.binary });
     let found: Awaited<ReturnType<typeof driver.inspect>>;
     try { found = await driver.inspect(); }
     catch (error) { throw new Fault('unavailable', error instanceof Error ? error.message : 'The Agent could not be started.'); }
@@ -704,11 +704,11 @@ export class Conversations {
       }
       const grant = await this.ports.grant(project, c); c.principal = grant.principal;
       const mcpServers = [{ name: 'rho', command: process.execPath, args: [fileURLToPath(import.meta.resolve('@rho-workspace/plugin-agent/mcp'))], env: [{ name: 'RHO_AGENT_CONNECTION', value: grant.file }] }];
-      const { ClaudeAcpConversation, CodexAcpConversation, ClaudeCliConversation } = await import('@rho-workspace/plugin-agent/conversation');
+      const { ClaudeAcpConversation, CodexAcpConversation, ClaudeCliConversation, GenericAcpConversation } = await import('@rho-workspace/plugin-agent/conversation');
       const observed = { observation: c.observation, observe: (observation: SessionObservation) => {
         requireThat(observation.sessionId === c.acpSessionId, 'conflict', 'The observed Agent session differs from the retained identity.');
         requireThat(Buffer.byteLength(JSON.stringify(observation)) <= this.limits.maxObservationBytes, 'limit', 'The session projection exceeded maxObservationBytes; prior observations were kept.');
-        const config = observation.config, learned = config && config.at !== c.observation?.config?.at && config.origin === 'initial' && !c.config && (c.backend === 'claude-acp' || c.backend === 'codex-acp');
+        const config = observation.config, learned = config && config.at !== c.observation?.config?.at && config.origin === 'initial' && !c.config && (c.backend === 'claude-acp' || c.backend === 'codex-acp' || c.backend === 'acp');
         c.observation = observation; this.schedule(project, c);
         for (const live of this.live.values()) if (live.project.id === project.id && live.conversation.id === c.id) {
           for (const tool of observation.tools ?? []) if (tool.origin !== 'history' && Date.parse(tool.at) >= Date.parse(live.turn.sentAt)) for (const location of tool.locations ?? []) this.capture(live, location.path, 'tool:' + tool.id + ':' + tool.outcome);
@@ -723,7 +723,9 @@ export class Conversations {
         ? new CodexAcpConversation({ ...this.config.codexAcp, ...common, codex: this.config.codex })
         : c.backend === 'claude-acp'
           ? new ClaudeAcpConversation({ preferred: claudePreferred, ...this.config.claudeAcp, ...common, claude: this.binary, plugins: [...this.config.claudeAcp?.plugins ?? [], ...await this.ports.claudePlugins?.(project) ?? []] })
-          : new ClaudeCliConversation({ cwd: project.root, binary: this.binary, sessionId: c.nativeSessionId!, confirmed: c.confirmed, projectName: project.name ?? path.basename(project.root), mcpServers, limits: this.limits, instructions });
+          : c.backend === 'acp'
+            ? new GenericAcpConversation({ ...common, command: this.config.acpCommand! })
+            : new ClaudeCliConversation({ cwd: project.root, binary: this.binary, sessionId: c.nativeSessionId!, confirmed: c.confirmed, projectName: project.name ?? path.basename(project.root), mcpServers, limits: this.limits, instructions });
       this.drivers.set(key, { driver, project, conversation: c }); return driver;
     });
   }
@@ -911,6 +913,7 @@ export class Conversations {
     const given = shown.get(file)!;
     const reason = !enabled ? 'Descriptions by a model are switched off; the facts are kept.'
       : c.backend === 'codex-acp' ? 'Descriptions are written with Claude Code; this session\'s Agent is Codex.'
+      : c.backend === 'acp' ? 'Descriptions are written with Claude Code; this session\'s Agent is a configured ACP agent.'
       : !this.ports.describe ? 'No model is set up to describe files.' : null;
     const keep = (why: string) => { if (record!.reason !== why) { record!.state = record!.sentence ? 'described' : 'facts'; record!.reason = why; this.schedule(project, c); } };
     if (reason) { keep(reason); return; }

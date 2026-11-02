@@ -8,13 +8,13 @@ import { BrandMark, brandOf, ProviderMark } from './brand-marks.js';
 // same controls for one open conversation. The values and their names are the Agent's own,
 // as it last offered them; Rho asks only when the person checks, never on its own.
 export type AgentSettings = RhoOutput<'conversation.settings.read'>;
-export type Backend = 'claude-acp' | 'codex-acp';
+export type Backend = 'claude-acp' | 'codex-acp' | 'acp';
 type Offered = NonNullable<AgentSettings['offered']['claude-acp']>;
 export type SettingOption = Offered['options'][number];
 export type SettingValue = string | boolean;
-export const backends: Backend[] = ['claude-acp', 'codex-acp'];
-export const agentLabel: Record<Backend, string> = { 'claude-acp': 'Claude Code', 'codex-acp': 'Codex' };
-export const backendOf = (client?: string | null): Backend => client === 'codex' ? 'codex-acp' : 'claude-acp';
+export const backends: Backend[] = ['claude-acp', 'codex-acp', 'acp'];
+export const agentLabel: Record<Backend, string> = { 'claude-acp': 'Claude Code', 'codex-acp': 'Codex', 'acp': 'ACP Agent' };
+export const backendOf = (client?: string | null): Backend => client === 'codex' ? 'codex-acp' : client === 'acp' ? 'acp' : 'claude-acp';
 
 // One copy for every place in this tab that shows the settings.
 const store = { value: null as AgentSettings | null, reading: false, problem: '', checking: new Set<Backend>(), checkProblem: {} as Partial<Record<Backend, string>>, version: 0, listeners: new Set<() => void>() };
@@ -32,7 +32,7 @@ export function useAgentSettings(client: BrowserClient, projectId: string) {
   useSyncExternalStore(subscribe, () => store.version);
   useEffect(() => { if (!store.value && !store.reading) void load(client, projectId); }, [client, projectId]);
   const settings = store.value;
-  const backend: Backend = settings?.backend ?? (settings?.serviceBackend === 'codex-acp' ? 'codex-acp' : 'claude-acp');
+  const backend: Backend = settings?.backend ?? (settings?.serviceBackend === 'codex-acp' ? 'codex-acp' : settings?.serviceBackend === 'acp' ? 'acp' : 'claude-acp');
   // A change made in another tab is read first and this one applied on top, once.
   async function update(patch: (current: AgentSettings) => { backend?: Backend; choices?: Partial<Record<Backend, Record<string, SettingValue>>>; describe?: { enabled: boolean } }) {
     for (let attempt = 0; attempt < 2; attempt++) {

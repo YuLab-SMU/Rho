@@ -6072,19 +6072,22 @@ export interface ConversationSendOutput {
 
 export interface ConversationSettingsCheckInput {
   projectId: string;
-  backend: 'claude-acp' | 'codex-acp';
+  backend: 'claude-acp' | 'codex-acp' | 'acp';
 }
 
 export interface ConversationSettingsCheckOutput {
   version: number;
   updatedAt: string | null;
-  backend: ('claude-acp' | 'codex-acp') | null;
-  serviceBackend: 'claude-acp' | 'codex-acp' | 'claude-cli';
+  backend: ('claude-acp' | 'codex-acp' | 'acp') | null;
+  serviceBackend: 'claude-acp' | 'codex-acp' | 'claude-cli' | 'acp';
   choices: {
     'claude-acp'?: {
       [k: string]: string | boolean;
     };
     'codex-acp'?: {
+      [k: string]: string | boolean;
+    };
+    acp?: {
       [k: string]: string | boolean;
     };
   };
@@ -6141,8 +6144,34 @@ export interface ConversationSettingsCheckOutput {
       }[];
       omitted: number;
     };
+    acp?: {
+      at: string;
+      source: 'check' | 'conversation';
+      adapter: {
+        name: string;
+        version?: string;
+      } | null;
+      options: {
+        category?: string;
+        current: string | boolean;
+        description?: string;
+        id: string;
+        name: string;
+        type: 'select' | 'boolean';
+        /**
+         * @maxItems 256
+         */
+        values?: {
+          description?: string;
+          group?: string;
+          name: string;
+          value: string;
+        }[];
+      }[];
+      omitted: number;
+    };
   };
-  checking: ('claude-acp' | 'codex-acp')[];
+  checking: ('claude-acp' | 'codex-acp' | 'acp')[];
   describe?: {
     enabled: boolean;
   };
@@ -6155,13 +6184,16 @@ export interface ConversationSettingsReadInput {
 export interface ConversationSettingsReadOutput {
   version: number;
   updatedAt: string | null;
-  backend: ('claude-acp' | 'codex-acp') | null;
-  serviceBackend: 'claude-acp' | 'codex-acp' | 'claude-cli';
+  backend: ('claude-acp' | 'codex-acp' | 'acp') | null;
+  serviceBackend: 'claude-acp' | 'codex-acp' | 'claude-cli' | 'acp';
   choices: {
     'claude-acp'?: {
       [k: string]: string | boolean;
     };
     'codex-acp'?: {
+      [k: string]: string | boolean;
+    };
+    acp?: {
       [k: string]: string | boolean;
     };
   };
@@ -6218,8 +6250,34 @@ export interface ConversationSettingsReadOutput {
       }[];
       omitted: number;
     };
+    acp?: {
+      at: string;
+      source: 'check' | 'conversation';
+      adapter: {
+        name: string;
+        version?: string;
+      } | null;
+      options: {
+        category?: string;
+        current: string | boolean;
+        description?: string;
+        id: string;
+        name: string;
+        type: 'select' | 'boolean';
+        /**
+         * @maxItems 256
+         */
+        values?: {
+          description?: string;
+          group?: string;
+          name: string;
+          value: string;
+        }[];
+      }[];
+      omitted: number;
+    };
   };
-  checking: ('claude-acp' | 'codex-acp')[];
+  checking: ('claude-acp' | 'codex-acp' | 'acp')[];
   describe?: {
     enabled: boolean;
   };
@@ -6228,12 +6286,15 @@ export interface ConversationSettingsReadOutput {
 export interface ConversationSettingsUpdateInput {
   projectId: string;
   expectedVersion: number;
-  backend?: ('claude-acp' | 'codex-acp') | null;
+  backend?: ('claude-acp' | 'codex-acp' | 'acp') | null;
   choices?: {
     'claude-acp'?: {
       [k: string]: string | boolean;
     };
     'codex-acp'?: {
+      [k: string]: string | boolean;
+    };
+    acp?: {
       [k: string]: string | boolean;
     };
   };
@@ -6245,13 +6306,16 @@ export interface ConversationSettingsUpdateInput {
 export interface ConversationSettingsUpdateOutput {
   version: number;
   updatedAt: string | null;
-  backend: ('claude-acp' | 'codex-acp') | null;
-  serviceBackend: 'claude-acp' | 'codex-acp' | 'claude-cli';
+  backend: ('claude-acp' | 'codex-acp' | 'acp') | null;
+  serviceBackend: 'claude-acp' | 'codex-acp' | 'claude-cli' | 'acp';
   choices: {
     'claude-acp'?: {
       [k: string]: string | boolean;
     };
     'codex-acp'?: {
+      [k: string]: string | boolean;
+    };
+    acp?: {
       [k: string]: string | boolean;
     };
   };
@@ -6308,8 +6372,34 @@ export interface ConversationSettingsUpdateOutput {
       }[];
       omitted: number;
     };
+    acp?: {
+      at: string;
+      source: 'check' | 'conversation';
+      adapter: {
+        name: string;
+        version?: string;
+      } | null;
+      options: {
+        category?: string;
+        current: string | boolean;
+        description?: string;
+        id: string;
+        name: string;
+        type: 'select' | 'boolean';
+        /**
+         * @maxItems 256
+         */
+        values?: {
+          description?: string;
+          group?: string;
+          name: string;
+          value: string;
+        }[];
+      }[];
+      omitted: number;
+    };
   };
-  checking: ('claude-acp' | 'codex-acp')[];
+  checking: ('claude-acp' | 'codex-acp' | 'acp')[];
   describe?: {
     enabled: boolean;
   };
@@ -6319,7 +6409,7 @@ export interface ConversationStartInput {
   projectId: string;
   changeId: string;
   text: string;
-  backend?: 'claude-acp' | 'codex-acp';
+  backend?: 'claude-acp' | 'codex-acp' | 'acp';
   config?: {
     [k: string]: string | boolean;
   };
