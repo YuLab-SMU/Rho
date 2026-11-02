@@ -153,7 +153,26 @@ npm install --prefix "$HOME\rho-0.5.2" --omit=dev --ignore-scripts C:\absolute\r
 & "$HOME\rho-0.5.2\node_modules\.bin\rho.cmd" --root "$HOME\rho-projects" --state-dir "$HOME\.rho-0.5.2" --open
 ```
 
-One tarball for all four platforms waits for the macOS and Linux Cores. It has not had the full 0.5.1
-acceptance. No registry publication, GitHub release or signing was performed. At this
-size, a GitHub Release asset installed with `npm install --prefix DIR URL` is the next
-distribution step to select.
+These 0.5.2 candidates have not had the full 0.5.1 acceptance. No registry publication, GitHub
+release or signing was performed. CI now packs one tarball for all four platforms, below.
+
+## CI and npm publication
+
+[`ci.yml`](../.github/workflows/ci.yml) runs on every push to `main`, pull request and `v*` tag.
+`components.json` selects the Core and Plugins commits. CI builds the four Cores from that Core
+commit (macOS arm64; static musl Linux x64 and arm64; MSVC Windows x64), runs Rho's suite on macOS
+arm64, Linux x64 and Windows x64, and packs one candidate with all four Cores. Each of the four
+platforms installs it offline with an empty npm cache and runs `scripts/ci-install-check.mjs`: the
+launcher with its own Core and the shipped project, then the packaged recovery and ordinary-project
+acceptances. The composition names the run that packed it. What the first runs found is in the
+[CI episode](CI-EPISODE.md).
+
+The package is `@rho-workspace/rho`; the source checkout stays private and the staged package is
+public. A `v*` tag naming the version in `package.json` publishes the candidate its own run built,
+tested and installed. The publish job checks out and builds nothing. It verifies the digest, name,
+version and commit, then runs `npm publish --provenance` with `NPM_TOKEN` from the GitHub environment
+`npm`, which no build or test job can read. A prerelease version goes to the `next` dist-tag, any
+other to `latest`; npm makes a package's first version `latest` whatever the tag. Before the first
+tag, the npm organization `rho-workspace`, a token that can publish there without a one-time
+password, and the `npm` environment holding it must exist; a required reviewer on that environment
+holds each publication for a person. No version has been published.
