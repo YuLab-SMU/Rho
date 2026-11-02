@@ -221,7 +221,8 @@ jobs:
     needs: [test, install]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
-    # NPM_TOKEN lives only in this environment, so no build or test job can read it.
+    # NPM_TOKEN is a repository secret that only this job names. The environment records each
+    # publication as a deployment; at the user's choice it has no required reviewer.
     environment: npm
     permissions:
       contents: read

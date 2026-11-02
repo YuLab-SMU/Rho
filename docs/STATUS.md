@@ -26,7 +26,7 @@ human benefits are not established by existing Rho checks.
 | Offline evidence | Preview one review and explicit refs; static reader/original files/manifest; read-only verifier | Service closed/project moved; four browser widths; tamper detection |
 | macOS 0.5.1 | Unsigned npm tarball/local WebUI selected; Core bundled explicitly | [Fixed tarball installed and exercised](PREVIEW-0.5.1.md) |
 | 0.5.2 candidate | 16 MB tarball for macOS arm64 and Linux x64/arm64, and a 12 MB Windows x64 one: one Core per platform (Core `c3dbeca`), Claude Code/Codex the person's own, all 12 plugins | [Packing, real Claude/Codex](PACKAGE-0.5.2-EPISODE.md); [offline install on four systems, Linux Notebook and Open folder](PLATFORMS-0.5.2-EPISODE.md); [Windows: Host lifetime and stop, installed checks](WINDOWS-0.5.2-EPISODE.md); x64 only under Rosetta; the full 0.5.1 acceptance not done |
-| CI and npm | Each push builds the four Cores, runs the suite on macOS, Linux and Windows, packs one 25 MB candidate for all four platforms and installs it offline on each; a `v*` tag publishes that candidate as `@rho-workspace/rho` | [CI episode](CI-EPISODE.md): all four installations and packaged acceptances pass; the Windows failures came from R under `%OS%` paths, Rho's exit-code contract and Core's Windows output commits (fixed in Core `8bed8ef`); nothing published |
+| CI and npm | Each push builds the four Cores, runs the suite on macOS, Linux and Windows, packs one 25 MB candidate for all four platforms and installs it offline on each; a `v*` tag publishes that candidate as `@rho-workspace/rho` | [CI episode](CI-EPISODE.md): run 7 passes every job on the four platforms; earlier Windows failures came from R under `%OS%` paths, Rho's exit-code contract and Core's Windows output commits (fixed in Core `8bed8ef`); nothing published |
 | Independent researcher use | Unobserved | Trial guide in the episode; no usability claim |
 | Example project | `example/pa14-qs` ships with the application; a new state copies it into the projects folder once, as an ordinary editable project | [Episode](EXAMPLE-PROJECT-EPISODE.md) |
 | dsh-rho 0.0.1 | Native dsh 0.2.1-rc.5 analysis, captured CSV/SVG, selected-row question | Real model/browser loop; local tarball installed; restart/overwrite/crash preserved results and one analysis run; 5/5 adapter tests and type check |
@@ -277,7 +277,7 @@ and installed results; the fixed 0.5.1 candidate passed 230/230 ([preview](PREVI
 is omitted to make a pass. The 0.5.2 packaging pass recorded Rho 269/270 and Plugins 165/165, and Windows
 11 x64 Rho 259/273 (13 skipped, MCP v2 cancelled) and Plugins 158/166 (8 skipped).
 The CI pass records Rho 275/277 and Plugins 165/166 on macOS in the [ledger](VERIFICATION.json). In [CI](CI-EPISODE.md)
-run 6 passed 275/277 on macOS and Linux x64; the episode traces the causes of its three Windows failures.
+run 7 every job passed: 275/277 on macOS and Linux x64, 262/277 on Windows (15 skipped), and all four installations.
 
 Automatic capture defaults: 8 MiB/snapshot, 64 snapshots and 32 MiB/turn, at most two
 workers/project, Files 512 MiB/1024 resources; export 512 MiB/128 files/4 MiB metadata,

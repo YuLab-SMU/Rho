@@ -192,6 +192,22 @@ the causes:
 
 `components.json` selects Core `8bed8ef`, the fix and its record.
 
+## Seventh run
+
+Run [41379100841](https://github.com/YuLab-SMU/Rho/actions/runs/41379100841) on `d880a5f6`, with Core
+`8bed8ef` and Plugins `90e68cf`, passed every job. The candidate is `83a071dc…`, 25,032,848 bytes,
+5,250 files:
+
+| Platform | Suite | Offline install | Ready | Stop | Recovery | Ordinary project |
+| --- | --- | --- | --- | --- | --- | --- |
+| macOS arm64 | 275/277, 2 skipped | 14.7 s | 1.5 s | In order | 7 | 7 |
+| Linux x64 | 275/277, 2 skipped | 6.4 s | 0.6 s | In order | 7 | 7 |
+| Linux arm64 | Not run | 7.6 s | 0.8 s | In order | 7 | 7 |
+| Windows x64 | 262/277, 15 skipped | 97 s | 1.6 s | Ended | 7 | 7 |
+
+On Windows the repair test took 4.2 s in the suite (47 to 48 s before), the cmd.exe test 2.3 s,
+and MCP v2 40.2 s: past its old limit under the suite's load, within the new one.
+
 ## Publication
 
 Nothing has been published. A `v*` tag needs:
@@ -210,7 +226,6 @@ published twice.
 
 ## Not done
 
-- A run in which every job passes. Run 5 fails on the two items below.
 - Publication, a GitHub Release, signing.
 - Rho's suite on Linux arm64; only the installation runs there.
 - Real Agent conversations in CI. The suite uses stand-ins; on Windows the 11 stand-ins written as
