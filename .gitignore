@@ -19,3 +19,11 @@ __pycache__/
 .RData
 *.log
 .DS_Store
+
+# Documentation site: assembled from docs/, which stays the source of truth
+/site/content/concepts/
+/site/content/reference/
+/site/content/records/
+/site/.vitepress/generated/
+/site/.vitepress/dist/
+/site/.vitepress/cache/

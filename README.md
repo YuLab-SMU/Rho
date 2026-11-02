@@ -49,7 +49,24 @@ The frontend was reconstructed on 2026-10-25 after withdrawing the earlier desig
 plans and visual rules. See [Frontend](docs/FRONTEND.md) for the current interface,
 [Status](docs/STATUS.md) for executed checks and limits, and the
 [documentation index](docs/README.md) for backend and release information.
-npm registry publication has not been performed.
+
+## Documentation
+
+The documentation is published at <https://yulab-smu.top/Rho/docs/>. The site is
+generated from this repository's `docs/` directory, which stays the only source of
+truth: every page names the file it came from and links to it.
+
+```sh
+npm run docs:dev      # assemble and serve locally
+npm run docs:build    # assemble, then build the static site into site/.vitepress/dist
+npm run docs:check    # fail if a document in docs/ is neither published nor withheld
+```
+
+`@rho-workspace/rho` is published to npm. The registry entry for 0.5.2 carries no
+README, so its package page shows no description; the next publication from a packed
+candidate restores it. Desktop installers on the
+[downloads page](https://yulab-smu.top/Rho/) are the earlier 0.4.0 line; this npm line
+is the current delivery.
 
 For a new component view, start with [Plugin authoring](docs/PLUGIN-AUTHORING.md):
 generate a typed package, preview it independently and select its compiled entry

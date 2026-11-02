@@ -30,6 +30,8 @@ human benefits are not established by existing Rho checks.
 | Independent researcher use | Unobserved | Trial guide in the episode; no usability claim |
 | Example project | `example/pa14-qs` ships with the application; a new state copies it into the projects folder once, as an ordinary editable project | [Episode](EXAMPLE-PROJECT-EPISODE.md) |
 | dsh-rho 0.0.1 | Native dsh 0.2.1-rc.5 analysis, captured CSV/SVG, selected-row question | Real model/browser loop; local tarball installed; restart/overwrite/crash preserved results and one analysis run; 5/5 adapter tests and type check |
+| Literature reproduction | Five papers of the 97 fully-open corpus reproduced in Rho 0.5.2 (bulk, snRNA-seq, GeoMx DSP, bulk+metabolome, multi-omics): Agents ran R in the shared Notebook, Rho captured cells, values, figures and notes | [Episode](LITERATURE-REPRO-EPISODE.md): two of five needed one turn and three needed 2–4, because the Agent client capped at 64 turns or waited on an event nothing wakes; 8–24 approval choices per run (counted); resource paths guessed. Conversation return and turn-limit continuation have a later [P3 pass](P3-CONTINUITY-EPISODE.md); the other issues remain. |
+| Documentation site | `docs/` is published at <https://yulab-smu.top/Rho/docs/>: 49 documents in Concepts, Reference and Records, local search, records ordered by their own `Updated:` date, every page naming its source file; the landing page uses the application's palette and five real 0.5.2 screenshots | [Episode](DOCS-SITE-EPISODE.md): no dead links at build, `docs:check` coverage passes, screenshots read at 1440 and 390 px; the downloads page and the four `updates/*.json` feeds are unchanged; no outside reader yet |
 
 M0 retains Python/R highlighting, Markdown reading and native command exit/time/bounded
 output ([record](CODE-MARKDOWN-EPISODE.md)); its report trial keeps scripts, results and
@@ -264,20 +266,18 @@ Earlier observations remain in the [home/project](HOME-PROJECT-EPISODE.md), [sid
 
 ## Verification
 
-Passes from the baseline (Rho 223/223, Plugins 104/104, an explicit unchanged Core binary) to
-Sources recorded up to Rho 273/274 and Plugins 151. Each first failure was an undeclared CSS variable,
-a stale count or limit in a check or a shell import, then fixed; each later miss was the MCP v2 test
-at its 30 s limit or a `.rho` cleanup race (`ENOTEMPTY`), passing alone. Their pages, ui:u2,
-person-files, agent-canvas, graph, agent-page, agent-ui, sources and review acceptances passed. The
-shell (editor focus at 390 px) and interaction (a `/^workspace/` sidebar row) acceptances failed
-before the toolbar pass and remain open; Git history keeps each count. Later passes (by-hand and plugin
-views, Rho 264/267, Plugins 161/161; timeline events, Rho 267/269, Plugins 163/163) had only those misses,
-and their browser acceptances passed. The [episode](REVIEW-EVIDENCE-EPISODE.md) records contract, browser
-and installed results; the fixed 0.5.1 candidate passed 230/230 ([preview](PREVIEW-0.5.1.md)). No failure
-is omitted to make a pass. The 0.5.2 packaging pass recorded Rho 269/270 and Plugins 165/165, and Windows
-11 x64 Rho 259/273 (13 skipped, MCP v2 cancelled) and Plugins 158/166 (8 skipped).
-The CI pass records Rho 275/277 and Plugins 165/166 on macOS in the [ledger](VERIFICATION.json). In [CI](CI-EPISODE.md)
-run 7 every job passed: 275/277 on macOS and Linux x64, 262/277 on Windows (15 skipped), and all four installations.
+Passes from the baseline (Rho 223/223, Plugins 104/104, an explicit unchanged Core binary) to Sources recorded up to Rho 273/274 and
+Plugins 151. Each first failure was an undeclared CSS variable, a stale count or limit in a check or a shell import, then fixed;
+each later miss was the MCP v2 test at its 30 s limit or a `.rho` cleanup race (`ENOTEMPTY`), passing alone. Their pages, ui:u2,
+person-files, agent-canvas, graph, agent-page, agent-ui, sources and review acceptances passed. The shell (editor focus at 390 px)
+and interaction (a `/^workspace/` sidebar row) acceptances failed before the toolbar pass and remain open; Git history keeps each
+count. Later passes (by-hand and plugin views, Rho 264/267, Plugins 161/161; timeline events, Rho 267/269, Plugins 163/163) had only
+those misses, and their browser acceptances passed. The [episode](REVIEW-EVIDENCE-EPISODE.md) records contract, browser and
+installed results; the fixed 0.5.1 candidate passed 230/230 ([preview](PREVIEW-0.5.1.md)). No failure is omitted to make a pass. The
+0.5.2 packaging pass recorded Rho 269/270 and Plugins 165/165, and Windows 11 x64 Rho 259/273 (13 skipped, MCP v2 cancelled) and
+Plugins 158/166 (8 skipped). The CI pass records Rho 275/277 and Plugins 165/166 on macOS in the [ledger](VERIFICATION.json). In
+[CI](CI-EPISODE.md) run 7 every job passed: 275/277 on macOS and Linux x64, 262/277 on Windows (15 skipped), and all four
+installations.
 
 Automatic capture defaults: 8 MiB/snapshot, 64 snapshots and 32 MiB/turn, at most two
 workers/project, Files 512 MiB/1024 resources; export 512 MiB/128 files/4 MiB metadata,
@@ -293,7 +293,6 @@ adapters. [Release](RELEASE.md) separates source, fixed composition, installatio
 is not a workspace restore or executable analysis format. Existing archives keep owner fields and reject older formats that would lose state.
 
 The withdrawn 2026-10-25 frontend guidance and the [2026-10-26 design commission](design/2026-10-26/index.html)
-are not requirements or templates for these screens. Current work
-advances by running real episodes and reviewing their results
+are not requirements or templates for these screens. Current work advances by running real episodes and reviewing their results
 ([Development](DEVELOPMENT.md), [Frontend](FRONTEND.md)). No independent researcher
 trial or physical IME observation has yet established ease of use.

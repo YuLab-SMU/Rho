@@ -68,6 +68,11 @@
     "acceptance:collaboration:agent": "RHO_COLLAB_MODEL=1 node scripts/collaboration-acceptance.mjs",
     "build:service": "node scripts/clean-dist.mjs && node scripts/contract-owners.mjs && npm run build:protocol-artifact && node scripts/contract-types.mjs && tsc && node scripts/plugin-inventory.mjs",
     "build:web": "tsc -p tsconfig.web.json && vite build && node scripts/web-manifest.mjs",
+    "docs:assemble": "node scripts/docs-site.mjs",
+    "docs:check": "node scripts/docs-site.mjs --check",
+    "docs:dev": "npm run docs:assemble && vitepress dev site",
+    "docs:build": "npm run docs:assemble && vitepress build site",
+    "docs:preview": "vitepress preview site",
     "test:ui": "npm run build && node --test test/browser.test.mjs && node scripts/ui-acceptance.mjs",
     "acceptance:execution": "node scripts/execution-acceptance.mjs",
     "acceptance:person": "node scripts/person-files-acceptance.mjs",
@@ -132,10 +137,10 @@
     "@rho-workspace/plugin-documents": "file:../Rho-plugins/plugins/documents",
     "@rho-workspace/plugin-files": "file:../Rho-plugins/plugins/files",
     "@rho-workspace/plugin-kernel": "file:../Rho-plugins/plugins/kernel",
-    "@rho-workspace/plugin-skills": "file:../Rho-plugins/plugins/skills",
     "@rho-workspace/plugin-media": "file:../Rho-plugins/plugins/media",
     "@rho-workspace/plugin-r": "file:../Rho-plugins/plugins/r",
     "@rho-workspace/plugin-requirements": "file:../Rho-plugins/plugins/requirements",
+    "@rho-workspace/plugin-skills": "file:../Rho-plugins/plugins/skills",
     "@rho-workspace/plugin-tables": "file:../Rho-plugins/plugins/tables",
     "ajv": "8.20.0"
   },
@@ -162,7 +167,8 @@
     "react": "19.3.1",
     "react-dom": "19.3.1",
     "typescript": "5.9.3",
-    "vite": "8.3.4"
+    "vite": "8.3.4",
+    "vitepress": "^1.6.4"
   },
   "bundleDependencies": [
     "ajv",

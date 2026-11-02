@@ -7,6 +7,14 @@ stage produces a real result, and the next step comes from reviewing it.
 Frontend plans, designs and guidance written before there were results to learn from
 were withdrawn on 2026-10-25; Git keeps their history.
 
+These files are also published as a site at <https://yulab-smu.top/Rho/docs/>. The site
+is assembled from this directory by `scripts/docs-site.mjs`, which sorts each document
+into Concepts, Reference or Records, rewrites its links and records the source file of
+every page. `npm run docs:check` fails when a Markdown file here is neither published
+nor explicitly withheld, so the two cannot drift apart. The
+[documentation site episode](DOCS-SITE-EPISODE.md) records what was built and what was
+observed.
+
 | Document | Purpose |
 | --- | --- |
 | [From-scratch design requirements · v2](design/2026-10-26/index.html) / [PDF](../output/pdf/rho-design-handoff-2026-10-26.pdf) | Designer commission: separate application/project navigation, Studio, panoramic Graph, dynamic Agent experience, dedicated conversation component, plugin standards and cross-mode scenarios; current implementation is not the design target |
@@ -25,6 +33,8 @@ were withdrawn on 2026-10-25; Git keeps their history.
 | [Timeline events](TIMELINE-EVENTS-EPISODE.md) | Plugins hand the timeline who did what and when: the person's Notebook cells and Console commands in their own lane, an Agent's cells in its conversation's; the Notebook's name and what Agents take "the notebook" to mean |
 | [Agent activity](AGENT-ACTIVITY.md) | Live Claude Code/dsh observations, errors, captured outputs, recovery and real-run evidence |
 | [dsh-rho prototype](DSH-RHO-EPISODE.md) | Native dsh analysis, reused Rho table/figure views, a selected-row question in the original conversation, local package installation and recovery |
+| [Literature reproduction as an application test](LITERATURE-REPRO-EPISODE.md) | Five open-data papers reproduced through Rho 0.5.2 with R in the Notebook: what the screens showed, the 64-turn stop and its recovery, approval load, guessed resource paths and a conversation lost with its tab |
+| [Documentation site](DOCS-SITE-EPISODE.md) | The landing page and documentation site published from `docs/`: assembly and link rewriting, VitePress build, what the screenshots showed, the two stale statements corrected, and the surfaces that must keep serving 0.4.0 desktop installs |
 | [Conversation episode](CONVERSATION-EPISODE.md) | Conversations with Claude Code started in Rho, who holds a session's input, limits, real runs and their reviews |
 | [Claude ACP episode](ACP-EPISODE.md) | Agent-owned ACP, real Westlake HPC multi-turn conversation, cancellation and recovery; legacy compatibility and limits |
 | [Claude, Codex and external ACP](ACP-MULTI-AGENT-EPISODE.md) | Second Agent, external-client relay, shared workspace loops and installed Westlake HPC acceptance |
