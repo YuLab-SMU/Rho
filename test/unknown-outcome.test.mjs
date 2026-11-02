@@ -37,6 +37,7 @@ test('a run whose Host stopped answering reads as unknown, not running', { timeo
     assert.notEqual(stored.execution, 'unknown');
   } finally {
     if (orphan) { try { process.kill(orphan, 'SIGKILL'); } catch {} }
-    await service.close(); await fs.rm(root, { recursive: true, force: true });
+    // On Windows a process just ended can hold its folder a moment longer (EBUSY).
+    await service.close(); await fs.rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
   }
 });

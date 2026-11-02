@@ -24732,7 +24732,7 @@ export const ownerContracts: OwnerContractSnapshot = {
     },
     "requirements": {
       "package": "@rho-workspace/plugin-requirements",
-      "packageVersion": "0.4.0",
+      "packageVersion": "0.4.2",
       "entry": "./operations",
       "entryPath": "@rho-workspace/plugin-requirements/dist/operations.js",
       "entrySha256": "4824ac282e0b3da158608f7663e6087ccc52d7421c9deefbafe897dfa1a183f3",
@@ -24897,7 +24897,7 @@ export const ownerContracts: OwnerContractSnapshot = {
     },
     "entry-requirements": {
       "package": "@rho-workspace/plugin-requirements",
-      "packageVersion": "0.4.0",
+      "packageVersion": "0.4.2",
       "entry": "./contract",
       "entryPath": "@rho-workspace/plugin-requirements/dist/contract.js",
       "entrySha256": "f0be4353c95b4719aeb8966b8124d6d33b760b50e9d491df8ecf7f198c2d5c78",

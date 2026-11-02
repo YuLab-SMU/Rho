@@ -103,6 +103,7 @@ jobs:
         run: |
           node --version && Rscript --version && python --version
           npm ci --no-audit --no-fund
+          npm run check:contracts
           npm test
       # What Rho's R dependency probe sees: on Windows always, and again with Rtools' MSYS tools first on
       # PATH, where every R run was refused; elsewhere when the suite fails.
