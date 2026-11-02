@@ -155,8 +155,13 @@ configuration stays with Codex (`CODEX_CONFIG` and its native config); Rho does 
 copy Claude credentials to Codex. The Westlake acceptance harness supplies an
 isolated native configuration with `tools.update_plan.enabled=true` and
 `features.apply_patch_freeform=true`. This enables real tools, not synthetic plans.
-`maxAgentTurns` is Claude's native step cap; Codex remains bounded by the application
-wall/output/record limits. ACP cancellation confirms the turn, not every native job.
+Rho sets no step cap (`maxAgentTurns`, Claude's `maxTurns`) and no message wall time
+(`turnWallMs`) by default; a `--limits` file can set either under `conversations`. Output,
+line and record limits still apply, and the person can stop a message at any time. A new
+Claude Code session opens in Auto unless the person chose a mode in Rho or their Claude
+settings name one; a model without Auto runs in Accept edits with the adapter's warning.
+Codex's adapter already opens in its own auto-review mode. ACP cancellation confirms the
+turn, not every native job.
 
 For an external ACP client, select this command as that client's Agent executable:
 

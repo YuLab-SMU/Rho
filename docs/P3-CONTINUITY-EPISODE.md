@@ -80,3 +80,22 @@ reports. Wall-time cancellation, a lost reply, a cancelled native tool and the
 Agent's assertion that background work will wake it are not evidence that an
 analysis is complete or safe to replay. Persistent authorization, resource-path
 discovery and real background wakeup remain separate work.
+
+## Defaults chosen afterwards
+
+The user then chose Claude Code's Auto permission mode as the default and no turn limit. Rho
+now sets no step cap (`maxAgentTurns`) and no message wall time (`turnWallMs`) unless a
+`--limits` file names them; output, line and record limits remain, and the person can stop a
+message. Agent 0.4.26 (Rho-plugins `2a9cd421`) passes Claude Code a step cap only when one is
+set, and applies `preferred` settings to a new session. Rho prefers `mode: auto` over Manual
+(`default`); a mode chosen in Rho or named in the person's Claude settings stays, and a loaded
+session keeps its own, so this pass's P3 conversation would continue in Manual. The pinned
+`claude-agent-acp` 0.97.0 offers Auto and falls back to Accept edits, with a warning, when the
+model does not support it. Codex's adapter already opens in its auto-review mode.
+
+A stand-in ACP peer checks the result: a new session receives no `maxTurns` and is switched
+from Manual to Auto; a chosen mode, a mode from the Agent's own settings, an unoffered value
+and a loaded session are left alone; a configured cap of 64 is still passed. The P3 task has not
+been run again with these defaults. Its earlier harness answered each permission request
+itself, which the permission check stopped here, so how many requests Auto leaves and whether
+the task now finishes in one message are unmeasured.

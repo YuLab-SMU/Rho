@@ -7,7 +7,7 @@ Updated: 2026-11-02.
 The selected work includes the [dsh-rho prototype](DSH-RHO-EPISODE.md): native dsh analysis,
 reused table/figure views and a selected-row question in the same conversation. Result review,
 historical evidence, macOS 0.5.1 and the offline reader retain their [episode](REVIEW-EVIDENCE-EPISODE.md).
-Native tools remain normal; Core is optional. No Core execution behavior changed. [P3 continuity](P3-CONTINUITY-EPISODE.md) reproduced a 64-turn stop and continued it after reopening; the restarted Notebook's in-memory state did not survive, and four native choices remained.
+Native tools remain normal; Core is optional. No Core execution behavior changed. [P3 continuity](P3-CONTINUITY-EPISODE.md) reproduced a 64-turn stop and continued it after reopening; the restarted Notebook's in-memory state did not survive, and four native choices remained. Claude sessions now prefer Auto, and Rho sets no step or wall cap by default; P3 has not been rerun with them.
 
 The [research method proposal](https://github.com/YuLab-SMU/Rho-paper) centers on purpose-driven
 composition: selecting materials, arranging related views and operations, and carrying their

@@ -13,6 +13,10 @@ import type { Project } from './state.js';
 
 // Rho holds user messages and their original identities. The selected Agent plugin
 // owns the connection, native session and protocol. Reads never start a driver.
+// A new Claude Code session opens in Manual mode unless the person's Claude settings name another.
+// Rho prefers Auto ("Claude handles permission decisions"); a mode chosen in Rho or in those
+// settings stays, and a model without Auto falls back to Accept edits with the adapter's warning.
+const claudePreferred = { mode: { value: 'auto', replaces: ['default'] } };
 export const conversationLimits = {
   // Conversations kept per project, not counting the trash; starting or restoring another is
   // refused. The trash keeps as many again; past that, moving one there is refused.
@@ -41,10 +45,12 @@ export const conversationLimits = {
   maxConnections: 4, idleMs: 300000, connectTimeoutMs: 60000,
   // Permission requests kept per message; later requests are declined.
   maxPermissions: 32,
-  // Claude Code's own step limit (--max-turns) for one message.
-  maxAgentTurns: 64,
-  // One message's wall time; past it cancellation is requested, then confirmed or unknown.
-  turnWallMs: 1800000,
+  // Claude Code's own step limit (--max-turns) for one message. None unless configured: a long
+  // analysis stopped at 64 steps midway (P3, 2026-11-02), and the person stops a message at will.
+  maxAgentTurns: undefined as number | undefined,
+  // One message's wall time; past it cancellation is requested, then confirmed or unknown. None
+  // unless configured, for the same reason.
+  turnWallMs: undefined as number | undefined,
   // What Claude Code may write for one message, and in one record; past either it is stopped.
   maxOutputBytes: 33554432, maxLineBytes: 4194304,
   // Between asking a process to stop and forcing it.
@@ -562,7 +568,7 @@ export class Conversations {
   private async inspect(project: Project, backend: Backend) {
     const { ClaudeAcpConversation, CodexAcpConversation } = await import('@rho-workspace/plugin-agent/conversation');
     const common = { cwd: project.root, mcpServers: [], limits: this.limits };
-    const driver = backend === 'codex-acp' ? new CodexAcpConversation({ ...this.config.codexAcp, ...common, codex: this.config.codex }) : new ClaudeAcpConversation({ ...this.config.claudeAcp, ...common, claude: this.binary });
+    const driver = backend === 'codex-acp' ? new CodexAcpConversation({ ...this.config.codexAcp, ...common, codex: this.config.codex }) : new ClaudeAcpConversation({ preferred: claudePreferred, ...this.config.claudeAcp, ...common, claude: this.binary });
     let found: Awaited<ReturnType<typeof driver.inspect>>;
     try { found = await driver.inspect(); }
     catch (error) { throw new Fault('unavailable', error instanceof Error ? error.message : 'The Agent could not be started.'); }
@@ -716,7 +722,7 @@ export class Conversations {
       const driver = c.backend === 'codex-acp'
         ? new CodexAcpConversation({ ...this.config.codexAcp, ...common, codex: this.config.codex })
         : c.backend === 'claude-acp'
-          ? new ClaudeAcpConversation({ ...this.config.claudeAcp, ...common, claude: this.binary, plugins: [...this.config.claudeAcp?.plugins ?? [], ...await this.ports.claudePlugins?.(project) ?? []] })
+          ? new ClaudeAcpConversation({ preferred: claudePreferred, ...this.config.claudeAcp, ...common, claude: this.binary, plugins: [...this.config.claudeAcp?.plugins ?? [], ...await this.ports.claudePlugins?.(project) ?? []] })
           : new ClaudeCliConversation({ cwd: project.root, binary: this.binary, sessionId: c.nativeSessionId!, confirmed: c.confirmed, projectName: project.name ?? path.basename(project.root), mcpServers, limits: this.limits, instructions });
       this.drivers.set(key, { driver, project, conversation: c }); return driver;
     });
@@ -807,7 +813,7 @@ export class Conversations {
     let driver: AgentConversation;
     try { driver = await this.driver(project, c); }
     catch (e) { turn.state = 'failed'; turn.problem = e instanceof Fault ? e.message : 'Rho could not connect this conversation to the project.'; return; }
-    const wall = setTimeout(() => live.stop('wall-limit', 'rho'), this.limits.turnWallMs); wall.unref();
+    const wall = this.limits.turnWallMs === undefined ? undefined : setTimeout(() => live.stop('wall-limit', 'rho'), this.limits.turnWallMs); wall?.unref();
     const ticking = setInterval(() => void this.describe(live), this.describing.everyMs); ticking.unref();
     try {
       let attached = false;

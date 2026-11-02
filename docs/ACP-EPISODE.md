@@ -310,7 +310,7 @@ application budgets, not native heap/process quotas.
 | User message / saved record | 16 KiB / 8 MiB | Refuse another message before dispatch. |
 | Active turns / retained connections | 4 / 4 | Refuse extra work; evict an idle connection when possible. |
 | Idle connection / session setup | 5 minutes / 60 seconds | Close idle transport; setup timeout fails without sending a prompt. |
-| Native steps / turn wall time | 64 / 30 minutes | Native step-limit result, or cancellation followed by confirmed/unknown outcome. |
+| Native steps / turn wall time | 64 / 30 minutes (none by default since 2026-11-02) | Native step-limit result, or cancellation followed by confirmed/unknown outcome. |
 | Stdout and stderr / NDJSON line | 32 MiB per turn / 4 MiB | Close transport; retain received output and uncertainty. |
 | Retained text block / turn content | 64 KiB / 256 KiB | Mark cut text; count omitted updates; do not grow the record. |
 | Session projection (`maxObservationBytes`) | 512 KiB | Close observation on excess; retain the prior projection. Reserved within the record budget. |

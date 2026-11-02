@@ -22,9 +22,12 @@ createInterface({input:process.stdin}).on('line',line=>{
  const r=JSON.parse(line),p=r.params,reply=result=>out({id:r.id,result});
  const update=update=>out({method:'session/update',params:{sessionId:'kept-session',update}});
  if(!r.method){log({kind:'choice',value:r.result});if(permission){out({id:permission,result:{stopReason:'end_turn'}});permission=null;}return;}
- log({kind:r.method,sessionId:p?.sessionId,text:p?.prompt?.[0]?.text,mcp:p?.mcpServers?.[0]?.env?.find(x=>x.name==='RHO_AGENT_CONNECTION')?.value,plugins:p?._meta?.claudeCode?.options?.plugins});
+ log({kind:r.method,sessionId:p?.sessionId,text:p?.prompt?.[0]?.text,mcp:p?.mcpServers?.[0]?.env?.find(x=>x.name==='RHO_AGENT_CONNECTION')?.value,plugins:p?._meta?.claudeCode?.options?.plugins,...(r.method==='session/new'?{maxTurns:p?._meta?.claudeCode?.options?.maxTurns}:{})});
  if(r.method==='initialize')return reply({protocolVersion:1,agentCapabilities:{loadSession:true}});
- if(r.method==='session/new')return reply({sessionId:'kept-session'});
+ // Only when a test names one: a permission mode as Claude's adapter offers it, opened in that mode.
+ const mode=v=>({id:'mode',name:'Mode',category:'mode',type:'select',currentValue:v,options:['default','acceptEdits','plan','auto'].map(value=>({value,name:value}))});
+ if(r.method==='session/new')return reply({sessionId:'kept-session',...(process.env.RHO_ACP_MODE?{configOptions:[mode(process.env.RHO_ACP_MODE)]}:{})});
+ if(r.method==='session/set_config_option'){log({kind:'set',configId:p.configId,value:p.value});return reply({configOptions:[mode(p.value)]});}
  if(r.method==='session/load'){update({sessionUpdate:'agent_message_chunk',content:{type:'text',text:'HISTORY'}});return reply({});}
  if(r.method==='session/cancel'){if(active)out({id:active,result:{stopReason:'cancelled'}});active=null;permission=null;return;}
  if(r.method==='session/prompt'){
@@ -49,12 +52,12 @@ createInterface({input:process.stdin}).on('line',line=>{
   active=null;return reply({stopReason:'end_turn'});
  }
 });`;
-async function setup(root, budgets = {}) {
+async function setup(root, budgets = {}, env = {}) {
   const file = path.join(root, 'peer.mjs'), log = path.join(root, 'calls.jsonl');
   await fs.writeFile(file, peer); await fs.mkdir(path.join(root, 'project'), { recursive: true });
   const service = await new RhoService({ root, stateDir: path.join(root, '.service'), coreBinary: path.join(root, 'absent-core'), rscript: 'Rscript',
     codexAcp: { command: { file: process.execPath, args: [file] }, env: { RHO_ACP_TEST_LOG: log } },
-    claudeAcp: { command: { file: process.execPath, args: [file] }, env: { RHO_ACP_TEST_LOG: log } }, conversations: { stopGraceMs: 200, ...budgets } }).start();
+    claudeAcp: { command: { file: process.execPath, args: [file] }, env: { RHO_ACP_TEST_LOG: log, ...env } }, conversations: { stopGraceMs: 200, ...budgets } }).start();
   const operator = new CheckedClient({ url: service.url, token: service.adminToken }), person = new BrowserClient({ url: service.url });
   const project = await operator.call('project.open', { path: 'project' });
   return { service, operator, person, project,
@@ -89,6 +92,23 @@ test('a confirmed Agent turn limit can be continued once as a linked new message
     await f.call('conversation.send', { conversationId: id, changeId: 'lost', text: 'drop' }); await f.wait(id, ended);
     await assert.rejects(f.call('conversation.send', { conversationId: id, changeId: 'unknown-continuation', continuationOf: 't3', text: 'Continue unfinished work.' }), e => e.error.kind === 'condition');
   } finally { await f.service.close(); await fs.rm(root, { recursive: true, force: true }); }
+});
+test('a new Claude session runs in Auto without a step or wall cap unless the person or a configuration sets them', async () => {
+  const roots = [await fs.mkdtemp(path.join(shortTemp, 'rho-acp-auto-')), await fs.mkdtemp(path.join(shortTemp, 'rho-acp-capped-'))];
+  let f = await setup(roots[0], {}, { RHO_ACP_MODE: 'default' });
+  try {
+    const first = await f.call('conversation.start', { changeId: 'auto-first', text: 'hello' });
+    await f.wait(first.conversation.conversationId, ended);
+    const chosen = await f.call('conversation.start', { changeId: 'auto-chosen', text: 'hello', config: { mode: 'plan' } });
+    await f.wait(chosen.conversation.conversationId, ended);
+    assert.deepEqual((await f.calls()).filter(x => x.kind === 'session/new').map(x => x.maxTurns), [undefined, undefined]);
+    assert.deepEqual((await f.calls()).filter(x => x.kind === 'set').map(x => [x.configId, x.value]), [['mode', 'auto'], ['mode', 'plan']], 'Manual becomes Auto; a chosen mode stays');
+    await f.service.close(); f = await setup(roots[1], { maxAgentTurns: 64 }, { RHO_ACP_MODE: 'acceptEdits' });
+    const capped = await f.call('conversation.start', { changeId: 'auto-capped', text: 'hello' });
+    await f.wait(capped.conversation.conversationId, ended);
+    assert.deepEqual((await f.calls()).filter(x => x.kind === 'session/new').map(x => x.maxTurns), [64]);
+    assert.deepEqual((await f.calls()).filter(x => x.kind === 'set'), [], 'a mode from the Agent\'s own settings stays');
+  } finally { await f.service.close(); for (const root of roots) await fs.rm(root, { recursive: true, force: true }); }
 });
 test('a session error after a prompt was sent never automatically sends it in a new session', async () => {
   const root = await fs.mkdtemp(path.join(shortTemp, 'rho-acp-sent-')); let f = await setup(root);
