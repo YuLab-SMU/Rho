@@ -95,7 +95,42 @@ model does not support it. Codex's adapter already opens in its auto-review mode
 
 A stand-in ACP peer checks the result: a new session receives no `maxTurns` and is switched
 from Manual to Auto; a chosen mode, a mode from the Agent's own settings, an unoffered value
-and a loaded session are left alone; a configured cap of 64 is still passed. The P3 task has not
-been run again with these defaults. Its earlier harness answered each permission request
-itself, which the permission check stopped here, so how many requests Auto leaves and whether
-the task now finishes in one message are unmeasured.
+and a loaded session are left alone; a configured cap of 64 is still passed.
+
+## Running P3 again with the defaults
+
+The user chose to let the harness answer any remaining permission request with its one-time
+allow and started it themselves, since the permission check here would not. Each run copied the
+README and matrix into a new `/tmp` project, started an isolated service and sent the original
+question with only the original Medium effort; nothing else was configured. The session reported
+`auto` on `fusecode-lab/claude-haiku-5-5[1m]` through `claude-agent-acp` 0.97.0 both times.
+
+| Run | Bridge | Steps | Time | Permission requests | Outputs required by the README |
+| --- | --- | --- | --- | --- | --- |
+| Before (above) | 30 s | 104, then 10 | stopped at 64 turns, then 116 s | 19, then 4 | after the continuation |
+| 1 | 30 s | 62 | 4.2 min, `end_turn` | 0 | 1 of 6 when the reply ended |
+| 2 | waitMs + 30 s | 34 | 12.9 min, `end_turn` | 0 | all 6, in the shared R session |
+
+Run 1 ended without finishing. The limma cell was sent with `waitMs` 120000, as Rho's
+instructions suggest, but the Agent's MCP bridge ended every call to the service at 30 s, so the
+call came back as an unknown outcome while the cell went on running. The Agent interrupted it,
+started `nohup Rscript scripts/analysis.R` in the background (Claude Code refused `sleep` and
+pointed to Monitor), and ended its reply saying it was waiting on a Monitor. Nothing resumed it.
+The orphaned script wrote the DE table, Hallmark ORA and dotplot about five minutes later;
+`notes/findings.md` was never written.
+
+Agent 0.4.27 (Rho-plugins `1eb1d3e9`) gives a call the `waitMs` it asked for plus 30 s. In run 2 a
+cell waited 259 s and returned. Another, sent with `waitMs` 600000, still came back unknown after
+exactly 300 s: Node's fetch stops waiting for a reply's headers then, and the service answers a
+waited cell only when it ends. The Agent read the session, found the cell running and sent the
+same change identity again, which returned that cell rather than a second one, and went on. The
+bridge now uses `node:http`; a 310 s cell sent through it with `waitMs` 400000 returned `done` after
+310 s. Whether Claude Code's own MCP call limit allows such a call was not observed.
+
+Run 2 stayed in the Notebook throughout, wrote the six outputs and a paired-only alternative, and
+checked its own claim that the alternative was "essentially unchanged" before keeping numbers
+(1,043 shared DEGs, logFC correlation 0.995). For ten minutes after the reply the service stayed
+up and nothing changed. Its counts equal the earlier literature run's: 1,111 DEGs (833 up in CD68,
+278 down) and 13 of 50 Hallmark sets, led by allograft rejection (BH 2.8e-7). That is agreement
+between runs on the same data, not a check against the paper, which the README gives no numbers
+for. One run each is not a rate; the harness, not a person, would have answered any request.

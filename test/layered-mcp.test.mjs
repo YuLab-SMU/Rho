@@ -13,7 +13,7 @@ import { validateResponse, responseProblems } from '../dist/contract-runtime.js'
 const require=createRequire(import.meta.resolve('@rho-workspace/plugin-agent'));
 const {Client}=await import(pathToFileURL(require.resolve('@modelcontextprotocol/sdk/client/index.js')));
 const {StdioClientTransport}=await import(pathToFileURL(require.resolve('@modelcontextprotocol/sdk/client/stdio.js')));
-async function connect(file,measures=[]){const client=new Client({name:'layered-acceptance',version:'1.0'}),transport=new StdioClientTransport({command:process.execPath,args:[fileURLToPath(import.meta.resolve('@rho-workspace/plugin-agent/mcp'))],env:{PATH:process.env.PATH,RHO_AGENT_CONNECTION:file},stderr:'pipe'});transport.stderr.resume();await client.connect(transport);const original=client.callTool.bind(client);client.callTool=async(...args)=>{const reply=await original(...args);measures.push({tool:args[0].name,requestBytes:Buffer.byteLength(JSON.stringify(args[0].arguments)),textBytes:Buffer.byteLength(reply.content[0].text),isError:!!reply.isError,structuredCopy:'structuredContent' in reply});return reply;};return client;}
+async function connect(file,measures=[],env={}){const client=new Client({name:'layered-acceptance',version:'1.0'}),transport=new StdioClientTransport({command:process.execPath,args:[fileURLToPath(import.meta.resolve('@rho-workspace/plugin-agent/mcp'))],env:{PATH:process.env.PATH,RHO_AGENT_CONNECTION:file,...env},stderr:'pipe'});transport.stderr.resume();await client.connect(transport);const original=client.callTool.bind(client);client.callTool=async(...args)=>{const reply=await original(...args);measures.push({tool:args[0].name,requestBytes:Buffer.byteLength(JSON.stringify(args[0].arguments)),textBytes:Buffer.byteLength(reply.content[0].text),isError:!!reply.isError,structuredCopy:'structuredContent' in reply});return reply;};return client;}
 async function call(client,name,input){const reply=await client.callTool({name,arguments:input});assert.equal('structuredContent' in reply,false);assert.equal(reply.content.length,1);return JSON.parse(reply.content[0].text);}
 const query={after:0,cursor:null,limit:100,maxBytes:65536};
 test('default progressive MCP pages whole contracts, reuses knownRefs, keeps resolved knowledge across messages of one connection and rejects stale authorization',async()=>{
@@ -85,6 +85,22 @@ test('the default Agent grant can discover what it was granted: every operation 
  const file=path.join(root,'default.private.json'),grant=await service.agentConnection(p.id,'default',file);assert.ok(grant.methods.includes('selection.set'));
  client=await connect(file);const groups=await call(client,'rho_index',{});assert.equal(groups.ok,true,JSON.stringify(groups.error));
  for(const {owner} of groups.value.groups){const page=await call(client,'rho_index',{owner,cursor:null,maxBytes:65536});assert.equal(page.ok,true,owner+' '+JSON.stringify(page.error));}
+ }finally{await client?.close();await service.close();await fs.rm(root,{recursive:true,force:true});}
+});
+// The bridge's own allowance (30 s, 0.5 s here) once ended a cell the Agent was waiting for,
+// within the wait it asked for, with an unknown outcome; P3 then left the shared session.
+test('a Notebook call waits as long as the Agent asked, beyond the bridge\'s own allowance',async()=>{
+ const root=await fs.mkdtemp(path.join(os.tmpdir(),'rho-layered-wait-')),service=await new RhoService({root,stateDir:path.join(root,'state'),coreBinary:'/missing',rscript:'/missing',python:process.env.RHO_PYTHON,plugins:['kernel','agent']}).start();let client;
+ try{
+ const admin=new RhoClient({url:service.url,token:service.adminToken}),p=await admin.call('project.create',{name:'project'});
+ const file=path.join(root,'wait.private.json');await service.agentConnection(p.id,'wait',file,['kernel.run']);
+ client=await connect(file,[],{RHO_TRANSPORT_MS:'500'});
+ const index=await call(client,'rho_index',{owner:'kernel',cursor:null,maxBytes:65536}),entry=index.value.entries.find(e=>e.id==='kernel.run');assert.ok(entry,JSON.stringify(index));
+ let input={catalogRef:index.value.catalogRef,selected:['kernel.run'],knownRefs:[],cursor:null,maxBytes:65536},page=await call(client,'rho_resolve',input);
+ for(let n=0;n<20&&page.ok&&!page.value.complete;n++){input=page.value.requiredBytes?{...input,maxBytes:page.value.requiredBytes}:{...input,cursor:page.value.next};page=await call(client,'rho_resolve',input);}
+ assert.equal(page.value?.complete,true,JSON.stringify(page));
+ const ran=await call(client,'rho_call',{operation:'kernel.run',contractRef:entry.contractRef,input:{language:'python',code:'import time\ntime.sleep(1.5)\nslept = True',purpose:'Wait longer than the transport allowance',changeId:'long-cell',waitMs:10000}});
+ assert.equal(ran.ok,true,JSON.stringify(ran.error));assert.equal(ran.value.cell.state,'done');
  }finally{await client?.close();await service.close();await fs.rm(root,{recursive:true,force:true});}
 });
 test('incomplete schema closure and forged immutable bodies never become executable cache proofs',async()=>{
