@@ -10,16 +10,24 @@ whose runners are free for a public repository on all four machines used here.
 
 `components.json` selects the Core commit (`6f83226`, then `8bed8ef` after the sixth run) and the
 Plugins commit (`491c440`, then `0b17877` and `90e68cf` after the third and fourth runs) the
-application is built from. On every push to `main`, pull request and `v*` tag,
-[`ci.yml`](../.github/workflows/ci.yml):
+application is built from. On each push to `main` and pull request that changes more than
+documentation, [`ci.yml`](../.github/workflows/ci.yml):
 
 | Job | Runner | What it does |
 | --- | --- | --- |
-| Core | macos-15, ubuntu-24.04, ubuntu-24.04-arm, windows-2022 | Builds the selected Core with Rust 1.97.0, dev profile without debug info: Mach-O arm64, static musl Linux x64 and arm64, MSVC Windows x64 |
+| Core | macos-15, ubuntu-24.04, ubuntu-24.04-arm, windows-2022 | Builds the selected Core with Rust 1.97.0, dev profile without debug info: Mach-O arm64, static musl Linux x64 and arm64, MSVC Windows x64; reuses a Core commit already built |
 | Test | macos-15, ubuntu-24.04, windows-2022 | Builds the selected Plugins and Rho, runs Rho's suite with that platform's Core |
 | Pack | ubuntu-24.04 | `pack:local` with all four Cores; checks the platforms, Linux linkage, clean inputs and commit |
 | Install | all four | [`ci-install-check.mjs`](../scripts/ci-install-check.mjs): digest, offline install with an empty npm cache, the launcher, the packaged recovery and ordinary-project acceptances |
-| Publish | ubuntu-24.04, environment `npm` | Only for a `v*` tag, after Test and Install: publishes the candidate that run packed |
+
+A `v*` tag runs [`release.yml`](../.github/workflows/release.yml) instead:
+
+| Job | What it does |
+| --- | --- |
+| Find | The successful CI run on `main` for the tagged commit that still keeps its candidate |
+| CI | Only when Find found none: `ci.yml` as above, in this run |
+| Verify | [`release-check.mjs`](../scripts/release-check.mjs): digest, the commit and run that packed it, the four installation reports, name and the tag's version |
+| Publish | Environment `npm`: `npm publish --provenance` of that candidate |
 
 The installed check verifies the tarball against `SHA256SUMS` and its composition, installs it
 outside every checkout with `--offline` and an empty cache, and runs the `rho` shim's usage. The
@@ -28,12 +36,13 @@ on SIGTERM with its shutdown report, or on Windows, where a CI step cannot send 
 its process tree with no project open. It then runs the packaged recovery acceptance and the packaged
 acceptance of Plugins' `examples/ordinary-r-project` from the installation.
 
-The publish job checks out and builds nothing. It downloads the candidate, checks its digest, that
-the package is `@rho-workspace/rho`, not private, has the tag's version and was packed from the
-tagged commit, then runs `npm publish --provenance --access public` with `NPM_TOKEN`, a repository
-secret that no other job names. The job's environment `npm` has no reviewer. A version with a prerelease
-suffix goes to the `next` dist-tag, any other to `latest`. A candidate's composition names the run
-that packed it (`build.run`).
+The release builds nothing when CI already tested the commit. Verify checks that the candidate's
+composition names the tagged commit and the run it came from (`build.run`), that each platform's
+installation report passed with this tarball, and that the package is `@rho-workspace/rho`, not
+private, with the tag's version. Publish runs `npm publish --provenance --access public` with
+`NPM_TOKEN`, a repository secret that no other job names; its environment `npm` has no reviewer. A
+version with a prerelease suffix goes to the `next` dist-tag, any other to `latest`. Run by hand on
+`main`, the release rehearses everything but Publish.
 
 ## Before the first run
 
@@ -207,6 +216,28 @@ Run [41379100841](https://github.com/YuLab-SMU/Rho/actions/runs/41379100841) on 
 
 On Windows the repair test took 4.2 s in the suite (47 to 48 s before), the cmd.exe test 2.3 s,
 and MCP v2 40.2 s: past its old limit under the suite's load, within the new one.
+
+## Shorter runs and releases without rebuilding
+
+After the seventh run the user asked why a small project's runs took so long, and asked that
+documentation and releases not rerun everything. A run took 5.5 to 6.6 minutes and about 22 runner
+minutes; the first run took 24 because a test hung. On the longest path the Core build took 40 to
+65 s, Windows tests 4 min 44 s (setup about a minute, the Plugins build 51 s, Rho's checks and build
+about a minute, the suite 110 s against 51 s on Linux) and the Windows installation 2 to 2.8 min,
+91 s of it the offline install. Every push to `main` ran it, documentation included, and a tag ran it
+again before publishing.
+
+`b2d5f401` changed that. CI skips documentation alone, apart from the shipped pages and the Status and
+ledger a test reads; a Core commit is built once and then taken from the cache; test jobs cache npm
+downloads; the R probe prints only on failure. A tag runs `release.yml`, which reuses the tested
+candidate of its commit. Turning off Windows Defender's real-time scanning on the runners was also
+proposed, to shorten the offline install; the permission check stopped it, and it is left to the user.
+
+Run [41383999412](https://github.com/YuLab-SMU/Rho/actions/runs/41383999412) on `b2d5f401` built the
+Cores once more to fill the cache and passed every job in 6 min 30 s. A rehearsal by hand,
+[41384593699](https://github.com/YuLab-SMU/Rho/actions/runs/41384593699), found that run, verified its
+candidate `36914452…` against the commit, the run and the four installation reports, and ended after
+19 s without publishing.
 
 ## Publication
 

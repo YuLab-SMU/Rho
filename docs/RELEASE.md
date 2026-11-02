@@ -158,9 +158,11 @@ release or signing was performed. CI now packs one tarball for all four platform
 
 ## CI and npm publication
 
-[`ci.yml`](../.github/workflows/ci.yml) runs on every push to `main`, pull request and `v*` tag.
+[`ci.yml`](../.github/workflows/ci.yml) runs on each push to `main` and pull request that changes
+more than documentation; the pages the package ships and the Status and ledger a test reads count.
 `components.json` selects the Core and Plugins commits. CI builds the four Cores from that Core
-commit (macOS arm64; static musl Linux x64 and arm64; MSVC Windows x64), runs Rho's suite on macOS
+commit (macOS arm64; static musl Linux x64 and arm64; MSVC Windows x64), reusing a Core commit it
+has already built, runs Rho's suite on macOS
 arm64, Linux x64 and Windows x64, and packs one candidate with all four Cores. Each of the four
 platforms installs it offline with an empty npm cache and runs `scripts/ci-install-check.mjs`: the
 launcher with its own Core and the shipped project, then the packaged recovery and ordinary-project
@@ -168,12 +170,17 @@ acceptances. The composition names the run that packed it. What the first runs f
 [CI episode](CI-EPISODE.md).
 
 The package is `@rho-workspace/rho`; the source checkout stays private and the staged package is
-public. A `v*` tag naming the version in `package.json` publishes the candidate its own run built,
-tested and installed. The publish job checks out and builds nothing. It verifies the digest, name,
-version and commit, then runs `npm publish --provenance` with the repository secret `NPM_TOKEN`,
+public. A `v*` tag naming the version in `package.json` runs
+[`release.yml`](../.github/workflows/release.yml). It takes the candidate of the successful CI run on
+`main` for the tagged commit and builds nothing; only when no such run kept its candidate (a
+documentation-only commit, or past GitHub's artifact retention) does it run CI first.
+[`release-check.mjs`](../scripts/release-check.mjs) verifies the digest, that run and commit, the four
+installation reports, the name and the tag's version. Then `npm publish --provenance` runs with the
+repository secret `NPM_TOKEN`,
 which no other job names and GitHub does not give to pull requests from forks. A prerelease version
 goes to the `next` dist-tag, any other to `latest`; npm makes a package's first version `latest`
 whatever the tag. The job runs in the GitHub environment `npm`, which records each publication as a
 deployment; it has no required reviewer, so a tag whose run passes publishes without waiting for a
-person. The npm organization `rho-workspace` and a token that can publish there without a one-time
-password must exist before the first tag. No version has been published.
+person. Run by hand on `main`, the release rehearses everything but the publication. The npm
+organization `rho-workspace` and a token that can publish there without a one-time password must
+exist before the first tag. No version has been published.
