@@ -78,7 +78,8 @@ jobs:
   publish:
     name: Publish to npm
     needs: verify
-    if: github.event_name == 'push'
+    # A skipped CI job upstream would skip this one too without an explicit status check.
+    if: ${{ !cancelled() && needs.verify.result == 'success' && github.event_name == 'push' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     # NPM_TOKEN is a repository secret that only this job names. The environment records each
