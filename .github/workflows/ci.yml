@@ -1,0 +1,238 @@
+# Builds the four Cores from the Core commit Rho selects (components.json), tests Rho on macOS,
+# Linux and Windows, packs one candidate for every platform and installs it offline on each.
+# A v* tag then publishes that same candidate to npm: the publish job builds nothing.
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  NODE_VERSION: '22'
+
+jobs:
+  core:
+    name: Core ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { platform: darwin-arm64, os: macos-15, target: aarch64-apple-darwin, exe: rho-core }
+          - { platform: linux-x64, os: ubuntu-24.04, target: x86_64-unknown-linux-musl, exe: rho-core }
+          - { platform: linux-arm64, os: ubuntu-24.04-arm, target: aarch64-unknown-linux-musl, exe: rho-core }
+          - { platform: win32-x64, os: windows-2022, target: x86_64-pc-windows-msvc, exe: rho-core.exe }
+    env:
+      # The dev profile without debug info, as the Cores were built and tested for 0.5.1 and 0.5.2.
+      CARGO_PROFILE_DEV_DEBUG: '0'
+      CC_x86_64_unknown_linux_musl: musl-gcc
+      CC_aarch64_unknown_linux_musl: musl-gcc
+    steps:
+      - run: git config --global core.autocrlf false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { path: Rho, sparse-checkout: components.json, sparse-checkout-cone-mode: false, persist-credentials: false }
+      - id: pins
+        run: node -e 'const c=require("./Rho/components.json");console.log("core="+c.core.commit)' >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { repository: YuLab-SMU/Rho-core, ref: '${{ steps.pins.outputs.core }}', path: Rho-core, persist-credentials: false }
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update -q && sudo apt-get install -y -q musl-tools
+      - name: Build
+        working-directory: Rho-core
+        run: |
+          rustup toolchain install
+          rustup target add ${{ matrix.target }}
+          rustc --version && cargo --version
+          cargo build --locked --target ${{ matrix.target }}
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with: { name: 'core-${{ matrix.platform }}', path: 'Rho-core/target/${{ matrix.target }}/debug/${{ matrix.exe }}', if-no-files-found: error }
+
+  test:
+    name: Test ${{ matrix.platform }}
+    needs: core
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { platform: darwin-arm64, os: macos-15, exe: rho-core }
+          - { platform: linux-x64, os: ubuntu-24.04, exe: rho-core }
+          - { platform: win32-x64, os: windows-2022, exe: rho-core.exe }
+    steps:
+      - run: git config --global core.autocrlf false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { path: Rho, persist-credentials: false }
+      - id: pins
+        run: node -e 'const c=require("./Rho/components.json");console.log("plugins="+c.plugins.commit)' >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { repository: YuLab-SMU/Rho-plugins, ref: '${{ steps.pins.outputs.plugins }}', path: Rho-plugins, persist-credentials: false }
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with: { node-version: '${{ env.NODE_VERSION }}', package-manager-cache: false }
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with: { python-version: '3.13' }
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update -q && sudo apt-get install -y -q r-base-core
+      - if: runner.os != 'Linux'
+        uses: r-lib/actions/setup-r@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05 # v2.14.0
+        with: { r-version: release }
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with: { name: 'core-${{ matrix.platform }}', path: '${{ runner.temp }}/core' }
+      - run: chmod +x "$RUNNER_TEMP/core/${{ matrix.exe }}"
+      - name: Build the Plugins
+        working-directory: Rho-plugins
+        run: npm ci --no-audit --no-fund && npm run build
+      - name: Test Rho
+        working-directory: Rho
+        env:
+          RHO_CORE_BINARY: '${{ runner.temp }}/core/${{ matrix.exe }}'
+        run: |
+          node --version && Rscript --version && python --version
+          npm ci --no-audit --no-fund
+          npm test
+
+  pack:
+    name: Pack the candidate
+    needs: core
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { path: Rho, persist-credentials: false }
+      - id: pins
+        run: node -e 'const c=require("./Rho/components.json");console.log("core="+c.core.commit);console.log("plugins="+c.plugins.commit)' >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { repository: YuLab-SMU/Rho-plugins, ref: '${{ steps.pins.outputs.plugins }}', path: Rho-plugins, persist-credentials: false }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { repository: YuLab-SMU/Rho-core, ref: '${{ steps.pins.outputs.core }}', path: Rho-core, persist-credentials: false }
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with: { node-version: '${{ env.NODE_VERSION }}', package-manager-cache: false }
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with: { pattern: 'core-*', path: '${{ runner.temp }}/cores' }
+      - name: Build the Plugins
+        working-directory: Rho-plugins
+        run: npm ci --no-audit --no-fund && npm run build
+      - name: Pack
+        working-directory: Rho
+        run: |
+          npm ci --no-audit --no-fund
+          C="$RUNNER_TEMP/cores"
+          node scripts/pack-local.mjs \
+            --core darwin-arm64="$C/core-darwin-arm64/rho-core" --core linux-arm64="$C/core-linux-arm64/rho-core" \
+            --core linux-x64="$C/core-linux-x64/rho-core" --core win32-x64="$C/core-win32-x64/rho-core.exe" \
+            --core-source ../Rho-core --plugins ../Rho-plugins --destination "$RUNNER_TEMP/candidate"
+      - name: Check the composition
+        run: |
+          node - "$RUNNER_TEMP/candidate/composition.json" <<'EOF'
+          const c = JSON.parse(require('fs').readFileSync(process.argv[2], 'utf8')), assert = require('assert/strict');
+          assert.deepEqual(c.platforms, ['darwin-arm64', 'linux-arm64', 'linux-x64', 'win32-x64']);
+          for (const p of ['linux-arm64', 'linux-x64']) assert.equal(c.core.artifacts[p].linkage, 'static', p);
+          for (const owner of ['application', 'plugins', 'core']) assert.equal(c[owner].localOverride, null, owner);
+          assert.equal(c.application.commit, process.env.GITHUB_SHA);
+          console.log(c.artifact.filename, c.artifact.bytes, 'bytes', c.artifact.sha256);
+          EOF
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: candidate
+          if-no-files-found: error
+          path: |
+            ${{ runner.temp }}/candidate/*.tgz
+            ${{ runner.temp }}/candidate/composition.json
+            ${{ runner.temp }}/candidate/SHA256SUMS
+
+  install:
+    name: Install ${{ matrix.platform }}
+    needs: pack
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { platform: darwin-arm64, os: macos-15 }
+          - { platform: linux-x64, os: ubuntu-24.04 }
+          - { platform: linux-arm64, os: ubuntu-24.04-arm }
+          - { platform: win32-x64, os: windows-2022 }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { path: Rho, sparse-checkout: "components.json\nscripts/ci-install-check.mjs", sparse-checkout-cone-mode: false, persist-credentials: false }
+      - id: pins
+        run: node -e 'const c=require("./Rho/components.json");console.log("plugins="+c.plugins.commit)' >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { repository: YuLab-SMU/Rho-plugins, ref: '${{ steps.pins.outputs.plugins }}', path: Rho-plugins, sparse-checkout: examples/ordinary-r-project, persist-credentials: false }
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with: { node-version: '${{ env.NODE_VERSION }}', package-manager-cache: false }
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update -q && sudo apt-get install -y -q r-base-core
+      - if: runner.os != 'Linux'
+        uses: r-lib/actions/setup-r@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05 # v2.14.0
+        with: { r-version: release }
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with: { name: candidate, path: '${{ runner.temp }}/candidate' }
+      - name: Install and run the candidate
+        run: node Rho/scripts/ci-install-check.mjs "$RUNNER_TEMP/candidate" Rho-plugins/examples/ordinary-r-project "install-${{ matrix.platform }}.json"
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with: { name: 'install-${{ matrix.platform }}', path: 'install-${{ matrix.platform }}.json', if-no-files-found: warn }
+
+  publish:
+    name: Publish to npm
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [test, install]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    # NPM_TOKEN lives only in this environment, so no build or test job can read it.
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with: { node-version: '${{ env.NODE_VERSION }}', registry-url: 'https://registry.npmjs.org', package-manager-cache: false }
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with: { name: candidate, path: candidate }
+      - name: Verify the candidate this run tested
+        id: verify
+        working-directory: candidate
+        run: |
+          sha256sum -c SHA256SUMS
+          node - <<'EOF' >> "$GITHUB_OUTPUT"
+          const fs = require('fs'), assert = require('assert/strict'), { execFileSync } = require('child_process');
+          const c = JSON.parse(fs.readFileSync('composition.json', 'utf8'));
+          const m = JSON.parse(execFileSync('tar', ['-xOzf', c.artifact.filename, 'package/package.json'], { encoding: 'utf8' }));
+          assert.equal(m.name, '@rho-workspace/rho'); assert.equal(m.private, undefined);
+          assert.equal('v' + m.version, process.env.GITHUB_REF_NAME, 'The tag names another version');
+          assert.equal(c.application.commit, process.env.GITHUB_SHA);
+          console.log('tarball=' + c.artifact.filename);
+          console.log('dist-tag=' + (m.version.includes('-') ? 'next' : 'latest'));
+          EOF
+      - name: Publish
+        working-directory: candidate
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish "./${{ steps.verify.outputs.tarball }}" --access public --provenance --tag "${{ steps.verify.outputs.dist-tag }}"
+      - name: Record the publication
+        working-directory: candidate
+        run: |
+          {
+            echo "Published \`@rho-workspace/rho@${GITHUB_REF_NAME#v}\` (dist-tag \`${{ steps.verify.outputs.dist-tag }}\`)."
+            echo
+            echo '```'
+            cat SHA256SUMS
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
