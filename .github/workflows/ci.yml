@@ -122,9 +122,8 @@ jobs:
         run: node -e 'const c=require("./Rho/components.json");console.log("plugins="+c.plugins.commit)' >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { repository: YuLab-SMU/Rho-plugins, ref: '${{ steps.pins.outputs.plugins }}', path: Rho-plugins, persist-credentials: false }
-      # npm checks every cached package against the lockfile's integrity.
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with: { node-version: '${{ env.NODE_VERSION }}', cache: npm, cache-dependency-path: "Rho/package-lock.json\nRho-plugins/package-lock.json" }
+        with: { node-version: '${{ env.NODE_VERSION }}', package-manager-cache: false }
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with: { python-version: '3.13' }
       # The suite's R scripts use base R of 4.5 and later (tools::sha256sum); Ubuntu's own R is 4.3.
@@ -144,7 +143,8 @@ jobs:
         run: |
           node --version && Rscript --version && python --version
           npm ci --no-audit --no-fund
-          npm run check:contracts
+          # Generated contracts and type checks are the same on every system; Linux runs them.
+          if [ "$RUNNER_OS" = Linux ]; then npm run check:contracts; fi
           npm test
       # What Rho's R dependency probe sees when the suite fails, and on Windows again with Rtools' MSYS
       # tools first on PATH, where every R run was once refused.
