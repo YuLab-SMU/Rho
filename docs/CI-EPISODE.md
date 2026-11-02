@@ -370,6 +370,14 @@ took 7 to 9 s on C: and 1.3 s on D:, so most of npm's time there is its own work
 `ci-install-check.mjs` now installs in `RUNNER_TEMP` on Windows and keeps the name with spaces, Chinese and
 the `rho ci` prefix; its report adds the package's file count.
 
+Run [41398273893](https://github.com/YuLab-SMU/Rho/actions/runs/41398273893) on `1ae9d07f` passed every job
+in 5 min 7 s, against 5 min 46 s before. Its candidate `131bd5f9…` has 3,030 files and 22,698,817 bytes.
+The offline install took 19.1 s on Windows (91 to 134 s in earlier runs), 8.8 s on macOS, 6.0 s on Linux
+arm64 and 3.6 s on Linux x64, and each installation passed recovery 7 and the ordinary project 7. The
+Windows installation job took 90 s instead of 152 to 210 s. The suite passed 277/279 on macOS and Linux
+and 264/279 on Windows (15 skipped), the two new pruning tests included. The longest path is now
+Linux x64's tests, 4 min 41 s.
+
 Not done: removing the CommonJS builds no Rho consumer requires (about 440 more files: zod's `.cjs`,
 hono, the MCP SDK, zod-to-json-schema, diff) needs a reachability check first, since some bundled CommonJS
 code does require these packages. KaTeX's WOFF and TTF fonts beside WOFF2 are 40 files. A person's
