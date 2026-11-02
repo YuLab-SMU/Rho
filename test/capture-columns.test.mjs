@@ -2,9 +2,12 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { tmpdir } from 'node:os';
 import { RhoService } from '../dist/server.js';
 import { BrowserClient } from '../dist/browser.js';
 import { RhoClient } from '../dist/client.js';
+// A Unix Host's socket lies under its project, within the socket path limit; Windows Hosts use pipes.
+const shortTemp = process.platform === 'win32' ? tmpdir() : '/tmp';
 
 // An Agent whose table gains a column with each message.
 const peer = `import fs from 'node:fs';import readline from 'node:readline';let n=0;const out=v=>process.stdout.write(JSON.stringify({jsonrpc:'2.0',...v})+'\\n');
@@ -14,7 +17,7 @@ if(r.method==='session/prompt'){n++;const cols=Array.from({length:n+1},(_,i)=>'c
 out({method:'session/update',params:{sessionId:'test',update:{sessionUpdate:'tool_call',toolCallId:'w'+n,title:'Write',kind:'edit',status:'completed',locations:[{path:process.cwd()+'/t.csv'}],rawInput:{file_path:process.cwd()+'/t.csv'}}}});reply({stopReason:'end_turn'});}});`;
 
 test('a table version whose columns changed is declared from its own header, so every kept version pages', async () => {
-  const root = await fs.mkdtemp('/tmp/rho-capture-columns-'); let service;
+  const root = await fs.mkdtemp(path.join(shortTemp, 'rho-capture-columns-')); let service;
   try {
     await fs.writeFile(path.join(root, 'peer.mjs'), peer); await fs.mkdir(path.join(root, 'project'));
     service = await new RhoService({ root, stateDir: path.join(root, '.service'), rscript: '/missing', claudeAcp: { command: { file: process.execPath, args: [path.join(root, 'peer.mjs')] } } }).start();

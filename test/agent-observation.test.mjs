@@ -2,14 +2,17 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { tmpdir } from 'node:os';
 import { spawn, spawnSync } from 'node:child_process';
 import { once } from 'node:events';
 import { digest } from '@rho-workspace/plugin-contracts';
 import { RhoService, layeredGrantLimits } from '../dist/server.js';
 import { CheckedClient } from './checked-client.mjs';
+// A Unix Host's socket lies under its project, within the socket path limit; Windows Hosts use pipes.
+const shortTemp = process.platform === 'win32' ? tmpdir() : '/tmp';
 
 test('browser observes only its project and selected caller; reads never create a Host or widen default Agent grants', async () => {
-  const root = await fs.realpath(await fs.mkdtemp('/tmp/rho-activity-api-'));
+  const root = await fs.realpath(await fs.mkdtemp(path.join(shortTemp, 'rho-activity-api-')));
   const binary = process.env.RHO_CORE_BINARY;
   assert.ok(binary, 'Select the activity-capable public Core binary');
   const service = await new RhoService({ root, stateDir: path.join(root, '.service'), coreBinary: binary, rscript: '/missing' }).start();

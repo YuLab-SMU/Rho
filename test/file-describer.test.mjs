@@ -2,12 +2,15 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { tmpdir } from 'node:os';
 import { RhoService } from '../dist/server.js';
 import { BrowserClient } from '../dist/browser.js';
 import { RhoClient } from '../dist/client.js';
 import { fileFacts, describedFiles, holdsOf, figureContext } from '../dist/file-describer.js';
 import http from 'node:http';
 import { createHash } from 'node:crypto';
+// A Unix Host's socket lies under its project, within the socket path limit; Windows Hosts use pipes.
+const shortTemp = process.platform === 'win32' ? tmpdir() : '/tmp';
 
 const png = (w, h) => { const b = Buffer.alloc(33); b.writeUInt32BE(0x89504e47, 0); b.writeUInt32BE(0x0d0a1a0a, 4); b.writeUInt32BE(13, 8); b.write('IHDR', 12, 'latin1'); b.writeUInt32BE(w, 16); b.writeUInt32BE(h, 20); return b; };
 
@@ -58,7 +61,7 @@ const catalog = { local: { models: {
 // Windows starts a script only through a shell, so a stand-in client cannot be started there.
 const stand = { skip: process.platform === 'win32' && 'the stand-in client is a script' };
 test('while a message runs, its files get facts at once and a sentence: a figure as an image to a model that takes images, else from what made it', stand, async () => {
-  const root = await fs.mkdtemp('/tmp/rho-describe-turn-'); let service;
+  const root = await fs.mkdtemp(path.join(shortTemp, 'rho-describe-turn-')); let service;
   const listing = http.createServer((_, res) => res.end(JSON.stringify(catalog)));
   await new Promise(r => listing.listen(0, '127.0.0.1', r));
   try {

@@ -5,9 +5,12 @@ import {RhoService} from '../dist/server.js';
 import {BrowserClient} from '../dist/browser.js';
 import {RhoClient} from '../dist/client.js';
 import path from 'node:path';
+import { tmpdir } from 'node:os';
+// A Unix Host's socket lies under its project, within the socket path limit; Windows Hosts use pipes.
+const shortTemp = process.platform === 'win32' ? tmpdir() : '/tmp';
 const peer=`import fs from 'node:fs';import readline from 'node:readline';let n=0;const out=v=>process.stdout.write(JSON.stringify({jsonrpc:'2.0',...v})+'\\n');readline.createInterface({input:process.stdin}).on('line',l=>{const r=JSON.parse(l),reply=result=>out({id:r.id,result});if(r.method==='initialize')reply({protocolVersion:1,agentCapabilities:{loadSession:true}});if(r.method==='session/new')reply({sessionId:'test'});if(r.method==='session/load')reply({});if(r.method==='session/prompt'){n++;fs.writeFileSync('analysis.py','print('+n+')\\n');out({method:'session/update',params:{sessionId:'test',update:{sessionUpdate:'tool_call',toolCallId:'write-'+n,title:'Write',kind:'edit',status:'completed',locations:[{path:process.cwd()+'/analysis.py'}],rawInput:{file_path:process.cwd()+'/analysis.py'}}}});reply({stopReason:'end_turn'});}});`;
 test('new turns capture immutable disk and dirty buffer versions; reads and retries do not repeat work',async()=>{
- const root=await fs.mkdtemp('/tmp/rho-evidence-turn-');let service;
+ const root=await fs.mkdtemp(path.join(shortTemp, 'rho-evidence-turn-'));let service;
  try{
  await fs.writeFile(path.join(root,'peer.mjs'),peer);await fs.mkdir(path.join(root,'project'));
  service=await new RhoService({root,stateDir:path.join(root,'.service'),rscript:'/missing',claudeAcp:{command:{file:process.execPath,args:[path.join(root,'peer.mjs')]}}}).start();

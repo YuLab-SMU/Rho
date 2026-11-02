@@ -2,12 +2,15 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { tmpdir } from 'node:os';
 import { RhoService, layeredGrantLimits } from '../dist/server.js';
 import { BrowserClient } from '../dist/browser.js';
 import { RhoClient } from '../dist/client.js';
+// A Unix Host's socket lies under its project, within the socket path limit; Windows Hosts use pipes.
+const shortTemp = process.platform === 'win32' ? tmpdir() : '/tmp';
 
 async function setup(t) {
-  const root = await fs.mkdtemp('/tmp/rho-notebook-');
+  const root = await fs.mkdtemp(path.join(shortTemp, 'rho-notebook-'));
   await fs.mkdir(path.join(root, 'project'));
   const service = await new RhoService({ root, stateDir: path.join(root, '.service'), rscript: '/missing', python: process.env.RHO_PYTHON }).start();
   t.after(async () => { await service.close(); await fs.rm(root, { recursive: true, force: true }); });

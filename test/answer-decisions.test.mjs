@@ -2,9 +2,12 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { tmpdir } from 'node:os';
 import { RhoService } from '../dist/server.js';
 import { BrowserClient } from '../dist/browser.js';
 import { RhoClient } from '../dist/client.js';
+// A Unix Host's socket lies under its project, within the socket path limit; Windows Hosts use pipes.
+const shortTemp = process.platform === 'win32' ? tmpdir() : '/tmp';
 
 // An Agent that reads the same unchanged data file many times, then writes its result.
 const peer = `import fs from 'node:fs';import readline from 'node:readline';
@@ -21,7 +24,7 @@ readline.createInterface({input:process.stdin}).on('line',l=>{const r=JSON.parse
   reply({stopReason:'end_turn'});}});`;
 
 async function setup(t, conversations = {}) {
-  const root = await fs.mkdtemp('/tmp/rho-decisions-');
+  const root = await fs.mkdtemp(path.join(shortTemp, 'rho-decisions-'));
   await fs.writeFile(path.join(root, 'peer.mjs'), peer); await fs.mkdir(path.join(root, 'project'));
   await fs.writeFile(path.join(root, 'project', 'data.csv'), 'id,x\n1,2\n');
   const service = await new RhoService({ root, stateDir: path.join(root, '.service'), rscript: '/missing', conversations, claudeAcp: { command: { file: process.execPath, args: [path.join(root, 'peer.mjs')] } } }).start();

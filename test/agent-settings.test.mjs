@@ -2,9 +2,12 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { tmpdir } from 'node:os';
 import { RhoService } from '../dist/server.js';
 import { CheckedClient } from './checked-client.mjs';
 import { BrowserClient } from '../dist/browser.js';
+// A Unix Host's socket lies under its project, within the socket path limit; Windows Hosts use pipes.
+const shortTemp = process.platform === 'win32' ? tmpdir() : '/tmp';
 
 // An ACP peer that offers a model and an effort setting, and answers with the model in use.
 const peer = `import fs from 'node:fs';
@@ -47,7 +50,7 @@ const ended = r => r.turns.at(-1).state !== 'running';
 const current = (holder, id) => (holder.config ?? holder).options.find(o => o.id === id).current;
 
 test('Agent settings are offered, chosen, applied before the first message and changed between messages', async () => {
-  const root = await fs.mkdtemp('/tmp/rho-agent-settings-'), f = await setup(root);
+  const root = await fs.mkdtemp(path.join(shortTemp, 'rho-agent-settings-')), f = await setup(root);
   try {
     let settings = await f.call('conversation.settings.read');
     assert.deepEqual([settings.version, settings.backend, settings.serviceBackend, settings.offered], [0, null, 'claude-acp', {}]);

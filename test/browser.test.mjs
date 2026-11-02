@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as fs from 'node:fs/promises';
+import { realpathSync } from 'node:fs';
 import path from 'node:path';
 import { homedir, tmpdir } from 'node:os';
 import { request } from 'node:http';
@@ -8,9 +9,11 @@ import { RhoService } from '../dist/server.js';
 import { CheckedClient as RhoClient } from './checked-client.mjs';
 import { BrowserClient } from '../dist/browser.js';
 
-// Folders chosen outside the service root: under /private/tmp on macOS, which Windows has not.
+// Folders chosen outside the service root, under /tmp as the system resolves it (/private/tmp on
+// macOS); Windows has none and uses its temporary folder.
 const windows = process.platform === 'win32';
-const temporary = prefix => windows ? path.join(tmpdir(), prefix) : '/private/tmp/' + prefix;
+const temporaryRoot = windows ? tmpdir() : realpathSync('/tmp');
+const temporary = prefix => path.join(temporaryRoot, prefix);
 
 async function fixture(options = {}) {
   const root = await fs.mkdtemp(path.join(tmpdir(), 'rho-browser-'));

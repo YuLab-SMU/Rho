@@ -2,11 +2,14 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { tmpdir } from 'node:os';
 import { RhoService } from '../dist/server.js';
 import { CheckedClient } from './checked-client.mjs';
 import { ExternalAcpObserver, readExternalAcp } from '@rho-workspace/plugin-agent/external-acp';
 import { BrowserClient } from '../dist/browser.js';
 import { validateResponse, responseProblems } from '../dist/contract-runtime.js';
+// A Unix Host's socket lies under its project, within the socket path limit; Windows Hosts use pipes.
+const shortTemp = process.platform === 'win32' ? tmpdir() : '/tmp';
 
 // Independent protocol peer for application identity/storage/authorization checks.
 const peer = `import fs from 'node:fs';
@@ -61,7 +64,7 @@ async function setup(root, budgets = {}) {
 }
 const ended = r => r.turns.at(-1).state !== 'running';
 test('Rho keeps ACP message identities, one grant per connection and the original session across loss/restart', async () => {
-  const root = await fs.mkdtemp('/tmp/rho-acp-ledger-'); let f = await setup(root);
+  const root = await fs.mkdtemp(path.join(shortTemp, 'rho-acp-ledger-')); let f = await setup(root);
   try {
     const first = await f.call('conversation.start', { changeId: 'first', text: 'hello 你好' }), id = first.conversation.conversationId;
     await f.wait(id, ended);
@@ -99,7 +102,7 @@ test('Rho keeps ACP message identities, one grant per connection and the origina
   } finally { await f.service.close(); await fs.rm(root, { recursive: true, force: true }); }
 });
 test('project work links session reports to current files and the single notes buffer; reads never connect', async () => {
-  const root = await fs.mkdtemp('/tmp/rho-acp-work-'); let f = await setup(root, { idleMs: 500 });
+  const root = await fs.mkdtemp(path.join(shortTemp, 'rho-acp-work-')); let f = await setup(root, { idleMs: 500 });
   try {
     const empty = await f.call('project.work.read', {});
     assert.deepEqual(empty.sessions, []); assert.equal(empty.native.state, 'unavailable'); assert.equal((await f.calls()).length, 0);
@@ -126,7 +129,7 @@ test('project work links session reports to current files and the single notes b
   } finally { await f.service.close(); await fs.rm(root, { recursive: true, force: true }); }
 });
 test('a message records the project files that changed on disk while it ran, and says when the comparison was partial', async () => {
-  const root = await fs.mkdtemp('/tmp/rho-acp-files-'); let f = await setup(root);
+  const root = await fs.mkdtemp(path.join(shortTemp, 'rho-acp-files-')); let f = await setup(root);
   try {
     await fs.writeFile(path.join(f.project.root, 'old.txt'), 'old'); await fs.writeFile(path.join(f.project.root, 'kept.txt'), 'kept');
     const id = (await f.call('conversation.start', { changeId: 'files', text: 'write' })).conversation.conversationId;
@@ -144,7 +147,7 @@ test('a message records the project files that changed on disk while it ran, and
 });
 
 test('a command step keeps when it started, its exit code and what it printed; a full message gives up the output first', async () => {
-  const root = await fs.mkdtemp('/tmp/rho-acp-command-'); let f = await setup(root);
+  const root = await fs.mkdtemp(path.join(shortTemp, 'rho-acp-command-')); let f = await setup(root);
   try {
     const id = (await f.call('conversation.start', { changeId: 'command', text: 'command' })).conversation.conversationId;
     await f.wait(id, ended);
@@ -163,7 +166,7 @@ test('a command step keeps when it started, its exit code and what it printed; a
   } finally { await f.service.close(); }
 });
 test('a conversation in the trash is kept whole, frees its place, cannot be continued, and is deleted only from there', async () => {
-  const root = await fs.mkdtemp('/tmp/rho-acp-trash-'); let f = await setup(root, { maxConversations: 2 });
+  const root = await fs.mkdtemp(path.join(shortTemp, 'rho-acp-trash-')); let f = await setup(root, { maxConversations: 2 });
   try {
     const first = (await f.call('conversation.start', { changeId: 'trash-1', text: 'hello' })).conversation.conversationId;
     await f.wait(first, ended);
@@ -196,7 +199,7 @@ test('a conversation in the trash is kept whole, frees its place, cannot be cont
 });
 
 test('Agent permission choices are scoped, conditional, retained, and cancelled with the original turn', async () => {
-  const root = await fs.mkdtemp('/tmp/rho-acp-choice-'), f = await setup(root);
+  const root = await fs.mkdtemp(path.join(shortTemp, 'rho-acp-choice-')), f = await setup(root);
   try {
     const first = await f.call('conversation.start', { changeId: 'first', text: 'permission' }), id = first.conversation.conversationId;
     const waiting = await f.wait(id, r => r.turns[0].permissions?.length), p = waiting.turns[0].permissions[0];
@@ -224,7 +227,7 @@ test('Agent permission choices are scoped, conditional, retained, and cancelled 
   } finally { await f.service.close(); await fs.rm(root, { recursive: true, force: true }); }
 });
 test('connection capacity releases idle Agents without losing conversations or starting them on reads', async () => {
-  const root = await fs.mkdtemp('/tmp/rho-acp-cap-'), f = await setup(root, { maxConnections: 1 });
+  const root = await fs.mkdtemp(path.join(shortTemp, 'rho-acp-cap-')), f = await setup(root, { maxConnections: 1 });
   try {
     const a = (await f.call('conversation.start', { changeId: 'a', text: 'first' })).conversation.conversationId; await f.wait(a, ended);
     const b = (await f.call('conversation.start', { changeId: 'b', text: 'second' })).conversation.conversationId; await f.wait(b, ended);
@@ -237,7 +240,7 @@ test('connection capacity releases idle Agents without losing conversations or s
 });
 
 test('a selected Codex backend survives restart and cannot change under an existing message identity', async () => {
-  const root = await fs.mkdtemp('/tmp/rho-codex-ledger-'); let f = await setup(root);
+  const root = await fs.mkdtemp(path.join(shortTemp, 'rho-codex-ledger-')); let f = await setup(root);
   try {
     const input = { changeId: 'codex', text: 'hello', backend: 'codex-acp' };
     const first = await f.call('conversation.start', input), id = first.conversation.conversationId;
@@ -253,7 +256,7 @@ test('a selected Codex backend survives restart and cannot change under an exist
   } finally { await f.service.close(); await fs.rm(root, { recursive: true, force: true }); }
 });
 test('external ACP joins the project read without acquiring input or runtime ownership', async () => {
-  const root = await fs.mkdtemp('/tmp/rho-external-app-'); let f = await setup(root), external;
+  const root = await fs.mkdtemp(path.join(shortTemp, 'rho-external-app-')); let f = await setup(root), external;
   try {
     external = new ExternalAcpObserver(f.project.root, 'codex');
     external.client({ id: 1, method: 'session/new', params: { cwd: f.project.root } });

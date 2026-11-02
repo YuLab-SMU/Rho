@@ -12,13 +12,20 @@ import { CheckedClient as RhoClient } from './checked-client.mjs';
 const windows = process.platform === 'win32';
 const readOnly = dir => windows ? spawnSync('icacls', [dir, '/deny', process.env.USERNAME + ':(WD,AD)'], { stdio: 'ignore' }) : fs.chmod(dir, 0o500);
 const writable = dir => windows ? spawnSync('icacls', [dir, '/remove:d', process.env.USERNAME], { stdio: 'ignore' }) : fs.chmod(dir, 0o700).catch(() => {});
+// An account the denial does not bind, such as an elevated Windows administrator, still writes there.
+async function denied(dir) {
+  const probe = path.join(dir, '.write-probe');
+  try { await fs.writeFile(probe, ''); await fs.rm(probe); return false; } catch { return true; }
+}
 
 // "Nothing happened" is not a diagnosis. doctor answers whether this project can do
 // work at all, and names the next action for whatever is wrong.
 async function fixture() {
   const root = await fs.mkdtemp(path.join(tmpdir(), 'rho-doctor-'));
-  await fs.mkdir(path.join(root, 'work'));
-  const service = await new RhoService({ root, stateDir: path.join(root, '.service'), coreBinary: '/missing-core', rscript: '/missing-Rscript' }).start();
+  await fs.mkdir(path.join(root, 'work')); await fs.mkdir(path.join(root, 'bin'));
+  // Agent clients the machine may or may not have installed are stand-ins here, so the report is this fixture's.
+  for (const client of ['claude', 'codex']) await fs.writeFile(path.join(root, 'bin', client + (windows ? '.cmd' : '')), '#!/bin/sh\n', { mode: 0o755 });
+  const service = await new RhoService({ root, stateDir: path.join(root, '.service'), coreBinary: '/missing-core', rscript: '/missing-Rscript', claude: path.join(root, 'bin/claude'), codex: path.join(root, 'bin/codex') }).start();
   const operator = new RhoClient({ url: service.url, token: service.adminToken });
   const p = await operator.call('project.open', { path: 'work' });
   return { root, project: path.join(root, 'work'), service, operator, p, cleanup: async () => { await service.close(); await fs.rm(root, { recursive: true, force: true }); } };
@@ -43,12 +50,13 @@ test('doctor reports a writable project with no Host as ready to work', async ()
   } finally { await f.cleanup(); }
 });
 
-test('doctor turns a folder it may not write into the exact remedy', async () => {
+test('doctor turns a folder it may not write into the exact remedy', async t => {
   const f = await fixture();
   try {
     // A read-only project folder is the condition that produced "nothing happened"
     // after choosing a folder, with no error shown anywhere.
     await readOnly(f.project);
+    if (!await denied(f.project)) return t.skip('this account still writes in a folder denied to it');
     const report = await f.operator.call('project.doctor', { projectId: f.p.id });
     const write = report.checks.find(check => check.id === 'project-write');
     assert.equal(write.state, 'fail');
@@ -132,7 +140,7 @@ test('an owner package that is selected but absent is named by the plugin check'
   } finally { await f.cleanup(); }
 });
 
-test('several faults at once are all located by one doctor call', async () => {
+test('several faults at once are all located by one doctor call', async t => {
   const f = await fixture();
   try {
     // Three independent problems, as a broken environment would present them. A Windows Host
@@ -140,6 +148,7 @@ test('several faults at once are all located by one doctor call', async () => {
     const socket = path.join(f.project, '.rho', 'host.sock');
     if (!windows) { await fs.mkdir(path.dirname(socket), { recursive: true }); await fs.writeFile(socket, ''); }
     await readOnly(f.project);
+    if (!await denied(f.project)) return t.skip('this account still writes in a folder denied to it');
     const started = Date.now();
     const report = await f.operator.call('project.doctor', { projectId: f.p.id });
     const elapsed = Date.now() - started;
