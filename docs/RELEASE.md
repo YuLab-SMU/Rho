@@ -183,5 +183,5 @@ whatever the tag. The job runs in the GitHub environment `npm`, which records ea
 deployment; it has no required reviewer, so a tag whose run passes publishes without waiting for a
 person. Run by hand on `main`, the release rehearses everything but the publication. The npm
 organization `rho-workspace` and a token that can publish there without a one-time password must
-exist before the first tag. `@rho-workspace/rho@0.5.2` was published this way on 2026-11-02 with
-provenance ([CI episode](CI-EPISODE.md#publication)).
+exist before the first tag. `@rho-workspace/rho@0.5.2` and `0.5.3` were published this way on
+2026-11-02 with provenance ([CI episode](CI-EPISODE.md#publication)).

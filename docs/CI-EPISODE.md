@@ -297,6 +297,19 @@ and `rho --help` printed its usage. `npm audit signatures` stopped at the bundle
 not separate registry packages (404 for `@rho-workspace/plugin-documents@0.4.10`). The placeholder
 version stays in the registry.
 
+Version 0.5.3 followed the same day, at the user's request to publish the fixed version: Claude
+sessions prefer Auto without Rho's step or wall cap, the Agent's bridge waits for a Notebook cell
+as long as it asked (Agent 0.4.27), the bundled dependencies are pruned, and the package carries
+its README. The new documentation-site job had failed on `eb8fc82a` by checking the site before
+assembling it; `ca873922` builds first. CI run
+[41415554593](https://github.com/YuLab-SMU/Rho/actions/runs/41415554593) on `40bb22af` passed every job
+in 5 min (281/283 on macOS and Linux, 268/283 on Windows with 15 skipped, four installations).
+The tag `v0.5.3` ran release [41416313702](https://github.com/YuLab-SMU/Rho/actions/runs/41416313702),
+which found that run's candidate, verified it and published it in 39 s without CI or a person.
+The registry recorded 0.5.3 at 08:58:01 and showed it as `latest` from 08:58:12, with 3,031 files,
+SLSA v1 provenance and the README. Its tarball's SHA-256, `75f25f83…`, equals the candidate's;
+installed, it carries Agent 0.4.27 and `rho --help` prints its usage.
+
 ## A new user on Ubuntu
 
 On 2026-11-02 the user asked to install as a new user on a Linux host. A fresh OrbStack machine,
