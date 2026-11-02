@@ -63,8 +63,7 @@ npm run docs:check    # fail if a document in docs/ is neither published nor wit
 ```
 
 `@rho-workspace/rho` is published to npm. The registry entry for 0.5.2 carries no
-README, so its package page shows no description; the next publication from a packed
-candidate restores it. Desktop installers on the
+README, so its package page shows no description; from 0.5.3 the packer ships this README. Desktop installers on the
 [downloads page](https://yulab-smu.top/Rho/) are the earlier 0.4.0 line; this npm line
 is the current delivery.
 
