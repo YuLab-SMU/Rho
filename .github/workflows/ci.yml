@@ -87,8 +87,9 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with: { python-version: '3.13' }
       # The suite's R scripts use base R of 4.5 and later (tools::sha256sum); Ubuntu's own R is 4.3.
+      # Rho compiles no R packages. Rtools on PATH would also make its MSYS bash every step's shell.
       - uses: r-lib/actions/setup-r@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05 # v2.14.0
-        with: { r-version: release }
+        with: { r-version: release, windows-path-include-rtools: false }
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with: { name: 'core-${{ matrix.platform }}', path: '${{ runner.temp }}/core' }
       - run: chmod +x "$RUNNER_TEMP/core/${{ matrix.exe }}"
@@ -103,24 +104,31 @@ jobs:
           node --version && Rscript --version && python --version
           npm ci --no-audit --no-fund
           npm test
-      # When R-dependent checks fail, show what Rho's R dependency probe sees on this machine.
+      # What Rho's R dependency probe sees: on Windows always, and again with Rtools' MSYS tools first on
+      # PATH, where every R run was refused; elsewhere when the suite fails.
       - name: Show the R dependency probe
-        if: failure()
+        if: always() && (failure() || runner.os == 'Windows')
         run: |
+          probe() {
           node --input-type=module - <<'EOF'
           import { spawnSync } from 'node:child_process';
           import path from 'node:path';
-          const { runtime } = await import(path.resolve('Rho/dist/runtime.js'));
-          const { checkRequirements, libraryPrefix } = await import(path.resolve('Rho-plugins/plugins/requirements/dist/index.js'));
+          import { pathToFileURL } from 'node:url';
+          const load = file => import(pathToFileURL(path.resolve(file)).href);
+          const { runtime } = await load('Rho/dist/runtime.js');
+          const { checkRequirements, libraryPrefix } = await load('Rho-plugins/plugins/requirements/dist/index.js');
           const { rscript } = await runtime();
-          console.log('Rscript selected by Rho:', rscript);
-          console.log('checkRequirements:', JSON.stringify(await checkRequirements(process.cwd(), [], rscript)));
+          console.log('Rscript selected by Rho:', rscript, JSON.stringify({ HOME: process.env.HOME, R_USER: process.env.R_USER, TMP: process.env.TMP, TEMP: process.env.TEMP }));
+          console.log('checkRequirements:', JSON.stringify((await checkRequirements(process.cwd(), [], rscript)).native));
           const code = libraryPrefix({ libraryPaths: [path.join(process.cwd(), '.rho/plugins/R-library')] }) + 'cat("R\\t", R.version.string, "\\n", sep="")\npkgs <- c()\n';
           for (const args of [['--vanilla', '-e', 'cat("R\\t", R.version.string, "\\n", sep="")'], ['--vanilla', '-e', code]]) {
             const p = spawnSync(rscript, args, { encoding: 'utf8' });
             console.log(JSON.stringify({ expression: args[2], status: p.status, error: p.error?.message, stdout: p.stdout, stderr: p.stderr?.slice(-2000) }));
           }
           EOF
+          }
+          probe
+          if [ "$RUNNER_OS" = Windows ] && [ -d /c/rtools45/usr/bin ]; then echo '--- with Rtools first on PATH'; PATH="/c/rtools45/usr/bin:$PATH" probe; fi
 
   pack:
     name: Pack the candidate
@@ -197,7 +205,7 @@ jobs:
         run: sudo apt-get update -q && sudo apt-get install -y -q r-base-core
       - if: runner.os != 'Linux'
         uses: r-lib/actions/setup-r@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05 # v2.14.0
-        with: { r-version: release }
+        with: { r-version: release, windows-path-include-rtools: false }
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with: { name: candidate, path: '${{ runner.temp }}/candidate' }
       - name: Install and run the candidate
