@@ -395,7 +395,11 @@ package are absent. Its plugin list must equal the application's runtime selecti
 Production dependencies install with `--omit=optional`, which leaves out only the
 Agent adapters' platform-specific Claude Code and Codex binaries; a native Agent
 client found in the package fails packing, and the installed smoke check fails if
-npm fetched one. Notebook's R and Python runners are its only packed `.R`/`.py`
+npm fetched one. The bundled third-party packages then lose what Node never
+loads: type declarations other than those Rho's own declarations reach, source maps,
+TypeScript sources, tests, examples, documentation and tool configuration. Licenses,
+first-party packages and every file a package names as an entry stay; each file costs
+a Windows installation far more than its bytes. Notebook's R and Python runners are its only packed `.R`/`.py`
 inputs. Each Core's own header (Mach-O, ELF or PE and its machine) must match its
 platform, and the composition records whether a Linux Core is statically linked. Every
 other file is platform-neutral JavaScript: a native Node addon (`.node`) fails packing.

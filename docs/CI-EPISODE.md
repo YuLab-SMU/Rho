@@ -327,6 +327,54 @@ show the author's model (`westlakehpc/deepseek-v4.1-flash`), costs ($12.93) and 
 failed for a reason tied to it, and Node 22 was not tried here. Claude Code and Codex were not
 installed or signed in.
 
+## Windows installation time
+
+The user then asked to shorten the slow Windows installation, with another agent's analysis and
+[issue 112](https://github.com/YuLab-SMU/Rho/issues/112) attached. That analysis put the cost on the
+package's file count, about 18 to 26 ms per file on Windows against 0.79 ms on macOS, and proposed
+removing what Node never reads, then the duplicate CommonJS builds, and installing CI's copy in an
+ASCII folder on the workspace volume. The issue measured 40 s for the package on a Windows 11 machine,
+against 91 to 134 s on the runner.
+
+The published 0.5.2 tarball holds 5,250 files, 4,688 of them bundled dependencies: 1,722 JavaScript
+files, 1,261 type declarations, 645 source maps, 454 TypeScript sources (332 of them zod's), 186
+Markdown files and 59 tool configurations; the MCP SDK also ships 208 example files.
+[`prune-bundled.mjs`](../scripts/prune-bundled.mjs) now runs in the packer after the production install. In
+third-party packages it removes declarations, source maps, TypeScript sources, tests, examples,
+documentation and dotfiles. Licenses and first-party packages stay, as do the declarations reached from
+Rho's own (`@agentclientprotocol/sdk`, `ajv`, `fast-deep-equal`, `fast-uri` and zod, 533 files). A file
+that a package names under a condition Node selects (`main`, `bin`, `exports` `import`/`require`/`node`/
+`default`) stops the packer instead; zod and eventsource name TypeScript sources only under `source`
+conditions. Pruned the same way, the published package has 3,030 files and 22.7 MB instead of 25.0 MB.
+
+Installed side by side on this Mac, the full and pruned packages loaded the same 327 of 343 export entries
+of their bundled packages; the other 16 fail in both (JSON without an import attribute, type-only paths,
+Deno and Bun entries, three Agent entries that need a connection). A pruned candidate packed here passed
+`ci-install-check.mjs`: launcher, its own Core, recovery 7 and the ordinary project 7. The offline install
+took 2.6 s against 4.2 s.
+
+A temporary workflow on `codex/windows-install-timing` (run
+[41395940042](https://github.com/YuLab-SMU/Rho/actions/runs/41395940042)) installed both offline on one
+windows-2022 runner (4 CPUs, Node 22.23.4), each time with an empty cache, in two rounds of opposite
+order. Defender's real-time protection was off there and `C:\` and `D:\` excluded, so it was not the cause.
+
+| Folder | Full, 5,286 installed files | Pruned, 3,066 |
+| --- | --- | --- |
+| System temporary folder on C:, Unicode name | 159, 164 s | 105, 105 s |
+| The same, ASCII name | 161, 159 s | 96, 99 s |
+| `RUNNER_TEMP` on D:, Unicode name | 22.2, 21.7 s | 13.5, 13.5 s |
+
+The runner's C: costs npm about 30 ms per file and D: about 4 ms; pruning saves 35 to 39% on both, in
+proportion to the files. The name changed nothing measurable. Extracting the same tarball with `tar`
+took 7 to 9 s on C: and 1.3 s on D:, so most of npm's time there is its own work per file. On the runner,
+`ci-install-check.mjs` now installs in `RUNNER_TEMP` on Windows and keeps the name with spaces, Chinese and
+the `rho ci` prefix; its report adds the package's file count.
+
+Not done: removing the CommonJS builds no Rho consumer requires (about 440 more files: zod's `.cjs`,
+hono, the MCP SDK, zod-to-json-schema, diff) needs a reachability check first, since some bundled CommonJS
+code does require these packages. KaTeX's WOFF and TTF fonts beside WOFF2 are 40 files. A person's
+Windows machine was not measured again; the issue's machine recorded no Defender state.
+
 ## Not done
 
 - A GitHub Release and signing.
@@ -340,9 +388,9 @@ installed or signed in.
 
 - In a project whose path holds `%OS%`, R run by Core on Windows ends with `0xC0000005`, as R does
   there when started directly. Whether Core should hand R a path it reads safely is not decided.
-- The offline install takes 91 to 179 s on the Windows runner against 5 to 15 s elsewhere, and is
-  now the longest part of a run. Whether Windows Defender's scanning of the 5,250 files causes it
-  was not measured.
+- npm still spends about 4 ms per installed file on the Windows runner's D: and 30 ms on its C:. A
+  person's Windows machine, with Defender scanning, has not been measured since the pruning
+  ([Windows installation time](#windows-installation-time)).
 - `engines` names Node 22 only. A person with Node 24 installs with npm's engine warning; no
   installation on Node 24 has been checked.
 - The candidate digest changes with every commit, since the composition names the commit; whether

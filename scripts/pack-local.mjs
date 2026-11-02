@@ -4,6 +4,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { parseArgs } from 'node:util';
+import { pruneBundled } from './prune-bundled.mjs';
 const root = fileURLToPath(new URL('..', import.meta.url));
 const { values } = parseArgs({ options: { core: { type: 'string', multiple: true }, 'core-source': { type: 'string' }, 'core-composition': { type: 'string' }, plugins: { type: 'string' }, destination: { type: 'string' }, 'allow-dirty': { type: 'boolean', default: false }, 'select-plugins': { type: 'string' } } });
 if (!values.core?.length || !values['core-source']) throw new Error('Select --core [PLATFORM=]BINARY, once per platform, and --core-source REPOSITORY. The builds must already have completed.');
@@ -114,12 +115,15 @@ await fs.writeFile(path.join(stage, 'package.json'), JSON.stringify(manifest, nu
 // Agent clients are the person's own installation (--claude/--codex, RHO_CLAUDE/RHO_CODEX or
 // PATH). The adapters' native clients are optional platform packages and stay out.
 run('npm', ['install', '--omit=dev', '--omit=optional', '--ignore-scripts', '--no-audit', '--no-fund'], stage);
+// Third-party packages keep the files Node loads, their licenses and the declarations Rho's own
+// declarations reach; each further file slows an installation on Windows (prune-bundled.mjs).
+const pruned = await pruneBundled(stage);
 const web = JSON.parse(await fs.readFile(path.join(stage, 'dist/web/composition.json'), 'utf8'));
 const catalogBytes = await fs.readFile(path.join(stage, 'dist/plugin-inventory.json'));
 // A candidate packed by CI names the workflow run that built its Cores and packed it.
 const e = process.env, build = e.GITHUB_ACTIONS === 'true' ? { system: 'github-actions', workflow: e.GITHUB_WORKFLOW_REF, run: e.GITHUB_SERVER_URL + '/' + e.GITHUB_REPOSITORY + '/actions/runs/' + e.GITHUB_RUN_ID, attempt: Number(e.GITHUB_RUN_ATTEMPT) } : { system: 'local' };
 // Everything but Core is platform-neutral JavaScript, so the package serves each Core's platform.
-const composition = { schemaVersion: 2, platforms: cores.map(c => c.platform), packedOn: process.platform + '-' + process.arch, node: process.version, build, application: { repository: 'https://github.com/YuLab-SMU/Rho', ...application }, plugins: { repository: 'https://github.com/YuLab-SMU/Rho-plugins', ...plugins, selected, uiSources, packages: pluginPacks.packages.map(({ files, ...item }) => item) }, catalog: { path: 'dist/plugin-inventory.json', sha256: sha(catalogBytes), bytes: catalogBytes.length, source: catalogSource, scope: 'Descriptive inventory of the reviewed owners; contributes no runtime entry or authority.' }, core: { repository: 'https://github.com/YuLab-SMU/Rho-core', ...core, artifacts: Object.fromEntries(cores.map(c => [c.platform, c.record])) }, web, productionLockSha256: sha(await fs.readFile(path.join(stage, 'package-lock.json'))), agentClients: { bundled: false, selection: ['--claude/--codex', 'RHO_CLAUDE/RHO_CODEX', 'PATH'] }, distribution: 'unsigned-local-npm-tarball', registryPublication: 'not-performed' };
+const composition = { schemaVersion: 2, platforms: cores.map(c => c.platform), packedOn: process.platform + '-' + process.arch, node: process.version, build, application: { repository: 'https://github.com/YuLab-SMU/Rho', ...application }, plugins: { repository: 'https://github.com/YuLab-SMU/Rho-plugins', ...plugins, selected, uiSources, packages: pluginPacks.packages.map(({ files, ...item }) => item) }, catalog: { path: 'dist/plugin-inventory.json', sha256: sha(catalogBytes), bytes: catalogBytes.length, source: catalogSource, scope: 'Descriptive inventory of the reviewed owners; contributes no runtime entry or authority.' }, core: { repository: 'https://github.com/YuLab-SMU/Rho-core', ...core, artifacts: Object.fromEntries(cores.map(c => [c.platform, c.record])) }, web, productionLockSha256: sha(await fs.readFile(path.join(stage, 'package-lock.json'))), bundledPruning: { declarationsKept: pruned.typed, scope: 'Third-party declarations, source maps, TypeScript sources, tests, examples, documentation and tool configuration; license texts, entries and first-party packages kept.' }, agentClients: { bundled: false, selection: ['--claude/--codex', 'RHO_CLAUDE/RHO_CODEX', 'PATH'] }, distribution: 'unsigned-local-npm-tarball', registryPublication: 'not-performed' };
 await fs.writeFile(path.join(stage, 'vendor/composition.json'), JSON.stringify(composition, null, 2) + '\n');
 const result = JSON.parse(run('npm', ['pack', '--ignore-scripts', '--json', '--pack-destination', destination], stage))[0];
 if (result.files.some(f => path.isAbsolute(f.path) || f.path.split('/').includes('..'))) throw new Error('Package contains a path outside the assembled root.');

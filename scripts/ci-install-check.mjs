@@ -28,8 +28,10 @@ function run(command, args, options = {}) {
 }
 const passedLines = output => output.split('\n').filter(line => line.startsWith('{"passed"')).length;
 // A Unix Host's socket lies under its project, within the system's socket path limit (104 bytes on
-// macOS), which macOS's own temporary folder alone nearly fills. Windows Hosts use named pipes.
-const root = await fs.mkdtemp(path.join(await fs.realpath(windows ? os.tmpdir() : '/tmp'), 'rho ci 中文 '));
+// macOS), which macOS's own temporary folder alone nearly fills. Windows Hosts use named pipes. On a
+// Windows runner the system temporary folder is on C:, where npm took 30 ms per file against 4 ms in
+// the runner's own on D: (Defender's real-time scanning is off on both), so the runner's is used.
+const root = await fs.mkdtemp(path.join(await fs.realpath(windows ? process.env.RUNNER_TEMP ?? os.tmpdir() : '/tmp'), 'rho ci 中文 '));
 let launcher;
 try {
   const sums = (await fs.readFile(path.join(candidate, 'SHA256SUMS'), 'utf8')).trim().split('\n');
@@ -44,7 +46,7 @@ try {
   await fs.mkdir(install); await fs.mkdir(cache);
   let started = Date.now();
   run('npm', ['install', '--prefix', install, '--omit=dev', '--ignore-scripts', '--offline', '--cache', cache, '--no-audit', '--no-fund', tarball], { cwd: root });
-  check('Installed offline with an empty npm cache', { ms: Date.now() - started });
+  check('Installed offline with an empty npm cache', { ms: Date.now() - started, files: composition.artifact.files });
 
   const pkg = path.join(install, 'node_modules/@rho-workspace/rho');
   const packed = JSON.parse(await fs.readFile(path.join(pkg, 'vendor/composition.json'), 'utf8'));
