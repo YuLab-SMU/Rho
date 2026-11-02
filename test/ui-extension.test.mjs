@@ -24,7 +24,7 @@ test('a scaffold creates an independent typed view without overwriting existing 
   try {
     assert.equal(f.entry.component, 'example.notes');
     assert.equal(f.entry.package, '@example/notes');
-    assert.match(await fs.readFile(path.join(f.directory, 'src/ui.tsx'), 'utf8'), /@rho-workspace\/local\/ui-contract/);
+    assert.match(await fs.readFile(path.join(f.directory, 'src/ui.tsx'), 'utf8'), /@rho-workspace\/rho\/ui-contract/);
     const packageJson = JSON.parse(await fs.readFile(new URL('../package.json', import.meta.url), 'utf8'));
     const toolchain = JSON.parse(await fs.readFile(new URL('../scripts/ui-toolchain.json', import.meta.url), 'utf8'));
     for (const [name, version] of Object.entries(toolchain)) assert.equal(version, packageJson.devDependencies[name]);

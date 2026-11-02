@@ -22,7 +22,7 @@ export async function createUiPlugin(directory, options = {}) {
   const manifest = { format: 'rho.ui-extension/1', plugin: 'documents', component, version: '1.0.0', displayName: 'Document summary', description: 'A view of the current shared document.', entry: './ui', development: './src/ui.tsx', export: 'View',
     propsSchema: { type: 'object', additionalProperties: false, properties: { title: { type: 'string' } } }, bindings: { document: 'document' }, requiredOperations: ['document.read'] };
   const source = `import { useEffect, useState } from 'react';
-import type { UiViewProps } from '@rho-workspace/local/ui-contract';
+import type { UiViewProps } from '@rho-workspace/rho/ui-contract';
 
 export function View({ view, client, projectId, snapshot }: UiViewProps) {
   const documentId = (view.bindings.document as { documentId?: string } | undefined)?.documentId;
@@ -48,7 +48,7 @@ export function View({ view, client, projectId, snapshot }: UiViewProps) {
   const files = {
     'package.json': json({ name, version: '0.1.0', type: 'module', private: true, description: 'A Rho document view', license: 'UNLICENSED', exports: { './ui': './dist/ui.js', './package.json': './package.json' }, rho: { ui: './rho-ui.json' }, files: ['dist', 'rho-ui.json', 'README.md'],
       scripts: { dev: 'rho-ui dev .', check: 'rho-ui check .', build: 'rho-ui build .' }, peerDependencies: { react: toolchain.react },
-      devDependencies: { '@rho-workspace/local': options.sdk ?? 'file:' + root, ...toolchain } }),
+      devDependencies: { '@rho-workspace/rho': options.sdk ?? 'file:' + root, ...toolchain } }),
     'rho-ui.json': json(manifest),
     'rho-selection.json': json({ format: 'rho.ui-selection/1', packages: [{ package: name, version: '0.1.0', directory: '.' }] }),
     'tsconfig.json': json({ compilerOptions: { target: 'ES2023', module: 'ESNext', moduleResolution: 'Bundler', jsx: 'react-jsx', strict: true, declaration: true, outDir: 'dist', rootDir: 'src', skipLibCheck: true }, include: ['src'] }),

@@ -13,7 +13,7 @@ const report = { status: 'running', artifactSha256: createHash('sha256').update(
 try {
   const install = spawnSync('npm', ['install', '--prefix', root, '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund', artifact], { encoding: 'utf8', maxBuffer: 1024 * 1024 });
   assert.equal(install.status, 0, install.stderr);
-  const pkg = path.join(root, 'node_modules/@rho-workspace/local');
+  const pkg = path.join(root, 'node_modules/@rho-workspace/rho');
   const composition = JSON.parse(await fs.readFile(path.join(pkg, 'vendor/composition.json'), 'utf8'));
   report.composition = composition;
   const selected = composition.plugins.selected;
@@ -23,9 +23,9 @@ try {
   const script = `import assert from 'node:assert/strict';
 import path from 'node:path';
 import * as fs from 'node:fs/promises';
-import { RhoService } from './node_modules/@rho-workspace/local/dist/server.js';
-import { RhoClient } from './node_modules/@rho-workspace/local/dist/client.js';
-import { runtime } from './node_modules/@rho-workspace/local/dist/runtime.js';
+import { RhoService } from './node_modules/@rho-workspace/rho/dist/server.js';
+import { RhoClient } from './node_modules/@rho-workspace/rho/dist/client.js';
+import { runtime } from './node_modules/@rho-workspace/rho/dist/runtime.js';
 import { createHash } from 'node:crypto';
 const digest = value => createHash('sha256').update(value).digest('hex');
 const selected = ${JSON.stringify(selected)};

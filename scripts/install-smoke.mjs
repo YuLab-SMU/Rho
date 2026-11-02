@@ -27,7 +27,7 @@ try {
   const natives = spawnSync('find', [install, '-type', 'd', '(', '-path', '*/node_modules/@openai/codex-*', '-o', '-path', '*/node_modules/@anthropic-ai/claude-agent-sdk-*', ')', '-prune', '-print'], { encoding: 'utf8' }).stdout.trim();
   assert.equal(natives, '', 'The installation obtained a native Agent client: ' + natives);
   report.installedKiB = Number(spawnSync('du', ['-sk', install], { encoding: 'utf8' }).stdout.split('\t')[0]);
-  const pkg = path.join(install, 'node_modules/@rho-workspace/local');
+  const pkg = path.join(install, 'node_modules/@rho-workspace/rho');
   const manifest = JSON.parse(await fs.readFile(path.join(pkg, 'vendor/composition.json'), 'utf8'));
   const packedCore = manifest.core?.artifacts?.[report.platform];
   report.core = { located: packedCore?.path, platforms: manifest.platforms, artifactSha256: packedCore?.sha256 };

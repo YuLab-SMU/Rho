@@ -25,7 +25,7 @@ async function command(program, args, cwd, maxMs = 900000) {
 let cli;
 try {
   await command('npm', ['install', '--prefix', install, '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund', artifact], root);
-  const pkg = path.join(install, 'node_modules/@rho-workspace/local');
+  const pkg = path.join(install, 'node_modules/@rho-workspace/rho');
   const manifest = JSON.parse(await fs.readFile(path.join(pkg, 'vendor/composition.json'), 'utf8'));
   const packedCore = manifest.core.artifacts[report.platform];
   assert.ok(packedCore, 'The package carries no Core for ' + report.platform); report.composition = manifest;

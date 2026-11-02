@@ -1,9 +1,15 @@
 {
-  "name": "@rho-workspace/local",
+  "name": "@rho-workspace/rho",
   "version": "0.5.2",
   "type": "module",
   "description": "Rho local workspace service, scoped browser shell and headless client",
   "license": "AGPL-3.0-only",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/YuLab-SMU/Rho.git"
+  },
+  "homepage": "https://github.com/YuLab-SMU/Rho#readme",
+  "bugs": "https://github.com/YuLab-SMU/Rho/issues",
   "engines": {
     "node": ">=22.22.0 <23"
   },

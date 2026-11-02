@@ -30,7 +30,7 @@ performed by any of these commands.
 
 | File | What to change |
 | --- | --- |
-| `src/ui.tsx` | The exported React `View`, typed with `UiViewProps` from `@rho-workspace/local/ui-contract` |
+| `src/ui.tsx` | The exported React `View`, typed with `UiViewProps` from `@rho-workspace/rho/ui-contract` |
 | `rho-ui.json` | Component identity, version, capability owner, props schema, bindings and required methods |
 | `preview.json` | Example props, document metadata and responses to declared client calls |
 | `rho-selection.json` | Exact package name/version and its explicit local directory |

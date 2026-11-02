@@ -92,7 +92,7 @@ facts. Private selection/context events are caller-scoped. A failed event public
 interrupts affected observers with a gap; it does not roll back persisted owner state.
 Slow subscriptions are interrupted at the configured writable-byte limit.
 
-The `@rho-workspace/local/observation` entry has no Node filesystem or DOM imports.
+The `@rho-workspace/rho/observation` entry has no Node filesystem or DOM imports.
 `ObservationClient` accepts an injected transport; `httpObservation` supplies Fetch
 HTTP/SSE. Each initial connection/reconnect starts with a snapshot, and invalidation
 or an event gap causes another snapshot. Reconnect and frame budgets are explicit;

@@ -65,9 +65,9 @@ try {
   const npm = spawnSync('npm', ['install', '--prefix', install, '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund', tarball], { cwd: root, env, encoding: 'utf8' });
   assert.equal(npm.status, 0, 'npm install failed: ' + npm.stderr.slice(-2000));
   report.timings.installMs = Date.now() - t;
-  const pkg = path.join(install, 'node_modules/@rho-workspace/local');
+  const pkg = path.join(install, 'node_modules/@rho-workspace/rho');
   const { RhoClient } = await import(pathToFileURL(path.join(pkg, 'dist/client.js')).href);
-  report.package = { name: '@rho-workspace/local', version: JSON.parse(await fs.readFile(path.join(pkg, 'package.json'), 'utf8')).version };
+  report.package = { name: '@rho-workspace/rho', version: JSON.parse(await fs.readFile(path.join(pkg, 'package.json'), 'utf8')).version };
 
   // Cold start: the person's browser is already open; the clock runs from the command to the
   // rendered home page.

@@ -48,7 +48,7 @@ An unavailable Rscript returns an unknown dependency probe and prevents managed 
 Other platforms and npm registry publication are unverified.
 
 ```sh
-npm install --prefix /absolute/install /absolute/rho-workspace-local-0.5.2.tgz
+npm install --prefix /absolute/install /absolute/rho-workspace-rho-0.5.2.tgz
 /absolute/install/node_modules/.bin/rho \
   --root /absolute/projects --state-dir /absolute/service-state
 ```
@@ -202,7 +202,7 @@ expand scope.
 
 `RhoClient` is a Node caller: it uses filesystem-backed connection/intent files.
 It has no generated method-specific types. Its event method returns a raw stream.
-The separate `@rho-workspace/local/observation` transport entry provides DOM-free
+The separate `@rho-workspace/rho/observation` transport entry provides DOM-free
 HTTP/SSE parsing and snapshot-first reconnect reconciliation without Node files. Browser consumers should use the versioned HTTP/SSE boundary.
 
 [protocol/index.json](../protocol/index.json) publishes requests, responses, typed
@@ -213,7 +213,7 @@ use authenticated `POST /api/v2/{operation}`, returning
 Documents, resources, compositions and event cursors have independent versions.
 
 ```js
-import { RhoClient } from '@rho-workspace/local';
+import { RhoClient } from '@rho-workspace/rho';
 const rho = await RhoClient.fromFile('/absolute/service-state/connection.json');
 const project = await rho.call('project.create', { name: 'my-project' });
 const check = await rho.call('requirements.check', {
@@ -380,7 +380,7 @@ RHO_CORE_BINARY=/absolute/rho-core npm run agent
 npm run pack:local -- --core darwin-arm64=/absolute/mac/rho-core \
   --core linux-x64=/absolute/linux-x64/rho-core --core linux-arm64=/absolute/linux-arm64/rho-core \
   --core-source /absolute/Rho-core --plugins /absolute/Rho-plugins
-node scripts/install-acceptance.mjs /absolute/rho-workspace-local-0.5.2.tgz \
+node scripts/install-acceptance.mjs /absolute/rho-workspace-rho-0.5.2.tgz \
   /absolute/ordinary-project /absolute/paired-project
 ```
 
