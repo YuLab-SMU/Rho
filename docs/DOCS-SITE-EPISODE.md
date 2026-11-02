@@ -86,3 +86,68 @@ removed).
 - Two documents are withheld from the site: `docs/README.md` (the site's own navigation
   replaces it) and the withdrawn 2026-10-26 design commission under `docs/design/`, which
   the repository already treats as history rather than requirements.
+
+## Front page and demo
+
+The root page at <https://yulab-smu.top/Rho/> was still the hand-written 0.4.0 downloads page
+of 2026-08-18, while the current delivery is the npm package (0.5.3, published the same day as
+this pass, with provenance). This pass replaces it with a front page that carries the real
+interface, an install prompt for an Agent and example prompts, and keeps every download, checksum,
+signing and uninstall statement the old page made.
+
+### What was built
+
+- **Demo** (`/Rho/demo/`). The application's own WebUI build (`site/demo/vite.config.ts` reuses
+  `vite.config.ts` with a relative base) with `site/demo/replay.js` run before it. Every browser
+  request is `POST /api/v2/<method>` plus one event stream, so the script answers each method and
+  input from `site/demo/recording.json` and keeps the stream open and quiet. A request the
+  recording does not hold is refused as `unavailable` with a notice; nothing is computed, saved or
+  sent. Three fallbacks were needed: table pages are cut again from recorded rows, a
+  `document.read` of a document the walk opened answers with the opened buffer, and reads that
+  differ only in `limit` return the recorded list.
+- **Recording.** `scripts/demo-capture.mjs` starts this checkout's service on a new state, which
+  copies `example/pa14-qs`, walks it with `scripts/demo-tour.mjs` (every answer on the Overview,
+  the Agent panel, Studio and its three sessions, Graph, Console, Notebook, Skills, every source
+  file, project settings and all twelve plugin pages) and keeps the last answer per method and
+  input: 195 answers over 21 methods, 6.3 MB. Machine paths become `/home/researcher/rho`; the
+  capture refuses to write if a home path, user name or credential-shaped field survives. The
+  build used Rho-plugins `1eb1d3e`, clean and equal to its `origin/main`.
+- **Front page** (`site/home/index.html`, assembled by `scripts/pages-site.mjs` into
+  `site/.pages` with the demo and the documentation). The hero is the demo, opened on the
+  project. The install prompts live in `site/home/install-prompts.json`, for Claude Code and for
+  Codex, with the projects folder as a field (quoted, with `$HOME`, when it has spaces). The
+  example prompts are the six requests the recording holds, with how long each took and what it
+  wrote, and each plugin's own `examplePrompts`, read from its presentation at build time. The
+  version shown is the registry's, not the checkout's.
+
+### What was observed
+
+- The install prompts' commands were run on npm 0.5.3 in a throwaway `HOME`: `npm install -g`,
+  the `nohup rho … &` start (port chosen per start, JSON first in the log), the example copied
+  into the projects folder, a start with `--agent-backend codex-acp`, and `rho --grant`, whose
+  reply carries the `claude mcp add` command and the `mcp` entry Codex needs. No Agent has yet
+  followed either prompt from start to finish, and Windows was not run.
+- `scripts/demo-check.mjs` serves the tree under `/Rho/` as Pages does and walks the demo with
+  the same tour at 1440 px, plus a phone pass at 390 px: 0 unanswered requests, 0 page errors,
+  0 failed assets. The first run left two `document.read` unanswered, which the opened-buffer
+  fallback closed. On the front page it opens the install dialog, switches to Codex, types a
+  folder with a space, compares the clipboard with the prompt shown, switches prompt sets and
+  requests all 11 internal links.
+- Screenshots were read at 1440, 768 and 390 px. Fixed by looking: the demo first opened on the
+  nearly empty project list (it now opens on the project's Overview), the closing sentence's
+  folder field was clipped, terminal blocks scrolled sideways on a phone, the prompt-set tabs ran
+  past the screen edge on a phone, and the demo's badge covered content inside the front page.
+- In the shipped example, the Overview's "Files the Agent used" lists every file as missing and
+  disabled. The recorded paths carry the project folder's name as a prefix
+  (`PA14 quorum sensing/analysis/summary_figure.R`), and the walk's `document.open` and
+  `agent.activity.capture` calls used those paths. This is visible in the demo and was not
+  changed here.
+
+### Limits
+
+- The demo is a replay. Sending a message, editing, running, saving and paging a table past the
+  recorded rows are refused, and times are the recording's. A change to the browser contract
+  needs a new capture from the same commit as the demo build.
+- `updates/*.json` and `.nojekyll` on `gh-pages` are left as they were, so an installed 0.4.0
+  desktop client keeps its update feed; the deployment compares their checksums.
+- No one outside this machine has used the page or the demo yet.

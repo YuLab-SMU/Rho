@@ -52,6 +52,8 @@ plans and visual rules. See [Frontend](docs/FRONTEND.md) for the current interfa
 
 ## Documentation
 
+<https://yulab-smu.top/Rho/> runs the real interface on the shipped example project,
+replaying a recorded session without a backend, and gives an install prompt for an Agent.
 The documentation is published at <https://yulab-smu.top/Rho/docs/>. The site is
 generated from this repository's `docs/` directory, which stays the only source of
 truth: every page names the file it came from and links to it.
@@ -60,6 +62,9 @@ truth: every page names the file it came from and links to it.
 npm run docs:dev      # assemble and serve locally
 npm run docs:build    # assemble, then build the static site into site/.vitepress/dist
 npm run docs:check    # fail if a document in docs/ is neither published nor withheld
+npm run pages:build   # front page, demo and documentation into site/.pages
+npm run pages:check   # walk the demo and the front page in a browser
+npm run pages:capture # record the demo again from this checkout's service (after npm run build)
 ```
 
 `@rho-workspace/rho` is published to npm. The registry entry for 0.5.2 carries no
