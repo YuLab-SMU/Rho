@@ -4,15 +4,15 @@
   "schemaVersion": 2,
   "shared": {
     "path": "operations/shared.json",
-    "bytes": 75341,
-    "sha256": "9352416eb01e98328e65a86f77dd12559a37701da060e535c9ce9592790e6d34"
+    "bytes": 75412,
+    "sha256": "d71c814419bfab48fcc6fe8c60e498a9cf59c83725d88787e938396c8b12c9a8"
   },
   "operations": {
     "action.cancel": {
       "summary": "action.cancel",
       "path": "operations/action.cancel.json",
-      "bytes": 39619,
-      "sha256": "3923931df78d23f7e1f6c0fab5fc4d411bc29d7e7e9ba8d44ac1b572f4f3d98c"
+      "bytes": 39688,
+      "sha256": "5a4dbc31008268e795bc286c92c6924f6b0fbe386c51ac380177c76068d03aae"
     },
     "action.export": {
       "summary": "Write one run as ordinary files in a new project folder (default exports/<operationId>): the script that ran, from the run's own record; each declared output as the run left it; and provenance.json with PROVENANCE.md, saying where each file came from and what was checked. A declared file that was not written, or no longer matches the inventory the run wrote, is named and left out. When the script has unsaved changes, unsaved must be \"include\" or \"leave\". Runs nothing and never writes into an existing folder.",
@@ -23,20 +23,20 @@
     "action.list": {
       "summary": "action.list",
       "path": "operations/action.list.json",
-      "bytes": 42073,
-      "sha256": "b29c76c734da2ff76dd522b83d5fb1584bc98cbfe5b6730c6244c65f69ef0f33"
+      "bytes": 42144,
+      "sha256": "33ff9da364eb8f9db8dba34d6f4be10dbc168c580bdd734e5746979bdeb5c05d"
     },
     "action.lookup": {
       "summary": "Read the original accepted operation. Missing acknowledgement is not permission for a new identity.",
       "path": "operations/action.lookup.json",
-      "bytes": 39716,
-      "sha256": "8aa8cfed2c1df5b65a025b0efeff95128e6c419c7f27e483bf424bcf193de20e"
+      "bytes": 39785,
+      "sha256": "fcb3e481e15924b8ac0580828e7774e7b1f99e17dcc14e3c74369888a3e5c1b5"
     },
     "action.observe": {
       "summary": "Observe original Core facts. Never starts or recovers a Host.",
       "path": "operations/action.observe.json",
-      "bytes": 39679,
-      "sha256": "a362d1d37a5c9f3f437b067a80511e519f9efe0e371e0e9fdf8048bb36f9e555"
+      "bytes": 39748,
+      "sha256": "96b087ce7ee0005d07f2de695cfc3aaa0a6230911497ad2203f1e0d93258adcf"
     },
     "action.output": {
       "summary": "action.output",
@@ -47,14 +47,14 @@
     "action.retry": {
       "summary": "action.retry",
       "path": "operations/action.retry.json",
-      "bytes": 39618,
-      "sha256": "d22b746230ca9cb81532bd60ed14f883468b0a731af668537848e96fd2b931d0"
+      "bytes": 39687,
+      "sha256": "6b937efea37d8940eddaf85f194b2712346ade221070a36ab1fd1b72829a8e82"
     },
     "action.submit": {
       "summary": "Execute the explicitly selected project R script snapshot and requirements. Persist operationId before delivery; identical retries retain the original Core identity. Output directory is the first R argument, followed by explicit args or frozen resource paths. Artifact paths are output-relative; completion is run-directory-relative, returned as plan.completion, so an inventory can remain beside immutable producer artifacts.",
       "path": "operations/action.submit.json",
-      "bytes": 51881,
-      "sha256": "6387f0d1cb59c8210d8a2a292a8b0d8c39adbd1e29c2f14085fa969e53d216aa"
+      "bytes": 51950,
+      "sha256": "58e7774f5780cbb4db7408f1b4517dca2988cd1f7c646b3d50e29d9b6cc36544"
     },
     "agent.activity.capture": {
       "summary": "agent.activity.capture",
@@ -533,8 +533,8 @@
     "observation.snapshot": {
       "summary": "observation.snapshot",
       "path": "operations/observation.snapshot.json",
-      "bytes": 164799,
-      "sha256": "fef370d64dcba4404895bf12a2af45885eab0a305b1a97a96d174ea80319978e"
+      "bytes": 164874,
+      "sha256": "afba91c8758f429f5195331fcff376e48d3ced42f8de6f083b0022ecbd375322"
     },
     "project.create": {
       "summary": "project.create",
@@ -629,8 +629,8 @@
     "requirements.prepare": {
       "summary": "requirements.prepare",
       "path": "operations/requirements.prepare.json",
-      "bytes": 40360,
-      "sha256": "10886c899156957e072c4439ab78b9582e43ca4dbf7e8d9fd5b5f3ee71c51de4"
+      "bytes": 40429,
+      "sha256": "7e32b6311269887d49592e86f31fd784977616d0a2c4483004c64a4cf5b2008c"
     },
     "resource.capture": {
       "summary": "resource.capture",

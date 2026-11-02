@@ -13,7 +13,9 @@ import { runtime } from '../dist/runtime.js';
 const pluginRequire = createRequire(import.meta.resolve('@rho-workspace/plugin-agent'));
 const { Client } = await import(pathToFileURL(pluginRequire.resolve('@modelcontextprotocol/sdk/client/index.js')));
 const { StdioClientTransport } = await import(pathToFileURL(pluginRequire.resolve('@modelcontextprotocol/sdk/client/stdio.js')));
-test('real stdio MCP v2 tools share the unsaved buffer, scope and retained native identity', { timeout: 30000 }, async () => {
+// Each call resolves its contract and reads its reply back through rho_read pages. Alone this took
+// 21 s on macOS and 29 to 30 s on GitHub's windows-2022 runner: 30 s was its duration, not a limit.
+test('real stdio MCP v2 tools share the unsaved buffer, scope and retained native identity', { timeout: 90000 }, async () => {
   const root = await fs.mkdtemp(path.join(tmpdir(), 'rho-mcp-'));
   const service = await new RhoService({ root, stateDir: path.join(root, 'state'), ...await runtime() }).start();
   const client = new Client({ name: 'rho-contract-consumer', version: '0.2.0' });

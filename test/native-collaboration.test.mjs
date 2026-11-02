@@ -62,24 +62,34 @@ test('explicit r.execute retains one dispatch after close, lost acknowledgement 
 });
 
 // On Windows cmd.exe starts the Host, so a project path with characters cmd treats specially
-// has to reach it unchanged, and the Host stops in order when the service closes.
+// has to reach it unchanged, and each Host stops in order when the service closes. R itself
+// cannot run a script whose absolute path holds "%OS%": on the windows-2022 runner R 4.5.1 and
+// 4.6.2, started by Node alone, end there with 0xC0000005. So R shows its working folder in a
+// project without "%", and in one whose path holds "%OS%" the Host runs R and keeps its ending.
 test('a Host started through cmd.exe runs R in a path cmd treats specially and stops with its report', { timeout: 30000, skip: process.platform !== 'win32' && 'cmd.exe starts the Host only on Windows' }, async () => {
   const base = await fs.mkdtemp(path.join(await fs.realpath(tmpdir()), 'rho-cmd-'));
-  const root = path.join(base, 'a & b ^ %OS% !OS! (1) 中文 🧬'); await fs.mkdir(root);
+  const root = path.join(base, 'a & b ^ !OS! (1) 中文 🧬'); await fs.mkdir(path.join(root, 'e %OS% f'), { recursive: true });
   const service = await new RhoService({ root, stateDir: path.join(root, 'state'), ...await runtime() }).start();
   let closed;
   try {
     const c = new RhoClient({ url: service.url, token: service.adminToken });
-    const p = await c.call('project.create', { name: 'p' });
-    const call = (m, b = {}) => c.call(m, { projectId: p.id, ...b });
     const script = 'writeLines(normalizePath(getwd()), "where.txt")\n';
-    await fs.writeFile(path.join(p.root, 'where.R'), script);
-    await call('action.submit', { operationId: 'where', action: 'r.execute', actionVersion: '0.2.0', input: { script: { kind: 'disk', path: 'where.R', digest: digest(script) }, args: [], requirements: [], artifacts: [], completion: null } });
-    let run;
-    for (let i = 0; i < 200; i++) { run = await call('action.observe', { operationId: 'where' }); if (run.execution === 'completed') break; await setTimeout(50); }
-    assert.equal(run.execution, 'completed');
+    const where = async p => {
+      await fs.writeFile(path.join(p.root, 'where.R'), script);
+      await c.call('action.submit', { projectId: p.id, operationId: 'where', action: 'r.execute', actionVersion: '0.2.0', input: { script: { kind: 'disk', path: 'where.R', digest: digest(script) }, args: [], requirements: [], artifacts: [], completion: null } });
+      let run;
+      for (let i = 0; i < 200; i++) { run = await c.call('action.observe', { projectId: p.id, operationId: 'where' }); if (['completed', 'failed', 'unknown'].includes(run.execution)) break; await setTimeout(50); }
+      return run;
+    };
+    const p = await c.call('project.create', { name: 'p' });
+    assert.equal((await where(p)).execution, 'completed');
     assert.equal((await fs.readFile(path.join(p.root, 'where.txt'), 'utf8')).trim(), p.root);
+    const q = await c.call('project.open', { path: 'e %OS% f' }), run = await where(q);
+    // cmd would have read %OS% as Windows_NT; the Host found the folder as named.
+    assert.ok(run.native.request.workdir_resolved.endsWith('e %OS% f'), run.native.request.workdir_resolved);
+    assert.equal(typeof run.native.status.Finished.exit.Code, 'number');
+    assert.equal(run.execution, run.native.status.Finished.exit.Code === 0 ? 'completed' : 'failed');
   } finally { closed = await service.close(); }
-  assert.equal(closed.length, 1); assert.equal(closed[0].confirmed, true);
-  await fs.rm(base, { recursive: true, force: true });
+  assert.equal(closed.length, 2); assert.ok(closed.every(host => host.confirmed));
+  await fs.rm(base, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
 });

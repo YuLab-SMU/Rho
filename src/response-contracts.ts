@@ -34,8 +34,10 @@ export const receiptSchema = obj({ changeId: identity, requestDigest: digest, ve
 // The schema names the fields Rho reads and allows the owner to add more, so a
 // future Core release is additive rather than a contract violation.
 export const streamInfoSchema = obj({ retained_bytes: integer, observed_bytes: integer, limit_bytes: integer, eof: { type: 'boolean' }, retention_error: { anyOf: [text, { type: 'null' }] }, truncated: { type: 'boolean' } });
+// Core reports a code as i32. On Windows a process ended by an NTSTATUS (0xC0000005, an access
+// violation) reads as negative, so the code keeps Core's whole range.
 export const exitSchema = { oneOf: [
-  obj({ Code: integer }, ['Code']),
+  obj({ Code: { type: 'integer', minimum: -2147483648, maximum: 2147483647 } }, ['Code']),
   obj({ Signal: integer }, ['Signal']),
   obj({ Unknown: text }, ['Unknown'])
 ] };

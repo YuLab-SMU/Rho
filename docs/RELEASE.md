@@ -170,9 +170,10 @@ acceptances. The composition names the run that packed it. What the first runs f
 The package is `@rho-workspace/rho`; the source checkout stays private and the staged package is
 public. A `v*` tag naming the version in `package.json` publishes the candidate its own run built,
 tested and installed. The publish job checks out and builds nothing. It verifies the digest, name,
-version and commit, then runs `npm publish --provenance` with `NPM_TOKEN` from the GitHub environment
-`npm`, which no build or test job can read. A prerelease version goes to the `next` dist-tag, any
-other to `latest`; npm makes a package's first version `latest` whatever the tag. Before the first
-tag, the npm organization `rho-workspace`, a token that can publish there without a one-time
-password, and the `npm` environment holding it must exist; a required reviewer on that environment
-holds each publication for a person. No version has been published.
+version and commit, then runs `npm publish --provenance` with the repository secret `NPM_TOKEN`,
+which no other job names and GitHub does not give to pull requests from forks. A prerelease version
+goes to the `next` dist-tag, any other to `latest`; npm makes a package's first version `latest`
+whatever the tag. The job runs in the GitHub environment `npm`, which records each publication as a
+deployment; it has no required reviewer, so a tag whose run passes publishes without waiting for a
+person. The npm organization `rho-workspace` and a token that can publish there without a one-time
+password must exist before the first tag. No version has been published.

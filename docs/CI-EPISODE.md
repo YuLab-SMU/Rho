@@ -8,8 +8,9 @@ whose runners are free for a public repository on all four machines used here.
 
 ## What CI does
 
-`components.json` selects the Core commit (`6f83226`) and the Plugins commit (`491c440`, then
-`0b17877` and `90e68cf` after the third and fourth runs) the application is built from. On every push to `main`, pull request and `v*` tag,
+`components.json` selects the Core commit (`6f83226`, then `8bed8ef` after the sixth run) and the
+Plugins commit (`491c440`, then `0b17877` and `90e68cf` after the third and fourth runs) the
+application is built from. On every push to `main`, pull request and `v*` tag,
 [`ci.yml`](../.github/workflows/ci.yml):
 
 | Job | Runner | What it does |
@@ -29,8 +30,8 @@ acceptance of Plugins' `examples/ordinary-r-project` from the installation.
 
 The publish job checks out and builds nothing. It downloads the candidate, checks its digest, that
 the package is `@rho-workspace/rho`, not private, has the tag's version and was packed from the
-tagged commit, then runs `npm publish --provenance --access public` with `NPM_TOKEN`. That secret
-lives only in the `npm` environment, which no build or test job names. A version with a prerelease
+tagged commit, then runs `npm publish --provenance --access public` with `NPM_TOKEN`, a repository
+secret that no other job names. The job's environment `npm` has no reviewer. A version with a prerelease
 suffix goes to the `next` dist-tag, any other to `latest`. A candidate's composition names the run
 that packed it (`build.run`).
 
@@ -156,20 +157,56 @@ contract, which requires a code of 0 or more, rejects the reply. Upstream's R 4.
 What R 4.6.2 does in that folder, and whether Rho's contract should carry Windows status codes,
 were not examined. MCP v2 passed on Linux in runs 2 to 4 and was cancelled in this one.
 
+## Sixth run and a Windows diagnosis
+
+Run [41375803891](https://github.com/YuLab-SMU/Rho/actions/runs/41375803891) on `64d73550` passed
+275/277 on macOS and Linux x64 and installed on all four platforms. Windows had three failures: the
+cmd-special path, MCP v2 at 30 s, and "a repair is a new identity", which took 47 to 48 s there
+against about 2 s on macOS and passed its 60 s limit this time. A diagnosis workflow on a temporary
+branch (runs [41377127229](https://github.com/YuLab-SMU/Rho/actions/runs/41377127229) and
+[41378118954](https://github.com/YuLab-SMU/Rho/actions/runs/41378118954), windows-2022) separated
+the causes:
+
+- **R and `%OS%`.** Node alone ran `Rscript --vanilla` on a script in folders named with each
+  character cmd treats specially. R 4.5.1 and 4.6.2 both ended with `0xC0000005`, an access
+  violation, when the script's absolute path held `%OS%`. They ran normally with `&`, `^`, `!OS!`,
+  `(1)`, Chinese and an emoji, and with a relative path in the `%OS%` folder. Core gives R the
+  script's absolute path, so R ends the same way in such a project under Rho; Core reports
+  `Code(-1073741819)`. Where R misreads the path was not found. Upstream's R 4.5.1 ran the test on
+  their own machine.
+- **Rho's contract.** Rho's schema of Core's exit required a code of 0 or more. Core reports an
+  i32, and a Windows process ended by an NTSTATUS reads negative, so the service's reply failed the
+  contract it publishes. The code now keeps Core's whole range. The test runs R in a project
+  without `%` and checks its working folder; in a project whose path holds `%OS%` it checks that
+  the Host found the folder as named and that the run's state follows R's code.
+- **Core's Windows output.** Through Rho's service, R writing 200 `message()` lines took 3.1 to
+  3.4 s on Windows and 2000 lines 20 to 35 s, against 0.2 s on macOS. Once a lookup waited 20 s and
+  Rho read the running run as unknown. Core's Windows reader gets each write as its own read, and
+  each was committed alone: a blob, its sync and the record. Core `5333181` commits the bytes
+  queued since the last drain together, at most one blob chunk at a time
+  ([Core record](https://github.com/YuLab-SMU/Rho-core/blob/main/docs/work/CORE-20261102-01.md)).
+  Its new regression failed on the old pump at the 512-chunk limit after 25.9 s and passed in
+  0.5 s. With that Core on the runner, 2000 lines took 0.32 s, the repair test 2.1 s alone and MCP
+  v2 22.4 s alone. Core's full regression suite was not run on Windows.
+- **MCP v2.** Alone with the old Core it took 28.7 and 30.0 s on the runner. Its limit is now 90 s.
+
+`components.json` selects Core `8bed8ef`, the fix and its record.
+
 ## Publication
 
-Nothing has been published. Before the first `v*` tag:
+Nothing has been published. A `v*` tag needs:
 
-1. Create the npm organization `rho-workspace` with the account that will own the package.
-2. Create a granular access token that can publish to that organization's packages without a
-   one-time password, and store it as the secret `NPM_TOKEN` of a GitHub environment named `npm` in
-   YuLab-SMU/Rho; a required reviewer and a `v*` tag rule on that environment hold each publication
-   for a person.
-3. Set the version in `package.json`, push it, and tag that commit `v<version>`.
+1. The npm organization `rho-workspace`, owned by the account that will own the package.
+2. A granular access token that can publish to that organization's packages without a one-time
+   password, stored as the repository secret `NPM_TOKEN` of YuLab-SMU/Rho. The user added the secret
+   on 2026-11-02 and chose no reviewer: the `npm` environment, which GitHub creates for the first
+   publish job, holds nothing back. Whether the organization exists and the token can publish there
+   is not visible from GitHub; the first publication shows it.
+3. The version in `package.json`, pushed, and that commit tagged `v<version>`.
 
-The tag's run builds, tests, packs and installs as any other, then waits for the environment and
-publishes the candidate it tested. The 0.5.2 candidates recorded earlier were never published, and
-a version cannot be published twice.
+The tag's run builds, tests, packs and installs as any other, then publishes the candidate it
+tested. The 0.5.2 candidates recorded earlier were never published, and a version cannot be
+published twice.
 
 ## Not done
 
@@ -183,10 +220,8 @@ a version cannot be published twice.
 
 ## Open items
 
-- On Windows with R 4.6.2, R run by Core in a project path with characters cmd treats specially
-  ends with a negative exit code, which Rho's contract rejects.
-- MCP v2 stdio is cancelled at its 30 s limit on the Windows runner in every run and on Linux x64
-  in one of four, as on a loaded Mac; alone it took 21 s on macOS and 26 s on upstream's Windows machine.
+- In a project whose path holds `%OS%`, R run by Core on Windows ends with `0xC0000005`, as R does
+  there when started directly. Whether Core should hand R a path it reads safely is not decided.
 - The offline install takes 94 to 179 s on the Windows runner against 5 to 12 s elsewhere.
 - `engines` names Node 22 only. A person with Node 24 installs with npm's engine warning; no
   installation on Node 24 has been checked.
