@@ -26,7 +26,7 @@ human benefits are not established by existing Rho checks.
 | Offline evidence | Preview one review and explicit refs; static reader/original files/manifest; read-only verifier | Service closed/project moved; four browser widths; tamper detection |
 | macOS 0.5.1 | Unsigned npm tarball/local WebUI selected; Core bundled explicitly | [Fixed tarball installed and exercised](PREVIEW-0.5.1.md) |
 | 0.5.2 candidate | 16 MB tarball for macOS arm64 and Linux x64/arm64, and a 12 MB Windows x64 one: one Core per platform (Core `c3dbeca`), Claude Code/Codex the person's own, all 12 plugins | [Packing, real Claude/Codex](PACKAGE-0.5.2-EPISODE.md); [offline install on four systems, Linux Notebook and Open folder](PLATFORMS-0.5.2-EPISODE.md); [Windows: Host lifetime and stop, installed checks](WINDOWS-0.5.2-EPISODE.md); x64 only under Rosetta; the full 0.5.1 acceptance not done |
-| CI and npm | Each push that changes more than documentation builds the four Cores (each Core commit once), runs the suite on macOS, Linux and Windows, packs one 25 MB candidate for all four platforms and installs it offline on each; a `v*` tag publishes the candidate CI tested for that commit as `@rho-workspace/rho`, building nothing | [CI episode](CI-EPISODE.md): every job passes on the four platforms since run 7; a release rehearsal verified a tested candidate in 19 s; nothing published |
+| CI and npm | Each push that changes more than documentation builds the four Cores (each Core commit once), runs the suite on macOS, Linux and Windows, packs one 25 MB candidate for all four platforms and installs it offline on each; a `v*` tag publishes the candidate CI tested for that commit as `@rho-workspace/rho`, building nothing | [CI episode](CI-EPISODE.md): every job passes on the four platforms since run 7; `@rho-workspace/rho@0.5.2` published from the candidate CI tested, with provenance |
 | Independent researcher use | Unobserved | Trial guide in the episode; no usability claim |
 | Example project | `example/pa14-qs` ships with the application; a new state copies it into the projects folder once, as an ordinary editable project | [Episode](EXAMPLE-PROJECT-EPISODE.md) |
 | dsh-rho 0.0.1 | Native dsh 0.2.1-rc.5 analysis, captured CSV/SVG, selected-row question | Real model/browser loop; local tarball installed; restart/overwrite/crash preserved results and one analysis run; 5/5 adapter tests and type check |
@@ -288,7 +288,7 @@ and uncertainty ([Headless](HEADLESS.md#retained-review-evidence)).
 
 The product target is local WebUI on macOS arm64, Linux x64/arm64 and Windows x64, each installed from one tarball in CI.
 No cloud/account/team/billing, native shell, automatic runtime download or signed release is included; npm publication
-of a `v*` tag is set up and nothing is published. From 0.5.2 the person installs the Agent clients; Rho pins their ACP
+of a `v*` tag published `@rho-workspace/rho@0.5.2`. From 0.5.2 the person installs the Agent clients; Rho pins their ACP
 adapters. [Release](RELEASE.md) separates source, fixed composition, installation and future signed distribution. Offline evidence
 is not a workspace restore or executable analysis format. Existing archives keep owner fields and reject older formats that would lose state.
 

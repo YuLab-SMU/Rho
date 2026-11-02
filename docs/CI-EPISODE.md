@@ -255,7 +255,7 @@ differences of that size are noise.
 
 ## Publication
 
-Nothing has been published. A `v*` tag needs:
+`@rho-workspace/rho@0.5.2` is published (below). A `v*` tag needs:
 
 1. The npm organization `rho-workspace`, owned by the account that will own the package.
 2. A granular access token that can publish to that organization's packages without a one-time
@@ -284,9 +284,22 @@ with `EOTP`: the token authenticated, but publishing needs a one-time password. 
 A token that bypasses two-factor authentication for publishing is needed; then the failed job can
 be rerun on the same tag.
 
+The user replaced `NPM_TOKEN` at 04:48 UTC and the failed job was rerun (attempt 2). `npm publish`
+logged a second provenance entry ([sigstore 3637698138](https://search.sigstore.dev/?logIndex=3637698138)),
+said the package was being processed and returned at 04:50:16. The registry first showed only a
+placeholder, `0.0.0-stage` ("Temporary package placeholder for staged publishing"), as `latest`;
+`npm stage list` showed nothing staged. Version 0.5.2 appeared at 04:54:29 as `latest`. Its tarball's
+SHA-256 is `2eb34912…`, the candidate CI run 41387094779 packed from `212d1289` and installed on all
+four platforms; its SLSA provenance names `release.yml` at `refs/tags/v0.5.2`, commit `212d1289`
+and run 41387607313 attempt 2. On this Mac `npm install @rho-workspace/rho@0.5.2` took 8 s (with
+`--prefer-online`, since npm had cached the placeholder-only document) and carried all four Cores,
+and `rho --help` printed its usage. `npm audit signatures` stopped at the bundled plugins, which are
+not separate registry packages (404 for `@rho-workspace/plugin-documents@0.4.10`). The placeholder
+version stays in the registry.
+
 ## Not done
 
-- Publication (refused for a one-time password), a GitHub Release, signing.
+- A GitHub Release and signing.
 - Rho's suite on Linux arm64; only the installation runs there.
 - Real Agent conversations in CI. The suite uses stand-ins; on Windows the 11 stand-ins written as
   Unix scripts are skipped.
