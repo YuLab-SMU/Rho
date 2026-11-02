@@ -448,7 +448,7 @@ export class RhoService {
     await this.state.init();
     // A person who starts Rho on a fresh state sees one finished study beside their own work.
     // It is copied into the projects folder once and is otherwise an ordinary project.
-    this.example = await seedExampleProject(this.state, { enabled: this.config.example }).catch(() => null);
+    this.example = await seedExampleProject(this.state, { enabled: this.config.example === true }).catch(() => null);
     for (const project of this.state.projects) if (project.sources) this.plugins.sourceFolders.set(project.id, project.sources);
     this.adminToken = randomBytes(32).toString('hex');
     this.state.principals = this.state.principals.filter(p => p.id !== 'operator');
