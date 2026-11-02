@@ -1,6 +1,6 @@
 {
   "name": "@rho-workspace/rho",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "type": "module",
   "description": "Rho local workspace service, scoped browser shell and headless client",
   "license": "AGPL-3.0-only",
@@ -73,6 +73,9 @@
     "docs:dev": "npm run docs:assemble && vitepress dev site",
     "docs:build": "npm run docs:assemble && vitepress build site",
     "docs:preview": "vitepress preview site",
+    "pages:build": "node scripts/pages-site.mjs",
+    "pages:check": "node scripts/demo-check.mjs",
+    "pages:capture": "node scripts/demo-capture.mjs",
     "test:ui": "npm run build && node --test test/browser.test.mjs && node scripts/ui-acceptance.mjs",
     "acceptance:execution": "node scripts/execution-acceptance.mjs",
     "acceptance:person": "node scripts/person-files-acceptance.mjs",

@@ -94,6 +94,8 @@ const manifest = JSON.parse(await fs.readFile(path.join(root, 'package.json'), '
 for (const entry of manifest.files.filter(p => p !== 'vendor')) {
   try { await fs.cp(path.join(root, entry), path.join(stage, entry), { recursive: true }); } catch (e) { if (e.code !== 'ENOENT') throw e; }
 }
+// npm shows the package's README on its page; it is not among `files`, so it is copied here.
+await fs.copyFile(path.join(root, 'README.md'), path.join(stage, 'README.md'));
 await fs.mkdir(path.join(stage, 'vendor'));
 for (const item of pluginPacks.packages) {
   await fs.copyFile(path.join(pluginPacks.destination, item.filename), path.join(stage, 'vendor', item.filename));
@@ -127,7 +129,7 @@ const composition = { schemaVersion: 2, platforms: cores.map(c => c.platform), p
 await fs.writeFile(path.join(stage, 'vendor/composition.json'), JSON.stringify(composition, null, 2) + '\n');
 const result = JSON.parse(run('npm', ['pack', '--ignore-scripts', '--json', '--pack-destination', destination], stage))[0];
 if (result.files.some(f => path.isAbsolute(f.path) || f.path.split('/').includes('..'))) throw new Error('Package contains a path outside the assembled root.');
-for (const required of [...cores.map(c => c.record.path), 'protocol/index.json', 'fixtures/states.json', 'dist/web/index.html', 'dist/web/composition.json', 'dist/web/licenses.md', ...web.assets.map(a => 'dist/web/' + a.path), ...pluginPacks.packages.map(p => 'node_modules/' + p.package + '/dist/index.js')]) if (!result.files.some(f => f.path === required)) throw new Error('Package is missing ' + required);
+for (const required of [...cores.map(c => c.record.path), 'README.md', 'protocol/index.json', 'fixtures/states.json', 'dist/web/index.html', 'dist/web/composition.json', 'dist/web/licenses.md', ...web.assets.map(a => 'dist/web/' + a.path), ...pluginPacks.packages.map(p => 'node_modules/' + p.package + '/dist/index.js')]) if (!result.files.some(f => f.path === required)) throw new Error('Package is missing ' + required);
 for (const [id, dependency] of [['tables', 'csv-parse'], ['agent', '@modelcontextprotocol/sdk'], ['agent', '@agentclientprotocol/sdk'], ['agent', '@agentclientprotocol/claude-agent-acp'], ['agent', '@agentclientprotocol/codex-acp'], ['agent', '@openai/codex']]) {
   if (result.files.some(f => f.path === 'node_modules/' + dependency + '/package.json') !== selected.includes(id)) throw new Error('Optional dependency did not follow its plugin: ' + dependency);
 }

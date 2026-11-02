@@ -1,0 +1,616 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rho — see what your Agent did in your R project</title>
+<meta name="description" content="Rho is a local workspace for R projects that you share with Claude Code or Codex. Try the real interface on a recorded project, then install it by asking your Agent.">
+<meta name="theme-color" content="#ffffff">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231e6b52'/%3E%3Ctext x='16' y='23' font-family='Georgia,serif' font-size='22' text-anchor='middle' fill='white'%3E%CF%81%3C/text%3E%3C/svg%3E">
+<script>document.documentElement.classList.add('js')</script>
+<style>
+/* The application's own palette and faces (web/theme.css), so the page and the demo read as one thing. */
+:root {
+  --bg: #ffffff;
+  --canvas: #f6f7f8;
+  --well: #eef2ef;
+  --field: #e5f1e9;
+  --ink: #202927;
+  --muted: #596560;
+  --line: #e1e6e3;
+  --accent: #1e6b52;
+  --accent-hover: #17553f;
+  --on-accent: #ffffff;
+  --failed: #b13f38;
+  --display: Georgia, 'Iowan Old Style', 'Times New Roman', serif;
+  --ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; /* taste-skill-ignore: code blocks and commands only */
+  --margin: clamp(16px, 2.6vw, 36px);
+  --radius: 6px;
+  --s1: 13px; --s2: 16px; --s3: 22px; --s4: clamp(24px, 2.3vw, 32px); --s5: clamp(40px, 5.6vw, 84px);
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 72px; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: var(--s2)/1.55 var(--ui); -webkit-font-smoothing: antialiased; }
+a { color: var(--accent); text-underline-offset: 3px; }
+a:hover { color: var(--accent-hover); }
+img { display: block; max-width: 100%; height: auto; }
+h1, h2, h3 { margin: 0; font-weight: 400; text-wrap: balance; }
+p { margin: 0; }
+button, input { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+::selection { background: var(--field); }
+.wrap { padding-inline: var(--margin); max-width: 1520px; margin-inline: auto; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+code { font-family: var(--mono); font-size: .92em; } /* taste-skill-ignore: literal commands */
+:not(pre) > code { padding: 1px 5px; border-radius: 4px; background: var(--well); }
+
+.btn { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 18px; border: 0; border-radius: var(--radius); background: var(--well); color: var(--ink); font-size: var(--s2); font-weight: 600; text-decoration: none; cursor: pointer; transition: background-color .18s ease, transform .18s ease; }
+.btn:hover { background: #e2eae5; color: var(--ink); }
+.btn:active { transform: translateY(1px) scale(.98); }
+.btn.primary { background: var(--accent); color: var(--on-accent); }
+.btn.primary:hover { background: var(--accent-hover); color: var(--on-accent); }
+.btn svg { transition: transform .18s ease; }
+.btn:hover svg { transform: translateX(3px); }
+
+/* Bar */
+.bar { position: sticky; top: 0; z-index: 20; background: var(--bg); }
+.bar .wrap { display: flex; align-items: center; gap: 28px; height: 64px; }
+.mark { display: inline-flex; align-items: center; gap: 10px; color: var(--ink); text-decoration: none; font: 600 var(--s3)/1 var(--display); }
+.mark i { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 8px; background: var(--accent); color: #fff; font: 20px/1 var(--display); font-style: normal; transition: transform .25s ease; }
+.mark:hover { color: var(--ink); }
+.mark:hover i { transform: rotate(-8deg); }
+.bar nav { display: flex; gap: 24px; margin-left: auto; }
+.bar nav a { color: var(--ink); text-decoration: none; }
+.bar nav a:hover { color: var(--accent); }
+.bar .btn { min-height: 38px; padding: 0 14px; }
+
+/* Hero: the headline, one sentence, and the product itself */
+.hero { padding-top: clamp(28px, 5vh, 64px); }
+.hero h1 { font: var(--s5)/1 var(--display); letter-spacing: -.025em; }
+.hero-sub { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px 48px; flex-wrap: wrap; margin-top: 22px; }
+.hero-sub p { max-width: 640px; font-size: var(--s3); line-height: 1.45; }
+.actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.demo { margin-top: clamp(28px, 4vh, 44px); margin-bottom: 0; }
+.demo-frame { position: relative; overflow: hidden; height: min(900px, calc(100svh - 84px)); min-height: 560px; border-radius: 10px; background: var(--canvas); box-shadow: 0 0 0 1px var(--line); } /* taste-skill-ignore: the application's own window edge */
+.demo-frame iframe { display: block; width: 100%; height: 100%; border: 0; background: var(--bg); }
+.demo-frame .loading { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); pointer-events: none; transition: opacity .3s ease; }
+.demo-frame.ready .loading { opacity: 0; }
+.demo figcaption { display: flex; justify-content: space-between; gap: 12px 32px; flex-wrap: wrap; margin-top: 16px; }
+.demo figcaption p { max-width: 68ch; }
+
+section { scroll-margin-top: 64px; }
+.gap { margin-top: clamp(120px, 14vw, 200px); }
+.lede { max-width: 660px; margin-top: 16px; font-size: 18px; line-height: 1.5; }
+
+/* Install: each beat holds its statement and its fragment while it is read */
+.install h2, .prompts h2, .checked h2, .downloads h2 { font: var(--s4)/1.1 var(--display); letter-spacing: -.015em; }
+.install > h2 { font-size: var(--s5); line-height: 1; letter-spacing: -.025em; }
+.beats { margin-top: 32px; }
+.beat { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 48px; min-height: 86vh; padding-bottom: 8vh; }
+.beat-text, .beat-frag { position: sticky; top: 13vh; align-self: start; }
+.beat-text h3 { font: var(--s4)/1.12 var(--display); letter-spacing: -.01em; }
+.beat-text p { margin-top: 14px; font-size: 18px; line-height: 1.5; max-width: 52ch; }
+.beat-text .actions { margin-top: 24px; }
+.switch { display: inline-flex; padding: 3px; border-radius: 8px; background: var(--well); }
+.switch button { min-height: 38px; padding: 0 14px; border: 0; border-radius: 6px; background: transparent; cursor: pointer; font-weight: 600; color: var(--muted); transition: background-color .18s ease, color .18s ease; }
+.switch button[aria-pressed="true"] { background: var(--bg); color: var(--ink); }
+.folder { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 18px; color: var(--muted); }
+.folder input { width: 15em; min-height: 40px; padding: 0 12px; border: 0; border-radius: var(--radius); background: var(--well); color: var(--ink); font-size: var(--s2); }
+
+/* Interface fragments keep the product's own conventions */
+.panel { overflow: hidden; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); font-size: 14px; } /* taste-skill-ignore: interface fragment */
+.panel-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 48px; padding: 6px 8px 6px 16px; border-bottom: 1px solid var(--line); background: var(--canvas); } /* taste-skill-ignore: interface fragment */
+.panel-head strong { font-size: 14px; }
+.panel-head .copy { min-height: 34px; padding: 0 12px; font-size: 14px; }
+.prompt-text { margin: 0; padding: 16px 18px 20px; max-height: 58vh; overflow: auto; font: 14px/1.6 var(--ui); white-space: pre-wrap; }
+.term { margin: 0; padding: 18px 20px; border-radius: 10px; background: var(--ink); color: #dfe7e3; font: 14px/1.7 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; } /* taste-skill-ignore: a terminal */
+.term b { color: #fff; font-weight: 600; }
+.term .dim { color: #97a49f; }
+.shot { margin: 0; padding: clamp(10px, 1.6vw, 20px); border-radius: 10px; background: var(--well); }
+.shot img { border-radius: 6px; }
+.frag-note { margin-top: 12px; color: var(--muted); font-size: var(--s2); }
+
+.manual { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 48px; }
+.manual h3 { font: var(--s4)/1.12 var(--display); }
+.manual pre { margin: 0; }
+.manual .codebox { position: relative; }
+.manual .codebox .term { padding-right: 88px; }
+.manual .codebox .copy { position: absolute; top: 10px; right: 10px; min-height: 34px; padding: 0 12px; background: #34403c; color: #fff; font-size: 14px; }
+.manual .codebox .copy:hover { background: #46534e; color: #fff; }
+.req { width: 100%; margin-top: 28px; border-collapse: collapse; }
+.req th, .req td { padding: 12px 12px 12px 0; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+.req th { width: 9em; font-weight: 600; }
+
+/* Prompts: sets on the left, the chosen set's prompts as bands */
+.prompts-head { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: 32px 48px; align-items: end; }
+.prompts-head .lede { max-width: 62ch; }
+.prompts-head .actions { margin-top: 28px; }
+.result { margin: 0; }
+.result img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; object-position: top; border-radius: 8px; background: #fff; }
+.result figcaption { margin-top: 10px; color: var(--muted); }
+.prompt-sets { display: grid; grid-template-columns: 196px minmax(0, 1fr); gap: 24px; margin-top: 48px; }
+.tabs { display: flex; flex-direction: column; gap: 6px; }
+.tabs button { display: flex; flex-direction: column; align-items: flex-start; justify-content: center; min-height: 64px; padding: 8px 14px; border: 0; border-radius: var(--radius); background: var(--well); text-align: left; cursor: pointer; transition: background-color .18s ease, transform .18s ease; }
+.tabs button b { font-size: var(--s2); }
+.tabs button span { color: var(--muted); font-size: var(--s1); }
+.tabs button:hover { background: #e2eae5; }
+.tabs button[aria-selected="true"] { background: var(--ink); color: #fff; }
+.tabs button[aria-selected="true"] span { color: #c9d4cf; }
+.bands { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.band { display: grid; grid-template-columns: 76px minmax(0, 1fr) auto; gap: 8px 20px; align-items: start; padding: 18px 16px 18px 20px; border-radius: 8px; background: var(--canvas); }
+.band:nth-child(even) { background: var(--well); }
+.band .took { font: 600 var(--s3)/1.3 var(--ui); font-variant-numeric: tabular-nums; }
+.band .took small { display: block; color: var(--muted); font-size: var(--s1); font-weight: 400; }
+.band .ask { max-width: 75ch; line-height: 1.5; }
+.band .note { margin-top: 6px; color: var(--muted); font-size: var(--s1); }
+.band .side { display: flex; align-items: flex-start; gap: 12px; }
+.band .thumb { width: 104px; height: 78px; object-fit: cover; object-position: top left; border-radius: 4px; background: #fff; }
+.band .copy { min-height: 36px; padding: 0 12px; background: var(--bg); font-size: 14px; }
+.band.plain { grid-template-columns: minmax(0, 1fr) auto; }
+.panel-intro { max-width: 75ch; margin-bottom: 14px; }
+.js [role="tabpanel"][hidden] { display: none; }
+
+/* Checked: a board of filled tiles */
+.board { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.tile { min-height: 200px; padding: 24px; border-radius: 8px; background: var(--canvas); display: flex; flex-direction: column; justify-content: space-between; gap: 20px; }
+.tile b { font: 700 var(--s3)/1.15 var(--ui); }
+.tile.lead { grid-column: span 2; background: var(--accent); color: #fff; }
+.tile.lead h2 { color: #fff; }
+.tile.lead p { color: #e6f0ea; }
+.tile.lead a { color: #fff; }
+.tile.open { grid-column: span 2; background: var(--ink); color: #fff; }
+.tile.open p { color: #d4ddd9; }
+.tile.open a { color: #fff; }
+
+/* Downloads */
+.downloads .grid { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 48px; }
+.dl { width: 100%; border-collapse: collapse; }
+.dl th, .dl td { padding: 14px 12px 14px 0; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+.dl td code { display: block; max-width: 34ch; overflow-wrap: anywhere; color: var(--muted); font-size: var(--s1); background: none; padding: 0; }
+.dl a { font-weight: 600; }
+.small-print { margin-top: 24px; display: grid; gap: 14px; }
+.small-print p { max-width: 72ch; }
+
+/* Closing sentence with its blank */
+.closing { padding-block: clamp(80px, 10vw, 140px); background: var(--field); }
+.closing form { max-width: 1100px; }
+.closing .statement { font: clamp(26px, 3.4vw, 36px)/1.5 var(--display); }
+.closing input { width: 7.4em; height: 1.35em; padding: 0 .3em; border: 0; border-radius: var(--radius); background: var(--bg); font: inherit; vertical-align: .04em; }
+.closing button { height: 1.5em; padding: 0 .45em; border: 0; border-radius: var(--radius); background: var(--accent); color: #fff; font: inherit; cursor: pointer; transition: background-color .18s ease, transform .18s ease; }
+.closing button:hover { background: var(--accent-hover); }
+.closing button:active { transform: scale(.97); }
+.closing .after { margin-top: 18px; color: var(--muted); }
+
+/* Footer tiles */
+.foot { padding: 8px; display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 8px; }
+.foot > * { border-radius: 8px; padding: 24px; background: var(--canvas); min-height: 220px; display: flex; flex-direction: column; justify-content: space-between; gap: 18px; }
+.foot .t-about { grid-column: span 4; }
+.foot .t-about p:first-child { font-size: var(--s3); line-height: 1.35; }
+.foot .t-nav { grid-column: span 3; }
+.foot .t-nav ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+.foot .t-ver { grid-column: span 2; }
+.foot .t-ver b { font: 700 var(--s4)/1 var(--ui); }
+.foot .t-issue { grid-column: span 3; }
+.foot .t-issue a.big { font-size: var(--s3); font-weight: 600; }
+.foot .t-word { grid-column: span 8; min-height: 300px; background: var(--ink); color: #fff; align-items: center; justify-content: center; }
+.foot .t-word span { font: clamp(64px, 11vw, 180px)/1 var(--display); letter-spacing: -.03em; }
+.foot .t-go { grid-column: span 4; min-height: 300px; border: 0; background: var(--accent); color: #fff; text-align: left; font: inherit; cursor: pointer; transition: background-color .2s ease; }
+.foot .t-go:hover { background: var(--accent-hover); }
+.foot .t-go strong { font: var(--s4)/1.15 var(--display); }
+.foot .t-go svg { align-self: flex-end; transition: transform .2s ease; }
+.foot .t-go:hover svg { transform: translate(4px, -4px); }
+.legal { color: var(--muted); font-size: var(--s1); }
+.legal a { color: var(--muted); }
+
+/* Dialog */
+dialog { width: min(760px, calc(100vw - 32px)); max-height: calc(100svh - 32px); padding: 0; border: 0; border-radius: 12px; color: var(--ink); box-shadow: 0 24px 64px rgba(16, 24, 22, .28); } /* taste-skill-ignore: a dialog floats */
+dialog::backdrop { background: rgba(20, 28, 26, .45); }
+.dlg { display: flex; flex-direction: column; gap: 16px; padding: 24px; max-height: calc(100svh - 32px); }
+.dlg-head { display: flex; justify-content: space-between; gap: 16px; }
+.dlg-head h2 { font: var(--s4)/1.1 var(--display); }
+.dlg-head p { margin-top: 8px; color: var(--muted); }
+.close { flex: none; width: 40px; height: 40px; border: 0; border-radius: 8px; background: var(--well); cursor: pointer; font-size: 22px; line-height: 1; }
+.dlg .switch { align-self: flex-start; }
+.dlg .panel { display: flex; flex-direction: column; min-height: 0; }
+.dlg .prompt-text { max-height: none; flex: 1; }
+.dlg-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.status { color: var(--accent); font-weight: 600; min-height: 1.5em; }
+
+/* Entrances: parts of each section rise in order; content is visible without script */
+.js [data-enter] > * { opacity: 0; transform: translateY(24px); transition: opacity .6s ease, transform .6s cubic-bezier(.2, .7, .2, 1); }
+.js [data-enter].in > * { opacity: 1; transform: none; }
+.js [data-enter].in > *:nth-child(2) { transition-delay: .08s; }
+.js [data-enter].in > *:nth-child(3) { transition-delay: .16s; }
+.js [data-enter].in > *:nth-child(4) { transition-delay: .24s; }
+.js [data-enter].in > *:nth-child(n+5) { transition-delay: .3s; }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .js [data-enter] > * { opacity: 1; transform: none; transition: none; }
+  * { transition-duration: .01ms !important; }
+}
+
+@media (max-width: 1100px) {
+  .bar nav { display: none; }
+  .bar .btn { margin-left: auto; }
+  .beat, .manual, .downloads .grid, .prompts-head { grid-template-columns: minmax(0, 1fr); gap: 24px; }
+  .beat { min-height: 0; padding-bottom: 72px; }
+  .beat-text, .beat-frag { position: static; }
+  .board { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .foot { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .foot > * { grid-column: span 1 !important; min-height: 180px; }
+  .foot .t-word, .foot .t-go { grid-column: span 2 !important; min-height: 180px; }
+}
+@media (max-width: 760px) {
+  :root { --s3: 19px; }
+  .hero h1 { font-size: 11vw; }
+  .hero-sub p { font-size: 18px; }
+  .demo-frame { height: 78svh; min-height: 480px; }
+  .prompt-sets { grid-template-columns: minmax(0, 1fr); }
+  .tabs { flex-direction: row; flex-wrap: wrap; }
+  .tabs button { min-height: 44px; padding: 6px 12px; }
+  .tabs button span { display: none; }
+  .band, .band.plain { grid-template-columns: minmax(0, 1fr); padding: 16px; }
+  .band .took { display: flex; gap: 8px; align-items: baseline; }
+  .band .took small { display: inline; }
+  .band .side { justify-content: space-between; }
+  .tile { min-height: 150px; padding: 20px; }
+  .tile.lead, .tile.open { grid-column: span 2; }
+  .foot { grid-template-columns: minmax(0, 1fr); }
+  .foot > *, .foot .t-word, .foot .t-go { grid-column: span 1 !important; }
+  .closing input { width: 100%; display: block; margin: .2em 0; font-size: .7em; }
+  .dl td code { max-width: none; }
+  .dlg { padding: 18px; }
+}
+</style>
+</head>
+<body>
+<header class="bar">
+  <div class="wrap">
+    <a class="mark" href="./" aria-label="Rho home"><i aria-hidden="true">ρ</i>Rho</a>
+    <nav aria-label="Page">
+      <a href="#demo">Demo</a>
+      <a href="#install">Install</a>
+      <a href="#prompts">Prompts</a>
+      <a href="#downloads">Downloads</a>
+      <a href="docs/">Documentation</a>
+      <a href="https://github.com/YuLab-SMU/Rho">GitHub</a>
+    </nav>
+    <button class="btn primary" type="button" data-open-install>Install with your Agent</button>
+  </div>
+</header>
+
+<main>
+  <section class="hero" aria-labelledby="title">
+    <div class="wrap" data-enter>
+      <h1 id="title">See what your Agent did.</h1>
+      <div class="hero-sub">
+        <p>Rho is a local workspace for R projects that you share with Claude Code or Codex: the same files, the same runs, and one record of how each result was reached.</p>
+        <div class="actions">
+          <button class="btn primary" type="button" data-open-install>Install with your Agent</button>
+          <a class="btn" href="demo/#project={{demo-project}}" target="_blank" rel="noopener">Open the demo full screen</a>
+        </div>
+      </div>
+    </div>
+    <figure class="demo wrap" id="demo">
+      <div class="demo-frame" data-ui>
+        <p class="loading">Loading the demo…</p>
+        <iframe src="demo/#project={{demo-project}}" title="Rho, replaying a recorded session on the PA14 quorum sensing project" allow="clipboard-write"></iframe>
+      </div>
+      <figcaption>
+        <p>This is Rho itself, replaying {{demo-turns}} recorded requests to an Agent on the PA14 quorum-sensing project it ships with. Open a figure, a table, the Graph or a Studio session. There is no backend: nothing you do here is sent anywhere.</p>
+        <a href="demo/#project={{demo-project}}" target="_blank" rel="noopener">Full screen</a>
+      </figcaption>
+    </figure>
+  </section>
+
+  <section class="install wrap gap" id="install" aria-labelledby="install-title">
+    <h2 id="install-title">Install it by asking</h2>
+    <p class="lede">Your Agent can install Rho, start it and connect itself to the example in one conversation. Pick the Agent you use and copy the prompt; every command in it is written out, so you can read it first.</p>
+    <div class="beats">
+      <div class="beat">
+        <div class="beat-text" data-enter>
+          <h3>Copy the prompt into your Agent.</h3>
+          <p>Use Claude Code or Codex on the machine where your R projects live. The prompt says when to stop and ask you: a different Node, or a global install that needs administrator rights.</p>
+          <div class="actions">
+            <div class="switch" role="group" aria-label="Agent">
+              <button type="button" aria-pressed="true" data-agent="claude">Claude Code</button>
+              <button type="button" aria-pressed="false" data-agent="codex">Codex</button>
+            </div>
+          </div>
+          <label class="folder">Projects folder <input type="text" value="~/rho-projects" spellcheck="false" autocomplete="off" data-folder></label>
+        </div>
+        <div class="beat-frag">
+          <div class="panel" data-ui>
+            <div class="panel-head"><strong>Prompt for <span data-agent-label>Claude Code</span></strong><button class="btn primary copy" type="button" data-copy-prompt>Copy prompt</button></div>
+            <pre class="prompt-text" data-prompt>{{prompt-default}}</pre>
+          </div>
+          <p class="frag-note status" role="status" data-status></p>
+        </div>
+      </div>
+      <div class="beat">
+        <div class="beat-text" data-enter>
+          <h3>It installs Rho and starts it.</h3>
+          <p>One npm package, run on your machine. There is no Rho server: the page Rho opens is served from your own computer at a loopback address, and the projects folder stays an ordinary folder.</p>
+        </div>
+        <div class="beat-frag">
+          <pre class="term" data-ui aria-label="What the install looks like in a terminal"><code><span class="dim">$</span> <b>node -v</b>
+v22.22.3
+<span class="dim">$</span> <b>npm install -g @rho-workspace/rho</b>
+added 1 package in 902ms
+<span class="dim">$</span> <b>mkdir -p ~/rho-projects</b>
+<span class="dim">$</span> <b>nohup rho --root ~/rho-projects --state-dir ~/.rho-service --open \
+    &gt; ~/.rho-service.log 2&gt;&amp;1 &amp;</b>
+<span class="dim">$</span> <b>head -c 120 ~/.rho-service.log</b>
+{"ready":{"url":"http://127.0.0.1:55671","connectionFile":"~/.rho-service/connection.json",…
+<span class="dim">$</span> <b>ls ~/rho-projects</b>
+PA14 quorum sensing</code></pre>
+          <p class="frag-note">Output of npm {{version}} on macOS arm64, with the home folder shown as ~. The port is chosen at each start.</p>
+        </div>
+      </div>
+      <div class="beat">
+        <div class="beat-text" data-enter>
+          <h3>Open the example and ask.</h3>
+          <p>The first start copies the PA14 quorum-sensing project into your projects folder: the project in the demo above, with its recorded work. Ask in Rho's Agent panel, which drives your own Claude Code or Codex under your own permissions.</p>
+        </div>
+        <div class="beat-frag">
+          <figure class="shot"><img src="img/overview.jpg" width="1600" height="1013" loading="lazy" alt="Rho's Overview of the PA14 quorum sensing project: the latest question, its answer and the summary figure it produced."></figure>
+          <p class="frag-note">The Overview opens on the latest answer and the files it produced.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="manual" data-enter>
+      <div>
+        <h3>Or install it yourself</h3>
+        <p class="lede">The same three steps by hand. Create the projects folder first and keep the service state outside it. <a href="docs/start/">Install guide</a></p>
+      </div>
+      <div>
+        <div class="codebox">
+          <pre class="term"><code><span class="dim">$</span> <b>npm install -g @rho-workspace/rho</b>
+<span class="dim">$</span> <b>mkdir -p ~/rho-projects</b>
+<span class="dim">$</span> <b>rho --root ~/rho-projects --state-dir ~/.rho-service --open</b></code></pre>
+          <button class="btn copy" type="button" data-copy-text="npm install -g @rho-workspace/rho&#10;mkdir -p ~/rho-projects&#10;rho --root ~/rho-projects --state-dir ~/.rho-service --open">Copy</button>
+        </div>
+        <table class="req">
+          <tbody>
+            <tr><th scope="row">Node</th><td>22.22 or a later 22.x. A different Node prints one <code>EBADENGINE</code> warning.</td></tr>
+            <tr><th scope="row">Agent</th><td>Claude Code or Codex, installed and signed in by you. Rho drives your client; it does not install an Agent or copy its credentials.</td></tr>
+            <tr><th scope="row">R</th><td>Only for R work. Rho installs no R packages on its own; a missing Rscript is reported, not worked around.</td></tr>
+            <tr><th scope="row">Systems</th><td>macOS arm64 is the baseline. Linux x64 and arm64 and Windows x64 are checked in CI; macOS x64 runs only under Rosetta.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="prompts wrap gap" id="prompts" aria-labelledby="prompts-title">
+    <div class="prompts-head" data-enter>
+      <div>
+        <h2 id="prompts-title">Prompts to start from</h2>
+        <p class="lede">The first set is what a person typed in Rho's Agent panel to build the example project: the session the demo replays, answered by Claude Code. The others are the prompts each plugin offers for itself; their file names stand in for yours.</p>
+        <div class="actions"><a class="btn" href="#demo">See these answers in the demo</a></div>
+      </div>
+      <figure class="result">
+        <img src="img/summary.jpg" width="1400" height="1500" loading="lazy" alt="The PA14 summary figure: colony area of wild type and four quorum-sensing mutants, and colony area across co-culture ratios with a fitted peak.">
+        <figcaption>results/summary.png, drawn in R by the Agent for the sixth request.</figcaption>
+      </figure>
+    </div>
+    <div class="prompt-sets">
+      <div class="tabs" role="tablist" aria-label="Prompt sets" aria-orientation="vertical">
+{{prompt-tabs}}
+      </div>
+      <div>
+{{prompt-panels}}
+        <p class="status" role="status" data-status></p>
+      </div>
+    </div>
+  </section>
+
+  <section class="checked wrap gap" id="checked" aria-labelledby="checked-title">
+    <div class="board" data-enter>
+      <div class="tile lead">
+        <h2 id="checked-title">Checked so far</h2>
+        <p>Each line is a check that was run, not a promise. <a href="docs/reference/status">Current status</a></p>
+      </div>
+      <div class="tile"><b>npm {{version}}</b><p>Published from the exact candidate the CI suite tested, with provenance.</p></div>
+      <div class="tile"><b>macOS arm64</b><p>The baseline. CI runs the suite and installs the packed candidate offline.</p></div>
+      <div class="tile"><b>Linux x64, arm64</b><p>The suite and an offline install of the same candidate, on each.</p></div>
+      <div class="tile"><b>Windows x64</b><p>The suite and an offline install; Rscript 4.5.1 checked.</p></div>
+      <div class="tile"><b>Claude Code</b><p>Real conversations through Rho's Agent panel, including the one in the demo.</p></div>
+      <div class="tile"><b>Codex</b><p>Real conversations through the same panel, with Codex's own permission modes.</p></div>
+      <div class="tile"><b>R 4.5</b><p>Scripts, a shared Notebook session and package checks; R is only needed for R work.</p></div>
+      <div class="tile"><b>Five papers</b><p>Reproduced in Rho 0.5.2 by Agents working in the shared Notebook.</p></div>
+      <div class="tile open">
+        <b>Not shown yet</b>
+        <p>Use by an independent researcher has not been observed, so no usability claim is made. Literature reproductions needed several turns and many approval choices. <a href="docs/records/literature-repro-episode">Read the record</a></p>
+      </div>
+    </div>
+  </section>
+
+  <section class="downloads wrap gap" id="downloads" aria-labelledby="downloads-title">
+    <div class="grid" data-enter>
+      <div>
+        <h2 id="downloads-title">Desktop installers</h2>
+        <p class="lede">Rho 0.4.0, published 2026-08-18, is the desktop line, on both the Stable and Development channels. Installed desktop apps keep their update feed. The current Rho is the npm package above.</p>
+      </div>
+      <div>
+        <table class="dl">
+          <thead><tr><th scope="col">System</th><th scope="col">Installer and SHA-256</th></tr></thead>
+          <tbody>
+            <tr><td>Windows x64</td><td><a href="https://github.com/YuLab-SMU/Rho/releases/download/v0.4.0/Rho_0.4.0_x64-setup.exe">Rho_0.4.0_x64-setup.exe</a><code>9d839c60a2e6fdebde71a1c2246fdb123dd91068b8e69e07a3f297d6e9ff13ce</code></td></tr>
+            <tr><td>macOS (Apple Silicon)</td><td><a href="https://github.com/YuLab-SMU/Rho/releases/download/v0.4.0/Rho_0.4.0_aarch64.dmg">Rho_0.4.0_aarch64.dmg</a><code>b6820eb321d24d9644a6a7c7a994b9833e5a90dcf46281ce001736e9b918b4bb</code></td></tr>
+            <tr><td>Linux x86-64</td><td><a href="https://github.com/YuLab-SMU/Rho/releases/download/v0.4.0/Rho_0.4.0_x86_64.AppImage">Rho_0.4.0_x86_64.AppImage</a><code>a3e1f5bd3fdcc6c1234300a299081ca38f01a66ec4efdb243ec394eaf73c4c3c</code></td></tr>
+          </tbody>
+        </table>
+        <div class="small-print">
+          <p>Installers are hosted by GitHub Releases. In some networks a download may be unavailable even when this page is reachable. Listed macOS builds are Developer ID signed and notarized. Verify every download with its SHA-256 checksum.</p>
+          <p><strong>Windows code signing.</strong> Rho 0.4.0 is Authenticode-signed with a SignPath Free Trial self-signed test certificate. It is not publicly trusted; Windows or SmartScreen may still warn. Rho is applying to SignPath Foundation for publicly trusted Windows code signing. A test signature does not establish Foundation acceptance, a production publisher, public trust, or SmartScreen reputation. If accepted, future production releases will use the attribution: “Free code signing provided by <a href="https://about.signpath.io">SignPath.io</a>, certificate by <a href="https://signpath.org">SignPath Foundation</a>.” See the <a href="https://github.com/YuLab-SMU/Rho/blob/main/CODE_SIGNING_POLICY.md">Code signing policy</a>.</p>
+          <p><strong>Uninstall.</strong> On Windows, open Settings &gt; Apps &gt; Installed apps, choose Rho, then Uninstall. On macOS, quit Rho and move Rho.app from Applications to the Trash. On Linux, quit Rho and delete the downloaded AppImage. For the npm package, run <code>npm uninstall -g @rho-workspace/rho</code>. Uninstalling does not delete project files, local application data, logs, or operating-system credential-store entries. Review the <a href="https://github.com/YuLab-SMU/Rho/blob/main/PRIVACY.md">Privacy policy</a> before removing retained data.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="closing gap" aria-labelledby="closing-title">
+    <div class="wrap">
+      <h2 id="closing-title" class="visually-hidden">Copy your install prompt</h2>
+      <form data-closing>
+        <p class="statement">Keep my projects in <label><span class="visually-hidden">Projects folder</span><input type="text" value="~/rho-projects" spellcheck="false" autocomplete="off" data-folder></label> and <button type="submit">copy the prompt</button>.</p>
+        <p class="after">Copies the install prompt for <span data-agent-label>Claude Code</span> with this folder in it. Paste it into your Agent.</p>
+        <p class="status" role="status" data-status></p>
+      </form>
+    </div>
+  </section>
+</main>
+
+<footer class="foot" aria-label="Site">
+  <div class="t-about">
+    <p>Rho is open source under AGPL-3.0, developed by YuLab-SMU with Rho-core and Rho-plugins.</p>
+    <p class="legal"><a href="https://github.com/YuLab-SMU/Rho/blob/main/LICENSE">License</a> · <a href="https://github.com/YuLab-SMU/Rho/blob/main/PRIVACY.md">Privacy policy</a> · <a href="https://github.com/YuLab-SMU/Rho/blob/main/SECURITY.md">Security</a> · <a href="https://github.com/YuLab-SMU/Rho/blob/main/CODE_SIGNING_POLICY.md">Code signing policy</a></p>
+  </div>
+  <nav class="t-nav" aria-label="Documentation">
+    <ul>
+      <li><a href="docs/">Documentation</a></li>
+      <li><a href="docs/start/">Install guide</a></li>
+      <li><a href="docs/reference/status">Current status</a></li>
+      <li><a href="https://github.com/YuLab-SMU/Rho">Source on GitHub</a></li>
+      <li><a href="https://www.npmjs.com/package/@rho-workspace/rho">npm package</a></li>
+    </ul>
+  </nav>
+  <div class="t-ver">
+    <b>{{version}}</b>
+    <p class="legal">The npm release, published {{published}}. Demo recorded {{captured}}.</p>
+  </div>
+  <div class="t-issue">
+    <a class="big" href="https://github.com/YuLab-SMU/Rho/issues">Report an issue</a>
+    <p class="legal">Security reports follow <a href="https://github.com/YuLab-SMU/Rho/blob/main/SECURITY.md">SECURITY.md</a>.</p>
+  </div>
+  <div class="t-word" aria-hidden="true"><span>ρ Rho</span></div>
+  <button class="t-go" type="button" data-open-install>
+    <strong>Install with your Agent</strong>
+    <svg width="44" height="44" viewBox="0 0 44 44" fill="none" stroke="currentColor" stroke-width="4" aria-hidden="true"><path d="M10 34 34 10M14 10h20v20"/></svg>
+  </button>
+</footer>
+
+<dialog id="install-dialog" aria-labelledby="dialog-title">
+  <div class="dlg">
+    <div class="dlg-head">
+      <div>
+        <h2 id="dialog-title">Install with your Agent</h2>
+        <p>Paste this into Claude Code or Codex. It installs Rho, starts it, opens the example project and connects your Agent to it.</p>
+      </div>
+      <button class="close" type="button" aria-label="Close" data-close>×</button>
+    </div>
+    <div class="switch" role="group" aria-label="Agent">
+      <button type="button" aria-pressed="true" data-agent="claude">Claude Code</button>
+      <button type="button" aria-pressed="false" data-agent="codex">Codex</button>
+    </div>
+    <label class="folder">Projects folder <input type="text" value="~/rho-projects" spellcheck="false" autocomplete="off" data-folder></label>
+    <div class="panel" data-ui>
+      <pre class="prompt-text" data-prompt>{{prompt-default}}</pre>
+    </div>
+    <div class="dlg-foot">
+      <button class="btn primary" type="button" data-copy-prompt>Copy prompt</button>
+      <a href="docs/start/">Read the install guide</a>
+      <span class="status" role="status" data-status></span>
+    </div>
+  </div>
+</dialog>
+
+<script type="application/json" id="install-prompts">{{prompt-templates}}</script>
+<script>
+(function () {
+  var prompts = JSON.parse(document.getElementById('install-prompts').textContent);
+  var state = { agent: 'claude', folder: '~/rho-projects' };
+  try { state.agent = localStorage.getItem('rho.site.agent') === 'codex' ? 'codex' : 'claude'; } catch (e) { /* this visit only */ }
+  function each(selector, fn) { Array.prototype.forEach.call(document.querySelectorAll(selector), fn); }
+  // A folder with spaces is quoted, and a leading ~ inside quotes becomes $HOME so the shell still expands it.
+  function shellPath(path) {
+    path = path.trim() || '~/rho-projects';
+    return /\s/.test(path) ? '"' + path.replace(/^~(?=\/|$)/, '$HOME') + '"' : path;
+  }
+  function text() { return prompts[state.agent].text.split('{folder}').join(shellPath(state.folder)); }
+  function render() {
+    each('[data-prompt]', function (el) { el.textContent = text(); });
+    each('[data-agent-label]', function (el) { el.textContent = prompts[state.agent].label; });
+    each('[data-agent]', function (el) { el.setAttribute('aria-pressed', String(el.getAttribute('data-agent') === state.agent)); });
+  }
+  function say(near, message) {
+    var box = near && near.closest('.beat-frag, .dlg, form, .prompt-sets');
+    var status = box ? box.querySelector('[data-status]') : null;
+    if (!status) return;
+    status.textContent = message;
+    clearTimeout(status._t); status._t = setTimeout(function () { status.textContent = ''; }, 2600);
+  }
+  function copy(value, button, label) {
+    function done() { if (button) { var was = button.textContent; button.textContent = 'Copied'; setTimeout(function () { button.textContent = was; }, 1600); } say(button, label); }
+    function fallback() {
+      var area = document.createElement('textarea'); area.value = value; area.setAttribute('readonly', ''); area.style.position = 'fixed'; area.style.opacity = '0';
+      document.body.appendChild(area); area.select();
+      try { document.execCommand('copy'); done(); } catch (e) { say(button, 'Copy did not work here. Select the text and copy it.'); }
+      area.remove();
+    }
+    if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(value).then(done, fallback); else fallback();
+  }
+  each('[data-agent]', function (el) {
+    el.addEventListener('click', function () {
+      state.agent = el.getAttribute('data-agent');
+      try { localStorage.setItem('rho.site.agent', state.agent); } catch (e) { /* this visit only */ }
+      render();
+    });
+  });
+  each('[data-folder]', function (el) {
+    el.addEventListener('input', function () {
+      state.folder = el.value;
+      each('[data-folder]', function (other) { if (other !== el) other.value = el.value; });
+      render();
+    });
+  });
+  each('[data-copy-prompt]', function (el) { el.addEventListener('click', function () { copy(text(), el, 'Prompt copied. Paste it into ' + prompts[state.agent].label + '.'); }); });
+  each('[data-copy-text]', function (el) { el.addEventListener('click', function () { copy(el.getAttribute('data-copy-text'), el, 'Copied.'); }); });
+  each('[data-copy-ask]', function (el) { el.addEventListener('click', function () { copy(el.closest('li').querySelector('.ask').textContent.trim(), el, 'Prompt copied.'); }); });
+  var closing = document.querySelector('[data-closing]');
+  closing.addEventListener('submit', function (event) { event.preventDefault(); copy(text(), null, 'Prompt copied. Paste it into ' + prompts[state.agent].label + '.'); say(closing.querySelector('button'), 'Prompt copied. Paste it into ' + prompts[state.agent].label + '.'); });
+
+  var dialog = document.getElementById('install-dialog');
+  each('[data-open-install]', function (el) { el.addEventListener('click', function () { render(); dialog.showModal(); }); });
+  dialog.querySelector('[data-close]').addEventListener('click', function () { dialog.close(); });
+  dialog.addEventListener('click', function (event) { if (event.target === dialog) dialog.close(); });
+
+  // Prompt sets: one panel at a time once script runs; all of them without it.
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('[role="tab"]'));
+  function select(tab, focus) {
+    tabs.forEach(function (t) {
+      var on = t === tab;
+      t.setAttribute('aria-selected', String(on)); t.tabIndex = on ? 0 : -1;
+      document.getElementById(t.getAttribute('aria-controls')).hidden = !on;
+    });
+    if (focus) tab.focus();
+  }
+  tabs.forEach(function (tab, i) {
+    tab.addEventListener('click', function () { select(tab, false); });
+    tab.addEventListener('keydown', function (event) {
+      var step = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 }[event.key];
+      if (event.key === 'Home') step = -i; else if (event.key === 'End') step = tabs.length - 1 - i;
+      if (step === undefined) return;
+      event.preventDefault(); select(tabs[(i + step + tabs.length) % tabs.length], true);
+    });
+  });
+  if (tabs.length) select(tabs[0], false);
+
+  var frame = document.querySelector('.demo-frame');
+  frame.querySelector('iframe').addEventListener('load', function () { frame.classList.add('ready'); });
+
+  if ('IntersectionObserver' in window) {
+    var seen = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) { if (entry.isIntersecting) { entry.target.classList.add('in'); seen.unobserve(entry.target); } });
+    }, { rootMargin: '0px 0px -8% 0px' });
+    each('[data-enter]', function (el) { seen.observe(el); });
+  } else each('[data-enter]', function (el) { el.classList.add('in'); });
+  render();
+})();
+</script>
+</body>
+</html>

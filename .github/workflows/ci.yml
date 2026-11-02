@@ -121,8 +121,8 @@ jobs:
         working-directory: Rho
         run: |
           npm ci --no-audit --no-fund
-          npm run docs:check
           npm run docs:build
+          npm run docs:check
 
   test:
     name: Test ${{ matrix.platform }}

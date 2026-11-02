@@ -27,3 +27,5 @@ __pycache__/
 /site/.vitepress/generated/
 /site/.vitepress/dist/
 /site/.vitepress/cache/
+/site/.pages/
+/.taste-skill/
