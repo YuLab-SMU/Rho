@@ -67,7 +67,7 @@ test('one writer per service and project; failed startup releases its own locks'
     await assert.rejects(d.call('project.open', { path: 'project' }), e => e.error.kind === 'conflict');
     // A listen failure must not leave a live helper holding the new state lock.
     const port = Number(new URL(first.url).port);
-    await assert.rejects(new RhoService({ root, stateDir: path.join(root, 'three'), ...native, port }).start(), { code: 'EADDRINUSE' });
+    await assert.rejects(new RhoService({ root, stateDir: path.join(root, 'three'), ...native, port }).start(), e => e.kind === 'conflict' && e.details.port === port);
     third = await new RhoService({ root, stateDir: path.join(root, 'three'), ...native }).start();
     await first.close();
     const reopened = await d.call('project.open', { path: 'project' });

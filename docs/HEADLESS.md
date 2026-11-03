@@ -37,7 +37,8 @@ it. Missing browser renderers do not disable the headless protocol.
 ## Install and start
 
 The selected baseline is macOS arm64, Node 22.22.3 (engine range
-`>=22.22.0 <23`), npm 10.9.8, Python 3 with `fcntl`, and Rscript 4.5.2. Windows x64
+`>=22.22.0 <27`; the suite and the installed check also passed on Node 24.22.2 and
+26.13.0), npm 10.9.8, Python 3 with `fcntl`, and Rscript 4.5.2. Windows x64
 was checked with Node 22.23.4 and Rscript 4.5.1; its writer lock needs no Python, and
 there `rho.cmd` starts Rho and Ctrl+Break on its console stops it in order.
 The unsigned local tarball contains Plugins and the selected digest-checked Core
@@ -63,7 +64,17 @@ must expire; that link is a credential and is only as good as its five-minute
 window and single use. A credential that is present must still be valid, so an old
 link never silently widens to local access; a same-origin request that carries no
 credential is the machine's own. Host and Origin are checked on every request, and
-a browser request marked as coming from another site is refused. `--port`, `--rscript`, `--core`, `--plugins` and `--limits` are explicit
+a browser request marked as coming from another site is refused.
+
+A start without `--port` takes the port this state's last start had, so a bookmarked
+address and every Agent connection still reach it after a restart; only when another
+program holds that port does it take a new one, and then each Agent connection file in
+the state that named the old address is rewritten to the new one, keeping its token.
+`--port 0` always takes a new port. A selected port that is in use is refused with the
+port named, never replaced. A second start on a state that is already running is
+refused with the running service's address.
+
+`--port`, `--rscript`, `--core`, `--plugins` and `--limits` are explicit
 operator selections; `RHO_RSCRIPT`, `RHO_CORE_BINARY` and `RHO_PYTHON` select
 equivalent runtimes. A Core override is outside bundled digest verification.
 A source checkout has no bundled Core: packaging supplies one per platform under
@@ -106,17 +117,32 @@ Exact Host and supplied Origin are checked. The bearer credential is project
 scoped for external callers. CLI shutdown stops only Hosts started by this
 service and reports confirmation separately. Existing Hosts keep their owner.
 
-### Connect Claude Code
+### Connect Claude Code or Codex
 
-The running service's operator connection grants one project to one Agent session
-and prints how Claude Code starts that session's MCP server:
+The running service's operator connection adds Rho to the person's own Claude Code
+or Codex for one project, as the project page's "Add to …" button does:
+
+```sh
+rho --grant /absolute/service-state/connection.json --project PROJECT_FOLDER --agent claude-code|codex
+```
+
+It gives that Agent its own grant to the project (kept when it still reaches the
+service), runs that Agent's `mcp remove` and `mcp add` on this machine — Claude Code's
+with `-s local` in the project folder, Codex's for every folder — and records it, so the
+page shows it under that Agent. The JSON reply names the project, its root, the number
+of granted methods, whether a new grant was made, and what was added (`name`, `scope`,
+`at`). A session that was already open does not have the tools; a new one does.
+
+Without `--agent`, the same connection grants one project to one Agent session and
+prints how Claude Code starts that session's MCP server:
 
 ```sh
 rho --grant /absolute/service-state/connection.json --project PROJECT_FOLDER [--session NAME]
 ```
 
 `--project` is the folder relative to `--root`; `--session` defaults to
-`claude-code`. The JSON reply names the project, the private session connection
+`claude-code`, the session `--agent claude-code` uses, and `--session codex` is the one
+`--agent codex` uses. When the service is not running, both forms say so and exit 1. The JSON reply names the project, the private session connection
 file, the number of granted methods (the server default), an `mcp` entry
 (`name`, `command`, `args`) for an MCP configuration file, and the equivalent
 `claude mcp add rho-<folder> -- … --mcp <file>` command. `rho --mcp FILE` serves

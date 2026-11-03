@@ -243,8 +243,10 @@ jobs:
             ${{ runner.temp }}/candidate/composition.json
             ${{ runner.temp }}/candidate/SHA256SUMS
 
+  # The four platforms on Node 22, and Linux x64 again on each later LTS line the engine range
+  # admits, so a person whose Node is 24 or 26 installs a candidate that was installed there.
   install:
-    name: Install ${{ matrix.platform }}
+    name: Install ${{ matrix.report }}
     needs: pack
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
@@ -252,10 +254,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { platform: darwin-arm64, os: macos-15 }
-          - { platform: linux-x64, os: ubuntu-24.04 }
-          - { platform: linux-arm64, os: ubuntu-24.04-arm }
-          - { platform: win32-x64, os: windows-2022 }
+          - { platform: darwin-arm64, os: macos-15, report: darwin-arm64 }
+          - { platform: linux-x64, os: ubuntu-24.04, report: linux-x64 }
+          - { platform: linux-arm64, os: ubuntu-24.04-arm, report: linux-arm64 }
+          - { platform: win32-x64, os: windows-2022, report: win32-x64 }
+          - { platform: linux-x64, os: ubuntu-24.04, report: linux-x64-node24, node: '24' }
+          - { platform: linux-x64, os: ubuntu-24.04, report: linux-x64-node26, node: '26' }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { path: Rho, sparse-checkout: "components.json\nscripts/ci-install-check.mjs", sparse-checkout-cone-mode: false, persist-credentials: false }
@@ -264,7 +268,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { repository: YuLab-SMU/Rho-plugins, ref: '${{ steps.pins.outputs.plugins }}', path: Rho-plugins, sparse-checkout: examples/ordinary-r-project, persist-credentials: false }
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with: { node-version: '${{ env.NODE_VERSION }}', package-manager-cache: false }
+        with: { node-version: '${{ matrix.node || env.NODE_VERSION }}', package-manager-cache: false }
       - if: runner.os == 'Linux'
         run: sudo apt-get update -q && sudo apt-get install -y -q r-base-core
       - if: runner.os != 'Linux'
@@ -273,7 +277,7 @@ jobs:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with: { name: candidate, path: '${{ runner.temp }}/candidate' }
       - name: Install and run the candidate
-        run: node Rho/scripts/ci-install-check.mjs "$RUNNER_TEMP/candidate" Rho-plugins/examples/ordinary-r-project "install-${{ matrix.platform }}.json"
+        run: node Rho/scripts/ci-install-check.mjs "$RUNNER_TEMP/candidate" Rho-plugins/examples/ordinary-r-project "install-${{ matrix.report }}.json"
       - if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with: { name: 'install-${{ matrix.platform }}', path: 'install-${{ matrix.platform }}.json', if-no-files-found: warn }
+        with: { name: 'install-${{ matrix.report }}', path: 'install-${{ matrix.report }}.json', if-no-files-found: warn }

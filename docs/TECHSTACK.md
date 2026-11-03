@@ -6,7 +6,7 @@ framework. [Architecture](ARCHITECTURE.md) defines source ownership.
 
 | Layer | Current implementation |
 | --- | --- |
-| Local service and launcher | Node 22.22.x, TypeScript 5.9.3, built-in HTTP, Ajv 8.20.0 |
+| Local service and launcher | Node 22.22.x (24 and 26 also checked), TypeScript 5.9.3, built-in HTTP, Ajv 8.20.0 |
 | Public API | Generated JSON Schema request/response contracts; authenticated JSON and SSE |
 | Browser application | React/React DOM 19.3.1, Vite 8.3.4, TypeScript |
 | Workspace | Rho renders the owner's conditional composition tree as tabs and splits |

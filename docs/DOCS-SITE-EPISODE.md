@@ -1,6 +1,6 @@
 # Documentation site
 
-Updated: 2026-11-02.
+Updated: 2026-11-03.
 
 Before this pass Rho had no online documentation: the only published surface was the
 downloads page at <https://yulab-smu.top/Rho/>, and the 49 documents in `docs/` were
@@ -151,3 +151,74 @@ signing and uninstall statement the old page made.
 - `updates/*.json` and `.nojekyll` on `gh-pages` are left as they were, so an installed 0.4.0
   desktop client keeps its update feed; the deployment compares their checksums.
 - No one outside this machine has used the page or the demo yet.
+
+## The install prompt on a real machine
+
+On 2026-11-03 the user shared one run of the Codex prompt, in Codex on another Mac with Node
+26.10.0, and asked for the problems it exposed in Rho to be fixed before the prompt itself is
+changed. That run's own record is not on this machine; what it showed comes from its
+screenshot, and each cause below was found in the source and then run here.
+
+### What was observed
+
+| In the run | Cause | Change |
+| --- | --- | --- |
+| Step 1 stopped on Node 26.10.0. Told to skip it, `npm install -g` finished in 4 s with one `EBADENGINE` warning, and Rho started | `engines` was `>=22.22.0 <23`, while 24 and 26 are the current LTS lines. Only Rho's own range is checked; the bundled plugins' ranges print nothing | `>=22.22.0 <27`; CI also installs the candidate on Linux x64 with Node 24 and 26 |
+| The `nohup rho … &` start left no running process; Codex then started Rho in the foreground | Not established. A check of which background processes outlive a Codex command was not run here: the session's permission check refused it | None |
+
+Reading the prompt's later steps against the source found four more, each reproduced on the
+published 0.5.3 in a throwaway folder:
+
+- **A restart moved Rho to a new port, and the Agent's tools stopped working.** Every start took a
+  new port (53149, then 53161), while the connection file `--grant` writes keeps the address it
+  was given, so Codex's `rho_index` answered `Delivery outcome unknown`. With `--port` fixed, the
+  same grant worked across a restart. Now a start without `--port` takes this state's last port;
+  only when another program holds it does it take a new one, and each Agent connection file that
+  named the old address is rewritten to the new one with its token. `--port 0` still always takes
+  a new port.
+- **Codex connected with `--grant` showed under Claude Code.** `--session` defaults to
+  `claude-code`, which the project page reads as Claude Code's grant, and the CLI records no
+  `mcp add`, so even `--session codex` shows "Access only". `rho --grant … --agent codex` (or
+  `claude-code`) now does what the page's "Add to …" button does: the grant, that Agent's own
+  `mcp remove` and `mcp add`, and the record the page shows.
+- **Refusals printed stack traces.** A second start on a running state, a `--port` already in use,
+  and `--grant` while Rho is stopped now print one line each: where Rho already runs, which port
+  is taken, or that Rho is not running at its address.
+- **The Agent was told the outcome was unknown when Rho was not running.** Agent 0.4.28's bridge
+  reports a refused connection as `unavailable`, naming the address, with `delivered: false`: no
+  byte reached the service, so nothing ran. Other transport failures keep their unknown outcome.
+
+### Checks
+
+- On a build of these changes, in a throwaway folder: a restart without `--port` kept 58224; with
+  58224 held by another program the next start took 58283, the grant named 58283 and `rho_index`
+  answered; `--grant --agent codex` ran a stand-in `codex` with `mcp remove` and `mcp add`; each
+  refusal printed its one line.
+- `test/agent-connect.test.mjs` gains the operator's `session.connect` and the restart and
+  taken-port cases; `test/cli-refusals.test.mjs` runs the CLI's refusals; the writer-lock test in
+  `test/service.test.mjs` now expects the taken port as a `conflict` naming it, and still checks
+  that the failed start released its lock.
+- The full suite passed on Node 22.22.3, 24.22.2 and 26.13.0 (284 of 286, 2 skipped). One
+  earlier run on 22 failed two timing-bound tests (a changed-file record and the bridge's waited
+  Notebook call); both passed alone twice and in the next full run.
+- A candidate packed from this tree (darwin-arm64 only, a debug Core, the dirty-tree override)
+  passed `ci-install-check.mjs` on Node 24.22.2 and 26.13.0: offline install, its own Core,
+  orderly stop, recovery 7 and the ordinary project 7. Installed on Node 26 it printed no
+  `EBADENGINE`.
+- The bridge, pointed at a closed port, answered `unavailable` with the address where 0.4.27
+  answered `Delivery outcome unknown`.
+
+### Not done
+
+- The prompts are unchanged.
+- Why the background start ended is not known, so no detached start was added.
+- R and the example's packages are checked neither by the prompt nor by a start with folders:
+  Rho's R session needs `jsonlite`, and the example's scripts use `ggplot2`, `dplyr`, `tidyr`,
+  `patchwork`, `scales` and Bioconductor's `DESeq2`.
+- The writer lock on macOS and Linux needs Python 3. On a Mac without the Command Line Tools,
+  `python3` is only a prompt to install them; that start was not observed.
+- `codex mcp add` adds the project's tools to every Codex session on the machine. Whether
+  Codex sessions that Rho itself starts also load them was not checked.
+- Agent 0.4.28 is a Rho-plugins change; Rho composes it only once `components.json` names that
+  commit.
+- Windows was not run, and CI has not run these changes.

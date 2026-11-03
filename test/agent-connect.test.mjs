@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
+import http from 'node:http';
 import { RhoService } from '../dist/server.js';
 import { CheckedClient } from './checked-client.mjs';
 import { BrowserClient } from '../dist/browser.js';
@@ -70,6 +71,40 @@ test('a grant from rho --grant is the same Claude Code session, and only the per
     const agent = new CheckedClient(JSON.parse(await fs.readFile(granted.connectionFile, 'utf8')));
     await assert.rejects(agent.call('session.connect', { projectId: s.project.id, agent: 'codex' }), error => ['unauthorized', 'scope'].includes(error.error?.kind ?? error.kind));
   } finally { await s.service.close(); }
+});
+
+test('whoever started the service adds Rho to Codex as the page does, and it shows under Codex', stand, async () => {
+  const s = await setup();
+  try {
+    const connected = await s.operator.call('session.connect', { projectId: s.project.id, agent: 'codex' });
+    assert.deepEqual([connected.label, connected.granted, connected.added.agent, connected.added.scope], ['Codex', true, 'codex', 'user']);
+    assert.deepEqual((await s.calls()).at(-1).args.slice(0, 4), ['mcp', 'add', 'rho-ozone-study', '--']);
+    const again = await s.call('session.connect', { agent: 'codex' });
+    assert.equal(again.granted, false, 'the page and the operator add the same Codex session');
+    const agents = (await s.call('observation.snapshot')).agents.filter(a => a.added);
+    assert.deepEqual(agents.map(a => [a.label, a.added.agent]), [['Codex', 'codex']]);
+  } finally { await s.service.close(); }
+});
+
+test('a restart keeps the address an Agent was given, and when that port is taken its connection follows', stand, async () => {
+  const s = await setup();
+  const config = s.service.config, first = s.service.url, port = Number(new URL(first).port);
+  await s.call('session.connect', { agent: 'codex' });
+  const file = (await s.calls()).at(-1).args.at(-1), token = JSON.parse(await fs.readFile(file, 'utf8')).token;
+  await s.service.close();
+  let service = await new RhoService(config).start(), blocker;
+  try {
+    assert.equal(service.url, first, 'a start that selects no port takes the last one');
+    await service.close();
+    blocker = http.createServer();
+    await new Promise(resolve => blocker.listen(port, '127.0.0.1', resolve));
+    service = await new RhoService(config).start();
+    assert.notEqual(service.url, first);
+    const moved = JSON.parse(await fs.readFile(file, 'utf8'));
+    assert.deepEqual([moved.url, moved.token], [service.url, token], 'the connection names the new address and keeps its token');
+    await assert.rejects(new RhoService({ ...config, stateDir: path.join(s.root, '.other'), port }).start(),
+      error => error.kind === 'conflict' && error.message.startsWith(`Port ${port} on 127.0.0.1 is in use`), 'a selected port is refused, never replaced');
+  } finally { await service.close(); blocker?.close(); }
 });
 
 test('an Agent that refuses, is missing or does not finish says so and leaves nothing marked added', stand, async () => {

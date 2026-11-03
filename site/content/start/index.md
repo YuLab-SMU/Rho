@@ -8,7 +8,7 @@ because there is no Rho server.
 
 | Requirement | What Rho needs |
 | --- | --- |
-| Node | `>=22.22.0 <23`. The checked baseline is Node 22.22.3 with npm 10.9.8. |
+| Node | `>=22.22.0 <27`: the 22, 24 and 26 LTS lines. The checked baseline is Node 22.22.3 with npm 10.9.8; the test suite and the installed check also passed on 24.22.2 and 26.13.0. |
 | R | Only for R work. The service, documents, readers and saved results work without R; a missing `Rscript` reports an unknown dependency probe instead of pretending. |
 | R packages | Yours to install. Rho does not install project packages implicitly. |
 | Agent client | Claude Code or Codex, installed and signed in by you. Conversations drive your client under your own permissions. |
@@ -25,7 +25,7 @@ npm install -g @rho-workspace/rho
 ```
 
 If the global prefix belongs to root, this fails with `EACCES`; installing it with `sudo` was
-performed and worked. The package declares its Node range, so a different Node prints one
+performed and worked. The package declares its Node range, so a Node outside it prints one
 `EBADENGINE` warning rather than failing silently.
 
 ## Start the service

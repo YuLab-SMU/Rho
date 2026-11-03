@@ -412,7 +412,8 @@ Windows machine was not measured again; the issue's machine recorded no Defender
 - npm still spends about 4 ms per installed file on the Windows runner's D: and 30 ms on its C:. A
   person's Windows machine, with Defender scanning, has not been measured since the pruning
   ([Windows installation time](#windows-installation-time)).
-- `engines` names Node 22 only. A person with Node 24 installs with npm's engine warning; no
-  installation on Node 24 has been checked.
+- `engines` named Node 22 only until 2026-11-03; it is now `>=22.22.0 <27`, with Linux x64
+  installed on Node 24 and 26 in CI ([Docs site episode](DOCS-SITE-EPISODE.md#the-install-prompt-on-a-real-machine)).
+  Node 18 and 20 are below the range and unchecked.
 - The candidate digest changes with every commit, since the composition names the commit; whether
   the same commit packs to the same bytes has not been checked.

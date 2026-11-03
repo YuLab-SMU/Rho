@@ -461,13 +461,45 @@ export class RhoService {
     const chosen = (earlier?.selectedProjects ?? []).filter(id => this.state.projects.some(p => p.id === id && p.nativeSelected));
     this.state.principals = this.state.principals.filter(p => p.id !== localBrowserId);
     await this.state.addPrincipal({ ...localBrowserPrincipal(await fs.realpath(this.config.root)), ...(chosen.length ? { selectedProjects: chosen } : {}) });
-    await new Promise<void>((resolve, reject) => { this.server.once('error', reject); this.server.listen(this.config.port ?? 0, '127.0.0.1', () => resolve()); });
+    // A person's bookmark and every Agent connection name this service's address. A start that
+    // selects no port takes the one this state's last start had, and a new one only when that
+    // port is taken now; a selected port is used or refused, never replaced.
+    const connectionFile = path.join(this.state.directory, 'connection.json');
+    const earlierUrl = await fs.readFile(connectionFile, 'utf8').then(text => String(JSON.parse(text).url), () => '');
+    const earlierPort = /^http:\/\/127\.0\.0\.1:\d+$/.test(earlierUrl) ? Number(new URL(earlierUrl).port) : 0;
+    const listen = (port: number) => new Promise<void>((resolve, reject) => {
+      this.server.once('error', reject);
+      this.server.listen(port, '127.0.0.1', () => { this.server.off('error', reject); resolve(); });
+    });
+    try { await listen(this.config.port ?? earlierPort); }
+    catch (error) {
+      const taken = (error as NodeJS.ErrnoException).code === 'EADDRINUSE';
+      requireThat(!taken || this.config.port === undefined, 'conflict', `Port ${this.config.port} on 127.0.0.1 is in use by another program. If that is Rho, open http://127.0.0.1:${this.config.port}; otherwise choose another --port, or leave it out.`, { port: this.config.port });
+      if (!taken) throw error;
+      await listen(0);
+    }
     this.url = 'http://127.0.0.1:' + (this.server.address() as any).port;
-    await atomicJson(path.join(this.state.directory, 'connection.json'), { url: this.url, token: this.adminToken, apiVersion: '2.0' });
+    await atomicJson(connectionFile, { url: this.url, token: this.adminToken, apiVersion: '2.0' });
+    // An Agent's connection holds the address it was given. When the address changed, each one
+    // that named the earlier address follows, so the Agent's next session reaches this service
+    // with the grant it already has. Its token and methods are unchanged.
+    if (earlierUrl && earlierUrl !== this.url) await this.followAddress(earlierUrl);
     return this;
     } catch (e) {
       if (this.server.listening) await new Promise<void>(resolve => this.server.close(() => resolve()));
       await this.state.close(); throw e;
+    }
+  }
+  // Only this state's own connection files, and only those that named the earlier address: a
+  // file that cannot be read or rewritten keeps what it had, and the start goes on.
+  private async followAddress(earlierUrl: string) {
+    const names = await fs.readdir(this.state.directory).catch(() => [] as string[]);
+    for (const name of names.filter(name => /^agent-[0-9a-f]+\.json$/.test(name))) {
+      const file = path.join(this.state.directory, name);
+      try {
+        const connection = JSON.parse(await fs.readFile(file, 'utf8'));
+        if (connection?.url === earlierUrl && typeof connection.token === 'string') await atomicJson(file, { ...connection, url: this.url });
+      } catch { /* left as it was */ }
     }
   }
   async agentConnection(projectId: string, externalSessionId: string, file: string, methods?: string[], pluginFilter?: string[], profile: 'layered-business' | 'layered-presentation' = 'layered-business', who: { label?: string; conversationId?: string } = {}) {
@@ -939,8 +971,9 @@ export class RhoService {
     }
     // The person's own Claude Code or Codex, outside Rho: the same grant the operator gives, kept
     // when it already exists so a connected session keeps its token, then the Agent's own `mcp add`.
+    // The person does it from the page; whoever started the service, with `rho --grant --agent`.
     if (method === 'session.connect') {
-      requireThat(principal.id === localBrowserId, 'unauthorized', 'Only the person at this machine can add Rho to their own Agent.');
+      requireThat(principal.id === localBrowserId || principal.id === 'operator', 'unauthorized', 'Only the person at this machine can add Rho to their own Agent.');
       const agent = b.agent as OutsideAgent, file = path.join(this.state.directory, 'agent-' + digest(p.id + ':' + agent) + '.json');
       const id = 'agent:' + digest(p.id + ':' + agent).slice(0, 32), existing = this.state.principals.find(x => x.id === id);
       // A grant is kept while its connection still reaches this service with its token; otherwise
