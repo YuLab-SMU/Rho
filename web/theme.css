@@ -706,7 +706,7 @@ ol.md-list { list-style-type: decimal; }
 .activity-row > details > summary:hover::after, .activity-row > details > summary:focus-visible::after, .activity-row > details[open] > summary::after { opacity: .6; }
 .activity-target.path, .activity-target.command, .activity-target.operation, .activity-target.query { font-family: var(--font-mono); font-size: 12px; }
 /* A command keeps one more line of meaning instead of ending at the first ellipsis. */
-.activity-target.command { white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.activity-target.command, .activity-target.packages { white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
 .activity-row[data-action="execute"] > p, .activity-row[data-action="execute"] > details > summary { align-items: flex-start; }
 .activity-row[data-action="execute"] .activity-icon, .activity-row[data-action="execute"] > details > summary::after { margin-top: .2em; }
 .activity-flag { flex: none; color: var(--color-failed); font-size: 12px; }

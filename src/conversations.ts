@@ -1,7 +1,7 @@
 import { projectPath, commandFiles, buildWorkGraph } from './work-graph.js';
 import { notesInstructions, projectNotesPath } from './project-notes.js';
 import { addSpend, describeLimits, describable, fileFacts, figureContext, raster, type Cost, type FileDescription, type MadeStep, type Spend, type Strategy } from './file-describer.js';
-import { agentTurnLimit, toolActivity } from './conversation-presentation.js';
+import { agentTurnLimit, displayCommand, toolActivity } from './conversation-presentation.js';
 import {privateEvidencePath, type CapturePort, type TurnEvidence} from './evidence-capture.js';
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
@@ -801,7 +801,8 @@ export class Conversations {
       if (incoming.kind === 'tool') {
         const action = toolActivity(incoming as any, null, project.root);
         if (action.targetKind === 'path' && (action.location || incoming.detail)) this.capture(live, action.location ?? incoming.detail!, 'step:' + incoming.id + ':' + incoming.outcome);
-        if (action.targetKind === 'command' && action.target) for (const file of commandFiles(action.target, project)) this.capture(live, file, 'command:' + incoming.id + ':' + incoming.outcome);
+        // A command's files are captured however its row reads (an install names its packages).
+        if (action.action === 'execute' && incoming.detail) for (const file of commandFiles(displayCommand(incoming.detail), project)) this.capture(live, file, 'command:' + incoming.id + ':' + incoming.outcome);
       }
       if (!kept) turn.omitted++;
       else if (existing) Object.assign(existing, kept); else turn.steps.push(kept);

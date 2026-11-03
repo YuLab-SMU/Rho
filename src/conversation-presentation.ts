@@ -1,4 +1,5 @@
 import type { RhoOutput } from './contract.generated.js';
+import { installText, readInstall, type Installed } from './installs.js';
 
 // Only an explicit Agent limit report qualifies; an unknown outcome never does.
 export function agentTurnLimit(turn: { state: string; problem?: string | null; result?: { kind?: string | null; reason?: string | null } | null }) {
@@ -16,7 +17,7 @@ export type SessionObservation = NonNullable<ConversationRead['observation']>;
 // A command that ran and exited with a failing code failed; the Agent may report it as refused.
 export type ActivityOutcome = NonNullable<ConversationStep['outcome']> | 'failed';
 export type AgentAction = 'read' | 'edit' | 'write' | 'delete' | 'move' | 'search' | 'execute' | 'fetch' | 'project' | 'agents' | 'plan' | 'other';
-export type TargetKind = 'path' | 'command' | 'query' | 'operation' | 'text' | null;
+export type TargetKind = 'path' | 'command' | 'query' | 'operation' | 'packages' | 'text' | null;
 
 export interface Activity {
   key: string;
@@ -29,6 +30,8 @@ export interface Activity {
   title: string | null;
   location: string | null;
   outcome: ActivityOutcome;
+  // What a command installed, when it was an install.
+  installed?: Installed;
 }
 export type Block =
   | { kind: 'text'; key: string; step: ConversationStep; streaming: boolean }
@@ -168,7 +171,12 @@ export function toolActivity(step: ConversationStep, location: string | null, ro
   if (tool.toLowerCase() === 'toolsearch') { target = detail ?? title ?? 'Agent tools'; targetKind = detail ? 'query' : 'text'; }
   else if (action === 'project') { target = clean(step.operation) ?? title ?? detail; targetKind = step.operation ? 'operation' : 'text'; }
   else if (path) { target = detail ? shortPath(detail, root) : location ? shortPath(location, root) : title; targetKind = detail || location ? 'path' : 'text'; }
-  else if (action === 'execute') { target = detail ? displayCommand(detail) : (title && title.toLowerCase() !== tool.toLowerCase() ? title : null); targetKind = detail ? 'command' : 'text'; }
+  else if (action === 'execute') {
+    // A command that installs packages reads as what it installed; its command stays in the details.
+    const installed = detail ? readInstall(detail, step.output?.text) : null;
+    if (installed) return { key: key ?? step.id ?? tool + '-' + step.at, step, action, verb: outcome === 'returned' ? 'Installed' : outcome === 'requested' ? 'Installing' : 'Tried to install', target: installText(installed), targetKind: 'packages', installed, title, location, outcome };
+    target = detail ? displayCommand(detail) : (title && title.toLowerCase() !== tool.toLowerCase() ? title : null); targetKind = detail ? 'command' : 'text';
+  }
   else if (action === 'search') { target = detail ?? title; targetKind = detail ? 'query' : 'text'; }
   else if (action === 'fetch') { target = detail ?? title; targetKind = 'text'; }
   else { target = title ?? detail; targetKind = detail && looksLikePath(detail) ? 'path' : 'text'; }
@@ -176,17 +184,21 @@ export function toolActivity(step: ConversationStep, location: string | null, ro
 }
 
 // Files are counted once however often the Agent touched them: nine edits of one script
-// are "Edited 1 file". Other actions count each time they happened.
+// are "Edited 1 file". Other actions count each time they happened. Installs are named by
+// their packages, "Installed pandas, statsmodels", and are not counted as commands.
 const onFiles = new Set<AgentAction>(['read', 'edit', 'write', 'delete', 'move']);
 export function activitySummary(activities: Activity[]) {
-  const seen = new Map<AgentAction, Set<string>>();
+  const seen = new Map<string, Set<string>>();
   activities.forEach((activity, i) => {
-    const file = onFiles.has(activity.action) ? activity.location ?? activity.step.detail ?? activity.target : null;
-    const named = seen.get(activity.action) ?? new Set<string>();
-    named.add(file ?? '#' + i);
-    seen.set(activity.action, named);
+    const group = activity.installed ? activity.verb : activity.action;
+    const file = activity.installed ? activity.installed.packages.map(p => p.name).join('\n') || 'packages from ' + activity.installed.from
+      : onFiles.has(activity.action) ? activity.location ?? activity.step.detail ?? activity.target : null;
+    const named = seen.get(group) ?? new Set<string>();
+    for (const name of activity.installed ? file!.split('\n') : [file ?? '#' + i]) named.add(name);
+    seen.set(group, named);
   });
-  const parts = [...seen].map(([action, named]) => summaries[action][named.size === 1 ? 0 : 1].replace('{n}', String(named.size)));
+  const listed = (names: string[]) => names.length > 3 ? names.slice(0, 3).join(', ') + ` and ${names.length - 3} more` : names.join(', ');
+  const parts = [...seen].map(([group, named]) => group in summaries ? summaries[group as AgentAction][named.size === 1 ? 0 : 1].replace('{n}', String(named.size)) : group + ' ' + listed([...named]));
   const count = (outcome: ActivityOutcome) => activities.filter(a => a.outcome === outcome).length;
   const failed = count('failed'), refused = count('rejected'), unknown = count('unknown');
   if (failed) parts.push(failed + ' failed');
