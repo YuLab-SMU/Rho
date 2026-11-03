@@ -8313,6 +8313,7 @@ export interface KernelInterruptOutput {
       width?: number;
     }[];
     problem: string | null;
+    program?: string | null;
     purpose: string | null;
     queuedAt: string;
     removed?: string[];
@@ -8320,6 +8321,7 @@ export interface KernelInterruptOutput {
     startedAt: string | null;
     state: 'queued' | 'running' | 'done' | 'error' | 'interrupted' | 'not-run' | 'unknown';
     used?: string[];
+    version?: string | null;
   };
 }
 
@@ -8537,6 +8539,7 @@ export interface KernelReadOutput {
       width?: number;
     }[];
     problem: string | null;
+    program?: string | null;
     purpose: string | null;
     queuedAt: string;
     removed?: string[];
@@ -8544,6 +8547,7 @@ export interface KernelReadOutput {
     startedAt: string | null;
     state: 'queued' | 'running' | 'done' | 'error' | 'interrupted' | 'not-run' | 'unknown';
     used?: string[];
+    version?: string | null;
   }[];
   omitted: number;
   sessions: {
@@ -8560,6 +8564,7 @@ export interface KernelReadOutput {
       placeId: string;
     } | null;
     problem: string | null;
+    program?: string | null;
     sessionId: string;
     startedAt: string;
     startedBy: string;
@@ -8585,6 +8590,7 @@ export interface KernelRunInput {
   projectId: string;
   changeId: string;
   code: string;
+  interpreter?: string;
   language: 'r' | 'python';
   place?: string;
   purpose?: string;
@@ -8620,6 +8626,7 @@ export interface KernelRunOutput {
       width?: number;
     }[];
     problem: string | null;
+    program?: string | null;
     purpose: string | null;
     queuedAt: string;
     removed?: string[];
@@ -8627,6 +8634,7 @@ export interface KernelRunOutput {
     startedAt: string | null;
     state: 'queued' | 'running' | 'done' | 'error' | 'interrupted' | 'not-run' | 'unknown';
     used?: string[];
+    version?: string | null;
   };
   session: {
     cells: number;
@@ -8642,6 +8650,7 @@ export interface KernelRunOutput {
       placeId: string;
     } | null;
     problem: string | null;
+    program?: string | null;
     sessionId: string;
     startedAt: string;
     startedBy: string;
@@ -8724,6 +8733,7 @@ export interface KernelStopOutput {
       placeId: string;
     } | null;
     problem: string | null;
+    program?: string | null;
     sessionId: string;
     startedAt: string;
     startedBy: string;

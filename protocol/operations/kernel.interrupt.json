@@ -170,6 +170,16 @@
               }
             ]
           },
+          "program": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "purpose": {
             "anyOf": [
               {
@@ -223,6 +233,16 @@
               "type": "string"
             },
             "type": "array"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [

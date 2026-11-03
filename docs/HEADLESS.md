@@ -978,6 +978,11 @@ Notebook 0.1.0 (`@rho-workspace/plugin-kernel`) keeps one live R session and one
 live Python session per project, in the project folder, shared by the person and
 their Agent. `kernel.run` queues a cell in its language's session and starts the
 session when none is live; `waitMs` waits up to `maxWaitMs` for it to end.
+Since Notebook 0.5.3 a cell may name `interpreter`, a program in a folder of the project
+such as an environment's `.venv/bin/python`; the project keeps it for that language's later
+sessions, and a session in which only that caller ran cells starts again with it, while one
+where anyone else ran a cell is refused. Each session and each cell records the program
+(relative to the project when it is in it) and the version that ran it.
 `kernel.read` returns the sessions, their variables and the cells, and never starts
 a session. `kernel.inspect` returns one value of a live session as its session
 describes it: its kind (table, model, vector, list, function, value or other), class,

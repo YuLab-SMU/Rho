@@ -449,8 +449,8 @@
     "kernel.interrupt": {
       "summary": "Interrupt one cell: a running cell stops and its session and values stay; a waiting cell is not run. A cell that has ended is returned unchanged.",
       "path": "operations/kernel.interrupt.json",
-      "bytes": 5956,
-      "sha256": "63316d82629e0308a6e1fbf312a90bd604f048e5aa0143227804b81a280f015d"
+      "bytes": 6360,
+      "sha256": "79636eab4cc83f34976c3a4097be5ee13777b17765e7955d55807a800eab287b"
     },
     "kernel.place.check": {
       "summary": "Connect to a place on a server and report its system, machine, the folder after its setup lines, and R and Python there. Runs the place's setup lines; starts no session.",
@@ -491,14 +491,14 @@
     "kernel.read": {
       "summary": "The live sessions and their cells, oldest cell first: code, purpose, who ran it, what it printed, its plots and how it ended, and each session's variables. Reading never starts a session.",
       "path": "operations/kernel.read.json",
-      "bytes": 12636,
-      "sha256": "ac6e56ffef48cd07964fee7f4c725c0c347557d617ff8c8880a70e97a515e887"
+      "bytes": 13302,
+      "sha256": "cfbc1a18a6c1414d45bbc9ba3baf7ddc009baad91f15194031f5de902f60d29f"
     },
     "kernel.run": {
-      "summary": "Run a cell of R or Python in the project's live session of that language, which the Agent and the person share: what one cell defines stays for the next. Starts the session when none is live, on this machine or at a place on one of the person's servers (place, or where kernel.places says that language runs next). The same changeId from the same caller returns the same cell and never runs it twice. waitMs waits for the cell to end.",
+      "summary": "Run a cell of R or Python in the project's live session of that language, which the Agent and the person share: what one cell defines stays for the next. Starts the session when none is live, on this machine or at a place on one of the person's servers (place, or where kernel.places says that language runs next). interpreter names the program a session on this machine starts with, in a folder of the project such as .venv/bin/python; the project keeps it for that language's later sessions, and each cell records the program and version that ran it. The same changeId from the same caller returns the same cell and never runs it twice. waitMs waits for the cell to end.",
       "path": "operations/kernel.run.json",
-      "bytes": 12210,
-      "sha256": "5886c1ad02346ab653b9d36ac47259df6ad75db7313b5fd9e5ff0d247cae2174"
+      "bytes": 13162,
+      "sha256": "f6a48db022b54b204f5c685fdb16737caf6dfa973cbd5184cbbb877a4032bbb5"
     },
     "kernel.server.skill": {
       "summary": "One skill bound to a server, as its file reads now: how that server is used. Read it before naming a place there or running work on it.",
@@ -515,8 +515,8 @@
     "kernel.stop": {
       "summary": "Person at this machine only: end one live session. Its values are gone, the running cell ends with an error and waiting cells are not run. A session that has ended is returned unchanged.",
       "path": "operations/kernel.stop.json",
-      "bytes": 6189,
-      "sha256": "736edc582fa07126c90eb5dbd39121ce149d12c4764dc9cea4215a6c93b286a1"
+      "bytes": 6391,
+      "sha256": "24f0b348a7a6d2378393abfc3e3d80a112090cace264672a834a2d0eb159dade"
     },
     "media.describe": {
       "summary": "media.describe",

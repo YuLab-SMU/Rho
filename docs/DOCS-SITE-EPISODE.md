@@ -219,6 +219,5 @@ published 0.5.3 in a throwaway folder:
   `python3` is only a prompt to install them; that start was not observed.
 - `codex mcp add` adds the project's tools to every Codex session on the machine. Whether
   Codex sessions that Rho itself starts also load them was not checked.
-- Agent 0.4.28 is a Rho-plugins change; Rho composes it only once `components.json` names that
-  commit.
+- Agent 0.4.28 is a Rho-plugins change; Rho composes it from Plugins `3b81626` on.
 - Windows was not run, and CI has not run these changes.

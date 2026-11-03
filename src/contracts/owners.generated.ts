@@ -19962,6 +19962,16 @@ export const ownerContracts: OwnerContractSnapshot = {
                       }
                     ]
                   },
+                  "program": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
                   "purpose": {
                     "anyOf": [
                       {
@@ -20015,6 +20025,16 @@ export const ownerContracts: OwnerContractSnapshot = {
                       "type": "string"
                     },
                     "type": "array"
+                  },
+                  "version": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -21204,6 +21224,16 @@ export const ownerContracts: OwnerContractSnapshot = {
                         }
                       ]
                     },
+                    "program": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
                     "purpose": {
                       "anyOf": [
                         {
@@ -21257,6 +21287,16 @@ export const ownerContracts: OwnerContractSnapshot = {
                         "type": "string"
                       },
                       "type": "array"
+                    },
+                    "version": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     }
                   },
                   "required": [
@@ -21384,6 +21424,16 @@ export const ownerContracts: OwnerContractSnapshot = {
                       ]
                     },
                     "problem": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "program": {
                       "anyOf": [
                         {
                           "type": "string"
@@ -21539,6 +21589,11 @@ export const ownerContracts: OwnerContractSnapshot = {
               },
               "code": {
                 "maxLength": 65536,
+                "minLength": 1,
+                "type": "string"
+              },
+              "interpreter": {
+                "maxLength": 1024,
                 "minLength": 1,
                 "type": "string"
               },
@@ -21721,6 +21776,16 @@ export const ownerContracts: OwnerContractSnapshot = {
                       }
                     ]
                   },
+                  "program": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
                   "purpose": {
                     "anyOf": [
                       {
@@ -21774,6 +21839,16 @@ export const ownerContracts: OwnerContractSnapshot = {
                       "type": "string"
                     },
                     "type": "array"
+                  },
+                  "version": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -21894,6 +21969,16 @@ export const ownerContracts: OwnerContractSnapshot = {
                     ]
                   },
                   "problem": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "program": {
                     "anyOf": [
                       {
                         "type": "string"
@@ -22342,6 +22427,16 @@ export const ownerContracts: OwnerContractSnapshot = {
                     ]
                   },
                   "problem": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "program": {
                     "anyOf": [
                       {
                         "type": "string"
@@ -24772,7 +24867,7 @@ export const ownerContracts: OwnerContractSnapshot = {
     },
     "agent": {
       "package": "@rho-workspace/plugin-agent",
-      "packageVersion": "0.4.27",
+      "packageVersion": "0.4.28",
       "entry": "./operations",
       "entryPath": "@rho-workspace/plugin-agent/dist/operations.js",
       "entrySha256": "08bb1c852cb89a17a2e307831ed2df5d6d16cbccaaf2971ec251bb9a1a34261f",
@@ -24782,7 +24877,7 @@ export const ownerContracts: OwnerContractSnapshot = {
     },
     "agent-feedback": {
       "package": "@rho-workspace/plugin-agent",
-      "packageVersion": "0.4.27",
+      "packageVersion": "0.4.28",
       "entry": "./feedback-contract",
       "entryPath": "@rho-workspace/plugin-agent/dist/feedback-contract.js",
       "entrySha256": "ecb1561d92b5953d2b786d29cfb57f6f8085d214dc1dec76f6e7bd7a5257cb75",
@@ -24792,7 +24887,7 @@ export const ownerContracts: OwnerContractSnapshot = {
     },
     "agent-native": {
       "package": "@rho-workspace/plugin-agent",
-      "packageVersion": "0.4.27",
+      "packageVersion": "0.4.28",
       "entry": "./contract",
       "entryPath": "@rho-workspace/plugin-agent/dist/contract.js",
       "entrySha256": "9e926081cb755a98d2b00d2a8488d8f4c6d25b3d5f1ec526d334ade633fe8a65",
@@ -24802,7 +24897,7 @@ export const ownerContracts: OwnerContractSnapshot = {
     },
     "agent-session": {
       "package": "@rho-workspace/plugin-agent",
-      "packageVersion": "0.4.27",
+      "packageVersion": "0.4.28",
       "entry": "./session-contract",
       "entryPath": "@rho-workspace/plugin-agent/dist/session-contract.js",
       "entrySha256": "bb5b118f965e208617781af3e8ad6b6739869bcc19f0092eab14468824693123",
@@ -24834,12 +24929,12 @@ export const ownerContracts: OwnerContractSnapshot = {
     },
     "kernel": {
       "package": "@rho-workspace/plugin-kernel",
-      "packageVersion": "0.5.2",
+      "packageVersion": "0.5.3",
       "entry": "./operations",
       "entryPath": "@rho-workspace/plugin-kernel/dist/operations.js",
-      "entrySha256": "112433cedbbea15d69b2547690c790902e41d3fc95020e73714de90207fdf9e1",
+      "entrySha256": "d984240d0953961897503d15419347712e5f80e23a3386074ff461e8655e7a46",
       "exports": {
-        "operationContracts": "fa78820498bf291d0e59a0aa1d0d0ef997add03c5cfec9f7288e737d1ed086f4"
+        "operationContracts": "738c966d85f5bcf6d65e313dad3221bac8974f430c86f46e119d67777ef7c788"
       }
     },
     "skills": {

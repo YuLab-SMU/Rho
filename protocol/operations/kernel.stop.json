@@ -126,6 +126,16 @@
               }
             ]
           },
+          "program": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "sessionId": {
             "pattern": "^s-[a-f0-9]{16}$",
             "type": "string"
