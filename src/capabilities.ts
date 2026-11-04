@@ -106,6 +106,78 @@ const personFiles = {
 };
 export const rhoWorkspaceSkill = { ...applicationSkill, digest: skillDigest };
 export const personFilesSkill = personFiles;
+
+// Written after five real analyses (bulk RNA-seq, snRNA-seq, GeoMx DSP, bulk plus a
+// metabolome, and a multi-omics cohort) ran through this application. None of them
+// finished unattended at the time: turns ended on a call limit or on a wait nothing
+// wakes, calls went into looking for what may be done rather than doing it, and results
+// were not always written before the turn ended. Several of those stops have since been
+// fixed in this application, so what follows is written as the practice that survived
+// them rather than as a workaround for one build's limits.
+const analysisRunContent = [
+  'A whole analysis has to survive interruption. Rho keeps no step cap and no wall time',
+  'by default, and a long analysis may still be stopped by the person or by the Agent',
+  'client, so write results as you go instead of holding them until the end.',
+  '',
+  '1. Spend calls on the analysis, not on discovery. Resolve the operations you will use',
+  '   once each (kernel.run, kernel.read, kernel.interrupt, resource.list) and reuse the',
+  '   contractRef you were given. In the runs behind this Skill one Agent spent 36',
+  '   capability.index calls in a single analysis and ended with only its quality-control',
+  '   table written.',
+  '2. Do not guess what a result reference contains. A refused read means the shape is',
+  '   wrong, not that the result is missing: resolve the operation that produced it and',
+  '   read the page or range it names instead of trying sibling paths.',
+  '3. Nothing wakes you later. No monitor, timer or event resumes your turn: a cell still',
+  '   running when you stop is left running for nobody, and ending your reply is not',
+  '   proof the analysis finished. Pass a waitMs long enough for the slowest step (a',
+  '   normalisation over 90,000 nuclei can take many minutes), or read the cell with',
+  '   kernel.read in your own next call.',
+  '4. Load once, build on it. A session keeps what a cell defines, so read the data in one',
+  '   cell and derive in the next. A service restart does not keep those objects: the code',
+  '   and its outputs stay, the values in memory do not, so keep a script that rebuilds',
+  '   what matters.',
+  '5. Prefer a few large cells to many small ones, and keep each short enough to finish. A',
+  '   cell that hangs costs time: interrupt it with kernel.interrupt and continue with the',
+  '   part that is cheap to redo.',
+  '6. Draw to an explicit device. In these runs a ggsave call in the shared session hung',
+  '   and the figure had to be redrawn with png() and dev.off(): open the device, plot,',
+  '   close it, and let the figure land in a file you name.',
+  '7. Write each file once, complete, and save it to disk before you rely on it. One script',
+  '   written in full and then run costs less than the same script edited piece by piece,',
+  '   and a file on disk is the only version that outlives a stop.',
+  '8. Check packages in one call, and do not install into a temporary library. Name what is',
+  '   missing, and when you substitute a gene-set source or an annotation build, say so',
+  '   beside the result, because that choice changes the numbers.',
+  '9. Say what did not reproduce, and why. When a published count cannot be matched, name',
+  '   the undefined choice (a threshold, a direction, a model) and compute the cheap',
+  '   alternatives beside your main one instead of tuning until it fits.',
+  '10. Report the state you actually reached. Say which outputs exist on disk, which cell',
+  '   was still running, and what a stopped turn left behind; the person continues from',
+  '   that record rather than from a claim that the work is done.',
+].join('\n');
+const analysisRunSkill = {
+  id: 'rho.analysis-run', version: '1.1', content: analysisRunContent,
+  digest: digest(analysisRunContent),
+  intent: 'Run a whole analysis through the live sessions so a stop never loses the work.',
+  requires: ['kernel.run', 'kernel.read', 'kernel.interrupt', 'resource.list'],
+  example: {
+    method: 'kernel.run',
+    input: {
+      language: 'r',
+      code: 'counts <- read.csv("data/counts.csv", row.names = 1); dim(counts)',
+      purpose: 'Load the count matrix once and keep it for later cells',
+      changeId: 'load-counts',
+      waitMs: 120000
+    }
+  },
+  failureRecipes: [
+    { kind: 'not_found', message: 'Skill is not available in this project and session.', next: 'Read skill.list for the Skills this project and session expose; a Skill owned by a disabled plugin is not listed.' },
+    { kind: 'stale', message: 'Skill content digest changed.', next: 'Read the Skill again and apply the current text; do not act on a cached copy.' },
+    { kind: 'limit', message: 'Too many cells are waiting.', next: 'Wait for the running cell or interrupt it, then continue in a new cell with a new changeId.' }
+  ],
+  verify: { command: 'npm run test:notebook', description: 'Runs R and Python cells, keeps their output, plots and variables, interrupts and stops sessions, and keeps identity across a restart.' }
+};
+export const analysisRunSkillDeclaration = analysisRunSkill;
 const taskMapContent = [
   'Describe the whole task yourself: Rho fixes no closed list of kinds or states.',
   '',
@@ -262,7 +334,7 @@ export class Capabilities {
 
   async skills(principal: Principal) {
     const state = await this.state();
-    const result: SkillDeclaration[] = [rhoWorkspaceSkill, personFilesSkill, taskMapSkill];
+    const result: SkillDeclaration[] = [rhoWorkspaceSkill, personFilesSkill, taskMapSkill, analysisRunSkill];
     for (const descriptor of this.plugins.descriptors()) {
       const status = this.pluginStatus(descriptor.id as PluginId, state);
       for (const skill of descriptor.skills ?? []) {

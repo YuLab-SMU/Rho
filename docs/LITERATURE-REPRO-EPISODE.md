@@ -198,3 +198,43 @@ back — are all presentation and recovery problems on Rho's side of the line.
    with a hint), so an Agent stops guessing and spends its turns on the analysis.
 3. Show what will run in the approval, once, in the same spelling as the executed step.
 4. A person must be able to close the tab and come back to the running conversation.
+
+## The practice these runs produced
+
+2026-11-02, later. The five runs above were turned into a shipped Skill,
+`rho.analysis-run`, declared beside `rho.workspace` in [capabilities](../src/capabilities.ts)
+and listed by `skill.list`/`skill.read`. Every conversation started here is also told to
+read it before a multi-step analysis ([project-notes](../src/project-notes.ts)), because
+in these runs the Agents never called `skill.list` on their own: a Skill nobody points
+at is inert.
+
+Its ten rules are what would have changed these five runs: spend calls on the analysis
+rather than re-running `capability.index` (one Agent spent 36 index calls and finished
+with only its QC table), never wait for an event that does not come, draw to an explicit
+device after `ggsave` hung, write each file complete and to disk, check packages once
+instead of installing into a temporary library, name what did not reproduce and compute
+the cheap alternatives, and report the state actually reached rather than a claim that
+the work is done.
+
+**The Skill was rewritten before it shipped, because the application had moved.** While
+this pass was being written up, the checkout advanced to 0.5.3 and three of the problems
+recorded above were fixed by other passes: `maxAgentTurns` and `turnWallMs` are no longer
+set by default, a new Claude Code session opens in Auto rather than Manual, a stopped
+conversation is named as an Agent turn limit and can be continued in place with the
+original task, and the conversation row opens an addressable record
+([P3 continuity](P3-CONTINUITY-EPISODE.md)). The first draft of the Skill taught
+workarounds for a 64-step cap that no longer exists; version 1.1 is written as the
+practice that survives those fixes, and it says plainly that the step cap and wall time
+are not set by default. The lesson is kept here rather than in the Skill: a Skill written
+from one build's limits goes stale, so it should describe invariants.
+
+What the Skill still cannot fix is on the other side of the line: the R session's
+in-memory objects do not survive a service restart, so a person who returns to yesterday's
+analysis gets the cells and their outputs but must rebuild the values. The Skill says so,
+and asks the Agent to keep a script that rebuilds what matters.
+
+Verified: `npm run build:service`, `test/skills.test.mjs`, `test/capabilities.test.mjs`
+and `test/notebook.test.mjs` pass; the Skill was read back through the running service
+(`skill.list` 18 Skills, `skill.read` returning 1.1 with its digest), and the pointer line
+was confirmed in the instructions handed to a conversation. No independent Agent has yet
+followed the Skill in a fresh analysis.

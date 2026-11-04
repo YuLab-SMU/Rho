@@ -35,6 +35,7 @@ export function notesInstructions(conversationId: string, options: { notebook?: 
       '- What a cell defines stays for your next cells, so load data once and build on it. kernel.read shows the cells, including any the person ran, and the variables.',
       '- To look at a value without adding a cell, call kernel.inspect with its language and name: it gives a page of a table, a model\'s fit and coefficients, or a list\'s parts, with the code that reaches each part.',
       '- Keep the code your results rest on in script files as well, so they can be run again without the session.',
+      '- Before a multi-step analysis, read the Skill "rho.analysis-run" with skill.list and skill.read: it holds the practice that keeps a long analysis from losing work when a turn stops, written after five real reproductions ran here.',
     ] : []),
   ].join('\n');
 }

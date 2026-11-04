@@ -31,6 +31,7 @@ human benefits are not established by existing Rho checks.
 | Example project | `example/pa14-qs` ships with the application; a new state copies it into the projects folder once, as an ordinary editable project | [Episode](EXAMPLE-PROJECT-EPISODE.md) |
 | dsh-rho 0.0.1 | Native dsh 0.2.1-rc.5 analysis, captured CSV/SVG, selected-row question | Real model/browser loop; local tarball installed; restart/overwrite/crash preserved results and one analysis run; 5/5 adapter tests and type check |
 | Literature reproduction | Five papers of the 97 fully-open corpus reproduced in Rho 0.5.2 (bulk, snRNA-seq, GeoMx DSP, bulk+metabolome, multi-omics): Agents ran R in the shared Notebook, Rho captured cells, values, figures and notes | [Episode](LITERATURE-REPRO-EPISODE.md): two of five needed one turn and three needed 2–4, because the Agent client capped at 64 turns or waited on an event nothing wakes; 8–24 approval choices per run (counted); resource paths guessed. Conversation return and turn-limit continuation have a later [P3 pass](P3-CONTINUITY-EPISODE.md); the other issues remain. |
+| Agent practice Skill | `rho.analysis-run` 1.1 is a shipped Skill for running a whole analysis in the live sessions, and every conversation started here is told to read it before a multi-step analysis | Written from the five reproductions above: spend calls on the analysis not on re-discovery, never wait for an event that does not come, draw to an explicit device, write files complete and to disk, and report the state actually reached. Read back through `skill.list`/`skill.read` on a running service; `test:notebook` is its verify command |
 | Documentation site | <https://yulab-smu.top/Rho/> is a front page with the real WebUI replaying the shipped PA14 project's recorded session (no backend), an install prompt for Claude Code or Codex, the recorded and per-plugin example prompts, and the retained 0.4.0 downloads; `docs/` is published under `/docs/` with local search and every page naming its source file | [Episode](DOCS-SITE-EPISODE.md): the demo tour gets every request answered at 1440 and 390 px; the install prompts' commands ran on npm 0.5.3; [one Codex run](DOCS-SITE-EPISODE.md#the-install-prompt-on-a-real-machine) stopped at the Node check, lost its background start and exposed a port that moved per start, Codex grants shown as Claude Code's and stack-trace refusals, fixed in Rho; the prompts are unchanged; the four `updates/*.json` feeds are unchanged; no outside reader yet |
 | Python environments | An Agent makes an environment in the project and passes `interpreter` (`.venv/bin/python`) to `kernel.run` (Notebook 0.5.3); the project keeps it for that language, a session only the Agent used starts again with it, and each session and cell records its program and version; the Agent panel reads install commands as what they installed | [Episode](PYTHON-ENV-EPISODE.md): five real runs outside Rho and from its Agent panel; installs made inside cells are not read as installs; other models and Codex unobserved |
 
@@ -139,13 +140,12 @@ type and summary; a model its fit and coefficients; a list its parts, each openi
 with the code that reaches it, which Use in Notebook puts in the line. While a cell runs or
 after the value is gone, the last reading stays, dimmed, with the cell it was read after.
 
-The four panes of interactive exploration, a script, its console, the variables and the plots,
-are made from these components ([episode](SIMULATED-PROJECT-EPISODE.md#script-console-variables-and-plots)).
-⌘/Ctrl+Enter or Run in an R or Python script runs the selection, or the statement the cursor
-is in, as the person's cell and moves on; a page without the Notebook gets one under the
-script. Variables and Plots are views of their own, in a column along the page's right side.
-R now draws on one device for the whole session, so a later cell draws over an earlier plot
-and a sourced script keeps each plot. No Agent ran cells in this layout.
+The four panes of interactive exploration, a script, its console, the variables and the plots, are made from
+these components ([episode](SIMULATED-PROJECT-EPISODE.md#script-console-variables-and-plots)). ⌘/Ctrl+Enter
+or Run in an R or Python script runs the selection, or the statement the cursor is in, as the person's cell
+and moves on; a page without the Notebook gets one under the script. Variables and Plots are views of their
+own, in a column along the page's right side. R now draws on one device for the whole session, so a later
+cell draws over an earlier plot and a sourced script keeps each plot. No Agent ran cells in this layout.
 
 The Notebook has [two forms](SIMULATED-PROJECT-EPISODE.md#two-forms-of-the-notebook) of the same
 sessions, switched in its header: the notebook, and a console with one transcript of prompts and
