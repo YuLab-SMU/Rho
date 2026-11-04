@@ -1,6 +1,6 @@
 # Rho status
 
-Updated: 2026-11-03.
+Updated: 2026-11-04.
 
 ## Current focus
 
@@ -34,6 +34,7 @@ human benefits are not established by existing Rho checks.
 | Agent practice Skill | `rho.analysis-run` 1.1 is a shipped Skill for running a whole analysis in the live sessions, and every conversation started here is told to read it before a multi-step analysis | Written from the five reproductions above: spend calls on the analysis not on re-discovery, never wait for an event that does not come, draw to an explicit device, write files complete and to disk, and report the state actually reached. Read back through `skill.list`/`skill.read` on a running service; `test:notebook` is its verify command |
 | Documentation site | <https://yulab-smu.top/Rho/> is a front page with the real WebUI replaying the shipped PA14 project's recorded session (no backend), an install prompt for Claude Code or Codex, and the recorded and per-plugin example prompts, with no desktop installers until a current desktop release; `docs/` is published under `/docs/` with local search and every page naming its source file | [Episode](DOCS-SITE-EPISODE.md): the demo tour gets every request answered at 1440 and 390 px; the install prompts' commands ran on npm 0.5.3; [one Codex run](DOCS-SITE-EPISODE.md#the-install-prompt-on-a-real-machine) stopped at the Node check, lost its background start and exposed a port that moved per start, Codex grants shown as Claude Code's and stack-trace refusals, fixed in Rho; the prompts are unchanged; the four `updates/*.json` feeds are unchanged; no outside reader yet |
 | Python environments | An Agent makes an environment in the project and passes `interpreter` (`.venv/bin/python`) to `kernel.run` (Notebook 0.5.3); the project keeps it for that language, a session only the Agent used starts again with it, and each session and cell records its program and version; the Agent panel reads install commands as what they installed | [Episode](PYTHON-ENV-EPISODE.md): five real runs outside Rho and from its Agent panel; installs made inside cells are not read as installs; other models and Codex unobserved |
+| Variable relations | Under each Notebook cell, what it read and from which cell, and the later cells that read what it made; Variables names the cell that made each value and those that read it; a script's editor shows its data flow read from its text (R and Python) beside the code, marking the cursor's step and its path; a cell that makes its values over several steps shows them step by step (Notebook 0.5.4, Documents 0.4.11) | [Episode](VARIABLE-FLOW-EPISODE.md): the shipped example in a real browser at 1440, 1920 and 390 px; read, not run, so names built at run time, dplyr columns named like a value and pasted paths are missed; the runners now record a file written after a script's many labels; no person has used it |
 
 M0 retains Python/R highlighting, Markdown reading and native command exit/time/bounded
 output ([record](CODE-MARKDOWN-EPISODE.md)); its report trial keeps scripts, results and
@@ -123,12 +124,11 @@ cell. The default Agent grant had reached its 64-method limit, so the limit is n
 (`layeredGrantLimits.maxMethods`); a larger grant is still refused.
 
 The Notebook is also a view of any Studio page
-([episode](SIMULATED-PROJECT-EPISODE.md#exploring-a-finished-answer)). The person makes
-empty workspaces of their own and adds the Notebook or project files to them. Explore in R
-or Python on a table or script, from Studio, the answer board or the file page, opens it on
-their workspace beside the Notebook: a table loads as a new value in their own cell, a
-script waits in the line to run. A Studio stage under 640 px shows its views one at a time.
-Pages cannot yet be renamed or removed.
+([episode](SIMULATED-PROJECT-EPISODE.md#exploring-a-finished-answer)). The person makes empty
+workspaces of their own and adds the Notebook or project files to them. Explore in R or Python on a
+table or script, from Studio, the answer board or the file page, opens it on their workspace beside
+the Notebook: a table loads as a new value in their own cell, a script waits in the line to run. A
+Studio stage under 640 px shows its views one at a time. Pages cannot yet be renamed or removed.
 
 Values of the live sessions have a view of their own
 ([episode](SIMULATED-PROJECT-EPISODE.md#looking-at-values)). Notebook's `kernel.inspect`
@@ -219,15 +219,14 @@ lines. Steps 1 to 3 then found the server in five calls each and shared one live
 (graded 4/5, 6/11, 0/7: analysis choices and, in step 3, stored results that the Agent showed
 do not come from the counts). The Overview, which said "No work yet", now shows the Notebook's work.
 
-[Project skills](SKILLS-EPISODE.md) (Skills 0.1.0): how work is done in a project is kept as
-its own skills, `SKILL.md` files in `.claude/skills/` that Claude Code loads and other Agents
-read through Rho. Each change keeps its author, reason, evidence and versions; undo is a change;
-an edit outside Rho is seen and kept before anything is written over it. The Skills page leads
-with a skill's newest change beside Undo, and the Overview lists the newest changes. In
-pa14-qs with the person's notes, every Agent listed the skills before its first cell, recorded
-the notes, and new Agents followed them (step 1 again 5/5). A rule an Agent widened while
-recording carried over too; the guidance now keeps the person's terms. Seed skills and records
-from failures are not built.
+[Project skills](SKILLS-EPISODE.md) (Skills 0.1.0): how work is done in a project is kept as its own
+skills, `SKILL.md` files in `.claude/skills/` that Claude Code loads and other Agents read through
+Rho. Each change keeps its author, reason, evidence and versions; undo is a change; an edit outside
+Rho is seen and kept before anything is written over it. The Skills page leads with a skill's newest
+change beside Undo, and the Overview lists the newest changes. In pa14-qs with the person's notes,
+every Agent listed the skills before its first cell, recorded the notes, and new Agents followed
+them (step 1 again 5/5). A rule an Agent widened while recording carried over too; the guidance now
+keeps the person's terms. Seed skills and records from failures are not built.
 
 [Timeline events](TIMELINE-EVENTS-EPISODE.md): a plugin names a read of who did what and when
 (Notebook 0.5.0 `kernel.events`, Console 0.3.0 `console.events`); the Graph, the Overview and a

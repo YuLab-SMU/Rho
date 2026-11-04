@@ -172,6 +172,18 @@ inspect what happened. The application gives those actions direct places:
   who ran it and Show in the Notebook. It follows the kernel's records (below), not the code:
   60 values, 8 plots and 24 written files are drawn at most, and older ones are counted
   ([episode](SIMULATED-PROJECT-EPISODE.md#data-flow-html-pages-and-object-dependent-cases)).
+  An opened box whose cell makes its values over three or more steps shows them step by step,
+  read from its code as a script's flow is.
+- **How variables relate** ([episode](VARIABLE-FLOW-EPISODE.md)). Under each Notebook cell, what
+  it read and from which cell ("Read co from R 3"), and the later cells that read what it made
+  ("ratio read in R 6"); a cell named there goes to that cell and marks it. Variables names the
+  cell that made each value as it is now and the cells that read it. An R or Python script's
+  editor has a Data flow switch in its header, kept with the page: the script's flow, read from
+  the text in the editor as it is typed (nothing runs), shows beside the code, or below it in a
+  view under 640 px. Each box is a statement or a few, in the script's order, with what it makes,
+  the files it reads and writes, and lines from each value to the steps that read it. The code
+  marks the step at the cursor, the steps it comes from and those it leads to, in the colors of
+  the key above the flow; choosing a step puts the cursor at its first line.
 - **Servers** (`rho.servers`) shows where the live sessions run: this machine and each place, a
   folder on one of the person's servers, reached through serverctl when serverctl manages it and
   with ssh otherwise. A place shows its server and folder, how it is reached, what its last check saw
@@ -502,8 +514,10 @@ opening a value or a server's file as a view, code waiting for the Notebook's li
 Notebook's form with the page, which views the page has, and a conversation's share of the
 sessions. Highlighting and Markdown come from the shell services (`highlight`, `markdown`).
 The plugin's `./code` finds the statement a script line runs (`statementAt`), writes the code
-that loads a table or runs a script, and makes Data flow's boxes and lanes (`lineage`);
-`web/entries/documents.tsx` sends a line through the page's `runCode` shell service.
+that loads a table or runs a script, makes Data flow's boxes and lanes (`lineage`), what each
+cell read from which cell (`cellRelations`) and a script's flow from its text (`scriptFlow`);
+`web/entries/documents.tsx` sends a line through the page's `runCode` shell service, and draws a
+script's flow with the plugin's `ScriptFlowView` and marks its lines in the editor.
 The HTML page view is `html.reader` from Rho-plugins (HTML 0.1.0); Rho gives it `pageFrame`, the
 service's `/frame.html` (sandboxed, with its own policy and no network; the page's policy adds
 only `frame-src 'self'`), and `fileBytes`, a file snapshot's bytes (`readFile` in `web/previews.ts`).
