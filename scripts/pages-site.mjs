@@ -1,13 +1,16 @@
 // Assembles the GitHub Pages tree for https://yulab-smu.top/Rho/ in site/.pages:
-//   index.html  the front page (site/home), filled with the npm release, the recorded prompts
-//               and the prompts each selected plugin declares for itself
+//   index.html  the front page (site/home), filled with the npm release, the install sentence in
+//               each language it is offered in, the setup page's steps, the recorded prompts and
+//               the prompts each selected plugin declares for itself
 //   demo/       the application's WebUI replaying site/demo/recording.json (no backend)
 //   docs/       the documentation site, built from docs/ with base /Rho/docs/
 //   doc/setup.md  SETUP.md as it is: the steps an Agent follows to install and configure Rho
 //   skills/     the Agent Skill in skills/, as it is, which those steps install
 // The branch's updates/*.json feeds and .nojekyll are not produced here; a deployment keeps them.
 //
-//   node scripts/pages-site.mjs [--no-docs]
+//   node scripts/pages-site.mjs [--no-docs | --home]
+// --home builds the front page alone (index.html, img/, doc/ and skills/), for a deployment that
+// leaves the demo and docs on the branch as they are.
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -20,11 +23,12 @@ const run = (command, args, env = {}) => execFileSync(command, args, { stdio: 'i
 const skillFiles = fs.readdirSync('skills/rho', { recursive: true }).map(f => f.split(path.sep).join('/')).filter(f => f.endsWith('.md')).sort();
 const downloads = [...new Set(fs.readFileSync('SETUP.md', 'utf8').match(/\b(?:SKILL|references\/[a-z-]+)\.md\b/g))].sort();
 if (skillFiles.join() !== downloads.join()) throw new Error(`SETUP.md downloads ${downloads.join(', ')}, but skills/rho holds ${skillFiles.join(', ')}.`);
+const home = process.argv.includes('--home'), docs = !home && !process.argv.includes('--no-docs');
 fs.rmSync(out, { recursive: true, force: true });
 fs.mkdirSync(out, { recursive: true });
 
-run('npx', ['vite', 'build', '--logLevel', 'warn', '--config', 'site/demo/vite.config.ts'], { RHO_WEB_OUTPUT: path.join(out, 'demo') });
-if (!process.argv.includes('--no-docs')) {
+if (!home) run('npx', ['vite', 'build', '--logLevel', 'warn', '--config', 'site/demo/vite.config.ts'], { RHO_WEB_OUTPUT: path.join(out, 'demo') });
+if (docs) {
   run('npm', ['run', 'docs:build', '--silent'], { RHO_DOCS_BASE: '/Rho/docs/' });
   fs.cpSync('site/.vitepress/dist', path.join(out, 'docs'), { recursive: true });
 }
@@ -70,16 +74,29 @@ const panels = [
   ...plugins.map(p => `        <div role="tabpanel" id="set-${p.id}" aria-labelledby="tab-${p.id}">\n          <p class="panel-intro"><strong>${escape(p.displayName)}.</strong> ${escape(p.description)}</p>\n          <ul class="bands">\n${p.examplePrompts.map(q => `            <li class="band plain"><p class="ask">${escape(q.replace(/^[“"]|[”"]$/g, ''))}</p><div class="side"><button class="btn copy" type="button" data-copy-ask>Copy</button></div></li>`).join('\n')}\n          </ul>\n        </div>`),
 ];
 
+// The install sentence, in each language it is offered in, names the setup page this build serves.
+const setupUrl = 'https://yulab-smu.top/Rho/doc/setup.md';
 const prompts = JSON.parse(fs.readFileSync('site/home/install-prompts.json', 'utf8'));
 delete prompts.note;
+for (const [lang, { text }] of Object.entries(prompts)) if (!text.includes(setupUrl)) throw new Error(`The ${lang} install sentence does not name ${setupUrl}.`);
+// The address breaks only after a slash on a narrow screen, never at the hyphen in its host name.
+const [, host, rest] = setupUrl.match(/^(https:\/\/[^/]+\/)(.+)$/);
+const sentence = text => escape(text).replace(setupUrl, `<a href="doc/setup.md"><span class="nowrap">${host}</span><wbr>${rest.split('/').join('/<wbr>')}</a>`);
+const promptBands = `<ul class="bands asks">\n${Object.entries(prompts).map(([lang, { text }]) => `  <li class="band plain"><p class="ask" lang="${lang}">${sentence(text)}</p><div class="side"><button class="btn copy" type="button" data-copy-text="${escape(text)}" data-copied="Copied. Paste it into Claude Code or Codex.">Copy</button></div></li>`).join('\n')}\n</ul>`;
+
+// The setup page's own step headings, listed where the front page says what an Agent does.
+const setupSteps = [...fs.readFileSync('SETUP.md', 'utf8').matchAll(/^## \d+\. (.+)$/gm)].map(m => `            <li>${escape(m[1])}</li>`);
 const words = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
 const fill = {
   version, published,
   captured: date(recording.capturedAt),
   'demo-project': encodeURIComponent(Object.values(recording.calls['project.list'])[0].body.value[0].id),
   'demo-turns': words[asked.length] ?? String(asked.length),
-  'prompt-default': escape(prompts.claude.text.split('{folder}').join('~/rho-projects')),
-  'prompt-templates': JSON.stringify(prompts).replace(/</g, '\\u003c'),
+  prompt: sentence(prompts.en.text),
+  'prompt-text': escape(prompts.en.text),
+  'prompt-bands': promptBands,
+  'setup-steps': setupSteps.join('\n'),
+  'setup-count': words[setupSteps.length] ?? String(setupSteps.length),
   'prompt-tabs': tabs.join('\n'),
   'prompt-panels': panels.join('\n'),
 };
@@ -94,4 +111,4 @@ fs.cpSync('site/home/img', path.join(out, 'img'), { recursive: true });
 fs.mkdirSync(path.join(out, 'doc'));
 fs.copyFileSync('SETUP.md', path.join(out, 'doc/setup.md'));
 fs.cpSync('skills', path.join(out, 'skills'), { recursive: true });
-console.log(`site/.pages: front page for npm ${version} (${published}), ${asked.length} recorded prompts, ${plugins.length} plugin prompt sets; demo${process.argv.includes('--no-docs') ? '' : ' and docs'} built.`);
+console.log(`site/.pages: front page for npm ${version} (${published}), ${asked.length} recorded prompts, ${plugins.length} plugin prompt sets; ${home ? 'no demo or docs' : docs ? 'demo and docs' : 'demo'} built.`);

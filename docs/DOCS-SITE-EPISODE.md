@@ -315,7 +315,95 @@ https://yulab-smu.top/Rho/doc/setup.md 文档，按照步骤为我安装并配�
   shell and no approvals was refused by the session's permission check, so the page was
   followed by hand, not by a model.
 - Codex was not run as an Agent; only its configuration commands were. Windows was not run.
-- The front page's install prompts are unchanged. They still use `~/rho-projects` and
-  `~/.rho-service`, which the page and the skill recognise.
+- The front page's install prompts were not changed in this pass. They still used
+  `~/rho-projects` and `~/.rho-service`, which the page and the skill recognise. They have
+  since been replaced by the one sentence; see
+  [The front page asks for the sentence](#the-front-page-asks-for-the-sentence).
 - An Agent whose fetch tool summarises pages may miss commands. The page asks it to fetch the
   whole file with `curl` when it has a summary.
+
+### On the site
+
+On 2026-11-04 the user asked for `SETUP.md` and `skills/` to be published from `9f72a931` as
+they are. The eight files were added to `gh-pages` in `e4f4febb`, taken from that commit with
+`git show` and `git archive` rather than from a working tree. The added blobs are the commit's
+own, and the deployment adds nothing else. `index.html`, `demo/`, `docs/`, `img/`,
+`updates/*.json` and `.nojekyll` were not changed.
+
+After the Pages build of `e4f4febb`, `curl` fetched each address. All eight answered `200` with
+`text/markdown; charset=utf-8` and were byte-identical to their files in `9f72a931`:
+
+| Address under `https://yulab-smu.top/Rho/` | Bytes |
+| --- | --- |
+| `doc/setup.md` (`SETUP.md`) | 10353 |
+| `skills/rho/SKILL.md` | 5698 |
+| `skills/rho/references/analysis.md` | 6823 |
+| `skills/rho/references/connect.md` | 3404 |
+| `skills/rho/references/install.md` | 6479 |
+| `skills/rho/references/needs.md` | 3827 |
+| `skills/rho/references/tools.md` | 7275 |
+| `skills/rho/references/troubleshooting.md` | 5189 |
+
+GitHub Pages serves them with `cache-control: max-age=600`. An address outside the skill
+answers `404`, and the front page was the same byte for byte as before. Chromium opened
+`doc/setup.md` as text and did not download it.
+
+Steps 3 to 5 were then run as the page writes them, against the live site, on npm 0.5.3 in a
+throwaway `HOME` and npm prefix. The install took 9 s. The `nohup … &` start answered `200`
+from a later command, and the example was copied. `--open` reached the browser command, which
+was replaced by a logging stand-in. The seven skill files downloaded from the site into
+`.claude/skills/rho` matched `skills/rho` in `9f72a931`, and the page's stop command left no
+service for that state folder.
+
+### The front page asks for the sentence
+
+The front page and its install dialog now give that one sentence, in English and in Chinese,
+each with a Copy button. The long Claude Code and Codex prompts, the Agent switch and the
+projects folder field are gone, since the setup page holds the commands and the folders.
+`site/home/install-prompts.json` holds the two sentences, and `pages-site.mjs` refuses one that
+does not name the setup page. The second beat lists the setup page's eight step headings, which
+the build reads from `SETUP.md`. Beside them is a terminal of steps 3 to 5 from the run above:
+it is shortened, and its note says so. The commands shown under "Or install it yourself" now
+use `~/Rho/projects` and `~/Rho/state`, the folders an Agent later looks for. The closing
+section gives the English sentence with its own Copy button, and the footer links the setup
+page.
+
+Each beat used to be at least 86 % of the window tall, so that its two columns stayed in view
+while it was read. With only the two sentences in the first beat, that left about 480 px of
+blank below them at 1440 px. The beats now take their content's height and end 128 px after
+the taller column, and the shorter column still stays in view beside the taller one.
+
+`pages-site.mjs --home` builds the front page alone. The deployment replaced only `index.html`,
+and `demo/` and `docs/` stayed as they were. The full build failed in this pass for an unrelated
+reason: the WebUI at `9f72a931` imports `flowPath` from the Notebook plugin, and the local
+Rho-plugins build no longer exports it.
+
+#### Checks
+
+- `scripts/demo-check.mjs` (`pages:check`) with `DEMO_NARROW=1`, on the tree that was deployed,
+  answered every demo request at 1440 and 390 px, with 0 page errors, 0 failed assets and all 12
+  internal links answering. Its front-page part now
+  copies each sentence in the dialog and the closing one and compares the clipboard with the
+  sentence shown. It also fails when a code block wraps a line or scrolls sideways at 390 px.
+  Both checks fired on deliberately broken copies.
+- Measured in the browser at 1440 and 390 px, nothing in the install section, the closing or the
+  footer goes past the right edge, and the page does not scroll sideways at 390 px. The dialog
+  needs no scrolling (760 × 414 and 352 × 635 px), and the Copy button covers no command. The
+  closing sentence takes two lines at 36 px and three at 20 px. In both sentences the address
+  breaks only after a slash.
+- Every command in the terminal, joined across its `\` splits, appears in `SETUP.md` at
+  `9f72a931` as written.
+- In the same throwaway home, `npm uninstall -g @rho-workspace/rho` took `rho` off `PATH` and
+  left the example project, the state folder, the log and the skill folder, as the Uninstall row
+  says. No MCP entry was made in that run, so the row's mention of it was not checked.
+- The install section, the closing and the dialog were looked at in screenshots at 1440 and
+  390 px.
+- The skill's page inspector found 0 FAIL, and the lint found nothing in the source. The
+  inspector warns about the page as a whole: three typefaces, eleven sizes, no video, the long
+  recorded prompts, and the tiles at 768 px. All of these were there before this change.
+
+#### Limits
+
+- No person and no Agent has followed the page from the sentence.
+- The terminal beside the steps is a shortened copy of one run, typed into the page, not
+  recorded by the build.

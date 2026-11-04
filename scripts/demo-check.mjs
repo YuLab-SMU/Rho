@@ -53,10 +53,11 @@ try {
   }
 } finally { await browser.close(); }
 
-// The front page: the install dialog, the Agent switch and folder, copying, the prompt sets, and
-// every link that stays on this site.
+// The front page: the install dialog, copying each install sentence and the closing one, the prompt
+// sets, and every link that stays on this site.
 const front = [];
 {
+  const sentences = Object.entries(JSON.parse(fs.readFileSync('site/home/install-prompts.json', 'utf8'))).filter(([key]) => key !== 'note').map(([, { text }]) => text);
   const browser = await chromium.launch();
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, permissions: ['clipboard-read', 'clipboard-write'] });
   const page = await context.newPage();
@@ -65,17 +66,18 @@ const front = [];
   const dialog = page.locator('#install-dialog');
   await page.locator('header [data-open-install]').click();
   if (!await dialog.isVisible()) front.push('the install dialog did not open');
-  await dialog.getByRole('button', { name: 'Codex' }).click();
-  await dialog.locator('[data-folder]').fill('~/My Projects');
-  const prompt = await dialog.locator('[data-prompt]').textContent();
-  if (!prompt.includes('--agent-backend codex-acp') || !prompt.includes('"$HOME/My Projects"')) front.push('the prompt did not follow the Agent and folder: ' + prompt.slice(0, 120));
-  await dialog.getByRole('button', { name: 'Copy prompt' }).click();
-  const copied = await page.evaluate(() => navigator.clipboard.readText());
-  if (copied !== prompt) front.push('the clipboard does not hold the prompt shown');
+  const clipboard = () => page.evaluate(() => navigator.clipboard.readText());
+  const copies = dialog.locator('[data-copy-text]');
+  if (await copies.count() !== sentences.length) front.push(`the dialog offers ${await copies.count()} sentences, not ${sentences.length}`);
+  for (let i = 0; i < await copies.count(); i++) {
+    await copies.nth(i).click();
+    const shown = (await dialog.locator('.ask').nth(i).textContent()).trim();
+    if (shown !== sentences[i] || await clipboard() !== sentences[i]) front.push('the clipboard does not hold the sentence shown: ' + shown.slice(0, 60));
+  }
   await page.screenshot({ path: path.join(shots, 'front-dialog.png') });
   await dialog.getByRole('button', { name: 'Close' }).click();
-  const closing = await page.locator('.closing [data-folder]').inputValue();
-  if (closing !== '~/My Projects') front.push('the folder fields are not shared');
+  await page.locator('.closing [data-copy-text]').click();
+  if (await clipboard() !== sentences[0]) front.push('the closing does not copy the install sentence');
   const tab = page.getByRole('tab', { name: /^Tables/ });
   await tab.click();
   if (!await page.locator('#set-tables').isVisible() || await page.locator('#set-example').isVisible()) front.push('the Tables prompt set did not replace the example');
@@ -85,6 +87,17 @@ const front = [];
     if (!response.ok()) front.push(response.status() + ' ' + link);
   }
   console.log('front page links checked:', new Set(links).size);
+  // A phone reads every command whole: no code block wraps a line or scrolls sideways, and the page
+  // does not scroll sideways either.
+  const phone = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  await phone.goto(origin + '/Rho/');
+  const blocks = await phone.evaluate(() => [...document.querySelectorAll('pre')].map(pre => {
+    const style = getComputedStyle(pre), lines = pre.textContent.split('\n');
+    const rendered = Math.round((pre.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom)) / parseFloat(style.lineHeight));
+    return { first: lines[0].trim(), lines: lines.length, rendered, scrolls: pre.scrollWidth > pre.clientWidth };
+  }));
+  for (const b of blocks) if (b.scrolls || b.rendered > b.lines) front.push(`a code block ${b.scrolls ? 'scrolls sideways' : `wraps ${b.lines} lines into ${b.rendered}`} at 390 px: ${b.first}`);
+  if (await phone.evaluate(() => document.documentElement.scrollWidth > innerWidth)) front.push('the front page scrolls sideways at 390 px');
   await browser.close();
   server.close();
 }
