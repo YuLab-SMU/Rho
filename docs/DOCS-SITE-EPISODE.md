@@ -407,3 +407,45 @@ Rho-plugins build no longer exports it.
 - No person and no Agent has followed the page from the sentence.
 - The terminal beside the steps is a shortened copy of one run, typed into the page, not
   recorded by the build.
+
+### The latest page and skill, and the Node row
+
+Later on 2026-11-04 the user asked for the latest `SETUP.md` and `skills/` to be published too,
+and pointed out that the front page limited Node more than Rho does. Its requirements row still
+said "22.22 or a later 22.x", although `engines` has been `>=22.22.0 <27` since
+[the install prompt on a real machine](#the-install-prompt-on-a-real-machine) and the setup
+page asks for 22.22 or later, below 27.
+
+`gh-pages` `02da85a9` replaced `doc/setup.md` and `skills/` with their files at `f82bc77a`,
+again with `git show` and `git archive`. Since `9f72a931` the skill has gained
+`references/screen-check.md` and `SKILL.md` links it. The page's two download lists, one for
+macOS and Linux and one for Windows, name it, so each still lists exactly the skill's files,
+now eight. Only those three paths changed.
+
+The row now reads "22.22 or later, below 27: Node 22, 24 or 26". It adds that version 0.5.3 on
+npm still declares 22.x only, so on 24 or 26 npm prints one `EBADENGINE` warning and installs it
+anyway, as it did in the Codex run on Node 26.10.0. The package on npm was not changed, so the
+warning stays until a release with the wider range is published. `49b0e262` changes the row,
+and `gh-pages` `29d20f0b` replaced only `index.html`, built with `pages-site.mjs --home`.
+
+The documentation's start page already gives `>=22.22.0 <27`. Its home page still introduces
+0.5.2 and heads its start section "Node 22, R, and one of your own Agent clients"; `docs/` was
+not rebuilt in this pass.
+
+#### Checks
+
+- `pages:check` with `DEMO_NARROW=1`, on the tree that was deployed, answered every demo request
+  at 1440 and 390 px, with 0 page errors, 0 failed assets, 0 front-page problems and all 12
+  internal links answering.
+- The row takes two lines at 1440 px and six at 390 px, ends inside the page's margins, and the
+  page does not scroll sideways. It was looked at in screenshots at both widths.
+- Every command in the terminal still appears in `SETUP.md` at `f82bc77a` as written.
+- The skill's page inspector found 0 FAIL and the same five warnings as before.
+- GitHub had an incident with Actions and Pages, and both deployments waited about 25 minutes in
+  its queue. It cancelled the run for `02da85a9`, which `29d20f0b` contains. After the Pages
+  build of `29d20f0b`, `curl` fetched every address. The nine files answered `200` with
+  `text/markdown; charset=utf-8`, byte-identical to `f82bc77a`: `doc/setup.md` is now 10439
+  bytes, `SKILL.md` 5803 and `references/screen-check.md` 3251, and the other six are as in the
+  table above. `index.html` was byte-identical to the build of `49b0e262`.
+- Between `6b8289e3` and `29d20f0b` only those four paths changed on `gh-pages`. The four
+  `updates/*.json` feeds and `.nojekyll` answered byte-identical to the branch.
