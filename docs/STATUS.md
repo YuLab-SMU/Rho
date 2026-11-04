@@ -296,4 +296,4 @@ is not a workspace restore or executable analysis format. Existing archives keep
 The withdrawn 2026-10-25 frontend guidance and the [2026-10-26 design commission](design/2026-10-26/index.html)
 are not requirements or templates for these screens. Current work advances by running real episodes and reviewing their results
 ([Development](DEVELOPMENT.md), [Frontend](FRONTEND.md)). No independent researcher
-trial or physical IME observation has yet established ease of use. The workspace's first load gets a 404 from `agent.activity.capture`: the example's recorded paths carry the projects-folder prefix, and the preview asks for captures of R scripts; neither is fixed yet ([record](SCREEN-CHECK-EPISODE.md)).
+trial or physical IME observation has yet established ease of use. The workspace's first load made a 404 from `agent.activity.capture`: the preview asked for a capture of an R script, and the example's paths carried the projects-folder prefix. The preview no longer asks for files capture refuses, and new installations get project-relative paths ([record](SCREEN-CHECK-EPISODE.md)).

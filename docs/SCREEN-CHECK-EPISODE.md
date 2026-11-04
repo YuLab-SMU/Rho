@@ -51,7 +51,7 @@ The prefix is in the example's recorded data. All 12 distinct observed location 
 
 The request is the preview's. It has no `expectedDigest`, and an R script is not capturable, so it can only come from `web/previews.ts:32`. That line asks the server to capture a node's file whenever capture is available and the node has no resource, with no extension check; `web/canvas.ts:54` checks `capturable` first. On a live run the R script would still be requested and refused as `unavailable`. That follows from the code and the direct check; I have not seen it in a live browser.
 
-Not changed. The fix candidates are in Rho, not in the agent plugin: gate `web/previews.ts` capture by `capturable`, as `canvas.ts` does, and correct the example's prefixed paths to the project-relative form. The example is a shipped artifact, so that change needs the person's decision. The tool reports the 404 by name.
+Both were fixed in Rho, not in the agent plugin. The preview asks for a capture only when `capturable` names the file, the same test `canvas.ts` already applies. The server accepts exactly those kinds, so no request that could succeed is removed. The example's 256 bare project-file values lose the projects-folder prefix (`PA14 quorum sensing/analysis/x.R` becomes `analysis/x.R`). The 38 occurrences inside command text stay as the agent ran them. A leaf-by-leaf comparison with the previous commit shows that only those 256 values changed.
 
 ## Changed
 
@@ -60,6 +60,8 @@ Not changed. The fix candidates are in Rho, not in the agent plugin: gate `web/p
 - The Skill names both fields and the mid-word blind spot.
 - `test:screen-check` builds first, since its Skill test imports `dist/`.
 - `playwright-core` is a runtime dependency and is listed in `bundleDependencies`, so an offline install still works. The person accepted its size, about 13 MB unpacked.
+- `web/previews.ts`: a file that no capture can open gets the note "Preview could not be read" without a request, and it no longer uses one of the preview slots.
+- `example/pa14-qs`: the three recorded conversations name their project files relatively, in the form the turns' evidence records already use.
 
 ## Checks
 
@@ -67,6 +69,8 @@ Not changed. The fix candidates are in Rho, not in the agent plugin: gate `web/p
 - `node --test test/skills.test.mjs` in the copy: 3 of 3, with `Rho-plugins` linked beside it. Without that link, the verify-script paths do not resolve and one check fails. That comes from the copy's layout, not from the change.
 - `npm pack --ignore-scripts` in the copy: 1,439 files, 12.3 MB packed and 36.9 MB unpacked. `playwright-core` adds 115 files, about 13 MB unpacked.
 - The tarball installed offline (`npm install -g --offline`) into a scratch prefix. Its bins are `rho`, `rho-screen-check` and `rho-ui`. The installed `rho-screen-check` found the overflow on a fixture at 390 px and exited 0, and reported nothing on the live home page at four widths.
+- After the fixes, with a fresh service on the fixed example: the workspace load made 56 API responses, all 200, and no capture call. The four-width check found no HTTP error, page error, console error or outside request, and nothing unkept. Past-edge counts moved to 84, 280, 315 and 307, because the observed paths now resolve; all sit inside scrolling boxes. A direct capture of `results/summary.png` returns a media resource, and `results/summary.md` is still refused as `unavailable`.
+- The observer over the fixed records: 98 references, 12 distinct files, all `observed`. `test/example-project.test.mjs` passes 4 of 4. The copy's build, including the web type check, passes.
 
 ## Limits
 
@@ -74,5 +78,6 @@ Not changed. The fix candidates are in Rho, not in the agent plugin: gate `web/p
 - Screenshots are at scale 1. The tool has no 2× option.
 - An Agent trial that runs the tool through Bash has not been done. Auto mode blocks Bash without authorization.
 - The release route has not run: `pack-local` bundles every dependency, so `playwright-core` also enters the release candidate, and the candidate's size and the Windows install time are unmeasured.
-- The 404 is not fixed. The mid-word sidebar cut is not detected by the tool.
+- Installations that copied the example before this keep their copy, which is never overwritten. The preview stops asking for those files, but their observer still reports the prefixed paths missing.
+- The mid-word sidebar cut is not detected by the tool.
 - Nothing is committed or pushed. The eight probe scripts are unchanged and still untracked.
