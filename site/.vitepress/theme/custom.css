@@ -571,15 +571,6 @@
   font-size: 13.5px;
   color: var(--rho-ink);
 }
-.panel-note {
-  margin: 0 !important;
-  font-size: 13px !important;
-  line-height: 1.55;
-  color: var(--rho-muted);
-}
-.panel-note a {
-  color: var(--rho-accent);
-}
 
 /* ── responsive ──────────────────────────────────────────────────────── */
 

@@ -1,9 +1,6 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
-import { useData, withBase } from 'vitepress';
-
-const { site } = useData();
-const base = computed(() => site.value.base);
+import { ref } from 'vue';
+import { withBase } from 'vitepress';
 
 const install = `npm install -g @rho-workspace/rho
 rho --root /absolute/projects --state-dir /absolute/service-state`;
@@ -262,10 +259,6 @@ const verified = [
       <div class="panel">
         <p class="panel-label">Published to npm</p>
         <p class="version">@rho-workspace/rho 0.5.2</p>
-        <p class="panel-note">
-          Desktop installers for 0.4.0 remain on the
-          <a :href="base">downloads page</a>; 0.5.2 is the npm line described here.
-        </p>
       </div>
     </section>
   </main>

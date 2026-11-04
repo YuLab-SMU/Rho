@@ -68,9 +68,7 @@ npm run pages:capture # record the demo again from this checkout's service (afte
 ```
 
 `@rho-workspace/rho` is published to npm. The registry entry for 0.5.2 carries no
-README, so its package page shows no description; from 0.5.3 the packer ships this README. Desktop installers on the
-[downloads page](https://yulab-smu.top/Rho/) are the earlier 0.4.0 line; this npm line
-is the current delivery.
+README, so its package page shows no description; from 0.5.3 the packer ships this README.
 
 For a new component view, start with [Plugin authoring](docs/PLUGIN-AUTHORING.md):
 generate a typed package, preview it independently and select its compiled entry

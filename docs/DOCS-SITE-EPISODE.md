@@ -221,3 +221,18 @@ published 0.5.3 in a throwaway folder:
   Codex sessions that Rho itself starts also load them was not checked.
 - Agent 0.4.28 is a Rho-plugins change; Rho composes it from Plugins `3b81626` on.
 - Windows was not run, and CI has not run these changes.
+
+## Desktop installers taken off the front page
+
+On 2026-11-04 the user asked for the front page's desktop installers section to be removed:
+the current desktop version has not been released, so a page offering 0.4.0 installers points
+visitors at a line that is not the current Rho. The section's table of 0.4.0 installers and
+checksums, its Windows code-signing statement and its uninstall notes are gone, with the header's
+Downloads link. The one line that applied to the npm package moved to the requirements table under
+"Or install it yourself" as an Uninstall row. The documentation home no longer points at a
+downloads page, and the README no longer calls the installers the earlier line.
+
+What stays: the v0.4.0 GitHub Release and its assets, the footer's Code signing policy link, and
+`updates/*.json` with `.nojekyll` on `gh-pages`, so an installed 0.4.0 desktop app keeps its
+update feed. The demo was not rebuilt: it stays the build deployed from `5c28b441`, which matches
+its recording.
