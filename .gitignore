@@ -29,3 +29,4 @@ __pycache__/
 /site/.vitepress/cache/
 /site/.pages/
 /.taste-skill/
+.alma-snapshots
