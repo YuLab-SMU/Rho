@@ -84,33 +84,25 @@ section { scroll-margin-top: 64px; }
 .gap { margin-top: clamp(120px, 14vw, 200px); }
 .lede { max-width: 660px; margin-top: 16px; font-size: 18px; line-height: 1.5; }
 
-/* Install: each beat holds its statement and its fragment while it is read */
+/* Install: in each beat the shorter column holds while the longer one is read */
 .install h2, .prompts h2, .checked h2 { font: var(--s4)/1.1 var(--display); letter-spacing: -.015em; }
 .install > h2 { font-size: var(--s5); line-height: 1; letter-spacing: -.025em; }
 .beats { margin-top: 32px; }
-.beat { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 48px; min-height: 86vh; padding-bottom: 8vh; }
+.beat { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 48px; padding-bottom: clamp(88px, 9vw, 128px); }
 .beat-text, .beat-frag { position: sticky; top: 13vh; align-self: start; }
 .beat-text h3 { font: var(--s4)/1.12 var(--display); letter-spacing: -.01em; }
 .beat-text p { margin-top: 14px; font-size: 18px; line-height: 1.5; max-width: 52ch; }
 .beat-text .actions { margin-top: 24px; }
-.switch { display: inline-flex; padding: 3px; border-radius: 8px; background: var(--well); }
-.switch button { min-height: 38px; padding: 0 14px; border: 0; border-radius: 6px; background: transparent; cursor: pointer; font-weight: 600; color: var(--muted); transition: background-color .18s ease, color .18s ease; }
-.switch button[aria-pressed="true"] { background: var(--bg); color: var(--ink); }
-.folder { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 18px; color: var(--muted); }
-.folder input { width: 15em; min-height: 40px; padding: 0 12px; border: 0; border-radius: var(--radius); background: var(--well); color: var(--ink); font-size: var(--s2); }
+.beat-text ol { display: grid; gap: 6px; margin: 16px 0 0; padding-left: 1.4em; font-size: 18px; line-height: 1.45; }
+.beat-text li::marker { color: var(--muted); }
 
 /* Interface fragments keep the product's own conventions */
-.panel { overflow: hidden; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); font-size: 14px; } /* taste-skill-ignore: interface fragment */
-.panel-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 48px; padding: 6px 8px 6px 16px; border-bottom: 1px solid var(--line); background: var(--canvas); } /* taste-skill-ignore: interface fragment */
-.panel-head strong { font-size: 14px; }
-.panel-head .copy { min-height: 34px; padding: 0 12px; font-size: 14px; }
-.prompt-text { margin: 0; padding: 16px 18px 20px; max-height: 58vh; overflow: auto; font: 14px/1.6 var(--ui); white-space: pre-wrap; }
 .term { margin: 0; padding: 18px 20px; border-radius: 10px; background: var(--ink); color: #dfe7e3; font: 14px/1.7 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; } /* taste-skill-ignore: a terminal */
 .term b { color: #fff; font-weight: 600; }
 .term .dim { color: #97a49f; }
 .shot { margin: 0; padding: clamp(10px, 1.6vw, 20px); border-radius: 10px; background: var(--well); }
 .shot img { border-radius: 6px; }
-.frag-note { margin-top: 12px; color: var(--muted); font-size: var(--s2); }
+.frag-note { max-width: 68ch; margin-top: 12px; color: var(--muted); font-size: var(--s2); }
 
 .manual { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 48px; }
 .manual h3 { font: var(--s4)/1.12 var(--display); }
@@ -149,6 +141,8 @@ section { scroll-margin-top: 64px; }
 .band .thumb { width: 104px; height: 78px; object-fit: cover; object-position: top left; border-radius: 4px; background: #fff; }
 .band .copy { min-height: 36px; padding: 0 12px; background: var(--bg); font-size: 14px; }
 .band.plain { grid-template-columns: minmax(0, 1fr) auto; }
+.asks .ask { font-size: 20px; line-height: 1.45; overflow-wrap: anywhere; }
+.nowrap { white-space: nowrap; }
 .panel-intro { max-width: 75ch; margin-bottom: 14px; }
 .js [role="tabpanel"][hidden] { display: none; }
 
@@ -164,15 +158,10 @@ section { scroll-margin-top: 64px; }
 .tile.open p { color: #d4ddd9; }
 .tile.open a { color: #fff; }
 
-/* Closing sentence with its blank */
+/* Closing: the sentence itself */
 .closing { padding-block: clamp(80px, 10vw, 140px); background: var(--field); }
-.closing form { max-width: 1100px; }
-.closing .statement { font: clamp(26px, 3.4vw, 36px)/1.5 var(--display); }
-.closing input { width: 7.4em; height: 1.35em; padding: 0 .3em; border: 0; border-radius: var(--radius); background: var(--bg); font: inherit; vertical-align: .04em; }
-.closing button { height: 1.5em; padding: 0 .45em; border: 0; border-radius: var(--radius); background: var(--accent); color: #fff; font: inherit; cursor: pointer; transition: background-color .18s ease, transform .18s ease; }
-.closing button:hover { background: var(--accent-hover); }
-.closing button:active { transform: scale(.97); }
-.closing .after { margin-top: 18px; color: var(--muted); }
+.closing .statement { max-width: 1100px; font: clamp(20px, 3.4vw, 36px)/1.4 var(--display); overflow-wrap: anywhere; }
+.closing .after { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; margin-top: 28px; color: var(--muted); }
 
 /* Footer tiles */
 .foot { padding: 8px; display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 8px; }
@@ -203,10 +192,7 @@ dialog::backdrop { background: rgba(20, 28, 26, .45); }
 .dlg-head h2 { font: var(--s4)/1.1 var(--display); }
 .dlg-head p { margin-top: 8px; color: var(--muted); }
 .close { flex: none; width: 40px; height: 40px; border: 0; border-radius: 8px; background: var(--well); cursor: pointer; font-size: 22px; line-height: 1; }
-.dlg .switch { align-self: flex-start; }
-.dlg .panel { display: flex; flex-direction: column; min-height: 0; }
-.dlg .prompt-text { max-height: none; flex: 1; }
-.dlg-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.dlg-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px; }
 .status { color: var(--accent); font-weight: 600; min-height: 1.5em; }
 
 /* Entrances: parts of each section rise in order; content is visible without script */
@@ -226,7 +212,7 @@ dialog::backdrop { background: rgba(20, 28, 26, .45); }
   .bar nav { display: none; }
   .bar .btn { margin-left: auto; }
   .beat, .manual, .prompts-head { grid-template-columns: minmax(0, 1fr); gap: 24px; }
-  .beat { min-height: 0; padding-bottom: 72px; }
+  .beat { padding-bottom: 72px; }
   .beat-text, .beat-frag { position: static; }
   .board { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .foot { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -250,8 +236,10 @@ dialog::backdrop { background: rgba(20, 28, 26, .45); }
   .tile.lead, .tile.open { grid-column: span 2; }
   .foot { grid-template-columns: minmax(0, 1fr); }
   .foot > *, .foot .t-word, .foot .t-go { grid-column: span 1 !important; }
-  .closing input { width: 100%; display: block; margin: .2em 0; font-size: .7em; }
   .dlg { padding: 18px; }
+  .req th { width: 6.5em; }
+  /* The commands are split with \ to fit a phone; the manual block's Copy button sits above them. */
+  .manual .codebox .term { padding: 56px 20px 18px; }
 }
 </style>
 </head>
@@ -296,59 +284,60 @@ dialog::backdrop { background: rgba(20, 28, 26, .45); }
 
   <section class="install wrap gap" id="install" aria-labelledby="install-title">
     <h2 id="install-title">Install it by asking</h2>
-    <p class="lede">Your Agent can install Rho, start it and connect itself to the example in one conversation. Pick the Agent you use and copy the prompt; every command in it is written out, so you can read it first.</p>
+    <p class="lede">Your Agent can install Rho, start it and connect itself to the example in one conversation. You give it one sentence; the setup page that sentence names holds every command, so you can read it first.</p>
     <div class="beats">
       <div class="beat">
         <div class="beat-text" data-enter>
-          <h3>Copy the prompt into your Agent.</h3>
-          <p>Use Claude Code or Codex on the machine where your R projects live. The prompt says when to stop and ask you: a different Node, or a global install that needs administrator rights.</p>
-          <div class="actions">
-            <div class="switch" role="group" aria-label="Agent">
-              <button type="button" aria-pressed="true" data-agent="claude">Claude Code</button>
-              <button type="button" aria-pressed="false" data-agent="codex">Codex</button>
-            </div>
-          </div>
-          <label class="folder">Projects folder <input type="text" value="~/rho-projects" spellcheck="false" autocomplete="off" data-folder></label>
+          <h3>Paste one sentence into your Agent.</h3>
+          <p>Use Claude Code or Codex on the machine where your projects live. The setup page tells it when to stop and ask you: a different Node, or an install that needs administrator rights.</p>
         </div>
         <div class="beat-frag">
-          <div class="panel" data-ui>
-            <div class="panel-head"><strong>Prompt for <span data-agent-label>Claude Code</span></strong><button class="btn primary copy" type="button" data-copy-prompt>Copy prompt</button></div>
-            <pre class="prompt-text" data-prompt>Install Rho for me. It is a local workspace where you and I work on the same R projects; its guide is https://yulab-smu.top/Rho/docs/start/.
-
-1. Run `node -v`. Rho needs Node 22.22 or a later 22.x. If this machine has another version, tell me how to get Node 22 and stop here.
-2. Run `npm install -g @rho-workspace/rho`. If it fails with EACCES, explain my options instead of using sudo yourself.
-3. Create ~/rho-projects for my projects. Start Rho so it keeps running after this conversation, with its service state outside that folder. On macOS or Linux: `nohup rho --root ~/rho-projects --state-dir ~/.rho-service --open &gt; ~/.rho-service.log 2&gt;&amp;1 &amp;`. On Windows, run the same rho command with full paths in its own PowerShell window. The log starts with a JSON line; tell me the url in it.
-4. The first start copies an example project, PA14 quorum sensing, into ~/rho-projects. Read its README.md and tell me in three sentences what it studies.
-5. Connect yourself to that project: run `rho --grant ~/.rho-service/connection.json --project &quot;PA14 quorum sensing&quot;`, then run the `claude mcp add` command it prints from inside the project folder. Tell me to start a new Claude Code session there to use Rho's tools.
-6. Finish by telling me to open the url, choose PA14 quorum sensing and ask in Rho's Agent panel, and suggest three questions I could ask about the example.</pre>
-          </div>
+<ul class="bands asks">
+  <li class="band plain"><p class="ask" lang="en">Read <a href="doc/setup.md"><span class="nowrap">https://yulab-smu.top/</span><wbr>Rho/<wbr>doc/<wbr>setup.md</a> and follow its steps to install and configure Rho for me.</p><div class="side"><button class="btn copy" type="button" data-copy-text="Read https://yulab-smu.top/Rho/doc/setup.md and follow its steps to install and configure Rho for me." data-copied="Copied. Paste it into Claude Code or Codex.">Copy</button></div></li>
+  <li class="band plain"><p class="ask" lang="zh-CN">请阅读 <a href="doc/setup.md"><span class="nowrap">https://yulab-smu.top/</span><wbr>Rho/<wbr>doc/<wbr>setup.md</a> 文档，按照步骤为我安装并配置 Rho。</p><div class="side"><button class="btn copy" type="button" data-copy-text="请阅读 https://yulab-smu.top/Rho/doc/setup.md 文档，按照步骤为我安装并配置 Rho。" data-copied="Copied. Paste it into Claude Code or Codex.">Copy</button></div></li>
+</ul>
+          <p class="frag-note">The same request in English and in Chinese. The setup page asks your Agent to write to you in the language you use.</p>
           <p class="frag-note status" role="status" data-status></p>
         </div>
       </div>
       <div class="beat">
         <div class="beat-text" data-enter>
-          <h3>It installs Rho and starts it.</h3>
-          <p>One npm package, run on your machine. There is no Rho server: the page Rho opens is served from your own computer at a loopback address, and the projects folder stays an ordinary folder.</p>
+          <h3>It follows the setup page.</h3>
+          <p>The page tells your Agent to use your own permissions and never run sudo, to leave a Rho that is already here as it is, and to stop and show you any step that fails. Its eight steps are addressed to your Agent, and each says how to check it:</p>
+          <ol>
+            <li>Check the machine</li>
+            <li>Look for a Rho that is already here</li>
+            <li>Install</li>
+            <li>Start Rho</li>
+            <li>Install the Rho skill for yourself</li>
+            <li>Connect yourself to the example project</li>
+            <li>Check R for the Notebook</li>
+            <li>Tell the person</li>
+          </ol>
         </div>
         <div class="beat-frag">
-          <pre class="term" data-ui aria-label="What the install looks like in a terminal"><code><span class="dim">$</span> <b>node -v</b>
-v22.22.3
-<span class="dim">$</span> <b>npm install -g @rho-workspace/rho</b>
-added 1 package in 902ms
-<span class="dim">$</span> <b>mkdir -p ~/rho-projects</b>
-<span class="dim">$</span> <b>nohup rho --root ~/rho-projects --state-dir ~/.rho-service --open \
-    &gt; ~/.rho-service.log 2&gt;&amp;1 &amp;</b>
-<span class="dim">$</span> <b>head -c 120 ~/.rho-service.log</b>
-{"ready":{"url":"http://127.0.0.1:55671","connectionFile":"~/.rho-service/connection.json",…
-<span class="dim">$</span> <b>ls ~/rho-projects</b>
-PA14 quorum sensing</code></pre>
-          <p class="frag-note">Output of npm 0.5.3 on macOS arm64, with the home folder shown as ~. The port is chosen at each start.</p>
+          <pre class="term" data-ui aria-label="Steps 3 to 5 of the setup page in a terminal"><code><span class="dim">$</span> <b>npm install -g @rho-workspace/rho</b>
+added 1 package in 9s
+<span class="dim">$</span> <b>mkdir -p "$HOME/Rho/projects" \
+    "$HOME/Rho/state"</b>
+<span class="dim">$</span> <b>nohup rho \
+    --root "$HOME/Rho/projects" \
+    --state-dir "$HOME/Rho/state" \
+    --open &gt; "$HOME/Rho/rho.log" 2&gt;&amp;1 &amp;</b>
+<span class="dim">$</span> <b>head -1 "$HOME/Rho/rho.log"</b>
+{"ready":{"url":"http://127.0.0.1:…
+<span class="dim">$</span> <b>dir="$HOME/.claude/skills/rho"</b>
+<span class="dim">$</span> <b>head -3 "$dir/SKILL.md"</b>
+---
+name: rho
+description: Install, start, …</code></pre>
+          <p class="frag-note">Steps 3 to 5 as they ran on npm 0.5.3 on macOS arm64, in a throwaway home folder. Some commands, checks and output are left out, and long lines are split or cut. The address is on your own computer: there is no Rho server or account. <a href="doc/setup.md">Read the whole page</a></p>
         </div>
       </div>
       <div class="beat">
         <div class="beat-text" data-enter>
           <h3>Open the example and ask.</h3>
-          <p>The first start copies the PA14 quorum-sensing project into your projects folder: the project in the demo above, with its recorded work. Ask in Rho's Agent panel, which drives your own Claude Code or Codex under your own permissions.</p>
+          <p>The first start copies the PA14 quorum-sensing project into ~/Rho/projects: the project in the demo above, with its recorded work. The setup page's last step has your Agent give you Rho's address and say what is missing, if anything. Ask in Rho's Agent panel, which drives your own Claude Code or Codex under your own permissions.</p>
         </div>
         <div class="beat-frag">
           <figure class="shot"><img src="img/overview.jpg" width="1600" height="1013" loading="lazy" alt="Rho's Overview of the PA14 quorum sensing project: the latest question, its answer and the summary figure it produced."></figure>
@@ -360,14 +349,15 @@ PA14 quorum sensing</code></pre>
     <div class="manual" data-enter>
       <div>
         <h3>Or install it yourself</h3>
-        <p class="lede">The same three steps by hand. Create the projects folder first and keep the service state outside it. <a href="docs/start/">Install guide</a></p>
+        <p class="lede">The same install by hand, with the service state outside the projects folder. In these two folders, an Agent you ask later finds this Rho instead of setting up another. <a href="docs/start/">Install guide</a></p>
       </div>
       <div>
         <div class="codebox">
           <pre class="term"><code><span class="dim">$</span> <b>npm install -g @rho-workspace/rho</b>
-<span class="dim">$</span> <b>mkdir -p ~/rho-projects</b>
-<span class="dim">$</span> <b>rho --root ~/rho-projects --state-dir ~/.rho-service --open</b></code></pre>
-          <button class="btn copy" type="button" data-copy-text="npm install -g @rho-workspace/rho&#10;mkdir -p ~/rho-projects&#10;rho --root ~/rho-projects --state-dir ~/.rho-service --open">Copy</button>
+<span class="dim">$</span> <b>mkdir -p ~/Rho/projects ~/Rho/state</b>
+<span class="dim">$</span> <b>rho --root ~/Rho/projects \
+    --state-dir ~/Rho/state --open</b></code></pre>
+          <button class="btn copy" type="button" data-copy-text="npm install -g @rho-workspace/rho&#10;mkdir -p ~/Rho/projects ~/Rho/state&#10;rho --root ~/Rho/projects --state-dir ~/Rho/state --open">Copy</button>
         </div>
         <table class="req">
           <tbody>
@@ -375,7 +365,7 @@ PA14 quorum sensing</code></pre>
             <tr><th scope="row">Agent</th><td>Claude Code or Codex, installed and signed in by you. Rho drives your client; it does not install an Agent or copy its credentials.</td></tr>
             <tr><th scope="row">R</th><td>Only for R work. Rho installs no R packages on its own; a missing Rscript is reported, not worked around.</td></tr>
             <tr><th scope="row">Systems</th><td>macOS arm64 is the baseline. Linux x64 and arm64 and Windows x64 are checked in CI; macOS x64 runs only under Rosetta.</td></tr>
-            <tr><th scope="row">Uninstall</th><td><code>npm uninstall -g @rho-workspace/rho</code>. Your projects folder, the service state and its log stay where they are.</td></tr>
+            <tr><th scope="row">Uninstall</th><td><code>npm uninstall -g <span class="nowrap">@rho-workspace/rho</span></code> removes the package. Your projects, Rho's state and its log stay where they are, and so do the Rho skill and the MCP entry the setup page gave your Agent; <a href="doc/setup.md">the page</a> says where they are.</td></tr>
           </tbody>
         </table>
       </div>
@@ -540,19 +530,20 @@ PA14 quorum sensing</code></pre>
       <div class="tile"><b>Five papers</b><p>Reproduced in Rho 0.5.2 by Agents working in the shared Notebook.</p></div>
       <div class="tile open">
         <b>Not shown yet</b>
-        <p>Use by an independent researcher has not been observed, so no usability claim is made. Literature reproductions needed several turns and many approval choices. <a href="docs/records/literature-repro-episode">Read the record</a></p>
+        <p>Use by an independent researcher has not been observed, so no usability claim is made. No Agent has yet followed the setup page from start to finish; its steps were run by hand. Literature reproductions needed several turns and many approval choices. <a href="docs/records/literature-repro-episode">Read the record</a></p>
       </div>
     </div>
   </section>
 
   <section class="closing gap" aria-labelledby="closing-title">
     <div class="wrap">
-      <h2 id="closing-title" class="visually-hidden">Copy your install prompt</h2>
-      <form data-closing>
-        <p class="statement">Keep my projects in <label><span class="visually-hidden">Projects folder</span><input type="text" value="~/rho-projects" spellcheck="false" autocomplete="off" data-folder></label> and <button type="submit">copy the prompt</button>.</p>
-        <p class="after">Copies the install prompt for <span data-agent-label>Claude Code</span> with this folder in it. Paste it into your Agent.</p>
+      <h2 id="closing-title" class="visually-hidden">The install sentence</h2>
+      <p class="statement">“Read <a href="doc/setup.md"><span class="nowrap">https://yulab-smu.top/</span><wbr>Rho/<wbr>doc/<wbr>setup.md</a> and follow its steps to install and configure Rho for me.”</p>
+      <div class="after">
+        <button class="btn primary" type="button" data-copy-text="Read https://yulab-smu.top/Rho/doc/setup.md and follow its steps to install and configure Rho for me." data-copied="Copied. Paste it into Claude Code or Codex.">Copy the sentence</button>
+        <p>Paste it into Claude Code or Codex, on the machine where your projects live.</p>
         <p class="status" role="status" data-status></p>
-      </form>
+      </div>
     </div>
   </section>
 </main>
@@ -566,6 +557,7 @@ PA14 quorum sensing</code></pre>
     <ul>
       <li><a href="docs/">Documentation</a></li>
       <li><a href="docs/start/">Install guide</a></li>
+      <li><a href="doc/setup.md">Setup page for Agents</a></li>
       <li><a href="docs/reference/status">Current status</a></li>
       <li><a href="https://github.com/YuLab-SMU/Rho">Source on GitHub</a></li>
       <li><a href="https://www.npmjs.com/package/@rho-workspace/rho">npm package</a></li>
@@ -591,53 +583,27 @@ PA14 quorum sensing</code></pre>
     <div class="dlg-head">
       <div>
         <h2 id="dialog-title">Install with your Agent</h2>
-        <p>Paste this into Claude Code or Codex. It installs Rho, starts it, opens the example project and connects your Agent to it.</p>
+        <p>Paste one of these into Claude Code or Codex. It asks your Agent to follow Rho's setup page: install and start Rho, connect itself to the example project and tell you where everything is.</p>
       </div>
       <button class="close" type="button" aria-label="Close" data-close>×</button>
     </div>
-    <div class="switch" role="group" aria-label="Agent">
-      <button type="button" aria-pressed="true" data-agent="claude">Claude Code</button>
-      <button type="button" aria-pressed="false" data-agent="codex">Codex</button>
-    </div>
-    <label class="folder">Projects folder <input type="text" value="~/rho-projects" spellcheck="false" autocomplete="off" data-folder></label>
-    <div class="panel" data-ui>
-      <pre class="prompt-text" data-prompt>Install Rho for me. It is a local workspace where you and I work on the same R projects; its guide is https://yulab-smu.top/Rho/docs/start/.
-
-1. Run `node -v`. Rho needs Node 22.22 or a later 22.x. If this machine has another version, tell me how to get Node 22 and stop here.
-2. Run `npm install -g @rho-workspace/rho`. If it fails with EACCES, explain my options instead of using sudo yourself.
-3. Create ~/rho-projects for my projects. Start Rho so it keeps running after this conversation, with its service state outside that folder. On macOS or Linux: `nohup rho --root ~/rho-projects --state-dir ~/.rho-service --open &gt; ~/.rho-service.log 2&gt;&amp;1 &amp;`. On Windows, run the same rho command with full paths in its own PowerShell window. The log starts with a JSON line; tell me the url in it.
-4. The first start copies an example project, PA14 quorum sensing, into ~/rho-projects. Read its README.md and tell me in three sentences what it studies.
-5. Connect yourself to that project: run `rho --grant ~/.rho-service/connection.json --project &quot;PA14 quorum sensing&quot;`, then run the `claude mcp add` command it prints from inside the project folder. Tell me to start a new Claude Code session there to use Rho's tools.
-6. Finish by telling me to open the url, choose PA14 quorum sensing and ask in Rho's Agent panel, and suggest three questions I could ask about the example.</pre>
-    </div>
+<ul class="bands asks">
+  <li class="band plain"><p class="ask" lang="en">Read <a href="doc/setup.md"><span class="nowrap">https://yulab-smu.top/</span><wbr>Rho/<wbr>doc/<wbr>setup.md</a> and follow its steps to install and configure Rho for me.</p><div class="side"><button class="btn copy" type="button" data-copy-text="Read https://yulab-smu.top/Rho/doc/setup.md and follow its steps to install and configure Rho for me." data-copied="Copied. Paste it into Claude Code or Codex.">Copy</button></div></li>
+  <li class="band plain"><p class="ask" lang="zh-CN">请阅读 <a href="doc/setup.md"><span class="nowrap">https://yulab-smu.top/</span><wbr>Rho/<wbr>doc/<wbr>setup.md</a> 文档，按照步骤为我安装并配置 Rho。</p><div class="side"><button class="btn copy" type="button" data-copy-text="请阅读 https://yulab-smu.top/Rho/doc/setup.md 文档，按照步骤为我安装并配置 Rho。" data-copied="Copied. Paste it into Claude Code or Codex.">Copy</button></div></li>
+</ul>
     <div class="dlg-foot">
-      <button class="btn primary" type="button" data-copy-prompt>Copy prompt</button>
-      <a href="docs/start/">Read the install guide</a>
+      <a href="doc/setup.md">Read the setup page</a>
+      <a href="docs/start/">Install guide</a>
       <span class="status" role="status" data-status></span>
     </div>
   </div>
 </dialog>
 
-<script type="application/json" id="install-prompts">{"claude":{"label":"Claude Code","text":"Install Rho for me. It is a local workspace where you and I work on the same R projects; its guide is https://yulab-smu.top/Rho/docs/start/.\n\n1. Run `node -v`. Rho needs Node 22.22 or a later 22.x. If this machine has another version, tell me how to get Node 22 and stop here.\n2. Run `npm install -g @rho-workspace/rho`. If it fails with EACCES, explain my options instead of using sudo yourself.\n3. Create {folder} for my projects. Start Rho so it keeps running after this conversation, with its service state outside that folder. On macOS or Linux: `nohup rho --root {folder} --state-dir ~/.rho-service --open > ~/.rho-service.log 2>&1 &`. On Windows, run the same rho command with full paths in its own PowerShell window. The log starts with a JSON line; tell me the url in it.\n4. The first start copies an example project, PA14 quorum sensing, into {folder}. Read its README.md and tell me in three sentences what it studies.\n5. Connect yourself to that project: run `rho --grant ~/.rho-service/connection.json --project \"PA14 quorum sensing\"`, then run the `claude mcp add` command it prints from inside the project folder. Tell me to start a new Claude Code session there to use Rho's tools.\n6. Finish by telling me to open the url, choose PA14 quorum sensing and ask in Rho's Agent panel, and suggest three questions I could ask about the example."},"codex":{"label":"Codex","text":"Install Rho for me. It is a local workspace where you and I work on the same R projects; its guide is https://yulab-smu.top/Rho/docs/start/.\n\n1. Run `node -v`. Rho needs Node 22.22 or a later 22.x. If this machine has another version, tell me how to get Node 22 and stop here.\n2. Run `npm install -g @rho-workspace/rho`. If it fails with EACCES, explain my options instead of using sudo yourself.\n3. Create {folder} for my projects. Start Rho so it keeps running after this conversation, with its service state outside that folder and Codex as the Agent in its panel. On macOS or Linux: `nohup rho --root {folder} --state-dir ~/.rho-service --agent-backend codex-acp --open > ~/.rho-service.log 2>&1 &`. On Windows, run the same rho command with full paths in its own PowerShell window. The log starts with a JSON line; tell me the url in it.\n4. The first start copies an example project, PA14 quorum sensing, into {folder}. Read its README.md and tell me in three sentences what it studies.\n5. Connect yourself to that project: run `rho --grant ~/.rho-service/connection.json --project \"PA14 quorum sensing\"`. Its JSON names an `mcp` entry; add it with `codex mcp add \u003cname> -- \u003ccommand> \u003cargs>`. Tell me to start a new Codex session to use Rho's tools.\n6. Finish by telling me to open the url, choose PA14 quorum sensing and ask in Rho's Agent panel, and suggest three questions I could ask about the example."}}</script>
 <script>
 (function () {
-  var prompts = JSON.parse(document.getElementById('install-prompts').textContent);
-  var state = { agent: 'claude', folder: '~/rho-projects' };
-  try { state.agent = localStorage.getItem('rho.site.agent') === 'codex' ? 'codex' : 'claude'; } catch (e) { /* this visit only */ }
   function each(selector, fn) { Array.prototype.forEach.call(document.querySelectorAll(selector), fn); }
-  // A folder with spaces is quoted, and a leading ~ inside quotes becomes $HOME so the shell still expands it.
-  function shellPath(path) {
-    path = path.trim() || '~/rho-projects';
-    return /\s/.test(path) ? '"' + path.replace(/^~(?=\/|$)/, '$HOME') + '"' : path;
-  }
-  function text() { return prompts[state.agent].text.split('{folder}').join(shellPath(state.folder)); }
-  function render() {
-    each('[data-prompt]', function (el) { el.textContent = text(); });
-    each('[data-agent-label]', function (el) { el.textContent = prompts[state.agent].label; });
-    each('[data-agent]', function (el) { el.setAttribute('aria-pressed', String(el.getAttribute('data-agent') === state.agent)); });
-  }
   function say(near, message) {
-    var box = near && near.closest('.beat-frag, .dlg, form, .prompt-sets');
+    var box = near && near.closest('.beat-frag, .dlg, .closing, .prompt-sets');
     var status = box ? box.querySelector('[data-status]') : null;
     if (!status) return;
     status.textContent = message;
@@ -653,28 +619,11 @@ PA14 quorum sensing</code></pre>
     }
     if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(value).then(done, fallback); else fallback();
   }
-  each('[data-agent]', function (el) {
-    el.addEventListener('click', function () {
-      state.agent = el.getAttribute('data-agent');
-      try { localStorage.setItem('rho.site.agent', state.agent); } catch (e) { /* this visit only */ }
-      render();
-    });
-  });
-  each('[data-folder]', function (el) {
-    el.addEventListener('input', function () {
-      state.folder = el.value;
-      each('[data-folder]', function (other) { if (other !== el) other.value = el.value; });
-      render();
-    });
-  });
-  each('[data-copy-prompt]', function (el) { el.addEventListener('click', function () { copy(text(), el, 'Prompt copied. Paste it into ' + prompts[state.agent].label + '.'); }); });
-  each('[data-copy-text]', function (el) { el.addEventListener('click', function () { copy(el.getAttribute('data-copy-text'), el, 'Copied.'); }); });
+  each('[data-copy-text]', function (el) { el.addEventListener('click', function () { copy(el.getAttribute('data-copy-text'), el, el.getAttribute('data-copied') || 'Copied.'); }); });
   each('[data-copy-ask]', function (el) { el.addEventListener('click', function () { copy(el.closest('li').querySelector('.ask').textContent.trim(), el, 'Prompt copied.'); }); });
-  var closing = document.querySelector('[data-closing]');
-  closing.addEventListener('submit', function (event) { event.preventDefault(); copy(text(), null, 'Prompt copied. Paste it into ' + prompts[state.agent].label + '.'); say(closing.querySelector('button'), 'Prompt copied. Paste it into ' + prompts[state.agent].label + '.'); });
 
   var dialog = document.getElementById('install-dialog');
-  each('[data-open-install]', function (el) { el.addEventListener('click', function () { render(); dialog.showModal(); }); });
+  each('[data-open-install]', function (el) { el.addEventListener('click', function () { dialog.showModal(); }); });
   dialog.querySelector('[data-close]').addEventListener('click', function () { dialog.close(); });
   dialog.addEventListener('click', function (event) { if (event.target === dialog) dialog.close(); });
 
@@ -708,7 +657,6 @@ PA14 quorum sensing</code></pre>
     }, { rootMargin: '0px 0px -8% 0px' });
     each('[data-enter]', function (el) { seen.observe(el); });
   } else each('[data-enter]', function (el) { el.classList.add('in'); });
-  render();
 })();
 </script>
 </body>
