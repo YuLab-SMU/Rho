@@ -109,7 +109,8 @@
   text-underline-offset: 2px;
 }
 .vp-doc table {
-  display: table;
+  display: block;
+  overflow-x: auto;
   width: 100%;
   border-collapse: collapse;
   font-size: 14.5px;
