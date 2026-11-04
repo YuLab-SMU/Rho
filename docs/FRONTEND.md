@@ -160,30 +160,31 @@ inspect what happened. The application gives those actions direct places:
   an ended session stay with their cells in the Notebook. With these views on the page, the
   Notebook leaves its own variables and plots out.
 - **Data flow** (`rho.flow`) shows how the values of a live session were made, as a tab beside
-  Variables (else in the right column). Each cell that made something still there is a box, in
-  the order the cells ran: its first line or purpose, the project files and folders it read, and
-  what it made one to a line (values with type and size, its plots, the files it wrote). A line
-  in the left margin runs from a value, or a written file, to each box that read it. A cell
-  that changed a value it read (`m$x <- …`) continues the cell that made it: its box says
-  "Changes what R 6 made", and what that value came from goes with it. A box that read a value
-  or file made again since says so in amber. Pointing at a box keeps its path in view and fades
-  the rest; the newest cell's box is outlined. A value opens as its own view, a file in its
-  viewer; the box's head opens its code (with the code of the cells it continues), its plots,
-  who ran it and Show in the Notebook. It follows the kernel's records (below), not the code:
-  60 values, 8 plots and 24 written files are drawn at most, and older ones are counted
-  ([episode](SIMULATED-PROJECT-EPISODE.md#data-flow-html-pages-and-object-dependent-cases)).
-  An opened box whose cell makes its values over three or more steps shows them step by step,
-  read from its code as a script's flow is.
-- **How variables relate** ([episode](VARIABLE-FLOW-EPISODE.md)). Under each Notebook cell, what
-  it read and from which cell ("Read co from R 3"), and the later cells that read what it made
-  ("ratio read in R 6"); a cell named there goes to that cell and marks it. Variables names the
-  cell that made each value as it is now and the cells that read it. An R or Python script's
-  editor has a Data flow switch in its header, kept with the page: the script's flow, read from
-  the text in the editor as it is typed (nothing runs), shows beside the code, or below it in a
-  view under 640 px. Each box is a statement or a few, in the script's order, with what it makes,
-  the files it reads and writes, and lines from each value to the steps that read it. The code
-  marks the step at the cursor, the steps it comes from and those it leads to, in the colors of
-  the key above the flow; choosing a step puts the cursor at its first line.
+  Variables (else in the right column). It is a graph of values: the project files and folders
+  the session read at the top, the results at the bottom (the files it wrote and the plots it
+  drew, else the values nothing reads), and the values between in rows. Each node is titled with
+  the meaning its `# means:` comment gives (the Agent writes these above the statement that first
+  makes the value; `# means NAME:` names one of several), with the name beneath, and shows the
+  name alone without one. A bar names the results: choosing one draws what leads to it, and the
+  first is chosen when every result at once would put more than six values in a row. Values that
+  lead to no result are named below the graph, and choosing one draws what leads to it. A chosen
+  value colors what it comes from and what comes of it; its panel gives its meaning, how and where
+  it was made, what it uses and leads to, and which results it reaches. A value can be looked at,
+  a file opened, and the cell that made it shown in the Notebook. A narrow view (under 640 px)
+  puts the chosen value above the graph. Its values come from the kernel's records (below), each
+  meaning from the code of the cell that made the value, and at most 80 values are drawn at once
+  ([episode](VARIABLE-FLOW-EPISODE.md#meaning-in-the-code)).
+- **How variables relate** ([episode](VARIABLE-FLOW-EPISODE.md)). Under each Notebook cell, what it
+  read and from which cell ("Read co from R 3"), and the later cells that read what it made ("ratio
+  read in R 6"); a cell named there goes to that cell and marks it. A cell that makes at least three
+  values offers "How its values came about", the same graph, under it. Variables names the cell that
+  made each value as it is now and the cells that read it. An R or Python script's editor has a Data
+  flow switch in its header, kept with the page: the script's flow, read from the text in the editor
+  as it is typed (nothing runs), shows beside the code, or below it in a view under 640 px. Its
+  nodes are titled by the same comments as the session's, and the flow line says how many values
+  have a meaning written in the code. The code marks the lines that make the chosen value, those it
+  comes from and those it leads to, in the colors of the key above the flow; choosing a value puts
+  the cursor on the line that makes it, and a click on a line that makes a value chooses it.
 - **Servers** (`rho.servers`) shows where the live sessions run: this machine and each place, a
   folder on one of the person's servers, reached through serverctl when serverctl manages it and
   with ssh otherwise. A place shows its server and folder, how it is reached, what its last check saw
@@ -514,10 +515,11 @@ opening a value or a server's file as a view, code waiting for the Notebook's li
 Notebook's form with the page, which views the page has, and a conversation's share of the
 sessions. Highlighting and Markdown come from the shell services (`highlight`, `markdown`).
 The plugin's `./code` finds the statement a script line runs (`statementAt`), writes the code
-that loads a table or runs a script, makes Data flow's boxes and lanes (`lineage`), what each
-cell read from which cell (`cellRelations`) and a script's flow from its text (`scriptFlow`);
-`web/entries/documents.tsx` sends a line through the page's `runCode` shell service, and draws a
-script's flow with the plugin's `ScriptFlowView` and marks its lines in the editor.
+that loads a table or runs a script, what each cell read from which cell (`cellRelations`), and
+Data flow's graph of values from a session (`sessionGraph`) or a script's text (`scriptGraph`);
+`web/entries/documents.tsx` sends a line through the page's `runCode` shell service, draws a
+script's graph with the plugin's `ScriptFlowView`, keeps the chosen value (from the graph or the
+cursor's line, `graphNodeAt`) and marks the lines behind and in front of it (`graphMarks`).
 The HTML page view is `html.reader` from Rho-plugins (HTML 0.1.0); Rho gives it `pageFrame`, the
 service's `/frame.html` (sandboxed, with its own policy and no network; the page's policy adds
 only `frame-src 'self'`), and `fileBytes`, a file snapshot's bytes (`readFile` in `web/previews.ts`).
