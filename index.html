@@ -85,7 +85,7 @@ section { scroll-margin-top: 64px; }
 .lede { max-width: 660px; margin-top: 16px; font-size: 18px; line-height: 1.5; }
 
 /* Install: each beat holds its statement and its fragment while it is read */
-.install h2, .prompts h2, .checked h2, .downloads h2 { font: var(--s4)/1.1 var(--display); letter-spacing: -.015em; }
+.install h2, .prompts h2, .checked h2 { font: var(--s4)/1.1 var(--display); letter-spacing: -.015em; }
 .install > h2 { font-size: var(--s5); line-height: 1; letter-spacing: -.025em; }
 .beats { margin-top: 32px; }
 .beat { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 48px; min-height: 86vh; padding-bottom: 8vh; }
@@ -164,15 +164,6 @@ section { scroll-margin-top: 64px; }
 .tile.open p { color: #d4ddd9; }
 .tile.open a { color: #fff; }
 
-/* Downloads */
-.downloads .grid { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 48px; }
-.dl { width: 100%; border-collapse: collapse; }
-.dl th, .dl td { padding: 14px 12px 14px 0; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
-.dl td code { display: block; max-width: 34ch; overflow-wrap: anywhere; color: var(--muted); font-size: var(--s1); background: none; padding: 0; }
-.dl a { font-weight: 600; }
-.small-print { margin-top: 24px; display: grid; gap: 14px; }
-.small-print p { max-width: 72ch; }
-
 /* Closing sentence with its blank */
 .closing { padding-block: clamp(80px, 10vw, 140px); background: var(--field); }
 .closing form { max-width: 1100px; }
@@ -234,7 +225,7 @@ dialog::backdrop { background: rgba(20, 28, 26, .45); }
 @media (max-width: 1100px) {
   .bar nav { display: none; }
   .bar .btn { margin-left: auto; }
-  .beat, .manual, .downloads .grid, .prompts-head { grid-template-columns: minmax(0, 1fr); gap: 24px; }
+  .beat, .manual, .prompts-head { grid-template-columns: minmax(0, 1fr); gap: 24px; }
   .beat { min-height: 0; padding-bottom: 72px; }
   .beat-text, .beat-frag { position: static; }
   .board { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -260,7 +251,6 @@ dialog::backdrop { background: rgba(20, 28, 26, .45); }
   .foot { grid-template-columns: minmax(0, 1fr); }
   .foot > *, .foot .t-word, .foot .t-go { grid-column: span 1 !important; }
   .closing input { width: 100%; display: block; margin: .2em 0; font-size: .7em; }
-  .dl td code { max-width: none; }
   .dlg { padding: 18px; }
 }
 </style>
@@ -273,7 +263,6 @@ dialog::backdrop { background: rgba(20, 28, 26, .45); }
       <a href="#demo">Demo</a>
       <a href="#install">Install</a>
       <a href="#prompts">Prompts</a>
-      <a href="#downloads">Downloads</a>
       <a href="docs/">Documentation</a>
       <a href="https://github.com/YuLab-SMU/Rho">GitHub</a>
     </nav>
@@ -386,6 +375,7 @@ PA14 quorum sensing</code></pre>
             <tr><th scope="row">Agent</th><td>Claude Code or Codex, installed and signed in by you. Rho drives your client; it does not install an Agent or copy its credentials.</td></tr>
             <tr><th scope="row">R</th><td>Only for R work. Rho installs no R packages on its own; a missing Rscript is reported, not worked around.</td></tr>
             <tr><th scope="row">Systems</th><td>macOS arm64 is the baseline. Linux x64 and arm64 and Windows x64 are checked in CI; macOS x64 runs only under Rosetta.</td></tr>
+            <tr><th scope="row">Uninstall</th><td><code>npm uninstall -g @rho-workspace/rho</code>. Your projects folder, the service state and its log stay where they are.</td></tr>
           </tbody>
         </table>
       </div>
@@ -551,30 +541,6 @@ PA14 quorum sensing</code></pre>
       <div class="tile open">
         <b>Not shown yet</b>
         <p>Use by an independent researcher has not been observed, so no usability claim is made. Literature reproductions needed several turns and many approval choices. <a href="docs/records/literature-repro-episode">Read the record</a></p>
-      </div>
-    </div>
-  </section>
-
-  <section class="downloads wrap gap" id="downloads" aria-labelledby="downloads-title">
-    <div class="grid" data-enter>
-      <div>
-        <h2 id="downloads-title">Desktop installers</h2>
-        <p class="lede">Rho 0.4.0, published 2026-08-18, is the desktop line, on both the Stable and Development channels. Installed desktop apps keep their update feed. The current Rho is the npm package above.</p>
-      </div>
-      <div>
-        <table class="dl">
-          <thead><tr><th scope="col">System</th><th scope="col">Installer and SHA-256</th></tr></thead>
-          <tbody>
-            <tr><td>Windows x64</td><td><a href="https://github.com/YuLab-SMU/Rho/releases/download/v0.4.0/Rho_0.4.0_x64-setup.exe">Rho_0.4.0_x64-setup.exe</a><code>9d839c60a2e6fdebde71a1c2246fdb123dd91068b8e69e07a3f297d6e9ff13ce</code></td></tr>
-            <tr><td>macOS (Apple Silicon)</td><td><a href="https://github.com/YuLab-SMU/Rho/releases/download/v0.4.0/Rho_0.4.0_aarch64.dmg">Rho_0.4.0_aarch64.dmg</a><code>b6820eb321d24d9644a6a7c7a994b9833e5a90dcf46281ce001736e9b918b4bb</code></td></tr>
-            <tr><td>Linux x86-64</td><td><a href="https://github.com/YuLab-SMU/Rho/releases/download/v0.4.0/Rho_0.4.0_x86_64.AppImage">Rho_0.4.0_x86_64.AppImage</a><code>a3e1f5bd3fdcc6c1234300a299081ca38f01a66ec4efdb243ec394eaf73c4c3c</code></td></tr>
-          </tbody>
-        </table>
-        <div class="small-print">
-          <p>Installers are hosted by GitHub Releases. In some networks a download may be unavailable even when this page is reachable. Listed macOS builds are Developer ID signed and notarized. Verify every download with its SHA-256 checksum.</p>
-          <p><strong>Windows code signing.</strong> Rho 0.4.0 is Authenticode-signed with a SignPath Free Trial self-signed test certificate. It is not publicly trusted; Windows or SmartScreen may still warn. Rho is applying to SignPath Foundation for publicly trusted Windows code signing. A test signature does not establish Foundation acceptance, a production publisher, public trust, or SmartScreen reputation. If accepted, future production releases will use the attribution: “Free code signing provided by <a href="https://about.signpath.io">SignPath.io</a>, certificate by <a href="https://signpath.org">SignPath Foundation</a>.” See the <a href="https://github.com/YuLab-SMU/Rho/blob/main/CODE_SIGNING_POLICY.md">Code signing policy</a>.</p>
-          <p><strong>Uninstall.</strong> On Windows, open Settings &gt; Apps &gt; Installed apps, choose Rho, then Uninstall. On macOS, quit Rho and move Rho.app from Applications to the Trash. On Linux, quit Rho and delete the downloaded AppImage. For the npm package, run <code>npm uninstall -g @rho-workspace/rho</code>. Uninstalling does not delete project files, local application data, logs, or operating-system credential-store entries. Review the <a href="https://github.com/YuLab-SMU/Rho/blob/main/PRIVACY.md">Privacy policy</a> before removing retained data.</p>
-        </div>
       </div>
     </div>
   </section>
