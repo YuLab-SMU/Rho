@@ -236,6 +236,9 @@ needs regression tests. Only executed checks count, each for its recorded scope.
   needs; the base-R runs use 1440, 1024, 768 and 390 CSS px. Verify the native IME,
   focus, keyboard, clipboard, undo and external-write behavior that an episode
   touches; synthetic key events alone do not show native input behavior.
+- **Layout**: `rho-screen-check <url or page.html>` opens the page at 1440, 1024, 768 and
+  390 CSS px and writes a screenshot and `report.json` for each. It reports what the page
+  does; read each screenshot yourself for what a person can follow ([record](SCREEN-CHECK-EPISODE.md)).
 - **Suites**: `acceptance:frontend`, `acceptance:base-r`, `acceptance:interaction`,
   `acceptance:continuity`, `acceptance:shell`, `acceptance:plugin-dx` and the owner
   suites supply bounded evidence; read their assertions before claiming coverage.

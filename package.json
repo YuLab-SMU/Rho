@@ -15,7 +15,8 @@
   },
   "bin": {
     "rho": "./dist/cli.js",
-    "rho-ui": "./scripts/ui-plugin.mjs"
+    "rho-ui": "./scripts/ui-plugin.mjs",
+    "rho-screen-check": "./scripts/screen-check.mjs"
   },
   "exports": {
     ".": "./dist/client.js",
@@ -48,6 +49,7 @@
     "scripts/person-files-acceptance.mjs",
     "scripts/interaction-acceptance.mjs",
     "scripts/browser-checks.mjs",
+    "scripts/screen-check.mjs",
     "scripts/frontend-acceptance.mjs",
     "scripts/ui-plugin.mjs",
     "scripts/ui-selection.mjs",
@@ -93,6 +95,7 @@
     "test:media": "node --test ../Rho-plugins/test/owners.test.mjs",
     "test:console": "node --test ../Rho-plugins/test/console.test.mjs && node --test --test-name-pattern='Console commands' test/answer-decisions.test.mjs",
     "test:notebook": "node --test ../Rho-plugins/test/kernel.test.mjs && node --test test/notebook.test.mjs",
+    "test:screen-check": "npm run build && node --test test/screen-check.test.mjs test/screen-check-skill.test.mjs",
     "test:skills": "node --test ../Rho-plugins/test/skills.test.mjs",
     "test:requirements": "node --test --test-name-pattern='base-R requirements' ../Rho-plugins/test/resources.test.mjs",
     "test:native": "node --test test/native-artifacts.test.mjs",
@@ -145,7 +148,8 @@
     "@rho-workspace/plugin-requirements": "file:../Rho-plugins/plugins/requirements",
     "@rho-workspace/plugin-skills": "file:../Rho-plugins/plugins/skills",
     "@rho-workspace/plugin-tables": "file:../Rho-plugins/plugins/tables",
-    "ajv": "8.20.0"
+    "ajv": "8.20.0",
+    "playwright-core": "1.64.1"
   },
   "devDependencies": {
     "@codemirror/autocomplete": "6.20.3",
@@ -187,7 +191,8 @@
     "@rho-workspace/plugin-annotations",
     "@rho-workspace/plugin-console",
     "@rho-workspace/plugin-kernel",
-    "@rho-workspace/plugin-skills"
+    "@rho-workspace/plugin-skills",
+    "playwright-core"
   ],
   "private": true
 }

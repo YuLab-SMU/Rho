@@ -260,6 +260,7 @@ replayed. Agents now read that "in the notebook" means Rho's sessions, untested 
 - Independent UI extensions contribute optional views over selected capabilities;
   standalone previews receive no project credentials and start no runtime
   ([authoring](PLUGIN-AUTHORING.md)).
+- `rho-screen-check` opens a page at four widths in a real browser, reports what it measures beside a screenshot per width, and changes nothing on the page ([record](SCREEN-CHECK-EPISODE.md)).
 
 Earlier observations remain in the [home/project](HOME-PROJECT-EPISODE.md), [sidebar/canvas](AGENT-CANVAS-EPISODE.md),
 [Graph](GRAPH-EPISODE.md), [Agent page](AGENT-PAGE-EPISODE.md), [Agent activity](AGENT-ACTIVITY.md) and
@@ -278,12 +279,11 @@ installed results; the fixed 0.5.1 candidate passed 230/230 ([preview](PREVIEW-0
 0.5.2 packaging pass recorded Rho 269/270 and Plugins 165/165, and Windows 11 x64 Rho 259/273 (13 skipped, MCP v2 cancelled) and
 Plugins 158/166 (8 skipped). The CI pass records Rho 275/277 and Plugins 165/166 on macOS in the [ledger](VERIFICATION.json). In
 [CI](CI-EPISODE.md) run 7 every job passed: 275/277 on macOS and Linux x64, 262/277 on Windows (15 skipped), and all four
-installations.
+installations. The [screen-check](SCREEN-CHECK-EPISODE.md) pass ran 20 of 20 in a verification copy, and the installed tarball's `rho-screen-check` ran offline.
 
 Automatic capture defaults: 8 MiB/snapshot, 64 snapshots and 32 MiB/turn, at most two
 workers/project, Files 512 MiB/1024 resources; export 512 MiB/128 files/4 MiB metadata,
-previews 200 rows/20 columns and 64 KiB text. Exhaustion preserves earlier evidence, output
-and uncertainty ([Headless](HEADLESS.md#retained-review-evidence)).
+previews 200 rows/20 columns and 64 KiB text. Exhaustion preserves earlier evidence, output and uncertainty ([Headless](HEADLESS.md#retained-review-evidence)).
 
 ## Scope and follow-up
 
@@ -296,4 +296,4 @@ is not a workspace restore or executable analysis format. Existing archives keep
 The withdrawn 2026-10-25 frontend guidance and the [2026-10-26 design commission](design/2026-10-26/index.html)
 are not requirements or templates for these screens. Current work advances by running real episodes and reviewing their results
 ([Development](DEVELOPMENT.md), [Frontend](FRONTEND.md)). No independent researcher
-trial or physical IME observation has yet established ease of use.
+trial or physical IME observation has yet established ease of use. The workspace's first load gets a 404 from `agent.activity.capture`: the example's recorded paths carry the projects-folder prefix, and the preview asks for captures of R scripts; neither is fixed yet ([record](SCREEN-CHECK-EPISODE.md)).

@@ -111,7 +111,8 @@ dir="$HOME/.claude/skills/rho"        # Codex: dir="${CODEX_HOME:-$HOME/.codex}/
 base="https://yulab-smu.top/Rho/skills/rho"
 mkdir -p "$dir/references"
 for f in SKILL.md references/install.md references/connect.md references/tools.md \
-         references/analysis.md references/needs.md references/troubleshooting.md; do
+         references/analysis.md references/needs.md references/troubleshooting.md \
+         references/screen-check.md; do
   curl -fsSL "$base/$f" -o "$dir/$f" || echo "failed: $f"
 done
 head -3 "$dir/SKILL.md"
@@ -215,7 +216,8 @@ These steps have not yet been run end to end on Windows. Use PowerShell. Python 
    $base = "https://yulab-smu.top/Rho/skills/rho"
    New-Item -ItemType Directory -Force "$dir\references" | Out-Null
    foreach ($f in "SKILL.md", "references/install.md", "references/connect.md", "references/tools.md",
-                  "references/analysis.md", "references/needs.md", "references/troubleshooting.md") {
+                  "references/analysis.md", "references/needs.md", "references/troubleshooting.md",
+                  "references/screen-check.md") {
      Invoke-WebRequest -Uri "$base/$f" -OutFile "$dir\$f"
    }
    ```

@@ -38,6 +38,7 @@ published 0.5.3. When it and `rho --help` disagree, `rho --help` wins.
 4. Run an analysis the person can follow: [references/analysis.md](references/analysis.md)
 5. Choose what Rho offers for a need: [references/needs.md](references/needs.md)
 6. Something failed: [references/troubleshooting.md](references/troubleshooting.md)
+7. Check how a page lays out in a real browser: [references/screen-check.md](references/screen-check.md)
 
 Read only the reference the task needs.
 

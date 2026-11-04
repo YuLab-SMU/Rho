@@ -1,6 +1,7 @@
 import * as path from 'node:path';
 import { SkillDeclaration, atomicJson, canonical, digest, now, readJson, requireThat, stateDirectory, type PluginDescriptor } from '@rho-workspace/plugin-contracts';
 import { operations } from './protocol.js';
+import { screenCheckSkill } from './screen-check-skill.js';
 import type { PluginId, Plugins } from './plugins.js';
 import type { Principal, Project } from './state.js';
 
@@ -334,7 +335,7 @@ export class Capabilities {
 
   async skills(principal: Principal) {
     const state = await this.state();
-    const result: SkillDeclaration[] = [rhoWorkspaceSkill, personFilesSkill, taskMapSkill, analysisRunSkill];
+    const result: SkillDeclaration[] = [rhoWorkspaceSkill, personFilesSkill, taskMapSkill, analysisRunSkill, screenCheckSkill];
     for (const descriptor of this.plugins.descriptors()) {
       const status = this.pluginStatus(descriptor.id as PluginId, state);
       for (const skill of descriptor.skills ?? []) {

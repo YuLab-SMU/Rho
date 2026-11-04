@@ -19,6 +19,7 @@ observed.
 | --- | --- |
 | [From-scratch design requirements · v2](design/2026-10-26/index.html) / [PDF](../output/pdf/rho-design-handoff-2026-10-26.pdf) | Designer commission: separate application/project navigation, Studio, panoramic Graph, dynamic Agent experience, dedicated conversation component, plugin standards and cross-mode scenarios; current implementation is not the design target |
 | [Frontend](FRONTEND.md) | Project navigation, workspaces, Agent conversations and handoff, browser checks |
+| [Layout checks in a real browser](SCREEN-CHECK-EPISODE.md) | `rho-screen-check`: a page at four widths, what the browser measures and the screenshots to read; the 404 found on the workspace's first load; checks and limits |
 | [Home and project screens](HOME-PROJECT-EPISODE.md) | The 2026-10-27 pass over home, projects and the empty project: setup, observations, changes, checks and open gaps |
 | [Project sidebar and Agent canvas](AGENT-CANVAS-EPISODE.md) | The sidebar's places, Sources browsing by kind, the one Agent entry and its page of what the Agent did, and the canvas that opens what it reads and changes; runs, owner changes, checks and limits |
 | [One workspace and the Graph](GRAPH-EPISODE.md) | The person and the Agent in one workspace, and the Graph of what the Agent read, changed, ran and what changed while it ran; runs, checks and limits |
