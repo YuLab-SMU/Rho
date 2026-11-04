@@ -57,3 +57,12 @@ test('a session is told where the notes are and how to keep its section, and not
   assert.match(words, /Change only your own section/);
   assert.doesNotMatch(words, /QUESTIONS|swarm/i);
 });
+
+test('a session is asked to explain each value and file in its code, in the person\'s language', () => {
+  const words = notesInstructions('c-42');
+  assert.ok(words.includes('`# means: '), 'asks for a comment above the statement that makes a value or writes a file');
+  assert.match(words, /top-level statement/, 'asks for top-level statements, which are the ones Rho reads');
+  assert.match(words, /# means NAME:/, 'names the value or file a statement with several is for');
+  assert.match(words, /under 200 characters/);
+  assert.match(words, /the language the person writes in/);
+});

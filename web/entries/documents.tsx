@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { Prec, RangeSetBuilder, StateEffect, StateField, type EditorState } from '@codemirror/state';
 import { Decoration, EditorView as CodeView, ViewPlugin, keymap, type DecorationSet, type EditorView } from '@codemirror/view';
 import { DocumentCardBody, DocumentEditorView, documentForms, editorEntry } from '@rho-workspace/plugin-documents/ui';
-import { flowPath, languageNames, runPurpose, scriptFlow, scriptLanguage, scriptStepAt, selectionCode, statementAt, type ScriptStep } from '@rho-workspace/plugin-kernel/code';
+import { graphMarks, graphNodeAt, languageNames, runPurpose, scriptFlow, scriptGraph, scriptLanguage, selectionCode, statementAt, type Making } from '@rho-workspace/plugin-kernel/code';
 import { ScriptFlowView } from '@rho-workspace/plugin-kernel/ui';
 import type { FrameBodyProps, UiContribution, UiViewProps } from '../../src/ui-contract.js';
 import { Icon } from '../icons.js';
@@ -11,8 +11,9 @@ import { languageExtensions } from '../languages.js';
 import { WorkspaceViewsContext } from '../shell/workspace-views.js';
 // A session without edit grants still reads the document.
 const editable = (props: UiViewProps) => ['document.edit', 'document.undoOwn', 'document.revert', 'document.change.read'].every(m => props.snapshot.catalog.operations.some(o => o.method === m && o.state === 'available' && o.authorized));
-// While a script's data flow is open beside it, the lines of the step at the cursor are marked, and
-// so are the lines of the steps it comes from and of those that come of it.
+// While a script's data flow is open beside it, the lines that make the value chosen are marked, and
+// so are the lines that make what it comes from (with the functions and constants they use) and
+// what comes of it.
 type Mark = { from: number; to: number; kind: 'here' | 'from' | 'into' };
 const setMarks = StateEffect.define<Mark[]>();
 const flowMarks = StateField.define<DecorationSet>({
@@ -57,7 +58,8 @@ function Editor(props: UiViewProps) {
     if (next) view.dispatch({ selection: { anchor: state.doc.line(next).from }, scrollIntoView: true });
   };
   // A script's data flow beside it, read from the text in the editor as the person types: the
-  // switch is saved with the page. Choosing a step puts the cursor at its first line.
+  // switch is saved with the page. Choosing a value puts the cursor where it is made, and putting
+  // the cursor on a line that makes a value chooses it.
   const page = useContext(WorkspaceViewsContext);
   const saved = props.view.props.flow === true;
   const [flowOpen, setFlowOpen] = useState(saved);
@@ -72,28 +74,26 @@ function Editor(props: UiViewProps) {
   };
   useEffect(() => { if (flowOpen && editor) { setText(editor.state.doc.toString()); setLine(editor.state.doc.lineAt(editor.state.selection.main.head).number); } }, [flowOpen, editor]);
   useEffect(() => () => clearTimeout(typing.current), []);
-  const flow = useMemo(() => flowOpen && language ? scriptFlow(text, language) : null, [flowOpen, language, text]);
+  const graph = useMemo(() => flowOpen && language ? scriptGraph(scriptFlow(text, language), language) : null, [flowOpen, language, text]);
+  const [chosen, setChosen] = useState<string | null>(null);
+  useEffect(() => {
+    if (!graph || line === null || graph.nodes.get(chosen ?? '')?.made.some(m => m.from <= line && line <= m.to)) return;
+    const here = graphNodeAt(graph, line);
+    if (here) setChosen(here.id);
+  }, [graph, line]);
   const marked = useRef(false);
   useEffect(() => {
     if (!editor) return;
-    const step = flow && line !== null ? scriptStepAt(flow, line) : null, marks: Mark[] = [];
-    if (flow && step) {
-      const { up, down } = flowPath(flow, step.id);
-      for (const s of flow.steps) {
-        const kind = s.id === step.id ? 'here' : up.has(s.id) ? 'from' : down.has(s.id) ? 'into' : null;
-        if (kind) marks.push({ from: s.from, to: s.to, kind });
-      }
-    }
+    const marks: Mark[] = graph && chosen ? graphMarks(graph, chosen) : [];
     if (!marks.length && !marked.current) return;
     marked.current = marks.length > 0;
     editor.dispatch({ effects: setMarks.of(marks) });
-  }, [editor, flow, line]);
+  }, [editor, graph, chosen]);
   const toggleFlow = (open: boolean) => { setFlowOpen(open); page?.setProps?.(props.viewId, { flow: open }); };
-  const goTo = (step: ScriptStep) => {
+  const goTo = (making: Making) => {
     if (!editor) return;
-    const at = editor.state.doc.line(Math.min(step.from, editor.state.doc.lines)).from;
+    const at = editor.state.doc.line(Math.min(making.from, editor.state.doc.lines)).from;
     editor.dispatch({ selection: { anchor: at }, effects: CodeView.scrollIntoView(at, { y: 'start', yMargin: 48 }) });
-    editor.focus();
   };
   const extensionsFor = useMemo(() => language
     ? async (file: string) => [...await languageExtensions(file), flowMarks,
@@ -116,10 +116,8 @@ function Editor(props: UiViewProps) {
     {/* The editor keeps its place in the page whether the flow is open or not, so its undo stays. */}
     {language ? <div className="script-flow"><div className={'script-flow-split' + (flowOpen ? ' open' : '')}>
       <div className="script-flow-editor">{body}</div>
-      {flowOpen && flow && <aside className="script-flow-side" aria-label="Data flow of this script">
-        <p className="script-flow-lede">Each box is a statement, or a few, in the script's order, with what it makes; a line joins a value to each step that reads it. Read from the code; nothing runs.</p>
-        <p className="script-flow-key" aria-hidden="true"><span className="here">At the cursor</span><span className="from">Comes from</span><span className="into">Leads to</span></p>
-        <ScriptFlowView flow={flow} language={language} current={line} onStep={goTo} onPath={props.shell?.openPath} shell={props.shell} />
+      {flowOpen && graph && <aside className="script-flow-side" aria-label="Data flow of this script">
+        <ScriptFlowView graph={graph} language={language} selected={chosen} onSelect={setChosen} onGo={goTo} onPath={props.shell?.openPath} shell={props.shell} />
       </aside>}
     </div></div> : body}</>;
 }

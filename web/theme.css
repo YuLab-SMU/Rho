@@ -923,23 +923,16 @@ dialog.review-overlay{border:1px solid var(--border);color:inherit;margin:auto;w
 .rho-review .review-version select { min-width: 220px; padding: 5px 8px; border: 1px solid var(--color-control-border); border-radius: 8px; background: var(--color-surface); color: var(--color-ink); font: inherit; }
 
 /* A script beside its data flow: the flow takes a column at the right, or the lower half of a
-   narrow view. The editor marks the step at the cursor, the steps it comes from and those it
-   leads to, with the same colors as the key above the flow. */
+   narrow view. The editor marks the lines that make the value chosen, those that make what it
+   comes from and those that make what comes of it, in the colors the flow draws its path in. */
 .script-flow { height: 100%; min-height: 0; container-type: inline-size; }
 .script-flow-split { display: grid; grid-template-columns: minmax(0, 1fr); height: 100%; min-height: 0; }
 .script-flow-split.open { grid-template-columns: minmax(0, 1fr) minmax(280px, 42%); }
 .script-flow-editor { min-width: 0; min-height: 0; height: 100%; }
 .script-flow-side { display: flex; flex-direction: column; gap: 8px; min-width: 0; min-height: 0; overflow-y: auto; padding: 10px 12px 14px; border-left: 1px solid var(--color-divider); background: var(--color-canvas); }
-.script-flow-lede { margin: 0; color: var(--color-meta); font-size: 12px; line-height: 1.45; }
-.script-flow-key { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 0; color: var(--color-muted); font-size: 11.5px; }
-.script-flow-key > span { display: inline-flex; align-items: center; gap: 5px; }
-.script-flow-key > span::before { content: ""; width: 10px; height: 10px; border-radius: 2px; }
-.script-flow-key > .here::before, .cm-flow-here { background: var(--color-accent-soft); }
-.script-flow-key > .from::before, .cm-flow-from { background: var(--color-hue-sky); }
-.script-flow-key > .into::before, .cm-flow-into { background: var(--color-hue-clay); }
-.cm-flow-here { box-shadow: inset 3px 0 0 var(--color-accent); }
-.cm-flow-from { box-shadow: inset 3px 0 0 var(--color-hue-sky-ink); }
-.cm-flow-into { box-shadow: inset 3px 0 0 var(--color-hue-clay-ink); }
+.cm-flow-here { background: var(--color-accent-soft); box-shadow: inset 3px 0 0 var(--color-accent); }
+.cm-flow-from { background: var(--color-hue-sky); box-shadow: inset 3px 0 0 var(--color-hue-sky-ink); }
+.cm-flow-into { background: var(--color-hue-clay); box-shadow: inset 3px 0 0 var(--color-hue-clay-ink); }
 @container (max-width: 640px) {
   .script-flow-split.open { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) minmax(0, 1fr); }
   .script-flow-side { border-top: 1px solid var(--color-divider); border-left: 0; }
