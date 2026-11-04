@@ -351,7 +351,7 @@ description: Install, start, …</code></pre>
         </div>
         <table class="req">
           <tbody>
-            <tr><th scope="row">Node</th><td>22.22 or a later 22.x. A different Node prints one <code>EBADENGINE</code> warning.</td></tr>
+            <tr><th scope="row">Node</th><td>22.22 or later, below 27: Node 22, 24 or 26. Version 0.5.3 on npm still declares 22.x only, so on 24 or 26 npm prints one <code>EBADENGINE</code> warning and installs it anyway.</td></tr>
             <tr><th scope="row">Agent</th><td>Claude Code or Codex, installed and signed in by you. Rho drives your client; it does not install an Agent or copy its credentials.</td></tr>
             <tr><th scope="row">R</th><td>Only for R work. Rho installs no R packages on its own; a missing Rscript is reported, not worked around.</td></tr>
             <tr><th scope="row">Systems</th><td>macOS arm64 is the baseline. Linux x64 and arm64 and Windows x64 are checked in CI; macOS x64 runs only under Rosetta.</td></tr>
