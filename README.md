@@ -50,6 +50,21 @@ plans and visual rules. See [Frontend](docs/FRONTEND.md) for the current interfa
 [Status](docs/STATUS.md) for executed checks and limits, and the
 [documentation index](docs/README.md) for backend and release information.
 
+## Set up with an Agent
+
+A person can ask Claude Code or Codex, in any language:
+
+> Read https://yulab-smu.top/Rho/doc/setup.md and follow its steps to install and configure Rho for me.
+
+or: 请阅读 https://yulab-smu.top/Rho/doc/setup.md 文档，按照步骤为我安装并配置 Rho。
+
+That page is [SETUP.md](SETUP.md). The Agent checks the machine, installs the npm package and
+starts Rho on `~/Rho/projects` and `~/Rho/state`. It then installs the Agent Skill in
+[skills/rho](skills/rho/SKILL.md) into its own skills folder, connects itself to the example
+project and says what is missing. The Skill teaches an Agent to install and connect Rho, call
+its tools without guessing, and run an analysis a person can follow. It is published beside the
+page at <https://yulab-smu.top/Rho/skills/rho/SKILL.md>.
+
 ## Documentation
 
 <https://yulab-smu.top/Rho/> runs the real interface on the shipped example project,

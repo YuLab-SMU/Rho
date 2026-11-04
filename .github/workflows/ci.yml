@@ -4,7 +4,7 @@
 name: CI
 
 # Documentation alone does not run CI, except the pages the package ships and the Status and
-# ledger a test reads. A tag never runs this directly; release.yml calls it when needed.
+# ledger a test reads. The setup page and the Agent Skill are documentation too. A tag never runs this directly; release.yml calls it when needed.
 on:
   push:
     branches: [main]
@@ -23,6 +23,8 @@ on:
       - '!PRIVACY.md'
       - '!SECURITY.md'
       - '!CODE_SIGNING_POLICY.md'
+      - '!SETUP.md'
+      - '!skills/**'
   pull_request:
     paths:
       - '**'
@@ -39,6 +41,8 @@ on:
       - '!PRIVACY.md'
       - '!SECURITY.md'
       - '!CODE_SIGNING_POLICY.md'
+      - '!SETUP.md'
+      - '!skills/**'
   workflow_dispatch:
   workflow_call:
 

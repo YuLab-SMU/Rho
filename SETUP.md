@@ -1,0 +1,225 @@
+# Set up Rho
+
+This page is for an Agent. A person asked you to read it and install and configure Rho for
+them. If you are reading a summary of this page, get the whole file first:
+`curl -fsSL https://yulab-smu.top/Rho/doc/setup.md`.
+
+Rho is a local workspace with a browser interface. The person and their Agent work on the same
+R and Python projects there: a live Notebook, files, figures and notes. Rho runs on this machine
+and drives the Agent client the person already has (Claude Code or Codex). There is no Rho
+account and no Rho server. These steps fit `@rho-workspace/rho` 0.5.3 and later.
+
+Do the steps in order; each one says how to check it. Write to the person in the language they
+used. Ask the person only where a step says so, and otherwise go on. If you cannot run commands
+on this machine, give the person these steps instead.
+
+## Rules
+
+- Use the person's own permissions. Never run `sudo`. When a step needs it, say why and what
+  the person can do, then wait.
+- Leave alone anything that already exists or runs. Do not stop, restart, overwrite or delete
+  it unless the person says so.
+- The `connection.json` and `agent-*.json` files in Rho's state folder are credentials. Name
+  their paths, but never print or paste their contents.
+- Report what you saw. When a step fails, give the command and what it printed, and stop.
+
+## 1. Check the machine
+
+| Check | Command | What is needed |
+| --- | --- | --- |
+| System | `uname -s` | macOS (`Darwin`) or Linux. If the command does not exist, this is Windows: follow [On Windows](#on-windows) |
+| Node | `node -v` | 22.22 or later, below 27. Otherwise tell the person to install Node 22, 24 or 26 (from nodejs.org or a version manager), and stop |
+| Python 3 | `python3 -c "import fcntl"` | It prints nothing. Rho's file lock needs it on macOS and Linux. On a Mac where it fails, the person installs the Command Line Tools with `xcode-select --install`; wait for that |
+| R | `Rscript --version` | Optional: only R work needs R |
+| Your client | `claude --version` or `codex --version` | Which Agent you are. Another client works too; steps 5 and 6 say how |
+
+## 2. Look for a Rho that is already here
+
+```sh
+npm ls -g @rho-workspace/rho
+for s in "$HOME/Rho/state" "$HOME/.rho-service"; do
+  [ -f "$s/connection.json" ] || continue
+  url=$(node -p "require('$s/connection.json').url")
+  echo "$s $url $(curl -s -o /dev/null -w '%{http_code}' "$url")"
+done
+```
+
+The first command shows the installed version, if there is one. The loop checks the two state
+folders that Rho's own instructions use. For each, it prints the address and either `200`
+(running) or `000` (nothing answering).
+
+- **Nothing found:** go on with step 3.
+- **A state folder answers `200`:** Rho is already set up. Use that state folder and address
+  from here on, skip to step 5, and do not start another service.
+- **A state folder exists but does not answer:** ask the person whether to start their existing
+  Rho again or set up a new one. For `~/.rho-service`, the projects folder is the one they chose
+  earlier (`~/rho-projects` by default); ask them if it is not there.
+
+Other running Rho services belong to other work, so leave them alone.
+`pgrep -fl "[-]-state-dir"` lists them.
+
+## 3. Install
+
+```sh
+npm install -g @rho-workspace/rho
+```
+
+- **`EACCES`:** npm's global folder belongs to root. Do not use `sudo`. Offer the person three
+  ways, then wait for their choice:
+  - they run `sudo npm install -g @rho-workspace/rho` themselves;
+  - npm uses a folder they own: `npm config set prefix ~/.npm-global`, add `~/.npm-global/bin`
+    to `PATH` in their shell profile, and install again;
+  - a Node version manager such as nvm, fnm or Volta.
+- **Very slow or timing out** (common in mainland China): tell the person. With their
+  agreement, install again with `--registry=https://registry.npmmirror.com`.
+
+Check: `npm ls -g @rho-workspace/rho` shows the version, and `rho --help` prints the usage.
+
+## 4. Start Rho
+
+```sh
+mkdir -p "$HOME/Rho/projects" "$HOME/Rho/state"
+nohup rho --root "$HOME/Rho/projects" --state-dir "$HOME/Rho/state" --open > "$HOME/Rho/rho.log" 2>&1 &
+```
+
+If you are Codex, put `--agent-backend codex-acp` before `--open`, so that Rho's Agent panel
+uses Codex. Claude Code is the default. `--open` opens the address in the person's browser.
+
+Wait for the log's first line. It is one JSON object that starts
+`{"ready":{"url":"http://127.0.0.1:…`:
+
+```sh
+for i in $(seq 30); do head -1 "$HOME/Rho/rho.log" 2>/dev/null | grep -q '"ready"' && break; sleep 1; done
+head -1 "$HOME/Rho/rho.log"
+```
+
+- **No ready line after 30 seconds:** show the person the log's last lines and stop.
+- **Check again in a separate command,** after the start command has returned.
+  `curl -s -o /dev/null -w '%{http_code}' <url>` should print `200`. If it prints `000`, your
+  client ended the background process. Give the person the start command without `nohup`, `&`
+  and the redirection, to run in a terminal they keep open. Go on when the address answers.
+
+The first start copies an example project, `PA14 quorum sensing`, into `~/Rho/projects`.
+
+## 5. Install the Rho skill for yourself
+
+The skill tells you, and your later sessions, how to work with Rho: its tools, the live
+Notebook, how to connect, and what to do when something fails.
+
+```sh
+dir="$HOME/.claude/skills/rho"        # Codex: dir="${CODEX_HOME:-$HOME/.codex}/skills/rho"
+base="https://yulab-smu.top/Rho/skills/rho"
+mkdir -p "$dir/references"
+for f in SKILL.md references/install.md references/connect.md references/tools.md \
+         references/analysis.md references/needs.md references/troubleshooting.md; do
+  curl -fsSL "$base/$f" -o "$dir/$f" || echo "failed: $f"
+done
+head -3 "$dir/SKILL.md"
+```
+
+- **Another client:** use the folder it loads user skills from. If you do not know it, skip this
+  step and say so in your report.
+- **A `rho` folder is already there:** it is an earlier copy of this skill, and these files
+  replace it. If its `SKILL.md` does not name `rho`, it is something else: ask the person first.
+- **The site does not answer:** use
+  `base="https://raw.githubusercontent.com/YuLab-SMU/Rho/main/skills/rho"`.
+
+Check: no file failed, and the last command prints `name: rho`. New sessions load the skill.
+
+## 6. Connect yourself to the example project
+
+Use the state folder from step 2 if Rho was already set up. If `rho --help` lists
+`--agent claude-code|codex`, one command grants the project and adds Rho's MCP server to your
+client:
+
+```sh
+rho --grant "$HOME/Rho/state/connection.json" --project "PA14 quorum sensing" --agent claude-code   # Codex: --agent codex
+```
+
+Otherwise (0.5.3), grant the project, then add the server yourself:
+
+```sh
+rho --grant "$HOME/Rho/state/connection.json" --project "PA14 quorum sensing"   # Codex: add --session codex
+```
+
+It prints one JSON line.
+
+- **Claude Code:** `cd "$HOME/Rho/projects/PA14 quorum sensing"`, then run the command in the
+  reply's `claude` field there. The entry belongs to that folder.
+- **Codex:** run `codex mcp add <mcp.name> -- <mcp.command> <mcp.args…>`, with the values from
+  the reply's `mcp` field.
+- **Another client:** add a stdio MCP server named `mcp.name` that runs `mcp.command` with
+  `mcp.args`.
+
+Check: `claude mcp list` in the project folder, or `codex mcp list`, shows
+`rho-pa14-quorum-sensing`. Rho's tools (`rho_index`, `rho_resolve`, `rho_call`, `rho_read`)
+appear in a new session started in that folder, not in this one.
+
+## 7. Check R for the Notebook
+
+Skip this step if there is no R: everything except running R works without it. Rho's live R
+session needs the package `jsonlite`:
+
+```sh
+Rscript -e 'cat(requireNamespace("jsonlite", quietly = TRUE), "\n")'
+```
+
+If it prints `FALSE`, install it with
+`Rscript -e 'install.packages("jsonlite", repos = "https://cloud.r-project.org")'`.
+
+The example project's scripts also use ggplot2, dplyr, tidyr, patchwork, scales, car and
+Bioconductor's DESeq2. Say which are missing, and install them only when the person asks:
+
+```sh
+Rscript -e 'p <- c("ggplot2", "dplyr", "tidyr", "patchwork", "scales", "car", "DESeq2"); cat("missing:", p[!vapply(p, requireNamespace, logical(1), quietly = TRUE)], "\n")'
+```
+
+## 8. Tell the person
+
+Keep it brief, in their language:
+
+1. **The address to open,** `http://127.0.0.1:…`. Opening it in a browser on this machine is
+   all the access needed: no account, link or code.
+2. **Where things are:** projects in `~/Rho/projects`, service state in `~/Rho/state`, the log
+   at `~/Rho/rho.log`, and the version installed.
+3. **What is missing,** if anything, and what works without it.
+4. **How to start working**, in either place:
+   - in the browser: open `PA14 quorum sensing` and ask in Rho's Agent panel;
+   - in a new session of this client started in `~/Rho/projects/PA14 quorum sensing`, where
+     Rho's tools and the skill are available.
+
+   Read the example's `README.md` and suggest three questions they could ask about it.
+5. **How to stop and restart Rho:** stop it with
+   `pkill -TERM -f "[-]-state-dir $HOME/Rho/state"`, and start it again with the command from
+   step 4.
+
+## On Windows
+
+These steps have not yet been run end to end on Windows. Use PowerShell. Python is not needed.
+
+1. Check Node with `node -v` as in step 1, then install with
+   `npm install -g @rho-workspace/rho`.
+2. Rho runs in a console window of its own. Create the folders, then ask the person to open a
+   new PowerShell window and run the start command there. It keeps running; Ctrl+Break in that
+   window stops it.
+
+   ```powershell
+   New-Item -ItemType Directory -Force "$HOME\Rho\projects", "$HOME\Rho\state"
+   rho.cmd --root "$HOME\Rho\projects" --state-dir "$HOME\Rho\state" --open
+   ```
+
+3. Install the skill:
+
+   ```powershell
+   $dir = "$HOME\.claude\skills\rho"     # Codex: "$HOME\.codex\skills\rho"
+   $base = "https://yulab-smu.top/Rho/skills/rho"
+   New-Item -ItemType Directory -Force "$dir\references" | Out-Null
+   foreach ($f in "SKILL.md", "references/install.md", "references/connect.md", "references/tools.md",
+                  "references/analysis.md", "references/needs.md", "references/troubleshooting.md") {
+     Invoke-WebRequest -Uri "$base/$f" -OutFile "$dir\$f"
+   }
+   ```
+
+4. Connect with
+   `rho.cmd --grant "$HOME\Rho\state\connection.json" --project "PA14 quorum sensing"`, then
+   continue as in step 6.

@@ -1,6 +1,6 @@
 # Documentation site
 
-Updated: 2026-11-03.
+Updated: 2026-11-04.
 
 Before this pass Rho had no online documentation: the only published surface was the
 downloads page at <https://yulab-smu.top/Rho/>, and the 49 documents in `docs/` were
@@ -236,3 +236,86 @@ What stays: the v0.4.0 GitHub Release and its assets, the footer's Code signing 
 `updates/*.json` with `.nojekyll` on `gh-pages`, so an installed 0.4.0 desktop app keeps its
 update feed. The demo was not rebuilt: it stays the build deployed from `5c28b441`, which matches
 its recording.
+
+## Setup page and Agent skill
+
+On 2026-11-04 the user asked for a skill kept outside Rho that guides an Agent to install Rho,
+use it, and apply it to different needs. Another pass had first answered the same request with
+`rho.analysis-run`, a Skill served inside Rho. The user then asked for a setup page, so that a
+first-time person need not paste the long install prompt and only says: "请阅读
+https://yulab-smu.top/Rho/doc/setup.md 文档，按照步骤为我安装并配置 Rho。"
+
+### What was built
+
+- **`skills/rho/`** is an Agent Skill for the Agent's own skills folder: `SKILL.md` and six
+  references (install, connect, tools, analysis, needs, troubleshooting). It works before Rho
+  is installed and marks the behaviour that appeared after the published 0.5.3.
+- **[`SETUP.md`](../SETUP.md)** is served as raw Markdown at
+  <https://yulab-smu.top/Rho/doc/setup.md>. It has eight steps for the Agent:
+  1. Check the machine.
+  2. Find an existing Rho.
+  3. Install.
+  4. Start on `~/Rho/projects` and `~/Rho/state`, the folders a start without flags uses after
+     0.5.3.
+  5. Install the skill from <https://yulab-smu.top/Rho/skills/rho/>.
+  6. Connect itself to the example project.
+  7. Check R.
+  8. Report.
+
+  Windows has its own short section.
+- **`scripts/pages-site.mjs`** copies both into the pages tree. It refuses a `SETUP.md` whose
+  download list differs from the files in `skills/rho`; a scratch copy missing one reference
+  was refused before anything was built. CI treats both as documentation.
+
+### What was observed
+
+- **The skill against npm 0.5.3.** Its commands and reply shapes come from 0.5.3 installed in
+  `/tmp`, with `rho --mcp` driven over JSON-RPC:
+  - a 75 KB reply came back as a reference and was read by the paths `rho_read` gave;
+  - a released reference answered `not_found`;
+  - `waitMs` held a 45 s cell until it finished;
+  - the same `changeId` returned the same cell in 32 ms;
+  - `ggsave` worked in a simple cell;
+  - `--version` does not exist, and a start without flags exits 2;
+  - a second start exited 1 with "Another Rho service holds …".
+
+  These runs corrected nine statements in the first draft. Among them were the version from
+  which a restart keeps its port, the page size of `rho_read` text, and the stop command:
+  `pkill -f "--state-dir …"` can match the shell that runs it, and `[-]-state-dir` cannot.
+- **A fresh Claude Code session.** Claude Code 2.1.318 (Haiku 5.5) had only the skill, Rho's
+  tools and file tools, with no shell. It answered an airquality question in the Notebook:
+  - it loaded the skill unprompted and read only the two references the task needed;
+  - 3 `rho_index`, 2 `rho_resolve` (one a page continuation) and 6 cells, with 0 refusals;
+  - 30 turns, 7.2 minutes and $0.29;
+  - it wrote its notes first, ran the whole script with `source()` and checked the result files
+    against memory;
+  - it corrected a column it had computed wrongly, and added a sensitivity check that weakened
+    its own conclusion.
+
+  The Overview showed the six runs, the figure and both tables. The Notebook gave each cell its
+  purpose and "An Agent". This is one small task, not a rate, and it does not compare with the
+  five papers.
+- **`SETUP.md` by hand.** It was followed command by command on 0.5.3, in a throwaway `HOME` and
+  npm prefix, without `--open`:
+  - the install took 5 s;
+  - the plain `nohup … &` start still answered from a later command, and the example was copied;
+  - the skill downloaded from a local copy of the pages tree into Claude Code's and Codex's
+    folders, identical to `skills/rho`;
+  - `claude mcp add`, run in the project folder, showed "✔ Connected" there and nothing
+    elsewhere;
+  - the Codex entry, started as configured, answered `rho_index`;
+  - `jsonlite` was found. The example-package check reported `car` and `DESeq2` missing only
+    because the throwaway `HOME` hid the person's R library; it reports nothing missing with
+    the real `HOME`;
+  - the stop command stopped that service and no other.
+
+### Limits
+
+- No Agent has followed the setup page from the one-sentence prompt. A nested Agent with a
+  shell and no approvals was refused by the session's permission check, so the page was
+  followed by hand, not by a model.
+- Codex was not run as an Agent; only its configuration commands were. Windows was not run.
+- The front page's install prompts are unchanged. They still use `~/rho-projects` and
+  `~/.rho-service`, which the page and the skill recognise.
+- An Agent whose fetch tool summarises pages may miss commands. The page asks it to fetch the
+  whole file with `curl` when it has a summary.

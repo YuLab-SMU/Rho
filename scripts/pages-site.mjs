@@ -3,6 +3,8 @@
 //               and the prompts each selected plugin declares for itself
 //   demo/       the application's WebUI replaying site/demo/recording.json (no backend)
 //   docs/       the documentation site, built from docs/ with base /Rho/docs/
+//   doc/setup.md  SETUP.md as it is: the steps an Agent follows to install and configure Rho
+//   skills/     the Agent Skill in skills/, as it is, which those steps install
 // The branch's updates/*.json feeds and .nojekyll are not produced here; a deployment keeps them.
 //
 //   node scripts/pages-site.mjs [--no-docs]
@@ -12,6 +14,12 @@ import path from 'node:path';
 
 const out = path.resolve('site/.pages');
 const run = (command, args, env = {}) => execFileSync(command, args, { stdio: 'inherit', env: { ...process.env, ...env } });
+
+// The setup page downloads the Skill file by file, so a file added to or removed from the Skill
+// has to be named there too.
+const skillFiles = fs.readdirSync('skills/rho', { recursive: true }).map(f => f.split(path.sep).join('/')).filter(f => f.endsWith('.md')).sort();
+const downloads = [...new Set(fs.readFileSync('SETUP.md', 'utf8').match(/\b(?:SKILL|references\/[a-z-]+)\.md\b/g))].sort();
+if (skillFiles.join() !== downloads.join()) throw new Error(`SETUP.md downloads ${downloads.join(', ')}, but skills/rho holds ${skillFiles.join(', ')}.`);
 fs.rmSync(out, { recursive: true, force: true });
 fs.mkdirSync(out, { recursive: true });
 
@@ -82,4 +90,8 @@ html = html.replace(/\{\{([a-z-]+)\}\}/g, (all, key) => {
 });
 fs.writeFileSync(path.join(out, 'index.html'), html);
 fs.cpSync('site/home/img', path.join(out, 'img'), { recursive: true });
+// Served as raw Markdown for an Agent to read; .nojekyll on the branch keeps them unrendered.
+fs.mkdirSync(path.join(out, 'doc'));
+fs.copyFileSync('SETUP.md', path.join(out, 'doc/setup.md'));
+fs.cpSync('skills', path.join(out, 'skills'), { recursive: true });
 console.log(`site/.pages: front page for npm ${version} (${published}), ${asked.length} recorded prompts, ${plugins.length} plugin prompt sets; demo${process.argv.includes('--no-docs') ? '' : ' and docs'} built.`);
