@@ -1,6 +1,7 @@
 import type { BrowserClient, WorkspaceSnapshot } from '../src/browser.js';
 import { canCapture } from './canvas.js';
 import { size } from './project.js';
+import { capturable } from './sources.js';
 
 // A file as it is now: its path in the project, and the size and time that tell a new version;
 // or a registered result, read as exactly its version.
@@ -20,11 +21,15 @@ async function slot<T>(run: () => Promise<T>) {
   active++;
   try { return await run(); } finally { active--; waiting.shift()?.(); }
 }
+// The note for a file that no preview can be read from: a script or a document, or one the capture refuses.
+const unreadable = (): Preview => ({ kind: 'none', note: 'Preview could not be read' });
 export function readPreview(client: BrowserClient, snapshot: WorkspaceSnapshot, node: PreviewFile): Promise<Preview> {
   const key = snapshot.project.id + ':' + node.path + ':' + (node.resource ? node.resource.id + '@' + node.resource.version : node.bytes + ':' + node.modifiedAt);
   const known = previews.get(key);
   if (known) return known;
   if (!node.resource && !canCapture(snapshot)) return Promise.resolve({ kind: 'none', note: 'No preview in this build' });
+  // Activity capture opens only the kinds `capturable` names; asking for any other file is a request the server refuses.
+  if (!node.resource && !capturable(node.path)) return Promise.resolve(unreadable());
   if (started >= previewLimits.files) return Promise.resolve({ kind: 'none', note: 'Select it to see it' });
   started++;
   const made = slot(async (): Promise<Preview> => {
@@ -39,7 +44,7 @@ export function readPreview(client: BrowserClient, snapshot: WorkspaceSnapshot, 
     const bytes = await readBytes(client, projectId, ref, previewLimits.figureBytes);
     const type = /\.svg$/i.test(node.path) ? 'image/svg+xml' : /\.png$/i.test(node.path) ? 'image/png' : 'image/jpeg';
     return { kind: 'image', url: URL.createObjectURL(new Blob([bytes], { type })) };
-  }).catch((): Preview => ({ kind: 'none', note: 'Preview could not be read' }));
+  }).catch((): Preview => unreadable());
   previews.set(key, made);
   return made;
 }
