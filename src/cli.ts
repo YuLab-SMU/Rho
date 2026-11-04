@@ -29,6 +29,8 @@ function parseAcpCommand(spec: string | undefined): { file: string; args: string
 }
 const usage = `Verify a read-only evidence package:
   rho --verify-evidence PATH
+Start Rho on ~/Rho/projects and ~/Rho/state, and say where it is and what is missing:
+  rho
 Start Rho:
   rho --root PROJECTS_DIRECTORY --state-dir SERVICE_STATE [--core ABSOLUTE_CORE_BINARY] [--rscript ABSOLUTE_RSCRIPT] [--python PYTHON] [--ssh SSH] [--serverctl SERVERCTL] [--claude CLAUDE_CODE_BINARY] [--codex CODEX_BINARY] [--agent-backend claude-acp|codex-acp|claude-cli|acp] [--acp-command JSON_ARGV] [--port PORT] [--limits JSON_FILE] [--plugins documents,files,...] [--example on|off] [--open]
 A narrower browser link (optional):
@@ -118,9 +120,23 @@ if (values.acp) {
       process.exit(0);
     } catch (error) { refuse(error, client.connection.url); }
   }
-  if (!values.root || !values['state-dir']) {
+  // A person who runs `npx @rho-workspace/rho` with no arguments wants the application, not a
+  // usage page: start it on their own folders, say in plain words where it is, and open it when
+  // this is an interactive terminal. Every flagged start is unchanged, so scripts and
+  // acceptance runs keep the output they read.
+  const quickStart = !values.root && !values['state-dir'];
+  if (!quickStart && (!values.root || !values['state-dir'])) {
     process.stderr.write(usage); process.exit(2);
   }
+  let quickRoot = '', quickState = '';
+  if (quickStart) {
+    const { homedir } = await import('node:os');
+    quickRoot = path.join(homedir(), 'Rho', 'projects');
+    quickState = path.join(homedir(), 'Rho', 'state');
+    await fs.mkdir(quickRoot, { recursive: true });
+    await fs.mkdir(quickState, { recursive: true });
+  }
+  const projectsRoot = values.root ?? quickRoot, stateDirectory = values['state-dir'] ?? quickState;
   const limits = values.limits ? JSON.parse(await fs.readFile(values.limits, 'utf8')) : {};
   const allowed = new Set(['maxRequestBytes', 'maxEventBytes', 'eventRetention', 'maxSubscriptions', 'maxQueue', 'maxContexts', 'maxBindings', 'maxActivities', 'maxContextBytes', 'maxRetainedMetadataBytes', 'maxConcurrentActions', 'maxOperations', 'maxLogPageBytes', 'maxCodeBytes', 'maxReconciled', 'documents', 'resources', 'workspace', 'r', 'annotations', 'interactions', 'capabilityLimits', 'browser', 'nativeFolders', 'conversations', 'evidence', 'console']);
   if (Object.keys(limits).some(k => !allowed.has(k))) throw new Error('Unknown service budget in --limits file.');
@@ -135,7 +151,7 @@ if (values.acp) {
   // for its own work says so itself and is left alone.
   if (values.example !== undefined && !['on', 'off'].includes(values.example)) throw new Error('Choose --example on or off.');
   const example = values.example !== 'off';
-  const service = await new RhoService({ example, ...limits, root: path.resolve(values.root), stateDir: path.resolve(values['state-dir']), ...native, agentBackend: agentBackend as 'claude-acp' | 'codex-acp' | 'claude-cli' | 'acp', acpCommand, codex: values.codex ?? process.env.RHO_CODEX ?? 'codex', claude: values.claude ?? process.env.RHO_CLAUDE ?? 'claude', python: values.python ?? process.env.RHO_PYTHON, ssh: values.ssh ?? process.env.RHO_SSH, serverctl: values.serverctl ?? process.env.RHO_SERVERCTL, port: values.port === undefined ? undefined : Number(values.port), ...(values.plugins !== undefined ? { plugins: values.plugins ? values.plugins.split(',') as PluginId[] : [] } : {}) }).start().catch(async error => {
+  const service = await new RhoService({ example, ...limits, root: path.resolve(projectsRoot), stateDir: path.resolve(stateDirectory), ...native, agentBackend: agentBackend as 'claude-acp' | 'codex-acp' | 'claude-cli' | 'acp', acpCommand, codex: values.codex ?? process.env.RHO_CODEX ?? 'codex', claude: values.claude ?? process.env.RHO_CLAUDE ?? 'claude', python: values.python ?? process.env.RHO_PYTHON, ssh: values.ssh ?? process.env.RHO_SSH, serverctl: values.serverctl ?? process.env.RHO_SERVERCTL, port: values.port === undefined ? undefined : Number(values.port), ...(values.plugins !== undefined ? { plugins: values.plugins ? values.plugins.split(',') as PluginId[] : [] } : {}) }).start().catch(async error => {
     // Starting Rho again on a state it already runs on is the common refusal: say where it runs.
     const held = (error as { details?: { stateDirectory?: unknown } })?.details?.stateDirectory;
     const running = typeof held === 'string' ? await fs.readFile(path.join(held, 'connection.json'), 'utf8').then(text => String(JSON.parse(text).url), () => '') : '';
@@ -149,11 +165,44 @@ if (values.acp) {
     url: service.url, connectionFile: path.join(service.state.directory, 'connection.json'), apiVersion: '2.0',
     openUrl: service.url,
     startup: {
-      projects: path.resolve(values.root), state: path.resolve(values['state-dir']),
+      projects: path.resolve(projectsRoot), state: path.resolve(stateDirectory),
       core: service.bridge.binary, rscript: service.bridge.rscript,
       note: 'Open this url in a browser on this machine. Execution stays off until an Agent submits a run; project.doctor answers what is missing.'
     }
   } }) + '\n');
+  // What a person needs, after the machine line: where it is, and what is missing to work in it.
+  // A missing Agent or R does not stop the workspace; it decides what the person can do next.
+  if (quickStart) {
+    const say = (text: string) => process.stdout.write(text + '\n');
+    say('');
+    say('Rho is running. Open this address in a browser on this machine:');
+    say('  ' + service.url);
+    say('');
+    say('Projects folder: ' + quickRoot);
+    say('Service state:   ' + quickState);
+    say('');
+    const agentCommand = await import('@rho-workspace/plugin-agent/acp-command').catch(() => null);
+    // The selection the service itself got: an explicit flag, then the environment, then the name
+    // on PATH. Reporting "installed" for a client the person pointed at a missing path is worse
+    // than saying nothing.
+    const claudePath = values.claude ?? process.env.RHO_CLAUDE, codexPath = values.codex ?? process.env.RHO_CODEX;
+    const env = { ...process.env, ...(claudePath ? { CLAUDE_CODE_EXECUTABLE: claudePath } : {}), ...(codexPath ? { CODEX_PATH: codexPath } : {}) };
+    // An ACP agent named with --acp-command is the operator's own command; it is named, not checked.
+    if (acpCommand) say('Agent: ' + acpCommand.file + ', named with --acp-command.');
+    else {
+      const missing = agentCommand ? agentCommand.missingClient(agentBackend === 'codex-acp' ? 'codex' : 'claude', env) : null;
+      say(missing
+        ? 'Agent: ' + missing + ' Until then folders can be opened and files read here; the Agent cannot run in them.'
+        : 'Agent: ' + (agentBackend === 'codex-acp' ? 'Codex' : 'Claude Code') + ' is installed; a conversation can start in any project.');
+    }
+    const hasR = await fs.access(service.bridge.rscript).then(() => true, () => false);
+    say(hasR
+      ? 'R: ' + service.bridge.rscript
+      : 'R: Rscript was not found. Reading, editing and viewing work; running R needs R installed (or --rscript).');
+    say('');
+    say('Stop it with Ctrl+C. Start it again with: npx @rho-workspace/rho');
+    if (process.stdout.isTTY) openBrowser(service.url);
+  }
   if (values.open) openBrowser(service.url);
   let closing = false;
   // Windows has no SIGTERM another process can send, and a console may pass on Ctrl+C turned off;

@@ -55,6 +55,21 @@ npm install --prefix /absolute/install /absolute/rho-workspace-rho-0.5.2.tgz
 ```
 
 Create the allowed projects directory first. Keep service state outside projects.
+
+A person who has no folders to name runs the package with no arguments instead (after
+0.5.3; the 0.5.3 package prints this page):
+
+```sh
+npx @rho-workspace/rho
+```
+
+That start uses `~/Rho/projects` and `~/Rho/state`, creates both, ships the example
+project on a new state, and prints — after the machine line — the address to open,
+the two folders, and whether the Agent client and R were found, so a missing one is
+read at startup rather than discovered later. It opens the address in a browser when
+stdout is an interactive terminal. Every flagged start keeps the output it had; no
+argument used to print this page and exit 2.
+
 Startup prints the loopback URL and private connection-file location, never the
 credential. Opening that URL in a browser on the same machine is the access: the
 service answers a same-origin request from loopback as the local person, with the
