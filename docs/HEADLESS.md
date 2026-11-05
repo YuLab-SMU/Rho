@@ -1,4 +1,4 @@
-# Rho local backend 0.5.1
+# Rho local backend
 
 Rho selects nine independent capability packages: annotations plus documents, files, R,
 requirements, tables, media, charts and Agent. Shared contracts contain generic envelopes/service ports and ordinary-file

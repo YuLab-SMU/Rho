@@ -5,6 +5,10 @@ import navigation from './generated/navigation.json';
 // local preview at / and the published build at the real prefix.
 const base = process.env.RHO_DOCS_BASE ?? '/';
 
+// The release a visitor installs is the registry's, which pages-site.mjs passes in. A build
+// without it names no version rather than this checkout's.
+const npmVersion = process.env.RHO_NPM_VERSION ?? '';
+
 type Item = { text: string; link: string; summary?: string; source?: string; updated?: string | null };
 const sections = (navigation as { sections: Record<string, Item[]> }).sections;
 
@@ -123,5 +127,6 @@ export default defineConfig({
   },
   vite: {
     server: { fs: { allow: ['..'] } },
+    define: { __RHO_NPM_VERSION__: JSON.stringify(npmVersion) },
   },
 });

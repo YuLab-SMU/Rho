@@ -2,6 +2,10 @@
 import { ref } from 'vue';
 import { withBase } from 'vitepress';
 
+// The registry's version when pages-site.mjs built the site; empty in a build without it.
+declare const __RHO_NPM_VERSION__: string;
+const version = __RHO_NPM_VERSION__;
+
 const install = `npm install -g @rho-workspace/rho
 rho --root /absolute/projects --state-dir /absolute/service-state`;
 
@@ -38,8 +42,8 @@ const verified = [
     label: 'Checked',
     tone: 'ok',
     items: [
-      '@rho-workspace/rho 0.5.2 is published from the exact candidate the CI suite tested, with provenance.',
-      'The suite runs on macOS, Linux and Windows; the packed candidate is installed offline on each.',
+      'Each release of @rho-workspace/rho is published from the exact candidate the CI suite tested, with provenance.',
+      'The suite runs on macOS, Linux and Windows; the packed candidate is installed offline on each, and on Linux also with Node 24 and 26.',
       'The example project ships with the application and is copied once into your projects folder.',
     ],
   },
@@ -48,7 +52,7 @@ const verified = [
     tone: 'warn',
     items: [
       'macOS x64 starts only under Rosetta.',
-      '0.5.2 carries platform installs and package checks; the full 0.5.1 acceptance was not repeated on it.',
+      'Releases since 0.5.2 carry platform installs and package checks; the full 0.5.1 acceptance was not repeated on them.',
       'Row questions on an ordinary CSV still need a declared key column or a row position.',
     ],
   },
@@ -67,7 +71,7 @@ const verified = [
 <template>
   <main class="rho-home">
     <section class="hero">
-      <p class="eyebrow">Scientific workbench for R · 0.5.2</p>
+      <p class="eyebrow">Scientific workbench for R<template v-if="version"> · {{ version }}</template></p>
       <h1><span>An Agent works in your project.</span><span>You see everything it did.</span></h1>
       <p class="lede">
         Rho puts a person and an external Agent on the same R project: the same files, the same
@@ -245,11 +249,11 @@ const verified = [
     <section class="start-block">
       <div>
         <p class="kicker">Start</p>
-        <h2>Node 22, R, and one of your own Agent clients</h2>
+        <h2>Node 22, 24 or 26, R, and one of your own Agent clients</h2>
         <p>
-          Rho is a local service with a WebUI. R and any project packages are yours to install, and
-          so are the Agent clients: conversations drive the Claude Code or Codex you already have.
-          The service, documents and readers work without R.
+          Rho is a local service with a WebUI, on Node 22.22 or later, below 27. R and any project
+          packages are yours to install, and so are the Agent clients: conversations drive the
+          Claude Code or Codex you already have. The service, documents and readers work without R.
         </p>
         <p class="asides">
           <a :href="withBase('/start/')">Installation and first project</a>
@@ -258,7 +262,7 @@ const verified = [
       </div>
       <div class="panel">
         <p class="panel-label">Published to npm</p>
-        <p class="version">@rho-workspace/rho 0.5.2</p>
+        <p class="version">@rho-workspace/rho {{ version }}</p>
       </div>
     </section>
   </main>

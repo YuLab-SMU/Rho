@@ -18,6 +18,17 @@ macOS arm64 is the checked baseline. Windows x64 was checked with Node 22.23.4 a
 Linux x64 and arm64 carry platform installs. On macOS x64 the application starts only under
 Rosetta.
 
+## Or ask your Agent
+
+Paste this into Claude Code or Codex:
+
+> Read https://yulab-smu.top/Rho/doc/setup.md and follow its steps to install and configure Rho for me.
+
+The [setup page](https://yulab-smu.top/Rho/doc/setup.md) holds every command, so you can read it
+first. Your Agent checks the requirements above and looks for a Rho that is already there, then
+installs the package, starts Rho on `~/Rho/projects` and `~/Rho/state`, adds the Rho Skill to its
+own skills folder, connects itself to the example project and tells you what is missing.
+
 ## Install from npm
 
 ```sh
@@ -29,6 +40,15 @@ performed and worked. The package declares its Node range, so a Node outside it 
 `EBADENGINE` warning rather than failing silently.
 
 ## Start the service
+
+```sh
+rho
+```
+
+From 0.5.4, `rho` with no arguments uses `~/Rho/projects` and `~/Rho/state`. It creates both,
+copies the example project into a new state, and prints the address to open, the two folders and
+whether your Agent client and R were found. 0.5.3 prints its usage instead. To choose the folders
+yourself, on any version:
 
 ```sh
 rho --root /absolute/projects --state-dir /absolute/service-state
