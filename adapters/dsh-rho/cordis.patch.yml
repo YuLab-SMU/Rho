@@ -1,6 +1,12 @@
 - insert:
-    - id: dsh-rho
-      name: dsh-rho
+    - id: rho-mcp
+      name: '@deepseek-ai/dsh-mcp-client'
       config:
-        projectRoot: !!js process.env.RHO_DSH_PROJECT
-        stateDir: !!js process.env.RHO_DSH_STATE
+        serverName: rho
+        transport: stdio
+        command: !!js process.env.RHO_DSH_COMMAND || 'rho'
+        args:
+          - --mcp
+          - !!js process.env.RHO_DSH_CONNECTION
+        failOnStartupError: true
+        toolCallTimeoutMs: 300000

@@ -1,5 +1,9 @@
 # dsh analysis, Rho results and a selected-row question
 
+The current **0.1.0** bundle reuses the complete Rho application through MCP; see
+[the November 5 episode](#reuse-the-whole-rho-application). The first episode below
+records the retired 0.0.1 embedded-view prototype, whose source remains in Git.
+
 2026-10-31 local / 2026-11-01 UTC. This episode implements the requested
 `dsh-rho` prototype: analyse in dsh, show the outputs with existing Rho components,
 select a result and continue the original conversation. It follows the native
@@ -9,7 +13,7 @@ published npm or signed distribution.
 
 ## What was built
 
-The application adapter lives in [adapters/dsh-rho](../adapters/dsh-rho/README.md).
+The application adapter lives in [the 0.0.1 adapter](https://github.com/YuLab-SMU/Rho/blob/dfd305fbff03cbdae6a4d2296fd70028ff0ad1be/adapters/dsh-rho/README.md).
 Its Cordis host registers `rho_present` and an authenticated result-reading route;
 its browser entry contributes **Rho** to dsh's `conversation.view` slot. Native
 session identity supplies both the tool's caller and the view's result scope.
@@ -147,8 +151,121 @@ questions carry references rather than pixels, and a question's structured conte
 is visible in the native draft. React comes from Harness; broader compatibility
 with the components' declared React peer version is not established by this run.
 
-The [package README](../adapters/dsh-rho/README.md#ownership-and-limits) names the
+The [0.0.1 package README](https://github.com/YuLab-SMU/Rho/blob/dfd305fbff03cbdae6a4d2296fd70028ff0ad1be/adapters/dsh-rho/README.md#ownership-and-limits) names the
 budgets, configuration and refusal behavior. Invalid table content can leave a
 bounded captured file unlisted. There is no silent deletion of earlier results or
 automatic replay of unknown work. Independent researcher use, Desktop/TUI entry
 points, Windows locking and public package distribution remain untested.
+
+## Reuse the whole Rho application
+
+2026-11-05. The user asked to reuse the existing Rho at the lowest integration
+cost. Inspection of Harness 0.2.1-rc.5's installed MCP client and bundle reference,
+and its [public bundle documentation](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/preset/agent-preset/skills/cordis-plugin-development/references/mcp-bundle.md),
+showed that a bundle can contain configuration without Host or Client entry code.
+Rho already supplies the project grant, stdio MCP bridge, full WebUI and frozen
+review-context handoff. These existing boundaries were sufficient for the flow.
+
+The 0.1.0 adapter now contains two configuration files, README and license. Its
+patch mounts Harness's existing MCP client and runs `rho --mcp` with an existing
+agent connection file. It adds no tool implementation, browser entry, service,
+result archive, Skill copy or model configuration. The previous 297 lines of
+runtime TypeScript, build script, lockfile and obsolete store tests were removed.
+No Core or component source changed. Rho's WebUI stays in its own window; its
+iframe policy was not relaxed. Unlike 0.0.1, returning a question requires one
+explicit copy/paste into the original Harness conversation.
+
+### Installed application episode
+
+The disposable project was `/private/tmp/rho-dsh-reuse-20261105/projects/analysis`,
+with separate service state and `DSH_HOME`. The service used an already installed
+`@rho-workspace/rho@0.5.3` from `/tmp/rho-npm-053`, with its packaged components;
+no application build was needed. Source main was 0.5.4, but the registry returned
+404 for that version at the time of this check. The person's other Rho service,
+Harness Desktop and projects were left running unchanged.
+
+An owned Rho service granted this project to session `dsh`. The 0.1.0 tarball was
+installed through `dsh plugin --profile web add … --ignore-scripts --offline`.
+The unchanged `skills/rho` directory was linked into this trial's Harness skill
+folder. The model actually read it, resolved Rho operations, wrote a Python
+standard-library script, ran it through `kernel.run` and registered a keyed CSV
+and SVG through `resource.register`. Model credentials stayed in memory, outside
+the bundle and evidence.
+
+The first configured model route, `westlakehpc/deepseek-v4.1-flash`, failed with
+an upstream duplicate-item-ID error after its initial tool calls. Both Chat
+Completions and Messages attempts failed, including a clean Messages session.
+The project still contained only the input file, and no Notebook cell had run.
+The trial then selected the already configured default route
+`fusecode-lab/claude-opus-5-5[1m]` through Messages. This succeeded. These are the
+configured route names, not independent verification of the model providers.
+The bundle makes no model selection and did not work around the failed gateway.
+
+The successful analysis took 59 seconds in Harness. The six input values were
+again alpha: 1, 2, 8 and beta: -3, 4, 7. The script wrote:
+
+| Group | n | CSV mean |
+| --- | --- | --- |
+| alpha | 3 | 3.666667 |
+| beta | 3 | 2.666667 |
+
+Notebook cell `k-441c12dcff1d7d0b`, change ID `analysis-run-20261105-1`, completed
+in the shared Python 3.13.1 session. Its output included both means, the CSV and
+`run-count lines: 1`. In the real browser, the Notebook showed the code, output
+and live `ns` value; existing table and media views displayed the two rows and the
+400 × 300 SVG. Existing project notes were readable alongside the Studio table.
+
+Selecting alpha and asking in Studio created question
+`q-99d55f47-8bcb-4f1b-bc57-b9bd9bcb7cc7`, with frozen context
+`1f4d589da930eaf21214d9024bfabedc7c5b76e1c7f655c674c1fd613269636d`.
+The retained CSV digest was
+`014d7d55f837f35a400dededec75999c5becd392a5355461be2795862509a4ca`.
+Through Review's **External Agent · copy request**, that context request was
+pasted and sent in the same Harness session. In 46 seconds the model read the
+context and wrote `annotation.reply`, retaining its original message identity and
+exact result versions. Rho displayed the Chinese answer: alpha, n = 3, mean
+3.666667, the mean of that group rather than all six observations. The answer
+created a reply document; it did not run the analysis again.
+
+The actual route needed **Open in Studio**: the ordinary file preview selected
+rows but did not show the question control. On this installed version, **Review
+this question** left the Studio visible, so the trial used the **Review** sidebar.
+Reading the clipboard before the asynchronous copied confirmation initially
+returned empty text; the disabled Harness Send button prevented an empty turn.
+Waiting for Rho's copied confirmation supplied the exact context request. The
+guide now follows these observed controls. No claim of one-click delivery is made.
+
+### Packaging and recovery checks
+
+The final package contains exactly `package.json`, `cordis.patch.yml`, `README.md`
+and `LICENSE`: 15,053 bytes compressed, 41,643 bytes unpacked. No dependencies or
+install/build scripts run. It was installed again with the ordinary offline bundle
+installer. A missing connection file then produced `ENOENT` and Harness's
+`rho-mcp … initial connection or tool synchronization failed` warning; Harness
+opened with the entry unavailable. The Plugins page showed installation, which
+by itself did not establish MCP readiness. Rho was not started or restarted by
+this failure.
+
+While the owned Harness was stopped, the Rho Notebook remained idle with its
+original live value and one cell. Restoring the correct connection and restarting
+only Harness reopened the same conversation and allowed a passive read of the
+original cell. The run counter stayed one. The bundle's five-minute MCP reply
+wait is configurable; this episode did not exercise long-running cells, all four
+tools' large-result paths, other operating systems, Desktop or TUI.
+
+Local evidence is in `work/dsh-rho/reuse-01/`: chat and handoff text, the missing-file
+log, package inventory, screenshots of Notebook, table, figure, question and reply,
+and the observation summary. The private launch addresses and credentials remain
+in the disposable trial directory. The final tarball is
+`work/dsh-rho/package/dsh-rho-0.1.0.tgz`, SHA-256
+`8b3b56f9d1c3370e8256ce167cece8753acd5a569e822e3036f4baadca64fd1e`.
+
+The minimum entry route is an ordinary Harness bundle. Its
+[market reader](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/boot/plugin-market/README.md)
+uses user-configured indexes and has no default index in the tested release. Git
+subdirectory packages are supported by that installer, so a listing can point to
+an available source commit without packaging Rho again. Public Git installation,
+npm publication and market inclusion were not performed. The local package stays
+private. The old 0.0.1 source history and archive bytes remain; no migration or
+archive deletion was attempted. This is one observed integration episode, not
+full application acceptance or independent usability evidence.
