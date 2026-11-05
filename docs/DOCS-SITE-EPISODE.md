@@ -468,10 +468,9 @@ navigation shows. The release itself is recorded in the [CI episode](CI-EPISODE.
   folders is the second form.
 - `HEADLESS.md` is titled "Rho local backend".
 
-The site was not rebuilt. Its pages take the version from the registry, which had not served 0.5.4
-45 minutes after accepting it, so a build would still name 0.5.3, and the front page's Node row
-keeps its sentence about 0.5.3's range, which is still what installs. The start page says what
-both versions do with no arguments.
+The site's pages take the version from the registry, so they waited for npm to serve 0.5.4, which
+it did 55 minutes after accepting it. The front page's Node row then dropped its sentence about
+0.5.3's range. The start page says what both versions do with no arguments.
 
 ### Checks
 

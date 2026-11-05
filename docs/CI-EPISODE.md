@@ -337,10 +337,13 @@ the downloaded candidate. At 05:45:57 npm answered that the package was being pr
 2026 the registry scans a version before serving it, typically for about five minutes and sometimes
 fifteen or more, and may hold it for review or block it.
 Forty-five minutes later, at 06:30, the registry still answered 404 for 0.5.4 and named 0.5.3
-`latest`, while 0.5.3 answered 200 and an unpublished 9.9.9 404. Whether npm holds 0.5.4 for
-review or has blocked it could not be seen from here: the registry says neither, and npm's website
-refuses automated requests. npm says it may notify the publisher of a blocked version. Nothing was
-retagged or published again; a version can be published only once.
+`latest`, while 0.5.3 answered 200 and an unpublished 9.9.9 404. Whether npm was holding 0.5.4
+for review could not be seen from here: the registry said nothing, and npm's website refuses
+automated requests. Nothing was retagged or published again; a version can be published only
+once. The registry recorded 0.5.4 at 06:41:18, 55 minutes after accepting it, and named it
+`latest`. The tarball it serves has the candidate's SHA-256 and SLSA v1 provenance. Installed
+from the registry into a throwaway prefix on this Mac, it printed no `EBADENGINE`, and
+`rho --help` printed 0.5.4's usage.
 
 The same candidate, installed in a throwaway home on this Mac with Node 22.22.3 and npm 10.9.8,
 printed no `EBADENGINE`. `rho` with no arguments started on `~/Rho/projects` and `~/Rho/state`,
@@ -451,7 +454,7 @@ Windows machine was not measured again; the issue's machine recorded no Defender
   ([Windows installation time](#windows-installation-time)).
 - `engines` named Node 22 only until 2026-11-03; it is now `>=22.22.0 <27`, with Linux x64
   installed on Node 24 and 26 in CI ([Docs site episode](DOCS-SITE-EPISODE.md#the-install-prompt-on-a-real-machine)).
-  0.5.4, the first release to declare it, was accepted by npm but not yet served ([Publication](#publication)).
+  0.5.4, published on 2026-11-05, is the first release to declare it ([Publication](#publication)).
   Node 18 and 20 are below the range and unchecked.
 - The candidate digest changes with every commit, since the composition names the commit; whether
   the same commit packs to the same bytes has not been checked.

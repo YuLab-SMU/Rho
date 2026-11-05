@@ -184,4 +184,6 @@ deployment; it has no required reviewer, so a tag whose run passes publishes wit
 person. Run by hand on `main`, the release rehearses everything but the publication. The npm
 organization `rho-workspace` and a token that can publish there without a one-time password must
 exist before the first tag. `@rho-workspace/rho@0.5.2` and `0.5.3` were published this way on
-2026-11-02 with provenance ([CI episode](CI-EPISODE.md#publication)).
+2026-11-02, and `0.5.4` on 2026-11-05, with provenance ([CI episode](CI-EPISODE.md#publication)).
+Since July 2026 npm scans a version before serving it, so a release is installable only when the
+registry serves it: 0.5.4 appeared 55 minutes after `npm publish` returned.
