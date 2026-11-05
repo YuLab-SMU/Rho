@@ -444,5 +444,36 @@ are under `work/dsh-rho/workspace-01/`; the tarball is under
 `work/dsh-rho/package/`. All nine installed files match the source; the 23,231-byte
 final tarball has SHA-256
 `f27327bfacc067049f4ef541a6eb7891ffc3c879e3669d43e09a45f7be4ebe8a`.
-The 0.1.3 public market selection is unchanged. TUI,
-other operating systems and independent usability remain unobserved.
+That local check left the public market at 0.1.3; the publication below updates
+it. TUI, other operating systems and independent usability remain unobserved.
+
+## Public workspace fix
+
+2026-11-05. The user asked to update the public index and online installation
+guide after the 0.1.4 workspace fix. The selected package source is
+[`4bc6f6bb`](https://github.com/YuLab-SMU/Rho/commit/4bc6f6bb3d439f8fe2eb1a5f4d960b428e6ce203),
+published before the index reference. Its runtime files and prebuilt launcher
+match the already checked workspace fix in `b646ed51`; only its package README
+now describes the public 0.1.4 route. The index retains the original icon,
+display locale and checked Harness 0.2.1-rc.5 compatibility, and pins the full
+source commit and its timestamp. The adapter build and all six tests pass.
+
+Two new Harness homes installed that exact Git subdirectory, with empty npm
+caches and pnpm stores and no Git credential helper. One disabled install
+scripts and one used normal defaults. Both completed, in about 66 and 49 seconds.
+All nine distribution files, including the manifest, matched the selected
+source. The scripts-disabled install printed pnpm's generic Git build warning;
+the prebuilt client was present. Both printed a missing MCP-client peer warning:
+Harness supplies that peer when it loads the plugin. The earlier real
+Harness/MCP check covers the unchanged runtime files; this publication does not
+repeat the model or scientific analysis. The official market-index parser
+accepted the generated 0.1.4 index and returned the same fixed install target.
+
+The online guide, start page, front-page entry, package README and release
+summary now name 0.1.4. The guide replaces the old two-entry configuration with
+one `dsh-rho` entry and describes removal of the old `rho-mcp` override, exact
+conversation-folder matching, refused or ambiguous connections and recovery.
+Rho’s index is a manually configured source in Harness’s optional Discover
+feature; it is not an official default source. No npm publication or installed
+user-profile change is part of this update. Local installation and publication
+evidence is under `work/dsh-rho/publish-02/`.
