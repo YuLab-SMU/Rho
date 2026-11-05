@@ -39,8 +39,9 @@ contract. Electron is reserved for a later desktop client that reuses the WebUI
 and component boundaries. Functional views use CodeMirror 6, AG Grid Community
 and ECharts.
 
-Install the packed tarball, start `rho`, and connect an external Agent with
-`rho --grant` ([Install and start](docs/HEADLESS.md#install-and-start)). Projects,
+Install it with `npm install -g @rho-workspace/rho` on Node 22.22 or later, below 27, start
+`rho`, and connect an external Agent with `rho --grant`
+([Install and start](docs/HEADLESS.md#install-and-start)). Projects,
 files, execution records and workspaces are available through the local WebUI.
 The Agent uses the same scoped capabilities; a browser request copied to an external
 Agent is explicitly a handoff.

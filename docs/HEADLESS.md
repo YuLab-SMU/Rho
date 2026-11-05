@@ -41,23 +41,23 @@ The selected baseline is macOS arm64, Node 22.22.3 (engine range
 26.13.0), npm 10.9.8, Python 3 with `fcntl`, and Rscript 4.5.2. Windows x64
 was checked with Node 22.23.4 and Rscript 4.5.1; its writer lock needs no Python, and
 there `rho.cmd` starts Rho and Ctrl+Break on its console stops it in order.
-The unsigned local tarball contains Plugins and the selected digest-checked Core
-binary. R and any project-selected packages are external prerequisites, and so are
-the Agent clients: conversations drive the person's installed Claude Code or Codex.
+The unsigned npm package `@rho-workspace/rho` contains Plugins and one digest-checked Core
+binary for each of macOS arm64, Linux x64 and arm64 and Windows x64; CI installs it on each.
+R and any project-selected packages are external prerequisites, and so are the Agent
+clients: conversations drive the person's installed Claude Code or Codex.
 The service, documents, declared files and saved resource readers work without R.
 An unavailable Rscript returns an unknown dependency probe and prevents managed R execution.
-Other platforms and npm registry publication are unverified.
+Other platforms are unverified.
 
 ```sh
-npm install --prefix /absolute/install /absolute/rho-workspace-rho-0.5.2.tgz
-/absolute/install/node_modules/.bin/rho \
-  --root /absolute/projects --state-dir /absolute/service-state
+npm install -g @rho-workspace/rho
+rho --root /absolute/projects --state-dir /absolute/service-state
 ```
 
 Create the allowed projects directory first. Keep service state outside projects.
 
-A person who has no folders to name runs the package with no arguments instead (after
-0.5.3; the 0.5.3 package prints this page):
+A person who has no folders to name runs the package with no arguments instead (from
+0.5.4; 0.5.3 prints its usage and exits 2):
 
 ```sh
 npx @rho-workspace/rho
