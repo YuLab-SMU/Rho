@@ -449,3 +449,52 @@ not rebuilt in this pass.
   table above. `index.html` was byte-identical to the build of `49b0e262`.
 - Between `6b8289e3` and `29d20f0b` only those four paths changed on `gh-pages`. The four
   `updates/*.json` feeds and `.nojekyll` answered byte-identical to the branch.
+
+## The documentation for 0.5.4
+
+On 2026-11-05 the user asked for a new release and for the documentation to be fixed. The
+documentation's home page still introduced 0.5.2, in its eyebrow, its npm panel and two of its
+checked and limited items, and headed its start section "Node 22, R, and one of your own Agent
+clients". `HEADLESS.md` still titled itself "Rho local backend 0.5.1", which the reference
+navigation shows. The release itself is recorded in the [CI episode](CI-EPISODE.md#publication).
+
+- The home page takes the version from the registry, as the front page does: `pages-site.mjs` asks
+  npm before it builds anything and hands the version to VitePress as `RHO_NPM_VERSION`. A build
+  without it names no version rather than this checkout's. Its items about releases now speak of
+  every release since 0.5.2, and its start section is headed "Node 22, 24 or 26, R, and one of your
+  own Agent clients", with the range in its text.
+- The start page gains "Or ask your Agent" with the sentence the front page gives, and its start
+  command is now `rho` alone, which from 0.5.4 uses `~/Rho/projects` and `~/Rho/state`; naming the
+  folders is the second form.
+- `HEADLESS.md` is titled "Rho local backend".
+
+The site's pages take the version from the registry, so they waited for npm to serve 0.5.4, which
+it did 55 minutes after accepting it. The front page's Node row then dropped its sentence about
+0.5.3's range. The start page says what both versions do with no arguments.
+
+The whole site was built from `2d97d763`, with Plugins `2e53dc2` built from `git archive`; the
+build that had failed on `flowPath` passed. `gh-pages` `bc4d0bea` replaced `index.html` and
+`docs/`, which had last been deployed from `25107546` and so also gained the pages written since.
+`demo/` stayed at its earlier build, and `img/`, `doc/`, `skills/`, the four `updates/*.json`
+feeds and `.nojekyll` were not changed.
+
+### Checks
+
+- `docs:check` covered 53 documents and 302 links, and the VitePress build, which fails on a dead
+  link, passed.
+- A preview built with `RHO_NPM_VERSION=0.5.4` was looked at in screenshots at 1440 and 390 px: the
+  home page's hero and start section, the start page's new sections and the reference's title. No
+  page scrolls sideways; at 390 px the long start command scrolls inside its code block. The first
+  preview read `@rho-workspace/rho0.5.4`: Vue drops a whitespace-only text node at the start of a
+  `<template>`, so the panel now writes the space outside it. A build without the variable shows
+  the eyebrow without a version and the panel with the package name alone.
+- `pages:check` with `DEMO_NARROW=1`, on the tree that was deployed, answered every demo request
+  at 1440 and 390 px, with 0 page errors, 0 failed assets, 0 front-page problems and all 12
+  internal links answering. The page inspector found 0 FAIL and the same five warnings as before.
+- The deployed home page, start page, reference title and front-page Node row were looked at in
+  screenshots at 1440 and 390 px. The Node row takes two lines and three, and no page scrolls
+  sideways.
+- After the Pages build of `bc4d0bea`, `curl` fetched the 90 added or changed paths, each `200`
+  and byte-identical to the branch, and the 25 removed or renamed paths answered `404`. The live
+  pages name 0.5.4, and the feeds, `.nojekyll`, the setup page and the Skill answered
+  byte-identical to the branch.

@@ -27,18 +27,18 @@ const home = process.argv.includes('--home'), docs = !home && !process.argv.incl
 fs.rmSync(out, { recursive: true, force: true });
 fs.mkdirSync(out, { recursive: true });
 
-if (!home) run('npx', ['vite', 'build', '--logLevel', 'warn', '--config', 'site/demo/vite.config.ts'], { RHO_WEB_OUTPUT: path.join(out, 'demo') });
-if (docs) {
-  run('npm', ['run', 'docs:build', '--silent'], { RHO_DOCS_BASE: '/Rho/docs/' });
-  fs.cpSync('site/.vitepress/dist', path.join(out, 'docs'), { recursive: true });
-}
-
 const escape = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const date = iso => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
 
 // The release a visitor installs is the registry's, not this checkout's version.
 const registry = JSON.parse(execFileSync('npm', ['view', '@rho-workspace/rho', 'version', 'time', '--json'], { encoding: 'utf8' }));
 const version = registry.version, published = date(registry.time[version]);
+
+if (!home) run('npx', ['vite', 'build', '--logLevel', 'warn', '--config', 'site/demo/vite.config.ts'], { RHO_WEB_OUTPUT: path.join(out, 'demo') });
+if (docs) {
+  run('npm', ['run', 'docs:build', '--silent'], { RHO_DOCS_BASE: '/Rho/docs/', RHO_NPM_VERSION: version });
+  fs.cpSync('site/.vitepress/dist', path.join(out, 'docs'), { recursive: true });
+}
 
 // The example's prompts are the ones the recording holds: what a person sent, in order.
 const recording = JSON.parse(fs.readFileSync('site/demo/recording.json', 'utf8'));

@@ -310,6 +310,46 @@ The registry recorded 0.5.3 at 08:58:01 and showed it as `latest` from 08:58:12,
 SLSA v1 provenance and the README. Its tarball's SHA-256, `75f25f83…`, equals the candidate's;
 installed, it carries Agent 0.4.27 and `rho --help` prints its usage.
 
+Version 0.5.4 followed on 2026-11-05, at the user's request, so that the package npm serves
+declares the Node range `>=22.22.0 <27` that main has declared since 2026-11-03; on 0.5.3, Node 24
+and 26 print one `EBADENGINE` warning. CI had failed on every push to main since the one ending at
+`e92efb12`. That push carried `c552a471`, whose Data flow imports `scriptGraph`, `graphNodeAt`,
+`graphMarks` and `Making` from the Notebook plugin. Only Plugins `2e53dc2` exports them, while
+`components.json` still selected `adb5fc6`, so the three test jobs stopped compiling
+`web/entries/documents.tsx` and the pack job stopped at the same build. In the next three runs the
+macOS Core job ran no step and was cancelled after 15 minutes, during GitHub's incident with Actions
+and Pages, so nothing after it ran either. `826d73c1` composes Plugins `2e53dc2`. With those
+Plugins built from `git archive` and the macOS Core of run 41822932525, the build,
+`check:contracts` and the full suite passed on this Mac (308 of 310, 2 skipped). `fd0f9de5` sets
+the version and has the README and `HEADLESS.md` install from the registry rather than a packed
+tarball.
+
+CI run [41975339969](https://github.com/YuLab-SMU/Rho/actions/runs/41975339969) on `fd0f9de5`
+passed every job in 5 min: 308/310 on macOS and Linux, 293/310 on Windows with 17 skipped, and the
+candidate installed and ran on the four platforms and on Linux x64 with Node 24.22.1 and 26.13.0.
+The check shows npm's output only when an install fails, so these logs do not show whether npm
+warned; the candidate's range includes both versions. The tag `v0.5.4` ran release
+[41975983772](https://github.com/YuLab-SMU/Rho/actions/runs/41975983772), which found that run,
+verified its candidate and published it in 21 s without CI or a person
+([sigstore 3692659118](https://search.sigstore.dev/?logIndex=3692659118)). The tarball holds 3,134
+files in 25.6 MB; its SHA-256, `a8466849…`, is the candidate's, and npm's SHA-1 `e8b10ffa…` matches
+the downloaded candidate. At 05:45:57 npm answered that the package was being processed: since July
+2026 the registry scans a version before serving it, typically for about five minutes and sometimes
+fifteen or more, and may hold it for review or block it.
+Forty-five minutes later, at 06:30, the registry still answered 404 for 0.5.4 and named 0.5.3
+`latest`, while 0.5.3 answered 200 and an unpublished 9.9.9 404. Whether npm was holding 0.5.4
+for review could not be seen from here: the registry said nothing, and npm's website refuses
+automated requests. Nothing was retagged or published again; a version can be published only
+once. The registry recorded 0.5.4 at 06:41:18, 55 minutes after accepting it, and named it
+`latest`. The tarball it serves has the candidate's SHA-256 and SLSA v1 provenance. Installed
+from the registry into a throwaway prefix on this Mac, it printed no `EBADENGINE`, and
+`rho --help` printed 0.5.4's usage.
+
+The same candidate, installed in a throwaway home on this Mac with Node 22.22.3 and npm 10.9.8,
+printed no `EBADENGINE`. `rho` with no arguments started on `~/Rho/projects` and `~/Rho/state`,
+copied the example and named Claude Code and R. A second start was refused in one line naming the
+running address, and after an orderly stop a start without `--port` took the same port.
+
 ## A new user on Ubuntu
 
 On 2026-11-02 the user asked to install as a new user on a Linux host. A fresh OrbStack machine,
@@ -414,6 +454,7 @@ Windows machine was not measured again; the issue's machine recorded no Defender
   ([Windows installation time](#windows-installation-time)).
 - `engines` named Node 22 only until 2026-11-03; it is now `>=22.22.0 <27`, with Linux x64
   installed on Node 24 and 26 in CI ([Docs site episode](DOCS-SITE-EPISODE.md#the-install-prompt-on-a-real-machine)).
+  0.5.4, published on 2026-11-05, is the first release to declare it ([Publication](#publication)).
   Node 18 and 20 are below the range and unchecked.
 - The candidate digest changes with every commit, since the composition names the commit; whether
   the same commit packs to the same bytes has not been checked.
