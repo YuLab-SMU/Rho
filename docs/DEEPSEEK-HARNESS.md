@@ -6,6 +6,15 @@ Rho interface in Harness Desktop's Browser pane beside your conversation. Harnes
 keeps its model and permissions; Rho keeps the shared Notebook, files, tables,
 figures and selected-result questions.
 
+**Workspace mismatch fixed in 0.1.4:** the local source package now selects the
+current conversation's project for both tools and **Open Rho workspace**. See
+the [upgrade configuration](../adapters/dsh-rho/README.md#harness-desktop) and
+[observed check](DSH-RHO-EPISODE.md#conversation-project-matching). Remove the
+old `rho-mcp` override when upgrading; configure existing grants under `dsh-rho`.
+Missing or ambiguous project matches are refused. The older installation
+instructions below retain their original, fixed-project behavior and do not
+include this fix.
+
 The available version is **dsh-rho 0.1.3**, a prebuilt prototype distributed from
 a fixed public Git commit. Rho publishes its own
 [Harness market index](https://yulab-smu.top/Rho/market/index.json), with the exact

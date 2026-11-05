@@ -6,19 +6,22 @@ follow the shared Notebook, inspect files, tables and figures, and ask about a
 selected result. Copy that question back to the original Harness conversation;
 the Agent reads its frozen context and writes its reply into Rho.
 
-Version **0.1.3** ships the existing **Rho conversation tab** and **Rho sidebar entry** with
+Version **0.1.4** ships the **Rho conversation tab** and **Rho sidebar entry** with
 its prebuilt launcher, display metadata and original Rho icon. Both entries
 show **Open Rho workspace**, which opens the existing application in Harness's
 Browser beside the conversation. **Open in system browser** is also available;
 use it in Web Harness, where Rho's iframe policy prevents embedding. The small
-launcher reads only the service address and project ID from the configured agent
-connection file. Credentials stay on the Host. No Rho views or result store are
+launcher verifies the current conversation’s folder against the project returned by
+Rho. The same selected connection supplies that conversation’s MCP tools and
+workspace button. It shows the project name, full folder and service address.
+Credentials and the rest of Rho’s snapshot stay on the Host. No Rho views or result store are
 bundled, and opening the interface starts no service or analysis.
 
 The [episode](../../docs/DSH-RHO-EPISODE.md) records the observed integration and
-its limits. This is a prototype distributed from a fixed public Git commit. Its
-[market index](https://yulab-smu.top/Rho/market/index.json) records the exact source
-and compatible Harness version. It is not published to npm.
+its limits. Version 0.1.4 is checked as a local tarball. The existing
+[market index](https://yulab-smu.top/Rho/market/index.json) selects the earlier
+0.1.3 public Git package; updating that index is a separate distribution step.
+The adapter is not published to npm.
 
 ## Install into Harness
 
@@ -52,7 +55,7 @@ export DSH_HOME="$HOME/.dsh-rho"
 export RHO_DSH_CONNECTION="/absolute/path/to/the/agent-connection.json"
 # Only when rho is outside PATH:
 # export RHO_DSH_COMMAND="/absolute/path/to/node_modules/.bin/rho"
-dsh plugin --profile web add /absolute/path/to/dsh-rho-0.1.3.tgz --ignore-scripts
+dsh plugin --profile web add /absolute/path/to/dsh-rho-0.1.4.tgz --ignore-scripts
 dsh --profile web --no-open
 ```
 
@@ -62,9 +65,13 @@ Configure the model in Harness as usual. Open the new **Rho** conversation tab o
 workspace**. On Desktop, the complete Rho interface opens in the right Browser
 pane. On Web, use **Open in system browser**.
 
-The grant is fixed to one Rho project. Changing Harness's workspace does **not**
-switch or revoke it. Use a separate Harness home for each project grant. Do not
-put connection files or their contents into a project, package or chat.
+Each grant is fixed to one Rho project. The plugin matches the current conversation’s
+canonical folder to the configured grants; switching conversations selects that
+conversation’s own tools and workspace. Matching is exact, including for subfolders;
+symlinks to the same folder match. Missing or ambiguous matches show **Connect this
+project**, with no open link and no Rho tools. The plugin never creates a grant,
+searches the disk for credentials, or falls back to another project. Do not put
+connection files or their contents into a project, package or chat.
 
 Reuse the existing Rho Agent Skill if it is installed in `~/.agents/skills/rho`,
 which Harness already discovers. Otherwise its unchanged source directory
@@ -80,28 +87,35 @@ new tarball through the same page. This releases the MCP bridge and UI, leaving
 the existing Rho service and Notebook running.
 
 A Desktop app opened from Finder may not inherit shell exports. Its profile
-`cordis.patch.yml` can instead hold explicit overrides for both entries. Keep the
-same **agent** connection file in both. A `config` override replaces the whole
-configuration, so include the full MCP configuration:
+`cordis.patch.yml` can hold one explicit configuration. Version 0.1.4 removes the
+separate `rho-mcp` entry: remove that old override when upgrading. There is one
+connection selection for both the launcher and tools.
 
 ```yaml
-- id: rho-mcp
-  config:
-    serverName: rho
-    transport: stdio
-    command: /absolute/path/to/node_modules/.bin/rho
-    args: [--mcp, /absolute/path/to/agent-connection.json]
-    failOnStartupError: true
-    toolCallTimeoutMs: 300000
 - id: dsh-rho
   config:
-    connectionFile: /absolute/path/to/agent-connection.json
+    command: /absolute/path/to/node_modules/.bin/rho
+    connectionFiles:
+      - /absolute/path/to/project-a-agent-connection.json
+      - /absolute/path/to/project-b-agent-connection.json
 ```
 
-If using Node directly, set `command` to that Node executable and put the absolute
-Rho `dist/cli.js` path first in `args`, before `--mcp`. After editing, turn the
-bundle off and on in Plugins to apply it. Verify its components say **Running**;
-being installed or selected does not establish a live connection.
+For one project, `connectionFile` is also supported. Each path must be an existing
+project-scoped agent grant. Use one grant per canonical project folder; two
+services pointing at the same folder are ambiguous and refused.
+
+If using Node directly, set `command` to its absolute executable and set
+`args: [/absolute/path/to/rho/dist/cli.js]`. The plugin appends `--mcp` and the
+matched connection file itself. `toolCallTimeoutMs` defaults to 300000 and
+`maxBridges` to 8 active conversation bridges. Exceeding that limit refuses a new
+bridge and leaves the existing work intact.
+
+After changing the configuration, reload the bundle. Existing transports keep
+their original connection until unloaded; replacing their connection file causes
+new tool calls and the launcher to refuse the mismatch. Reconnection does not
+replay analysis. **Try again** can retry an initially unavailable bridge for an
+already live conversation. Opening the panel only reads the connection; it does
+not resume an Agent. A dormant conversation connects when Harness resumes it.
 
 ## Try the flow
 
@@ -124,13 +138,16 @@ Harness conversation. This version does not insert a draft automatically.
 
 Harness keeps its model, permissions, native tools and conversation. Rho keeps its
 project grant, Notebook, resources, versions, selections, review and full WebUI.
-The MCP entry starts only `rho --mcp`, a bridge to the existing service. The launcher
-reads at most 64 KiB from its connection file and refuses larger files, remote
-addresses, credential-bearing addresses and connections without a project scope. It neither
+Each conversation’s MCP entry starts only `rho --mcp`, a bridge to the existing
+service. The launcher reads at most 64 KiB per connection file and refuses larger
+files, remote addresses, credential-bearing addresses and connections without a
+project scope. It checks at most 16 configured grants, with a five-second deadline
+and 4 MiB response cap per project snapshot; a failed or over-limit check leaves
+that connection unavailable. Only project identity leaves the Host. It neither
 starts Rho nor starts another Agent. Closing Harness does not stop the Rho service
 or its live Notebook; closing a browser view does not rerun analysis.
 
-The `rho-mcp` entry sets `toolCallTimeoutMs` to **300000** (five minutes), configurable
+The `dsh-rho` configuration sets `toolCallTimeoutMs` to **300000** (five minutes), configurable
 through a Harness profile patch. This bounds a tool reply wait, not the lifetime
 of a Rho cell. Use shorter Notebook waits and read the original cell when it is
 still running. After a transport error, preserve the original `changeId` and
@@ -138,8 +155,7 @@ recover its outcome; never assume a timeout stopped the work or submit a new run
 Rho 0.5.3 has its own bridge deadlines too; long jobs were not exercised here.
 
 Missing or inaccessible connection files keep the launcher visible with **Try
-again** and fail MCP activation; Harness may still
-open without Rho tools. Correct the path or start the selected Rho service, then
+again** and leave that conversation without Rho tools. Correct the path or start the selected Rho service, then
 reload the entry or restart Harness. Its native MCP client owns reconnection and
 does not replay analysis. Do not restart a person's Rho just to reconnect Harness.
 

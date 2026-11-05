@@ -1,6 +1,6 @@
 {
   "name": "dsh-rho",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Connect DeepSeek Harness to an existing Rho project and its full WebUI",
   "license": "AGPL-3.0-only",
   "author": "YuLab-SMU",
@@ -21,6 +21,7 @@
   },
   "files": [
     "src/host.cjs",
+    "src/connection.cjs",
     "lib/client.js",
     "cordis.patch.yml",
     "README.md",
@@ -54,5 +55,8 @@
   },
   "devDependencies": {
     "esbuild": "0.25.12"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/dsh-mcp-client": "0.2.1-rc.5"
   }
 }

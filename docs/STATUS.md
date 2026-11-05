@@ -4,8 +4,8 @@ Updated: 2026-11-05.
 
 ## Current focus
 
-The [dsh-rho 0.1.3 public Git package](DSH-RHO-EPISODE.md#public-git-distribution) keeps the existing Rho tab
-and sidebar launcher, with prebuilt assets and a [Harness market index](https://yulab-smu.top/Rho/market/index.json). Result review,
+[dsh-rho 0.1.4](DSH-RHO-EPISODE.md#conversation-project-matching) binds each conversation’s tools and launcher to the same verified project folder. Six regressions, two real services and the original Desktop conversation pass; the local plugin is upgraded.
+The [public market](https://yulab-smu.top/Rho/market/index.json) still selects 0.1.3. Result review,
 historical evidence, macOS 0.5.1 and the offline reader retain their [episode](REVIEW-EVIDENCE-EPISODE.md).
 Native tools remain normal; Core is optional. No Core execution behavior changed. [P3 continuity](P3-CONTINUITY-EPISODE.md) reproduced a 64-turn stop and continued it after reopening; the restarted Notebook's in-memory state did not survive, and four native choices remained. Claude sessions now prefer Auto, and Rho sets no step or wall cap by default. Rerun so, P3 asked for no permission; the Agent's MCP bridge had cut Notebook calls at 30 s and then 300 s, and without those cuts P3 finished in the shared R session in 12.9 minutes.
 

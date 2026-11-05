@@ -1,7 +1,8 @@
 # dsh analysis, Rho results and a selected-row question
 
-The current **0.1.2** bundle adds visible Harness entries for the complete Rho
-application; see [Desktop installation](#desktop-installation-and-visible-entry-points).
+The current **0.1.4** local bundle matches tools and the launcher to each
+conversation's project; see [project matching](#conversation-project-matching).
+Version 0.1.2 added the visible entries; see [Desktop installation](#desktop-installation-and-visible-entry-points).
 The [earlier November 5 episode](#reuse-the-whole-rho-application) records 0.1.0. The first episode below
 records the retired 0.0.1 embedded-view prototype, whose source remains in Git.
 
@@ -393,3 +394,55 @@ the existing documentation. The documentation build and coverage check pass with
 existing files outside the front page and documentation remain byte-identical.
 The generated index and public guide are the publisher's deliverables. Enabling
 a market source in a person's Harness is outside this change.
+
+## Conversation project matching
+
+2026-11-05. A person's Harness conversation had opened their real project in a
+second Rho service, while the plugin's global grant and launcher still selected
+an earlier disposable `analysis` project. The conversation and **Open Rho
+workspace** therefore referred to different folders and services. The launcher
+did not show either identity. Changing only the URL would leave the tools on
+the wrong project.
+
+Version 0.1.4 selects an existing grant by the conversation's canonical working
+folder. It verifies that folder against the project's read-only Rho observation,
+then gives the same selected descriptor to the conversation's own official
+Harness MCP client and launcher. The global `rho-mcp` component is removed.
+Both launcher entries show the project name, full folder and service address.
+No match or multiple matches refuse both the link and tool access; the panel
+names the conversation folder and reachable configured projects. Subfolders do
+not broaden a grant, and a symlink to the same canonical folder does match.
+
+The first real Harness check exposed a lifecycle mistake: `agent/created`
+delivers `{ agent }`, not the Agent itself. After correcting that owner code,
+two same-named Unicode projects on separate disposable Rho 0.5.4 services each
+returned their own project ID from a real `mcp__rho__rho_index` call. Each ID
+matched its launcher's project URL. A third, unconnected conversation had no
+Rho tools, returned a launcher refusal and refused a forced tool call. Switching
+projects in Web Harness visibly changed the full folder and service address.
+The unconnected card kept **Open Rho workspace** disabled. The Web fallback
+opened the selected project's actual Rho page in a separate browser tab.
+
+Six adapter regression tests pass, including two-service matching, Unicode,
+symlinks, ambiguous grants, missing connections, restored-file recovery,
+per-Agent attachment and replacement of a live descriptor. A read never resumes
+a dormant Agent or starts a bridge. **Try again** can retry an initially failed
+connection for a live Agent; changing an already bound descriptor refuses new
+calls until plugin reload, without replaying work. The plugin checks the current
+folder again before each Rho call. It permits eight active conversation bridges
+by default (`maxBridges`); exceeding the limit refuses the new bridge and keeps
+existing ones. Probe and response bounds are recorded in the package README.
+
+The person's Desktop 0.2.1-rc.5 profile was backed up before upgrading the local
+bundle to 0.1.4 and replacing the two old overrides with one configuration of
+already-existing project grants. Their original conversation's Rho tab showed
+the correct full folder, and its button opened that same real project in the
+Harness Browser. The running Rho services, scientific sessions, conversation
+history and background task were retained. No new model turn or scientific
+execution was requested for this check. Local evidence and disposable fixtures
+are under `work/dsh-rho/workspace-01/`; the tarball is under
+`work/dsh-rho/package/`. All nine installed files match the source; the 23,231-byte
+final tarball has SHA-256
+`f27327bfacc067049f4ef541a6eb7891ffc3c879e3669d43e09a45f7be4ebe8a`.
+The 0.1.3 public market selection is unchanged. TUI,
+other operating systems and independent usability remain unobserved.
