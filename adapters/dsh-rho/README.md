@@ -18,10 +18,11 @@ Credentials and the rest of Rho’s snapshot stay on the Host. No Rho views or r
 bundled, and opening the interface starts no service or analysis.
 
 The [episode](../../docs/DSH-RHO-EPISODE.md) records the observed integration and
-its limits. Version 0.1.4 is checked as a local tarball. The existing
-[market index](https://yulab-smu.top/Rho/market/index.json) selects the earlier
-0.1.3 public Git package; updating that index is a separate distribution step.
-The adapter is not published to npm.
+its limits. The [market index](https://yulab-smu.top/Rho/market/index.json) selects
+the prebuilt 0.1.4 package from an immutable public Git commit, with its icon and
+checked Harness compatibility. This is Rho's own index; add it to Harness's
+Discover sources to search for Rho. It is not in Harness's official default
+source, and the adapter is not published to npm.
 
 ## Install into Harness
 
