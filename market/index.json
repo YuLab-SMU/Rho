@@ -1,0 +1,72 @@
+{
+  "format": 1,
+  "title": {
+    "en": "Rho plugins"
+  },
+  "description": {
+    "en": "Rho integrations for DeepSeek Harness."
+  },
+  "metadata": {
+    "categories": {
+      "science": {
+        "title": {
+          "en": "Science and data analysis"
+        }
+      }
+    },
+    "labels": {
+      "prototype": {
+        "title": {
+          "en": "Prototype"
+        }
+      }
+    }
+  },
+  "plugins": [
+    {
+      "name": "dsh-rho",
+      "title": {
+        "en": "Rho"
+      },
+      "description": {
+        "en": "Connect DeepSeek Harness to an existing Rho project and its full WebUI"
+      },
+      "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAzMiIgcm9sZT0iaW1nIiBhcmlhLWxhYmVsPSJSaG8iPgogIDxyZWN0IHdpZHRoPSIzMiIgaGVpZ2h0PSIzMiIgcng9IjgiIGZpbGw9IiMxZTZiNTIiIC8+CiAgPHRleHQgeD0iMTYiIHk9IjIzIiBmb250LWZhbWlseT0iR2VvcmdpYSwgJ0lvd2FuIE9sZCBTdHlsZScsIHNlcmlmIiBmb250LXNpemU9IjIyIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjZmZmZmZmIj7PgTwvdGV4dD4KPC9zdmc+Cg==",
+      "author": "YuLab-SMU",
+      "homepage": "https://yulab-smu.top/Rho/docs/reference/deepseek-harness.html",
+      "repository": {
+        "url": "https://github.com/YuLab-SMU/Rho",
+        "directory": "adapters/dsh-rho"
+      },
+      "metadata": {
+        "category": "science",
+        "labels": [
+          "prototype"
+        ],
+        "keywords": [
+          "deepseek-harness",
+          "dsh",
+          "rho",
+          "science",
+          "data-analysis",
+          "notebook"
+        ]
+      },
+      "versions": [
+        {
+          "version": "0.1.3",
+          "publishTimestamp": 1793872503,
+          "source": {
+            "type": "git",
+            "url": "https://github.com/YuLab-SMU/Rho",
+            "commit": "f3248a8ad5e1b3a5744dd04f899d0f4373995851",
+            "path": "adapters/dsh-rho"
+          },
+          "engines": {
+            "dsh": "0.2.1-rc.5"
+          }
+        }
+      ]
+    }
+  ]
+}
