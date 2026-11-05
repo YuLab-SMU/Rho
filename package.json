@@ -56,7 +56,9 @@
     "scripts/ui-toolchain.json",
     "scripts/ui-preview",
     "web/theme.css",
-    "docs/PLUGIN-AUTHORING.md"
+    "docs/PLUGIN-AUTHORING.md",
+    "docs/THIRD-PARTY-PLUGINS.md",
+    "scripts/third-party-acceptance.mjs"
   ],
   "scripts": {
     "build": "npm run build:service && npm run build:web",
@@ -132,7 +134,8 @@
     "acceptance:acp": "node scripts/acp-episode.mjs",
     "acceptance:agent-ui": "node scripts/agent-ui-acceptance.mjs",
     "acceptance:review": "node scripts/review-evidence-acceptance.mjs",
-    "acceptance:review:agent": "node scripts/review-agent-episode.mjs"
+    "acceptance:review:agent": "node scripts/review-agent-episode.mjs",
+    "acceptance:third-party": "npm run build:service && node scripts/third-party-acceptance.mjs"
   },
   "dependencies": {
     "@rho-workspace/plugin-agent": "file:../Rho-plugins/plugins/agent",

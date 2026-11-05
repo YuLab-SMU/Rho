@@ -1,0 +1,78 @@
+{
+  "method": "extension.content",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "projectId": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1024
+      },
+      "pluginId": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9._-]{0,95}$"
+      },
+      "expectedDigest": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{64}$"
+      },
+      "kind": {
+        "enum": [
+          "skill",
+          "view"
+        ]
+      },
+      "entryId": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9._-]{0,95}$"
+      }
+    },
+    "required": [
+      "projectId",
+      "pluginId",
+      "expectedDigest",
+      "kind",
+      "entryId"
+    ],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "pluginId": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9._-]{0,95}$"
+      },
+      "packageDigest": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{64}$"
+      },
+      "entryId": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9._-]{0,95}$"
+      },
+      "kind": {
+        "enum": [
+          "skill",
+          "view"
+        ]
+      },
+      "title": {
+        "type": "string"
+      },
+      "text": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "pluginId",
+      "packageDigest",
+      "entryId",
+      "kind",
+      "title",
+      "text"
+    ],
+    "additionalProperties": false
+  },
+  "description": "Read one installed plugin Skill or standalone HTML view at its selected package digest. Reading starts no plugin or runtime."
+}

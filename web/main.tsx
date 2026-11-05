@@ -605,7 +605,7 @@ function App() {
             {(phase === 'offline' || reconnecting) && <div className="offline-bar" role="alert"><Icon name="offline" size={17} /><p>{reconnecting ? 'Reconnecting. ' : "Can't reach Rho. "}{seen}</p><button disabled={reconnecting} onClick={reread}>Reconnect</button></div>}
             {screen === 'home' || !project ? <Home client={client!} projects={projects} folder={folder} focusRequest={homeFocus} onFocused={() => setHomeFocus(false)} onChoose={chooseProject} onOpened={opened} onAccessEnded={() => useLocalAccess('That access has ended. This tab uses this machine.')} />
               : !snapshot ? <Loading text="Opening project…" />
-              : screen === 'plugins' ? <PluginCatalog catalog={snapshot.catalog} project={name(project)} pluginId={pluginId} onSelect={choosePlugin} back={pluginReturn ? { label: 'Back to project', run: () => { setPluginReturn(false); setPluginId(''); setScreen('project'); setMainFocus(true); } } : undefined} />
+              : screen === 'plugins' ? <PluginCatalog client={client} projectId={project.id} canManage={!link} catalog={snapshot.catalog} project={name(project)} pluginId={pluginId} onSelect={choosePlugin} back={pluginReturn ? { label: 'Back to project', run: () => { setPluginReturn(false); setPluginId(''); setScreen('project'); setMainFocus(true); } } : undefined} />
               : studioOpen ? <div className={'studio-with-notes' + (notesOpen && !link ? ' notes-open' : '')}>
                 {notesOpen && !link && <NotesPanel notes={notes} snapshot={snapshot} client={client!} principalId={connection.principalId} section={shownProcess ? notes.titles.get(shownProcess) ?? null : null} onClose={() => showNotes(false)} onAbout={about} />}
                 <div className="studio-main">

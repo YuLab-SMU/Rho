@@ -1,5 +1,7 @@
+import { Extensions, extensionLimits } from './extensions.js';
+import { extensionManagement } from './extension-contract.js';
 import { EvidenceExporter, evidenceExportLimits } from './evidence-export.js';
-import { Discovery } from './discovery.js';
+import { Discovery, applicationEffects } from './discovery.js';
 import * as http from 'node:http';
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
@@ -20,7 +22,7 @@ import { BrowserAccess, browserLimits, localBrowserId, localBrowserPrincipal } f
 import { addToAgent, connectLimits, mcpCommand, mcpName, outsideLabel, type OutsideAgent } from './agent-connect.js';
 import { NativeFolderPicker, nativeFolderLimits } from './native-folders.js';
 import { homedir } from 'node:os';
-import { serveWeb, servePageFrame, pageFramePath, webRoot, installedWebEntries } from './web-assets.js';
+import { serveWeb, servePageFrame, pageFramePath, extensionFramePath, webRoot, installedWebEntries } from './web-assets.js';
 import { Presentation, presentationWitnessLimits, visibilityLimits } from './presentation.js';
 import { presentationSchemas } from './presentation-contracts.js';
 import { isNativeTime } from './native-time.js';
@@ -43,7 +45,7 @@ export interface NativeAdapterRegistration {
   proof: { kind: 'claude-code-init'; sessionId: string; clientVersion: string };
 }
 export const serviceLimits = { maxRequestBytes: 1024 * 1024, maxEventBytes: 65536, eventRetention: 256, maxSubscriptions: 8, maxQueue: 32, maxContexts: 128, maxBindings: 64, maxActivities: 256, maxContextBytes: 1024 * 1024, maxRetainedMetadataBytes: 32 * 1024 * 1024 };
-export interface ServiceConfig extends Partial<typeof serviceLimits>, Partial<typeof requestLimits>, PluginConfig { root: string; stateDir: string; coreBinary?: string; rscript: string; python?: string; ssh?: string; serverctl?: string; port?: number; nativeFolders?: Partial<typeof nativeFolderLimits>; workspace?: Partial<typeof workspaceLimits>; interactions?: Partial<typeof interactionLimits>; taskMap?: Partial<typeof taskMapLimits>; browser?: Partial<typeof browserLimits>; webRoot?: string; example?: boolean; agentNativeActivity?: Partial<typeof nativeActivityLimits>; presentationWitness?: Partial<typeof presentationWitnessLimits>; visibility?: Partial<typeof visibilityLimits>; agentDelivery?: Partial<typeof agentDeliveryLimits>; deliveryTransportTimeoutMs?: number; claude?: string; agentBackend?: ConversationConfig['backend']; claudeAcp?: ConversationConfig['claudeAcp']; acpCommand?: ConversationConfig['acpCommand']; codex?: string; codexAcp?: ConversationConfig['codexAcp']; conversations?: Partial<typeof conversationLimits>; describe?: Partial<typeof describeLimits>; modelsDev?: { url?: string; maxBytes?: number; timeoutMs?: number; refreshMs?: number; retryMs?: number }; evidence?: Partial<typeof evidenceExportLimits>; connect?: Partial<typeof connectLimits> }
+export interface ServiceConfig extends Partial<typeof serviceLimits>, Partial<typeof requestLimits>, PluginConfig { root: string; stateDir: string; extensions?: Partial<typeof extensionLimits>; coreBinary?: string; rscript: string; python?: string; ssh?: string; serverctl?: string; port?: number; nativeFolders?: Partial<typeof nativeFolderLimits>; workspace?: Partial<typeof workspaceLimits>; interactions?: Partial<typeof interactionLimits>; taskMap?: Partial<typeof taskMapLimits>; browser?: Partial<typeof browserLimits>; webRoot?: string; example?: boolean; agentNativeActivity?: Partial<typeof nativeActivityLimits>; presentationWitness?: Partial<typeof presentationWitnessLimits>; visibility?: Partial<typeof visibilityLimits>; agentDelivery?: Partial<typeof agentDeliveryLimits>; deliveryTransportTimeoutMs?: number; claude?: string; agentBackend?: ConversationConfig['backend']; claudeAcp?: ConversationConfig['claudeAcp']; acpCommand?: ConversationConfig['acpCommand']; codex?: string; codexAcp?: ConversationConfig['codexAcp']; conversations?: Partial<typeof conversationLimits>; describe?: Partial<typeof describeLimits>; modelsDev?: { url?: string; maxBytes?: number; timeoutMs?: number; refreshMs?: number; retryMs?: number }; evidence?: Partial<typeof evidenceExportLimits>; connect?: Partial<typeof connectLimits> }
 const ajv = new Ajv({ allErrors: true, strict: false, allowUnionTypes: true });
 // The same timestamp check every published contract uses; an unknown format would be skipped silently.
 ajv.addFormat('date-time', { type: 'string', validate: isNativeTime });
@@ -180,7 +182,7 @@ function explainFailure(e: any): [string, string, Record<string, unknown>] {
   }
 }
 export class RhoService {
-  plugins: Plugins; state: State; bridge: CoreBridge; url = ''; adminToken = ''; server: http.Server;
+  extensions: Extensions; plugins: Plugins; state: State; bridge: CoreBridge; url = ''; adminToken = ''; server: http.Server;
   // What the start did about the project Rho ships, if anything.
   example: ExampleSeed | null = null;
   private queues = new Map<string, Promise<any>>();
@@ -354,6 +356,7 @@ export class RhoService {
     for (const [key, value] of Object.entries({ ...serviceLimits, ...requestLimits, ...config.documents, ...config.resources, ...config.workspace, ...config.interactions, ...config.annotations, ...config.capabilityLimits, ...config.r, ...config.browser, ...config.nativeFolders, ...config.agentNativeActivity, ...config.agentDelivery, ...config.presentationWitness, ...config.visibility, ...config.conversations, ...config.describe, ...config })) {
       if (typeof value === 'number') requireThat(Number.isSafeInteger(value) && (key === 'port' ? value >= 0 && value <= 65535 : value > 0), 'invalid', 'Invalid service budget.', { field: key });
     }
+    this.extensions = new Extensions(path.join(config.stateDir, 'plugins'), config.extensions);
     this.plugins = new Plugins(config);
     this.state = new State(config.root, config.stateDir); this.bridge = new CoreBridge(config.coreBinary, config.rscript);
     this.browser = new BrowserAccess(this.state, config.browser);
@@ -446,6 +449,7 @@ export class RhoService {
     await this.plugins.load();
     this.plugins.installUi(await installedWebEntries(this.config.webRoot), Object.keys(operations));
     await this.state.init();
+    await this.extensions.init();
     // A person who starts Rho on a fresh state sees one finished study beside their own work.
     // It is copied into the projects folder once and is otherwise an ordinary project.
     this.example = await seedExampleProject(this.state, { enabled: this.config.example === true }).catch(() => null);
@@ -509,11 +513,11 @@ export class RhoService {
     const capabilities = new Capabilities(this.plugins, project);
     const state = await capabilities.state();
     // The shared project listing remains available alongside an Agent's native tools.
-    const available = Object.keys(operations).filter(m => !m.startsWith('agent.activity.') && !m.startsWith('session.') && !m.startsWith('conversation.') && (!m.startsWith('project.') || m === 'project.entries') && !m.startsWith('requirements.prepare') && !m.startsWith('workspace.restore') && !['task.routing.put', 'binding.activity.append', 'feedback.submit', 'view.observe', 'view.observations.read', 'task.map.respond', 'annotation.decide', 'evidence.export', 'evidence.preview', 'console.run', 'console.stop', 'kernel.stop'].includes(m));
+    const available = Object.keys(operations).filter(m => !extensionManagement.includes(m) && !m.startsWith('agent.activity.') && !m.startsWith('session.') && !m.startsWith('conversation.') && (!m.startsWith('project.') || m === 'project.entries') && !m.startsWith('requirements.prepare') && !m.startsWith('workspace.restore') && !['task.routing.put', 'binding.activity.append', 'feedback.submit', 'view.observe', 'view.observations.read', 'task.map.respond', 'annotation.decide', 'evidence.export', 'evidence.preview', 'console.run', 'console.stop', 'kernel.stop'].includes(m));
     const profileMethods = profile === 'layered-presentation' ? ['binding.open', 'capability.index', 'capability.resolve', 'workspace.observe', 'workspace.enhance'] : available.filter(m => !['workspace.observe', 'workspace.enhance', ...(profile ? ['skill.list','skill.read','protocol.describe'] : [])].includes(m));
     const selected = methods ?? (profile === 'layered-presentation' ? profileMethods : (await Promise.all(profileMethods.map(async method => [method, await capabilities.isAvailable(method, state)] as const))).filter(([, enabled]) => enabled).map(([method]) => method));
     requireThat(profile !== 'layered-presentation' || selected.every(m => profileMethods.includes(m)), 'scope', 'The selected role cannot receive broader methods.');
-    requireThat(selected.every(m => !!operations[m] && !m.startsWith('session.') && !m.startsWith('conversation.') && (!m.startsWith('project.') || m === 'project.entries') && !['task.routing.put', 'console.run', 'console.stop', 'kernel.stop'].includes(m)), 'invalid', 'Unknown or operator-only Agent capability.');
+    requireThat(selected.every(m => !extensionManagement.includes(m) && !!operations[m] && !m.startsWith('session.') && !m.startsWith('conversation.') && (!m.startsWith('project.') || m === 'project.entries') && !['task.routing.put', 'console.run', 'console.stop', 'kernel.stop'].includes(m)), 'invalid', 'Unknown or operator-only Agent capability.');
     requireThat(await Promise.all(selected.map(method => capabilities.isAvailable(method, state))).then(values => values.every(Boolean)), 'unavailable', 'A requested Agent operation has no selected provider.');
     requireThat(!profile || new Set(['capability.index', 'capability.resolve', ...selected]).size <= layeredGrantLimits.maxMethods, 'limit', `Layered connection methods exceed the ${layeredGrantLimits.maxMethods}-method profile; choose an explicit narrower grant.`, { limit: 'maxMethods', maximum: layeredGrantLimits.maxMethods });
     const token = randomBytes(32).toString('hex');
@@ -592,7 +596,7 @@ export class RhoService {
       }
       if (!url.pathname.startsWith('/api/')) {
         requireThat((req.method === 'GET' || req.method === 'HEAD') && !url.search, 'not_found', 'Use the same-origin browser entry without query credentials.');
-        if (url.pathname === pageFramePath) { servePageFrame(res, req.method === 'HEAD'); return; }
+        if (url.pathname === pageFramePath || url.pathname === extensionFramePath) { servePageFrame(res, req.method === 'HEAD', url.pathname === extensionFramePath); return; }
         await serveWeb(url.pathname, res, this.config.webRoot, req.method === 'HEAD'); return;
       }
       const method = url.pathname.startsWith('/api/v2/') ? url.pathname.slice(8) : '';
@@ -613,7 +617,7 @@ export class RhoService {
       requireThat(read.ok, read.ok ? 'invalid' : read.kind, read.ok ? '' : (read.problems[0]?.fix ? `Request does not match the versioned schema: ${read.problems[0].fix}` : 'Request does not match the versioned schema.'), read.ok ? {} : { problems: read.problems, remedy: 'Fix the named fields and resend the same request identity.' });
       const request = read.request, contractRef = typeof req.headers['x-rho-contract-ref'] === 'string' ? req.headers['x-rho-contract-ref'] : undefined;
       let value;
-      if (body.projectId && method.startsWith('kernel.')) {
+      if (body.projectId && (method.startsWith('kernel.') || method === 'extension.call')) {
         // A cell may run for minutes and a run may wait for it. The live sessions keep their own
         // order, so waiting holds no other request of the project, an interrupt among them.
         const projectId = body.projectId;
@@ -746,6 +750,15 @@ export class RhoService {
     const b: any = request.body;
     requireThat(this.state.principals.some(current => current.id === principal.id && current.tokenHash === principal.tokenHash && current.methods.includes(method) && (!current.expiresAt || Date.parse(current.expiresAt) > Date.now())), 'unauthorized', 'Session authorization expired or was revoked before this operation.');
     if (method === 'protocol.describe') return describeProtocol(protocol, principal.methods, b);
+    if (extensionManagement.includes(method)) {
+      requireThat(principal.id === 'operator' || principal.id === localBrowserId, 'scope', 'Plugin installation and management belong to the person at this machine.');
+      return method === 'extension.install' ? this.extensions.install(b.source, b.replace, b.expectedDigest) : this.extensions.manage(b.pluginId, b.expectedDigest, b.action);
+    }
+    if (method === 'extension.list' && !b.projectId) {
+      requireThat(principal.id === 'operator' || principal.id === localBrowserId, 'scope', 'A project-scoped caller must supply its project.');
+      return this.extensions.list();
+    }
+
     // A dry run of any operation body: the same schema the server enforces, with the
     // edit each problem needs. Nothing is executed and no project is touched.
     if (method === 'protocol.validate') {
@@ -806,6 +819,28 @@ export class RhoService {
     const workspace = new Workspace(p, owners, this.config.workspace, this.config.interactions);
     const interactions = new Interactions(p, owners, this.config.interactions);
     const routing = new TaskRouting(p, this.config.capabilityLimits?.maxReceipts, this.config.maxRetainedMetadataBytes);
+    if (method.startsWith('extension.')) {
+      if (contractRef) {
+        const reader = new Discovery(this.plugins, p, principal, await routing.read(), await readJson<any[]>(path.join(await this.dataDir(p), 'bindings.json'), []));
+        await reader.assertContract(method, contractRef);
+      }
+      if (method === 'extension.list') return this.extensions.list();
+      if (method === 'extension.describe') return this.extensions.describe(b.pluginId);
+      if (method === 'extension.content') return this.extensions.content(b.pluginId, b.expectedDigest, b.kind, b.entryId);
+      if (method === 'extension.read') return this.extensions.read(b.invocationId, principal.id, p.id);
+      if (method === 'extension.call') return this.extensions.call(b, principal.id, p.root, async (target, body, effect) => {
+        requireThat(principal.methods.includes(target), 'scope', 'The caller has not been granted this Rho method.');
+        requireThat(!body?.projectId || body.projectId === p.id, 'scope', 'A plugin cannot delegate into another project.');
+        const request = readOperation(target, { ...body, projectId: p.id });
+        requireThat(request.ok, 'invalid', 'Plugin delegated an invalid Rho request.');
+        const capabilities = new Capabilities(this.plugins, p);
+        const status = (await capabilities.operationStatus(principal, await capabilities.state())).find(op => op.method === target);
+        requireThat(effect !== 'read' || (status?.effect ?? applicationEffects[target]) === 'read', 'scope', 'A read operation cannot delegate a mutating Rho method.');
+        const run = () => this.dispatch(request.request, principal);
+        return target.startsWith('kernel.') ? run() : this.serial(p.id, run);
+      });
+    }
+
     // A person's own view of the folder they selected. The tab is confined to this one
     // project, so it may list that folder and open a text file from it; registering
     // resources and execution stay Agent/operator work.
@@ -1376,6 +1411,7 @@ export class RhoService {
     return this.state.principals.some(p => p.id === id && p.tokenHash === tokenHash && p.methods.includes('observation.snapshot') && (!p.expiresAt || Date.parse(p.expiresAt) > Date.now()));
   }
   async close() {
+    this.extensions.close();
     this.closing = true;
     this.folderPicker.close();
     for (const s of this.subscribers) s.response.end();

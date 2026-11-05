@@ -1,5 +1,9 @@
 # Build a UI extension
 
+For independently installed operations, Skills and live HTML views, use the
+[third-party plugin channel](THIRD-PARTY-PLUGINS.md). This page covers compiled
+React entries over an existing Rho capability.
+
 A UI extension is a React view over an existing Rho capability, such as Documents
 or Tables. The package owns its view; the existing capability owns data, edits and
 operations. Rho supplies tabs, splits, focus and versioned resource bindings.

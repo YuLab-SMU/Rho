@@ -27,7 +27,9 @@ function parseAcpCommand(spec: string | undefined): { file: string; args: string
   if (!parts.length) throw new Error('--acp-command is empty.');
   return { file: parts[0], args: parts.slice(1) };
 }
-const usage = `Verify a read-only evidence package:
+const usage = `Develop, install and manage independent plugins:
+  rho plugin --help
+Verify a read-only evidence package:
   rho --verify-evidence PATH
 Start Rho on ~/Rho/projects and ~/Rho/state, and say where it is and what is missing:
   rho
@@ -63,6 +65,10 @@ function refuse(error: unknown, url?: string): never {
   else throw error;
   process.exit(1);
 }
+if (process.argv[2] === 'plugin') {
+  try { await (await import('./plugin-cli.js')).pluginCli(process.argv.slice(3)); }
+  catch (error) { process.stderr.write((error instanceof Error ? error.message : String(error)) + '\n'); process.exitCode = 1; }
+} else {
 let parsed;
 try { parsed = parseArgs({ options }); }
 catch (error) { process.stderr.write((error instanceof Error ? error.message : String(error)) + '\n\n' + usage); process.exit(2); }
@@ -208,4 +214,6 @@ if (values.acp) {
   // Windows has no SIGTERM another process can send, and a console may pass on Ctrl+C turned off;
   // there Ctrl+Break on Rho's console (SIGBREAK) stops it in order too.
   for (const signal of ['SIGTERM', 'SIGINT', ...(process.platform === 'win32' ? ['SIGBREAK'] as const : [])] as const) process.on(signal, async () => { if (closing) return; closing = true; const reports = await service.close(); process.stdout.write(JSON.stringify({ shutdown: reports }) + '\n'); });
+}
+
 }

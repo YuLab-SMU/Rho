@@ -3,6 +3,7 @@
 Updated: 2026-11-05.
 
 ## Current focus
+The [third-party plugin channel](THIRD-PARTY-PLUGINS.md) now installs independent packages; sclet and a generated package have real native/browser [evidence](THIRD-PARTY-PLUGINS-EPISODE.md). Source after 0.5.4; distribution remains separate.
 
 [dsh-rho 0.1.4](DSH-RHO-EPISODE.md#conversation-project-matching) binds each conversation’s tools and launcher to the same verified project folder. Six regressions, two real services and the original Desktop conversation pass; the local plugin is upgraded.
 The [public market](https://yulab-smu.top/Rho/market/index.json) selects the same prebuilt 0.1.4 from a fixed source commit; this is Rho’s own index, added explicitly in Harness. Result review,
@@ -27,6 +28,7 @@ human benefits are not established by existing Rho checks.
 | macOS 0.5.1 | Unsigned npm tarball/local WebUI selected; Core bundled explicitly | [Fixed tarball installed and exercised](PREVIEW-0.5.1.md) |
 | 0.5.2 candidate | 16 MB tarball for macOS arm64 and Linux x64/arm64, and a 12 MB Windows x64 one: one Core per platform (Core `c3dbeca`), Claude Code/Codex the person's own, all 12 plugins | [Packing, real Claude/Codex](PACKAGE-0.5.2-EPISODE.md); [offline install on four systems, Linux Notebook and Open folder](PLATFORMS-0.5.2-EPISODE.md); [Windows: Host lifetime and stop, installed checks](WINDOWS-0.5.2-EPISODE.md); x64 only under Rosetta; the full 0.5.1 acceptance not done |
 | CI and npm | Each push that changes more than documentation builds the four Cores (each Core commit once), runs the suite on macOS, Linux and Windows, packs one candidate for all four platforms (3,030 files, 23 MB; bundled third-party packages keep what Node loads, licenses and reached declarations) and installs it offline on each; a `v*` tag publishes the candidate CI tested for that commit as `@rho-workspace/rho`, building nothing | [CI episode](CI-EPISODE.md): every job passes on the four platforms since run 7; [`@rho-workspace/rho@0.5.4`](CI-EPISODE.md#publication) published on 2026-11-05 from the candidate CI run 41975339969 tested, with provenance and its README, declaring `>=22.22.0 <27`; npm served it 55 minutes after accepting it, byte-identical to that candidate, and Linux x64 also installs it on Node 24 and 26; CI failed from `e92efb12` until `826d73c1` selected the Plugins commit the Data flow imports; pruning cut the Windows offline install by 35–39% |
+| Third-party plugins | Runtime package installation, checked snapshots, CLI development, directory and Plugins management; optional sclet adapter uses the shared R session | [Episode](THIRD-PARTY-PLUGINS-EPISODE.md): real 200 × 60 synthetic SCE, PCA, audited report, stale-plan refusal and browser lifecycle. Source after 0.5.4; no npm release or independent usability claim |
 | Independent researcher use | Unobserved | Trial guide in the episode; no usability claim |
 | Example project | `example/pa14-qs` ships with the application; a new state copies it into the projects folder once, as an ordinary editable project | [Episode](EXAMPLE-PROJECT-EPISODE.md). Without folders (after 0.5.3), `npx @rho-workspace/rho` starts on `~/Rho/projects` and `~/Rho/state`, ships this project, and names a missing Agent client or R at startup; flagged starts are unchanged. The full suite also passes on Node 18.20.8 (end of life), below the engine range's 22.22. |
 | dsh-rho 0.1.4 | Prebuilt public Git package and Rho’s own market index; each conversation’s tools and launcher select the same verified folder; [installation and upgrade guide](DEEPSEEK-HARNESS.md) | [Public workspace fix](DSH-RHO-EPISODE.md#public-workspace-fix): two fresh Harness 0.2.1-rc.5 installs, with and without scripts; all nine files match; direct public-index search, recovery after an unmatched query and the selected source detail checked; 6/6 adapter tests and earlier real MCP/Desktop project checks. No npm, default-source, TUI or other OS claim |
@@ -265,7 +267,6 @@ replayed. Agents now read that "in the notebook" means Rho's sessions, untested 
 Earlier observations remain in the [home/project](HOME-PROJECT-EPISODE.md), [sidebar/canvas](AGENT-CANVAS-EPISODE.md),
 [Graph](GRAPH-EPISODE.md), [Agent page](AGENT-PAGE-EPISODE.md), [Agent activity](AGENT-ACTIVITY.md) and
 [backend acceptance](BACKEND-ACCEPTANCE.md) records, within their original scope.
-
 ## Verification
 
 Passes from the baseline (Rho 223/223, Plugins 104/104, an explicit unchanged Core binary) to Sources recorded up to Rho 273/274 and
@@ -284,7 +285,6 @@ installations. The [screen-check](SCREEN-CHECK-EPISODE.md) pass ran 20 of 20 in 
 Automatic capture defaults: 8 MiB/snapshot, 64 snapshots and 32 MiB/turn, at most two
 workers/project, Files 512 MiB/1024 resources; export 512 MiB/128 files/4 MiB metadata,
 previews 200 rows/20 columns and 64 KiB text. Exhaustion preserves earlier evidence, output and uncertainty ([Headless](HEADLESS.md#retained-review-evidence)).
-
 ## Scope and follow-up
 
 The product target is local WebUI on macOS arm64, Linux x64/arm64 and Windows x64, each installed from one tarball in CI.

@@ -1,0 +1,55 @@
+{
+  "method": "extension.manage",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "pluginId": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9._-]{0,95}$"
+      },
+      "expectedDigest": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{64}$"
+      },
+      "action": {
+        "enum": [
+          "enable",
+          "disable",
+          "remove"
+        ]
+      }
+    },
+    "required": [
+      "pluginId",
+      "expectedDigest",
+      "action"
+    ],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "pluginId": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9._-]{0,95}$"
+      },
+      "action": {
+        "enum": [
+          "enable",
+          "disable",
+          "remove"
+        ]
+      },
+      "retained": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "pluginId",
+      "action",
+      "retained"
+    ],
+    "additionalProperties": false
+  },
+  "description": "Local person/operator: enable, disable or remove an installed third-party package at the expected digest. Existing native tasks, R sessions, project files and retained receipts are preserved."
+}

@@ -1,3 +1,4 @@
+import { extensionMethods } from './extension-contract.js';
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
@@ -51,7 +52,7 @@ export const skillsMethods = ['skills.list', 'skills.read', 'skills.change', 'sk
 export function localBrowserPrincipal(root: string): Principal {
   // The empty token hash can never match a request digest, so no header impersonates this
   // identity: it is chosen because the request carried no credential at all.
-  return { id: localBrowserId, kind: 'browser', tokenHash: '', projectRoot: root, methods: [...browserMethods, ...conversationMethods, ...consoleMethods, ...kernelMethods, ...skillsMethods] };
+  return { id: localBrowserId, kind: 'browser', tokenHash: '', projectRoot: root, methods: [...extensionMethods, ...browserMethods, ...conversationMethods, ...consoleMethods, ...kernelMethods, ...skillsMethods] };
 }
 interface Pairing { hash: string; root: string; methods: string[]; expires: number; selectedProjects: string[] }
 export class BrowserAccess {

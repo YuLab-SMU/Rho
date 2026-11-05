@@ -61,3 +61,30 @@
   .plugin-entry-section li { flex-wrap: wrap; }
   .plugin-information dl { grid-template-columns: 85px minmax(0,1fr); }
 }
+
+/* Independently installed packages keep their management and source visible. */
+.third-party-plugins { margin: 28px 0 36px; padding-bottom: 24px; border-bottom: 1px solid var(--border, #ddd); }
+.third-party-plugins h2 { margin-bottom: 8px; }
+.third-party-plugins header p { max-width: 70ch; line-height: 1.6; }
+.plugin-install label { display: block; margin: 16px 0 6px; font-weight: 600; }
+.plugin-install > div { display: flex; gap: 8px; }
+.plugin-install input { flex: 1; min-width: 0; padding: 10px; border: 1px solid var(--border, #ccc); border-radius: 6px; background: var(--surface, white); color: inherit; }
+.third-party-plugins button { padding: 8px 12px; border: 1px solid var(--border, #ccc); border-radius: 6px; background: var(--surface, white); color: inherit; cursor: pointer; }
+.third-party-plugins button:disabled { opacity: .5; cursor: default; }
+.extension-list { display: grid; gap: 12px; }
+.extension-list article { padding: 18px; border: 1px solid var(--border, #ddd); border-radius: 10px; }
+.extension-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.extension-heading h3 { margin: 0; }
+.extension-source, .extension-list dd { overflow-wrap: anywhere; font-size: 12px; opacity: .8; }
+.extension-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.extension-list summary, .extension-development summary { cursor: pointer; }
+.extension-development { margin-top: 24px; line-height: 1.7; }
+.extension-view { margin-top: 12px; border: 1px solid var(--border, #ddd); border-radius: 10px; overflow: hidden; }
+.extension-view iframe { display: block; border: 0; width: 100%; height: 570px; background: white; }
+.extension-guide pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 480px; overflow: auto; padding: 16px; background: var(--surface, #fafafa); }
+.extension-error { color: #a32c28; overflow-wrap: anywhere; }
+@media (max-width: 560px) { .plugin-install > div { flex-direction: column; } .extension-list article { padding: 12px; } }
+
+.extension-discovery { padding: 18px; margin-top: 18px; border: 1px dashed var(--border, #c6d3ca); border-radius: 10px; }
+.extension-discovery h3 { margin: 0; }
+.extension-discovery small { font-size: 12px; font-weight: normal; }

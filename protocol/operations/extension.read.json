@@ -1,0 +1,112 @@
+{
+  "method": "extension.read",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "projectId": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1024
+      },
+      "invocationId": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{64}$"
+      }
+    },
+    "required": [
+      "projectId",
+      "invocationId"
+    ],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "invocationId": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{64}$"
+      },
+      "caller": {
+        "type": "string"
+      },
+      "projectId": {
+        "type": "string"
+      },
+      "pluginId": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9._-]{0,95}$"
+      },
+      "packageDigest": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{64}$"
+      },
+      "operation": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9._-]{0,95}$"
+      },
+      "requestDigest": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{64}$"
+      },
+      "state": {
+        "enum": [
+          "pending",
+          "completed",
+          "unknown"
+        ]
+      },
+      "startedAt": {
+        "type": "string"
+      },
+      "endedAt": {
+        "type": "string"
+      },
+      "value": {},
+      "error": {
+        "type": "string"
+      },
+      "delegations": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "method": {
+              "type": "string"
+            },
+            "request": {},
+            "state": {
+              "enum": [
+                "pending",
+                "completed",
+                "unknown"
+              ]
+            },
+            "value": {},
+            "error": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "method",
+            "request",
+            "state"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    "required": [
+      "invocationId",
+      "caller",
+      "projectId",
+      "pluginId",
+      "packageDigest",
+      "operation",
+      "requestDigest",
+      "state",
+      "startedAt"
+    ],
+    "additionalProperties": false
+  },
+  "description": "Observe an original plugin invocation, including pending or unknown outcomes. Never reruns code. Only its original caller can read it."
+}

@@ -1,0 +1,198 @@
+{
+  "method": "extension.install",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "source": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1024
+      },
+      "replace": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9._-]{0,95}$"
+      },
+      "expectedDigest": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{64}$"
+      }
+    },
+    "required": [
+      "source"
+    ],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "id": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9._-]{0,95}$"
+      },
+      "name": {
+        "type": "string"
+      },
+      "version": {
+        "type": "string"
+      },
+      "title": {
+        "type": "string"
+      },
+      "description": {
+        "type": "string"
+      },
+      "digest": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{64}$"
+      },
+      "source": {
+        "type": "string"
+      },
+      "sourceCommit": {
+        "type": "string"
+      },
+      "enabled": {
+        "type": "boolean"
+      },
+      "installedAt": {
+        "type": "string"
+      },
+      "manifest": {
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "const": 1
+          },
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9._-]{0,95}$"
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "host": {
+            "type": "string"
+          },
+          "operations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[a-z0-9][a-z0-9._-]{0,95}$"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "effect": {
+                  "enum": [
+                    "read",
+                    "native"
+                  ]
+                },
+                "methods": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "inputSchema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              },
+              "required": [
+                "id",
+                "title",
+                "description",
+                "effect",
+                "methods",
+                "inputSchema"
+              ],
+              "additionalProperties": true
+            }
+          },
+          "skills": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[a-z0-9][a-z0-9._-]{0,95}$"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "file": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "title",
+                "file"
+              ],
+              "additionalProperties": true
+            }
+          },
+          "views": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[a-z0-9][a-z0-9._-]{0,95}$"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "file": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "title",
+                "file"
+              ],
+              "additionalProperties": true
+            }
+          }
+        },
+        "required": [
+          "apiVersion",
+          "id",
+          "title",
+          "description",
+          "operations",
+          "skills",
+          "views"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "required": [
+      "id",
+      "name",
+      "version",
+      "title",
+      "description",
+      "digest",
+      "source",
+      "enabled",
+      "installedAt",
+      "manifest"
+    ],
+    "additionalProperties": false
+  },
+  "description": "Local person/operator: install a trusted prebuilt npm package, local folder, tarball, or Git source. Lifecycle scripts are disabled. Replacement stages and checks the new package before switching; use replace and expectedDigest for updates."
+}

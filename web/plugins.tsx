@@ -1,3 +1,5 @@
+import { ThirdPartyPlugins } from './extensions.js';
+import type { BrowserClient } from '../src/browser.js';
 import { useLayoutEffect, useRef, useState } from 'react';
 import type { CapabilityCatalog, CapabilityPlugin, EntryPresentation } from '../src/browser.js';
 import { pluginEntries, pluginGroups, pluginPresentation } from '../src/plugin-presentation.js';
@@ -49,7 +51,7 @@ export function PluginNavigation({ catalog, pluginId, onSelect }: { catalog?: Ca
     <PluginSymbol plugin={plugin} size="small" /><span className="nav-row-name">{pluginPresentation(plugin).displayName}</span>
   </button>;
   return <>
-    <div className="project-heading"><strong>Plugins</strong>{catalog && <span>{installed.length} installed on this machine</span>}</div>
+    <div className="project-heading"><strong>Plugins</strong>{catalog && <span>{installed.length} built-in plugins</span>}</div>
     <button className="nav-row" aria-current={!pluginId ? 'page' : undefined} onClick={() => onSelect('')}><Icon name="grid" size={16} stroke={1.8} /><span className="nav-row-name">All plugins</span></button>
     {installed.length > 0 && <><span className="section-label" id="nav-installed">Installed</span>
       <div role="group" aria-labelledby="nav-installed" className="nav-group">{installed.map(row)}</div></>}
@@ -65,8 +67,8 @@ function inProject(plugin: CapabilityPlugin, state: Problem | null) {
   return { on: true, text: 'On. Claude Code can use it in this project.' };
 }
 
-export function PluginCatalog({ catalog, project, pluginId, onSelect: setPluginId, back: leave }: {
-  catalog: CapabilityCatalog; project: string; pluginId: string; onSelect: (id: string) => void;
+export function PluginCatalog({ client, projectId, canManage, catalog, project, pluginId, onSelect: setPluginId, back: leave }: {
+  client: BrowserClient; projectId: string; canManage: boolean; catalog: CapabilityCatalog; project: string; pluginId: string; onSelect: (id: string) => void;
   back?: { label: string; run: () => void };
 }) {
   const [copied, setCopied] = useState<number | null>(null), [copyError, setCopyError] = useState('');
@@ -153,6 +155,7 @@ export function PluginCatalog({ catalog, project, pluginId, onSelect: setPluginI
   const absent = catalog.plugins.filter(p => problem(p, catalog.plugins, project)?.installed === false);
   return <section className="page-section plugin-page">
     <header className="plugin-page-heading"><h1>Plugins</h1><p>Plugins let Claude Code work with your code, data and figures, and let you see that work here.</p></header>
+    {canManage && <ThirdPartyPlugins client={client} projectId={projectId} canManage={canManage} />}
     {/* Plugins that are not part of this installation form their own group, last. */}
     {[...pluginGroups(catalog.plugins.filter(p => !absent.includes(p))), { category: 'Not installed', plugins: absent }].filter(group => group.plugins.length).map(group => <section className="plugin-group" key={group.category}>
       {group.category && <h2>{group.category}</h2>}

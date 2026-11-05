@@ -1,0 +1,123 @@
+{
+  "method": "extension.list",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "projectId": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1024
+      }
+    },
+    "required": [],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "plugins": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9._-]{0,95}$"
+            },
+            "name": {
+              "type": "string"
+            },
+            "version": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            },
+            "description": {
+              "type": "string"
+            },
+            "digest": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "source": {
+              "type": "string"
+            },
+            "sourceCommit": {
+              "type": "string"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "installedAt": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "name",
+            "version",
+            "title",
+            "description",
+            "digest",
+            "source",
+            "enabled",
+            "installedAt"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "directory": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9._-]{0,95}$"
+            },
+            "title": {
+              "type": "string"
+            },
+            "version": {
+              "type": "string"
+            },
+            "description": {
+              "type": "string"
+            },
+            "source": {
+              "type": "string"
+            },
+            "repository": {
+              "type": "string"
+            },
+            "needs": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "title",
+            "version",
+            "description",
+            "source",
+            "repository",
+            "needs"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "limits": {
+        "type": "object",
+        "additionalProperties": true
+      }
+    },
+    "required": [
+      "plugins",
+      "directory",
+      "limits"
+    ],
+    "additionalProperties": false
+  },
+  "description": "List independently installed third-party packages and their enabled state, source and immutable digest. Reads start no plugin or runtime. Use extension.describe to discover operation schemas and Skills."
+}

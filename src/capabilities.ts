@@ -30,6 +30,11 @@ const applicationContent = [
   'Start with rho_index: select an owner or search, then rho_resolve only the operations',
   'needed now. Use rho_call with the complete contractRef. The private connection supplies',
   'the project; discovery never grants additional authority or starts a runtime.',
+  'Independent third-party plugins: extension.list shows installed packages, extension.describe',
+  'gives their digest, operations and Skill entries. Read extension.content (kind skill)',
+  'before extension.call. Keep expectedDigest and the original changeId for a native call;',
+  'extension.read observes pending or unknown outcomes without rerunning. Installation and',
+  'management belong to the local person; plugin code never expands this connection grant.',
   'Large replies carry a result reference. Use rho_read to inspect its fields and fetch',
   'only selected text ranges or array pages. Retain useful references; release finished',
   'results explicitly. Never repeat an action just to retrieve a large reply.',
@@ -50,7 +55,7 @@ const applicationContent = [
   'run or export it as files; a stopped run is not resubmitted under its own operationId.'
 ].join('\n');
 const applicationSkill = {
-  id: 'rho.workspace', version: '1.5', content: applicationContent,
+  id: 'rho.workspace', version: '1.6', content: applicationContent,
   intent: 'Work in this project through versioned operations, in a safe order.',
   requires: ['capability.list', 'observation.snapshot', 'action.submit', 'composition.apply', 'context.read'],
   example: { method: 'observation.snapshot', input: { projectId: 'the-open-project' } },

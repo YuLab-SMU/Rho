@@ -26,6 +26,7 @@ export async function installedWebEntries(root = webRoot) {
 // from the network and lets the page's own inline scripts, styles and data run. It tells the
 // view that embeds it that it is ready, then writes the one page that view sends it.
 export const pageFramePath = '/frame.html';
+export const extensionFramePath = '/extension-frame.html';
 export const pageFramePolicy = "sandbox allow-scripts; default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' data: blob:; style-src 'unsafe-inline' data: blob:; img-src data: blob:; font-src data: blob:; media-src data: blob:; base-uri 'none'; form-action 'none'; frame-ancestors 'self'";
 const pageFrame = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Page</title></head><body><script>
 (function () {
@@ -39,9 +40,9 @@ const pageFrame = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Page<
 })();
 </script></body></html>
 `;
-export function servePageFrame(response: ServerResponse, head = false) {
+export function servePageFrame(response: ServerResponse, head = false, allowForms = false) {
   const bytes = Buffer.from(pageFrame);
-  response.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'content-length': bytes.length, 'content-security-policy': pageFramePolicy });
+  response.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'content-length': bytes.length, 'content-security-policy': allowForms ? pageFramePolicy.replace('sandbox allow-scripts;', 'sandbox allow-scripts allow-forms;') : pageFramePolicy });
   response.end(head ? undefined : bytes);
 }
 const types: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.woff2': 'font/woff2', '.svg': 'image/svg+xml' };

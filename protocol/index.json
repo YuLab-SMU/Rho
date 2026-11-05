@@ -404,6 +404,48 @@
       "bytes": 1004,
       "sha256": "4fbf03970c525ad073153aad9846ce960da2369b8cb45b4b6aaeef95cd8f19fd"
     },
+    "extension.call": {
+      "summary": "Call an enabled third-party operation at the described package digest, under the caller and project. The package runs trusted native code. Non-read calls retain the original changeId: repeat observes that invocation, including unknown outcomes, without re-execution. Completion is not scientific validity.",
+      "path": "operations/extension.call.json",
+      "bytes": 3054,
+      "sha256": "fef35859de95442313afcf2fb517ab7ec2e30781344e0b77174b904f70e5df3b"
+    },
+    "extension.content": {
+      "summary": "Read one installed plugin Skill or standalone HTML view at its selected package digest. Reading starts no plugin or runtime.",
+      "path": "operations/extension.content.json",
+      "bytes": 1627,
+      "sha256": "fe3542d6f35267766ef5227d9d6cb98009895ac9ec9cdc1355fbed97e07c77d9"
+    },
+    "extension.describe": {
+      "summary": "Read an installed third-party package manifest, operation input schemas, required Rho methods, Skills and views. Read its Skill with extension.content before use. Disabled packages cannot run.",
+      "path": "operations/extension.describe.json",
+      "bytes": 4684,
+      "sha256": "441616d6e634daa1ce2d058f6d0b0bd7ccd494de33f01a3dae3d6c344dc6f1a9"
+    },
+    "extension.install": {
+      "summary": "Local person/operator: install a trusted prebuilt npm package, local folder, tarball, or Git source. Lifecycle scripts are disabled. Replacement stages and checks the new package before switching; use replace and expectedDigest for updates.",
+      "path": "operations/extension.install.json",
+      "bytes": 4803,
+      "sha256": "862db9660b7c6d0ddfe53aa2c3e1254c0d4a4a717f23c6b820c3248d916b7ce9"
+    },
+    "extension.list": {
+      "summary": "List independently installed third-party packages and their enabled state, source and immutable digest. Reads start no plugin or runtime. Use extension.describe to discover operation schemas and Skills.",
+      "path": "operations/extension.list.json",
+      "bytes": 2933,
+      "sha256": "4af06a8a7c11dbed53a9d9804d215708d7e6b6c0edacdf1bf2817a3daf24f86f"
+    },
+    "extension.manage": {
+      "summary": "Local person/operator: enable, disable or remove an installed third-party package at the expected digest. Existing native tasks, R sessions, project files and retained receipts are preserved.",
+      "path": "operations/extension.manage.json",
+      "bytes": 1207,
+      "sha256": "90a83550840d2d33d3d0c7e5db0dcd09de4752b0b829f65a0cac2f39dbdf5a07"
+    },
+    "extension.read": {
+      "summary": "Observe an original plugin invocation, including pending or unknown outcomes. Never reruns code. Only its original caller can read it.",
+      "path": "operations/extension.read.json",
+      "bytes": 2409,
+      "sha256": "81f219ef1ce3aa15a3d7bd5865a97e141ff5db3ab4629a1eef7928dcf9681d40"
+    },
     "feedback.read": {
       "summary": "Original business binding only: fetch one complete frozen feedback object using its original delivery/context and a stable fetchId. relatedDocumentId is a pointer: read its CURRENT version before conditional edit/save and preserve human changes. This owner-served receipt does not prove client return or understanding.",
       "path": "operations/feedback.read.json",
@@ -683,8 +725,8 @@
     "session.grant": {
       "summary": "session.grant",
       "path": "operations/session.grant.json",
-      "bytes": 4767,
-      "sha256": "95564602b9006b5fe960bad93460916c1461f9578766d2fd95a1bccfd866b7a4"
+      "bytes": 4989,
+      "sha256": "5c6414c989032b5a09fca7c8b76c49102fb0cb0ce46cca4d4c23bf2e90b50dd3"
     },
     "skill.list": {
       "summary": "List the application and enabled provider Skills shipped in the selected package. Skills guide discovery but do not grant authorization.",

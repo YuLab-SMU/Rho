@@ -34,7 +34,7 @@ const SECTIONS = {
     'ROADMAP',
     'AGENT-ACTIVITY',
   ],
-  reference: ['HEADLESS', 'FRONTEND', 'STATUS', 'RELEASE', 'PLUGIN-AUTHORING', 'DEEPSEEK-HARNESS'],
+  reference: ['HEADLESS', 'FRONTEND', 'STATUS', 'RELEASE', 'PLUGIN-AUTHORING', 'THIRD-PARTY-PLUGINS', 'DEEPSEEK-HARNESS'],
 };
 
 // Withheld on purpose: the index is replaced by the site's own navigation, the

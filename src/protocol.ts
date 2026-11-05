@@ -1,3 +1,4 @@
+import { extensionOperations, extensionResponses, extensionDescriptions } from './extension-contract.js';
 import { evidenceSchema } from './evidence-capture.js';
 import { ownerContracts } from './contracts/owners.generated.js';
 import { enhancementSchemas } from './enhancement-contracts.js';
@@ -58,7 +59,7 @@ for (const owner of ['documents', 'files', 'r', 'requirements', 'tables', 'media
   }
 }
 
-export const operations: Record<string, any> = { ...base.operations,
+export const operations: Record<string, any> = { ...base.operations, ...extensionOperations,
   'protocol.describe': obj({ ...project, method: text, cursor: { type: ['string', 'null'], maxLength: 128 }, limit: { type: 'integer', minimum: 1, maximum: 100 }, maxBytes: { type: 'integer', minimum: 1024, maximum: 65536 } }, []),
   'project.pick': obj({}),
   'project.source.pick': obj({}),
@@ -293,7 +294,7 @@ const structuredComposition = contract.structuredCompositionSchema;
 const composition = { anyOf: [contract.legacyCompositionSchema, structuredComposition] };
 const taskMap = { ...contract.taskMapStateSchema, properties: { ...contract.taskMapStateSchema.properties, receipt: obj({ changeId: identity, requestDigest: digest, kind: { enum: ['declare', 'present', 'respond'] }, author: text, version: positive, at: { type: 'string', format: 'date-time' }, outcome: contract.taskMapReceiptField }, ['changeId', 'kind', 'author', 'version', 'at']) } };
 
-export const responses: Record<string, any> = { ...base.responses, ...ownerResponses,
+export const responses: Record<string, any> = { ...base.responses, ...ownerResponses, ...extensionResponses,
   'project.work.read': projectWorkSchema(sessionObservation),
   'project.open': { ...contract.projectRecordSchema, properties: { ...contract.projectRecordSchema.properties, host: contract.cliSchema }, required: [...contract.projectRecordSchema.required, 'host'] },
   'project.pick': response({ cancelled: { type: 'boolean' }, project: { anyOf: [contract.projectSummarySchema, { type: 'null' }] } }),
@@ -393,6 +394,7 @@ export const responses: Record<string, any> = { ...base.responses, ...ownerRespo
 };
 responses['session.grant'].properties.profile = operations['session.grant'].properties.profile;
 export const descriptions = {
+  ...extensionDescriptions,
   'workspace.observe': 'Assigned presenter only: bounded layout/basis/owner summary/visibility projection. No feedback, full documents or native trace. Reading starts no model or renderer.',
   'workspace.enhance': 'Assigned presenter only: conditional display emphasis/title/plain Agent note using exact current generation, witness and observation. Does not modify business resources, feedback or protection.',
   'capability.index': 'Read a small role-narrowed index of currently authorized, enabled operations and immutable Skill/contract references.',
