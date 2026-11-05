@@ -6,7 +6,8 @@ follow the shared Notebook, inspect files, tables and figures, and ask about a
 selected result. Copy that question back to the original Harness conversation;
 the Agent reads its frozen context and writes its reply into Rho.
 
-Version **0.1.2** adds a **Rho conversation tab** and **Rho sidebar entry**. Both
+Version **0.1.3** ships the existing **Rho conversation tab** and **Rho sidebar entry** with
+its prebuilt launcher, display metadata and original Rho icon. Both entries
 show **Open Rho workspace**, which opens the existing application in Harness's
 Browser beside the conversation. **Open in system browser** is also available;
 use it in Web Harness, where Rho's iframe policy prevents embedding. The small
@@ -15,7 +16,9 @@ connection file. Credentials stay on the Host. No Rho views or result store are
 bundled, and opening the interface starts no service or analysis.
 
 The [episode](../../docs/DSH-RHO-EPISODE.md) records the observed integration and
-its limits. This is a local prototype, not an npm release or a market listing.
+its limits. This is a prototype distributed from a fixed public Git commit. Its
+[market index](https://yulab-smu.top/Rho/market/index.json) records the exact source
+and compatible Harness version. It is not published to npm.
 
 ## Install into Harness
 
@@ -49,7 +52,7 @@ export DSH_HOME="$HOME/.dsh-rho"
 export RHO_DSH_CONNECTION="/absolute/path/to/the/agent-connection.json"
 # Only when rho is outside PATH:
 # export RHO_DSH_COMMAND="/absolute/path/to/node_modules/.bin/rho"
-dsh plugin --profile web add /absolute/path/to/dsh-rho-0.1.2.tgz --ignore-scripts
+dsh plugin --profile web add /absolute/path/to/dsh-rho-0.1.3.tgz --ignore-scripts
 dsh --profile web --no-open
 ```
 
@@ -147,17 +150,30 @@ use the separate trial home above to evaluate this connection.
 
 ## Distribution route
 
-The tested entry route is Harness's ordinary bundle installer. It also supports
-Git packages in a subdirectory, so a future published source commit can be
-installed with a quoted target of this form:
+The public source includes `lib/client.js`; a Git install needs no build or
+`prepare` script. Harness's ordinary bundle installer accepts the package from
+the immutable commit in the [market index](https://yulab-smu.top/Rho/market/index.json),
+using a quoted target of this form:
 
 ```text
 git+https://github.com/YuLab-SMU/Rho.git#<full-commit>&path:/adapters/dsh-rho
 ```
 
 The [Harness market](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/boot/plugin-market/README.md)
-reads indexes configured by the user; this tested release ships with no default
-index. Listing this bundle would add an index entry pointing at an available
-commit or npm version. It does not require a second Rho implementation. Git
-installation, public npm publication, market inclusion and TUI remain
-unverified; this bundle stays private until a publication is selected.
+reads configured indexes. The Rho index names this package, its exact Git source,
+display metadata and `engines.dsh`; publishing an index does not add it to anyone's
+Harness configuration. No second Rho implementation is distributed.
+
+For a subsequent release, build and test the launcher, inspect the packed files,
+commit the prebuilt client with its source, and publish that source commit first.
+Then generate the index from that full commit ID:
+
+```sh
+node adapters/dsh-rho/market.mjs --commit <full-published-source-commit>
+```
+
+Validate the output with Harness's `parseMarketIndex`, and verify a fresh install
+of its `marketInstallTarget` before publishing `site/market/index.json` to
+`gh-pages`. The generator copies metadata and the commit's timestamp from the
+selected commit, rather than following a branch at install time. npm publication,
+TUI and other operating systems remain outside the observed integration.

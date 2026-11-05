@@ -1,9 +1,11 @@
 {
   "name": "dsh-rho",
-  "version": "0.1.2",
-  "private": true,
+  "version": "0.1.3",
   "description": "Connect DeepSeek Harness to an existing Rho project and its full WebUI",
   "license": "AGPL-3.0-only",
+  "author": "YuLab-SMU",
+  "homepage": "https://yulab-smu.top/Rho/docs/reference/deepseek-harness.html",
+  "keywords": ["deepseek-harness", "dsh", "rho", "science", "data-analysis", "notebook"],
   "type": "module",
   "repository": {
     "type": "git",
@@ -13,14 +15,18 @@
   "main": "./src/host.cjs",
   "exports": {
     ".": "./src/host.cjs",
-    "./client": "./lib/client.js"
+    "./client": "./lib/client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
   },
   "files": [
     "src/host.cjs",
     "lib/client.js",
     "cordis.patch.yml",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "locale/en.json",
+    "icon.svg"
   ],
   "engines": {
     "node": ">=22.22.0 <23",

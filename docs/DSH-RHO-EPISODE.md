@@ -334,3 +334,27 @@ missing-connection and recovery screenshots and the installed-package summary.
 The owned Web check is disposable; the person's Desktop and existing Rho services
 stay available for their trial. Public distribution, TUI, other operating systems
 and independent usability evidence remain outside this check.
+
+## Public Git distribution
+
+2026-11-05. The user asked to complete the publisher's work for market discovery,
+leaving user configuration alone. The npm account check returned HTTP 401, so this
+release uses Harness's documented commit-pinned Git package source. No npm
+publication is claimed. The existing source package omitted `lib/`, which makes a
+source-only Git install incomplete without running a build. Version 0.1.3 tracks
+the prebuilt client with its source and adds an exported English display locale,
+the existing Rho SVG icon, author, homepage and search keywords. It has no install
+or prepare lifecycle script, and keeps the checked `engines.dsh: 0.2.1-rc.5` range.
+
+The Host, built client and MCP patch match the installed 0.1.2 package byte for
+byte. No Rho component or runtime behavior changed. The launcher build and both
+adapter tests passed. The packed candidate has eight files, is 19,642 bytes
+compressed (53,288 unpacked), and has SHA-256
+`34f0ac6e29b562a331ea2536c55d2f85d50b31f439d410499174311fbf2f9c2f`.
+The inventory is under `work/dsh-rho/publish-01/package/`.
+
+`adapters/dsh-rho/market.mjs` reads one explicit, full source commit, including
+its built client, locale and icon, and generates the index from that version's
+manifest and commit timestamp. Public Git installation, official index validation,
+search and public index delivery are the next observations; the person's existing
+Harness configuration and Rho sessions are not part of those checks.
