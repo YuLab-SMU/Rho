@@ -6,11 +6,33 @@ Rho interface in Harness Desktop's Browser pane beside your conversation. Harnes
 keeps its model and permissions; Rho keeps the shared Notebook, files, tables,
 figures and selected-result questions.
 
-The available version is **dsh-rho 0.1.2**, a local prototype built from source.
-It has been installed and exercised in **Harness Desktop 0.2.1-rc.5** on macOS,
-with **Rho 0.5.3** and **Node 22.22.x**. Newer combinations, TUI and other systems
-have not been checked for this plugin. There is no npm release or marketplace
-listing; install the local tarball below.
+The available version is **dsh-rho 0.1.3**, a prebuilt prototype distributed from
+a fixed public Git commit. Rho publishes its own
+[Harness market index](https://yulab-smu.top/Rho/market/index.json), with the exact
+install source, version, icon and compatibility. There is no npm release.
+
+The full workspace flow was observed with 0.1.2 in **Harness Desktop 0.2.1-rc.5**
+on macOS, with **Rho 0.5.3** and **Node 22.22.x**. Version 0.1.3 keeps its Host,
+client and MCP configuration byte-identical, and adds the distribution files and
+display metadata. Its public Git package was installed in fresh Harness profiles
+with and without install scripts enabled. Newer combinations, TUI and other
+systems have not been checked for this plugin.
+
+## Public package and index
+
+The index points to source commit
+[`f3248a8a`](https://github.com/YuLab-SMU/Rho/commit/f3248a8ad5e1b3a5744dd04f899d0f4373995851),
+package directory `adapters/dsh-rho`. The package already includes its built
+launcher; installation needs no build allowance or local source checkout. The
+exact install target is:
+
+```text
+git+https://github.com/YuLab-SMU/Rho.git#f3248a8ad5e1b3a5744dd04f899d0f4373995851&path:/adapters/dsh-rho
+```
+
+The index declares the checked **Harness 0.2.1-rc.5** range, the same as the
+package manifest. It lists a prototype and does not claim a default or official
+Harness listing. Publishing it does not change anyone's Harness configuration.
 
 ## Prepare Rho and its project grant
 
@@ -35,15 +57,15 @@ The grant stays fixed to this Rho project. Choosing another Harness workspace do
 not switch or revoke it. Use the same project folder as your Harness workspace,
 and keep separate Harness profiles or homes for different project grants.
 
-## Build the local plugin package
+## Optional: build a local tarball
 
 Use a separate source checkout. This selects the commit used for the installed
-0.1.2 prototype; building the launcher does not build or replace your Rho service.
+0.1.3 package; building the launcher does not build or replace your Rho service.
 
 ```sh
 git clone https://github.com/YuLab-SMU/Rho.git rho-harness
 cd rho-harness
-git checkout d054dd0567958e04b4a84973bde3889639287d07
+git checkout f3248a8ad5e1b3a5744dd04f899d0f4373995851
 npm --prefix adapters/dsh-rho ci --ignore-scripts
 npm --prefix adapters/dsh-rho run build
 npm --prefix adapters/dsh-rho test
@@ -52,8 +74,8 @@ npm pack ./adapters/dsh-rho --ignore-scripts \
   --pack-destination "$PWD/work/dsh-rho/package"
 ```
 
-The resulting file is `work/dsh-rho/package/dsh-rho-0.1.2.tgz`. The checked package
-was about 19 KB and reused Rho's existing MCP tools and WebUI.
+The resulting file is `work/dsh-rho/package/dsh-rho-0.1.3.tgz`. The checked package
+has eight files and is 19,642 bytes compressed; it reuses Rho's MCP tools and WebUI.
 
 ## Install in Harness Desktop
 
@@ -104,7 +126,8 @@ export RHO_DSH_CONNECTION="/absolute/path/to/agent-connection.json"
 # Only if rho is outside PATH:
 # export RHO_DSH_COMMAND="/absolute/path/to/node_modules/.bin/rho"
 dsh plugin --profile web add \
-  /absolute/path/to/dsh-rho-0.1.2.tgz --ignore-scripts
+  'git+https://github.com/YuLab-SMU/Rho.git#f3248a8ad5e1b3a5744dd04f899d0f4373995851&path:/adapters/dsh-rho' \
+  --ignore-scripts
 dsh --profile web --no-open
 ```
 
@@ -134,14 +157,14 @@ skills; the plugin does not copy or replace them.
    with `annotation.reply`. Rho shows the reply against that retained table version.
 
 Copying prepares the request; you choose the Harness conversation and send it.
-Version 0.1.2 does not insert a draft automatically. Opening or closing a Rho view
+Version 0.1.3 does not insert a draft automatically. Opening or closing a Rho view
 does not start, rerun or cancel analysis.
 
 ## Connection problems
 
 | What you see | What to check |
 | --- | --- |
-| No Rho tab or sidebar entry | Install and enable **dsh-rho 0.1.2**; the earlier 0.1.0 bundle had no launcher. Check both components in Plugins. |
+| No Rho tab or sidebar entry | Install and enable **dsh-rho 0.1.3**; the earlier 0.1.0 bundle had no launcher. Check both components in Plugins. |
 | Launcher shows **Try again** | Check the agent file path and that the selected Rho service is running. Correct the path, then retry. The launcher opens no service itself. |
 | Launcher opens but Rho tools are missing | Check `rho-mcp`, its executable path, the complete override and its agent file. Harness can open while MCP activation has failed. |
 | Harness Browser is unavailable | Choose **Open in system browser**. The launcher stays available. |
@@ -155,5 +178,5 @@ Reconnect Harness without restarting another person's Rho or Notebook.
 See the [integration record](DSH-RHO-EPISODE.md#desktop-installation-and-visible-entry-points)
 for the installed checks and their limits, and the
 [package README](https://github.com/YuLab-SMU/Rho/blob/main/adapters/dsh-rho/README.md) for the adapter's configuration
-and distribution details. Git-package installation and public distribution remain
-unverified.
+and distribution details. The [public distribution record](DSH-RHO-EPISODE.md#public-git-distribution)
+keeps the fixed source, package inventory and installation evidence.

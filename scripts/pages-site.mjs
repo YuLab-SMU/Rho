@@ -6,6 +6,7 @@
 //   docs/       the documentation site, built from docs/ with base /Rho/docs/
 //   doc/setup.md  SETUP.md as it is: the steps an Agent follows to install and configure Rho
 //   skills/     the Agent Skill in skills/, as it is, which those steps install
+//   market/     the static Harness plugin index, pinned to published source commits
 // The branch's updates/*.json feeds and .nojekyll are not produced here; a deployment keeps them.
 //
 //   node scripts/pages-site.mjs [--no-docs | --home]
@@ -111,4 +112,5 @@ fs.cpSync('site/home/img', path.join(out, 'img'), { recursive: true });
 fs.mkdirSync(path.join(out, 'doc'));
 fs.copyFileSync('SETUP.md', path.join(out, 'doc/setup.md'));
 fs.cpSync('skills', path.join(out, 'skills'), { recursive: true });
+fs.cpSync('site/market', path.join(out, 'market'), { recursive: true });
 console.log(`site/.pages: front page for npm ${version} (${published}), ${asked.length} recorded prompts, ${plugins.length} plugin prompt sets; ${home ? 'no demo or docs' : docs ? 'demo and docs' : 'demo'} built.`);

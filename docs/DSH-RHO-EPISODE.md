@@ -358,3 +358,38 @@ its built client, locale and icon, and generates the index from that version's
 manifest and commit timestamp. Public Git installation, official index validation,
 search and public index delivery are the next observations; the person's existing
 Harness configuration and Rho sessions are not part of those checks.
+
+### Public installation
+
+Source [`f3248a8a`](https://github.com/YuLab-SMU/Rho/commit/f3248a8ad5e1b3a5744dd04f899d0f4373995851)
+was published before the index reference. Harness 0.2.1-rc.5 installed its exact
+Git subdirectory target in two new profiles, using separate empty pnpm stores and
+no Git credential helper. The first disabled install scripts; the second used
+the normal defaults. Both completed successfully, downloading one package, in
+about seven seconds. The scripts-disabled run printed pnpm's generic Git build
+warning, but its eight distribution files were present and matched the source.
+The normal installation needed no build approval or additional dependencies.
+
+Harness's own `dsh-plugin-market-index` 0.2.1-rc.5 accepted the generated index
+and produced the same commit-pinned install target. Its Rho title, icon, author,
+homepage, keywords, version, source and compatibility are read from that fixed
+package. The index's timestamp is the source commit's committer time. The
+publisher's checks use disposable Harness homes; the person's installed Desktop
+bundle and existing Rho/Notebook sessions are unchanged.
+
+In an isolated Web Harness, the optional Discover bundle read a local preview of
+that same index. Searching `Rho` displayed one card with the original rho icon,
+Prototype label, version 0.1.3 and YuLab-SMU author. An unmatched query showed
+`No plugins match`; restoring `Rho` recovered the card. Its detail page displayed
+the exact commit and package directory and marked 0.1.3 **Recommended Installed**.
+The public package's sidebar launcher loaded too: with no Rho connection supplied,
+it kept the disabled open button, explanation and **Try again**. The fixture
+disabled `rho-mcp`, so this was a package, metadata and discovery check, without
+a Rho service or model analysis. Screenshots are in `work/dsh-rho/publish-01/`.
+
+The page assembler now carries `site/market/` into the Pages output alongside
+the existing documentation. The documentation build and coverage check pass with
+54 documents; the rendered site's local links and anchors resolve, and the 123
+existing files outside the front page and documentation remain byte-identical.
+The generated index and public guide are the publisher's deliverables. Enabling
+a market source in a person's Harness is outside this change.

@@ -42,6 +42,18 @@ other platforms and full product installation are not accepted by a headless run
 No registry publication or signing is performed. npm publication would not itself
 establish a signed desktop distribution or require creating Rho-releases.
 
+## DeepSeek Harness plugin
+
+The independent **dsh-rho 0.1.3 prototype** is distributed as a prebuilt package
+from an immutable Git commit, through the
+[Rho Harness index](https://yulab-smu.top/Rho/market/index.json). Its
+[distribution record](DSH-RHO-EPISODE.md#public-git-distribution) separates the
+source, packed file inventory, public installation and index checks. The index
+is generated from the selected commit's manifest and timestamp; it does not
+follow `main` at install time. This plugin delivery publishes no npm package and
+changes no installed user profile or running Rho. It is separate from the future
+signed application distribution below.
+
 ## Official distribution
 
 This is selected design, not an implemented pipeline. Create Rho-releases only

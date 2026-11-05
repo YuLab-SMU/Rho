@@ -79,8 +79,8 @@ The [dsh-rho plugin](/reference/deepseek-harness) connects Harness to an existin
 Rho project. Its **Rho** tab and sidebar entry open the complete Rho in Harness
 Desktop's Browser pane; Web Harness uses a separate browser window. Analyse in the
 shared Notebook, inspect a result in Rho, then copy a selected-row question back
-to the same Harness conversation. The guide covers the local 0.1.2 package,
-project grant, installation and connection recovery.
+to the same Harness conversation. The guide covers the public prebuilt 0.1.3 Git
+package and market index, project grant, installation and connection recovery.
 
 ## What to read next
 
