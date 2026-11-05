@@ -54,12 +54,12 @@
       },
       "versions": [
         {
-          "version": "0.1.3",
-          "publishTimestamp": 1793872503,
+          "version": "0.1.4",
+          "publishTimestamp": 1793876411,
           "source": {
             "type": "git",
             "url": "https://github.com/YuLab-SMU/Rho",
-            "commit": "f3248a8ad5e1b3a5744dd04f899d0f4373995851",
+            "commit": "4bc6f6bb3d439f8fe2eb1a5f4d960b428e6ce203",
             "path": "adapters/dsh-rho"
           },
           "engines": {
