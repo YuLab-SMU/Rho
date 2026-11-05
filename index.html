@@ -361,7 +361,7 @@ description: Install, start, …</code></pre>
         </div>
         <table class="req">
           <tbody>
-            <tr><th scope="row">Node</th><td>22.22 or later, below 27: Node 22, 24 or 26. Version 0.5.3 on npm still declares 22.x only, so on 24 or 26 npm prints one <code>EBADENGINE</code> warning and installs it anyway.</td></tr>
+            <tr><th scope="row">Node</th><td>22.22 or later, below 27: Node 22, 24 or 26. A different Node prints one <code>EBADENGINE</code> warning.</td></tr>
             <tr><th scope="row">Agent</th><td>Claude Code or Codex, installed and signed in by you. Rho drives your client; it does not install an Agent or copy its credentials.</td></tr>
             <tr><th scope="row">R</th><td>Only for R work. Rho installs no R packages on its own; a missing Rscript is reported, not worked around.</td></tr>
             <tr><th scope="row">Systems</th><td>macOS arm64 is the baseline. Linux x64 and arm64 and Windows x64 are checked in CI; macOS x64 runs only under Rosetta.</td></tr>
@@ -520,7 +520,7 @@ description: Install, start, …</code></pre>
         <h2 id="checked-title">Checked so far</h2>
         <p>Each line is a check that was run, not a promise. <a href="docs/reference/status">Current status</a></p>
       </div>
-      <div class="tile"><b>npm 0.5.3</b><p>Published from the exact candidate the CI suite tested, with provenance.</p></div>
+      <div class="tile"><b>npm 0.5.4</b><p>Published from the exact candidate the CI suite tested, with provenance.</p></div>
       <div class="tile"><b>macOS arm64</b><p>The baseline. CI runs the suite and installs the packed candidate offline.</p></div>
       <div class="tile"><b>Linux x64, arm64</b><p>The suite and an offline install of the same candidate, on each.</p></div>
       <div class="tile"><b>Windows x64</b><p>The suite and an offline install; Rscript 4.5.1 checked.</p></div>
@@ -564,8 +564,8 @@ description: Install, start, …</code></pre>
     </ul>
   </nav>
   <div class="t-ver">
-    <b>0.5.3</b>
-    <p class="legal">The npm release, published 2 Nov 2026. Demo recorded 2 Nov 2026.</p>
+    <b>0.5.4</b>
+    <p class="legal">The npm release, published 5 Nov 2026. Demo recorded 2 Nov 2026.</p>
   </div>
   <div class="t-issue">
     <a class="big" href="https://github.com/YuLab-SMU/Rho/issues">Report an issue</a>
