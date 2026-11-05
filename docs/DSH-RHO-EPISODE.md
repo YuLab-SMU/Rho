@@ -1,7 +1,8 @@
 # dsh analysis, Rho results and a selected-row question
 
-The current **0.1.0** bundle reuses the complete Rho application through MCP; see
-[the November 5 episode](#reuse-the-whole-rho-application). The first episode below
+The current **0.1.2** bundle adds visible Harness entries for the complete Rho
+application; see [Desktop installation](#desktop-installation-and-visible-entry-points).
+The [earlier November 5 episode](#reuse-the-whole-rho-application) records 0.1.0. The first episode below
 records the retired 0.0.1 embedded-view prototype, whose source remains in Git.
 
 2026-10-31 local / 2026-11-01 UTC. This episode implements the requested
@@ -269,3 +270,67 @@ npm publication and market inclusion were not performed. The local package stays
 private. The old 0.0.1 source history and archive bytes remain; no migration or
 archive deletion was attempted. This is one observed integration episode, not
 full application acceptance or independent usability evidence.
+
+## Desktop installation and visible entry points
+
+2026-11-05. The user installed the connection-only bundle and found no Rho tab or
+button in Harness. The missing entry was visible in their screenshot. Version
+0.1.2 adds **Rho** to `conversation.view` and `sidebar.panellist`, both opening a
+small launcher. **Open Rho workspace** uses the existing `sidebarRight.openTab`
+Browser to display the complete application beside the conversation. **Open in
+system browser** remains available. The Rho application and its iframe policy
+are unchanged; Desktop uses Harness's native webview.
+
+A small Host route reads at most 64 KiB from the chosen agent connection file,
+extracts its local service address and project ID, and returns only the project
+URL. Credential fields never leave the Host. It refuses remote or
+credential-bearing addresses, missing project scope and oversized files. The
+launcher neither starts a service nor submits analysis. The existing MCP entry
+and four tool names are unchanged. React comes from Harness; only the launcher
+is built, with esbuild 0.25.12. No Rho component code is bundled or modified.
+
+The real installation used the person's already running Harness Desktop
+0.2.1-rc.5 on macOS and the existing Rho 0.5.3 trial project `analysis`. Its original
+service, Notebook, one cell and retained results remained in place. Desktop
+refused `dsh plugin --profile desktop` because the Electron application exclusively
+owns that profile. Its **Plugins → Add plugin → Enable now** path installed the
+local tarball successfully. The prior profile files were backed up outside the
+repository. The unchanged Rho Skill was linked into Harness's skills directory.
+
+An initial partial MCP config override failed schema validation: a profile
+`config` replaces the complete object, so command and arguments alone dropped
+`serverName` and `transport`. A complete override and a bundle off/on recovered
+it. Desktop's Finder launch did not use the shell exports, so its profile now
+explicitly names the same agent connection for the MCP and launcher entries.
+Neither the other configured MCP servers nor their grants were changed.
+
+In the actual Desktop window, both Rho entries appeared and the final bundle
+reported **2 running** components. The conversation tab's open button and the
+sidebar's open button both displayed the full Rho project inside Harness's Browser.
+Switching back to Chat kept Rho beside it. The existing `summary.csv` displayed
+alpha (3, 3.667) and beta (3, 2.667), with alpha's prior selection retained. The
+final screen was visually inspected and left open for the person. This check
+opened existing work; it did not run a new model analysis or establish another
+selected-row model continuation beyond the earlier episode.
+
+An isolated Web Harness exercised a missing launcher connection: the entry stayed
+visible, **Open Rho workspace** was disabled, and **Try again** was available.
+Restoring the file and retrying recovered the same launcher without restarting
+Rho. Another run found that a missing Browser provider switched away from the
+launcher before displaying its error. The final client checks the tab registry
+before navigation and restores the prior panel on a failed open. Repeating the
+same Web action then kept the launcher, its explanation and its system-browser
+link visible. Reusing the same local tarball version initially retained an older
+pnpm asset; checking actual installed bytes caught this, and the final 0.1.2
+package uses a distinct version and tarball identity.
+
+The adapter build and both credential-projection/error-route tests passed. The
+final installed Desktop files were compared to the source package. The tarball
+has six files and is 19,011 bytes compressed (51,727 unpacked), at
+`work/dsh-rho/package/dsh-rho-0.1.2.tgz`, SHA-256
+`60dbeb0a5417d92682fa169f1fcb6d33e9efd6418bb4704b71bfe7a68c0d11cd`.
+Local evidence is under `work/dsh-rho/launcher-01/`, including the Desktop window,
+missing-connection and recovery screenshots and the installed-package summary.
+The owned Web check is disposable; the person's Desktop and existing Rho services
+stay available for their trial. Public distribution, TUI, other operating systems
+and independent usability evidence remain outside this check.

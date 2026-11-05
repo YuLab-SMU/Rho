@@ -1,14 +1,52 @@
 {
   "name": "dsh-rho",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "private": true,
   "description": "Connect DeepSeek Harness to an existing Rho project and its full WebUI",
   "license": "AGPL-3.0-only",
   "type": "module",
-  "repository": { "type": "git", "url": "https://github.com/YuLab-SMU/Rho.git", "directory": "adapters/dsh-rho" },
-  "files": ["cordis.patch.yml", "README.md", "LICENSE"],
-  "engines": { "node": ">=22.22.0 <23", "dsh": "0.2.1-rc.5" },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/YuLab-SMU/Rho.git",
+    "directory": "adapters/dsh-rho"
+  },
+  "main": "./src/host.cjs",
+  "exports": {
+    ".": "./src/host.cjs",
+    "./client": "./lib/client.js"
+  },
+  "files": [
+    "src/host.cjs",
+    "lib/client.js",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22.22.0 <23",
+    "dsh": "0.2.1-rc.5"
+  },
   "dsh": {
-    "bundle": { "patch": "./cordis.patch.yml" }
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-client-ui-sidebar",
+        "@deepseek-ai/dsh-client-ui-sidebar-right",
+        "@deepseek-ai/dsh-client-ui-layout",
+        "@deepseek-ai/dsh-client-connection"
+      ]
+    }
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node --test test/*.test.cjs"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.12"
   }
 }
