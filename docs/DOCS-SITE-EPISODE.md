@@ -472,6 +472,12 @@ The site's pages take the version from the registry, so they waited for npm to s
 it did 55 minutes after accepting it. The front page's Node row then dropped its sentence about
 0.5.3's range. The start page says what both versions do with no arguments.
 
+The whole site was built from `2d97d763`, with Plugins `2e53dc2` built from `git archive`; the
+build that had failed on `flowPath` passed. `gh-pages` `bc4d0bea` replaced `index.html` and
+`docs/`, which had last been deployed from `25107546` and so also gained the pages written since.
+`demo/` stayed at its earlier build, and `img/`, `doc/`, `skills/`, the four `updates/*.json`
+feeds and `.nojekyll` were not changed.
+
 ### Checks
 
 - `docs:check` covered 53 documents and 302 links, and the VitePress build, which fails on a dead
@@ -482,3 +488,13 @@ it did 55 minutes after accepting it. The front page's Node row then dropped its
   preview read `@rho-workspace/rho0.5.4`: Vue drops a whitespace-only text node at the start of a
   `<template>`, so the panel now writes the space outside it. A build without the variable shows
   the eyebrow without a version and the panel with the package name alone.
+- `pages:check` with `DEMO_NARROW=1`, on the tree that was deployed, answered every demo request
+  at 1440 and 390 px, with 0 page errors, 0 failed assets, 0 front-page problems and all 12
+  internal links answering. The page inspector found 0 FAIL and the same five warnings as before.
+- The deployed home page, start page, reference title and front-page Node row were looked at in
+  screenshots at 1440 and 390 px. The Node row takes two lines and three, and no page scrolls
+  sideways.
+- After the Pages build of `bc4d0bea`, `curl` fetched the 90 added or changed paths, each `200`
+  and byte-identical to the branch, and the 25 removed or renamed paths answered `404`. The live
+  pages name 0.5.4, and the feeds, `.nojekyll`, the setup page and the Skill answered
+  byte-identical to the branch.
