@@ -477,3 +477,22 @@ Rho’s index is a manually configured source in Harness’s optional Discover
 feature; it is not an official default source. No npm publication or installed
 user-profile change is part of this update. Local installation and publication
 evidence is under `work/dsh-rho/publish-02/`.
+
+The public index returned HTTP 200 with version 0.1.4 and bytes identical to the
+checked index. An owned, freshly installed Web Harness read that public URL
+directly: searching `Rho` displayed the original icon, 0.1.4, Prototype and
+YuLab-SMU. A nonmatching query showed **No plugins match**; restoring `Rho`
+recovered the card. Its detail page showed the full selected commit and package
+directory, with **Recommended Installed**. This also loaded the installed Host
+and prebuilt launcher despite the installer's peer warning. The public guide,
+start page and front page returned HTTP 200 and matched their deployed bytes.
+
+The first local documentation preview used the development `/docs/` prefix and
+showed missing styles. Rebuilding with `RHO_DOCS_BASE=/Rho/docs/` corrected it
+before publication. The rendered changed sections were inspected, and the full
+Pages tree passed 3,971 local link/asset and 765 anchor checks. All 123 existing
+files outside the front page, documentation and market remained byte-identical,
+including the demo, update feeds, setup page and Skill. The initial Pages
+deployment is `244f0167` from source `43e23fd5`; the observed public verification
+is recorded here in the following documentation commit. Public screenshots and
+HTTP receipts are in `work/dsh-rho/publish-02/`.
