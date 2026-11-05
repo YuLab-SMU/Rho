@@ -87,7 +87,10 @@ export default defineConfig({
       { text: 'Current state', link: '/reference/status' },
     ],
     sidebar: {
-      '/start/': [{ text: 'Get started', items: [{ text: 'Install and open a project', link: '/start/' }] }],
+      '/start/': [{ text: 'Get started', items: [
+        { text: 'Install and open a project', link: '/start/' },
+        { text: 'DeepSeek Harness plugin', link: '/reference/deepseek-harness' },
+      ] }],
       '/concepts/': [sidebarGroup('concepts', 'Concepts', false)],
       '/reference/': [sidebarGroup('reference', 'Reference', false)],
       '/records/': [{ text: 'Records', link: '/records/', collapsed: false, items: recordGroups() }],

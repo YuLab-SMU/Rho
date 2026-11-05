@@ -81,6 +81,7 @@ const verified = [
       <div class="cta">
         <a class="btn primary" :href="withBase('/start/')">Install Rho</a>
         <a class="btn ghost" :href="withBase('/reference/headless')">Read the documentation</a>
+        <a class="btn ghost" :href="withBase('/reference/deepseek-harness')">DeepSeek Harness plugin</a>
       </div>
       <div class="repro">
         <pre><code>{{ install }}</code></pre>
@@ -150,7 +151,7 @@ const verified = [
         </p>
         <p class="asides">
           <a :href="withBase('/records/graph-episode')">The Graph episode</a>
-          <a :href="withBase('/records/agent-activity')">Agent activity</a>
+          <a :href="withBase('/concepts/agent-activity')">Agent activity</a>
         </p>
       </div>
       <figure class="frame side">
@@ -253,7 +254,8 @@ const verified = [
         <p>
           Rho is a local service with a WebUI, on Node 22.22 or later, below 27. R and any project
           packages are yours to install, and so are the Agent clients: conversations drive the
-          Claude Code or Codex you already have. The service, documents and readers work without R.
+          Claude Code or Codex you already have. DeepSeek Harness connects as an external Agent
+          through the dsh-rho plugin. The service, documents and readers work without R.
         </p>
         <p class="asides">
           <a :href="withBase('/start/')">Installation and first project</a>

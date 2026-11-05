@@ -278,7 +278,7 @@ decision: a higher limit, a narrower default grant, or grants chosen per task.
   a lost message that stays unknown and is not sent again, and the boundary tests:
   the grant has no conversation or session methods, lists the project folder and
   is refused `project.open`.
-- The full Rho suite is in [Status](STATUS.md#conversations-started-in-rho).
+- The full Rho suite is in [Status](STATUS.md#verification).
 - `node --test test/layered-mcp.test.mjs` covers the knowledge a connection keeps: a
   new process under the same connection calls what it resolved last message, another
   connection starts empty, a superseded contract is not kept, and a body the cache

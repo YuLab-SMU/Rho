@@ -44,6 +44,7 @@ observed.
 | [Base-R episode](BASE-R-EPISODE.md) | Real selected-row question, external Agent edit, result comparison and browser recovery; evidence, limits and the review that sets the next run |
 | [What Rho-core earns](CORE-VALUE-EPISODE.md) | A real analysis run through plain tools, a 30-line convention and the Core CLI, plus two Agents on the same task: what Core costs, what only it can report, and which parts to keep, simplify or drop |
 | [Plugin authoring](PLUGIN-AUTHORING.md) | Create, preview, check and select an independent UI extension |
+| [DeepSeek Harness plugin](DEEPSEEK-HARNESS.md) | Install dsh-rho, open the full Rho from Harness, analyse in the shared Notebook and ask about a selected result |
 | [magpie's frontend, studied](MAGPIE-FRONTEND-STUDY.md) | A reference project read in depth: a no-framework app shell, its click-and-scroll engine, plugin kernel, i18n and verification machinery, and candidate actions for Rho; it sets no design for Rho |
 | [Architecture](ARCHITECTURE.md) | Source ownership, state and lifecycle boundaries |
 | [Technology stack](TECHSTACK.md) | Libraries and runtimes used by the current implementation |

@@ -34,7 +34,7 @@ const SECTIONS = {
     'ROADMAP',
     'AGENT-ACTIVITY',
   ],
-  reference: ['HEADLESS', 'FRONTEND', 'STATUS', 'RELEASE', 'PLUGIN-AUTHORING'],
+  reference: ['HEADLESS', 'FRONTEND', 'STATUS', 'RELEASE', 'PLUGIN-AUTHORING', 'DEEPSEEK-HARNESS'],
 };
 
 // Withheld on purpose: the index is replaced by the site's own navigation, the
@@ -58,6 +58,17 @@ const SECTION_INTROS = {
 };
 
 const slug = (name) => name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+
+// These existing GitHub anchors differ from the IDs VitePress renders. Keep
+// source Markdown links usable on GitHub and translate only the site copies.
+const SITE_ANCHORS = {
+  'DOCS-SITE-EPISODE': { 'the-documentation-for-054': 'the-documentation-for-0-5-4' },
+  'AGENT-CANVAS-EPISODE': {
+    'the-persons-own-hands-on-the-layout': 'the-person-s-own-hands-on-the-layout',
+    'closing-every-view-of-a-conversations-studio': 'closing-every-view-of-a-conversation-s-studio',
+  },
+  'AGENT-PANEL-EPISODE': { 'connection--access': 'connection-access' },
+};
 
 function walk(dir, out = []) {
   for (const entry of readdirSync(dir).sort()) {
@@ -155,7 +166,8 @@ function rewriteLinks(markdown, name) {
     const base = path.split('/').pop().replace(/\.md$/, '');
     const hit = published.get(base);
     if (hit && !path.includes('/')) {
-      const url = `${hit.url}${anchor ? `#${anchor}` : ''}`;
+      const siteAnchor = SITE_ANCHORS[base]?.[anchor] ?? anchor;
+      const url = `${hit.url}${siteAnchor ? `#${siteAnchor}` : ''}`;
       rewritten.push({ from: name, target, url });
       return `${bang}[${text}](${url}${title ?? ''})`;
     }

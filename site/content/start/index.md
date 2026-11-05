@@ -11,7 +11,7 @@ because there is no Rho server.
 | Node | `>=22.22.0 <27`: the 22, 24 and 26 LTS lines. The checked baseline is Node 22.22.3 with npm 10.9.8; the test suite and the installed check also passed on 24.22.2 and 26.13.0. |
 | R | Only for R work. The service, documents, readers and saved results work without R; a missing `Rscript` reports an unknown dependency probe instead of pretending. |
 | R packages | Yours to install. Rho does not install project packages implicitly. |
-| Agent client | Claude Code or Codex, installed and signed in by you. Conversations drive your client under your own permissions. |
+| Agent client | Rho's Agent panel drives your own Claude Code or Codex. DeepSeek Harness can connect as an external Agent through the [dsh-rho plugin](/reference/deepseek-harness). |
 | Python | Only for the file writer lock on platforms that need it. Windows does not. |
 
 macOS arm64 is the checked baseline. Windows x64 was checked with Node 22.23.4 and Rscript 4.5.1;
@@ -72,6 +72,15 @@ That link is a credential with a five-minute window and a single use.
 A new state copies the bundled `example/pa14-qs` project into your projects folder once, as an
 ordinary editable project. Open it, then ask the Agent a question about one of its figures or a
 selected row of a result table.
+
+## Use DeepSeek Harness
+
+The [dsh-rho plugin](/reference/deepseek-harness) connects Harness to an existing
+Rho project. Its **Rho** tab and sidebar entry open the complete Rho in Harness
+Desktop's Browser pane; Web Harness uses a separate browser window. Analyse in the
+shared Notebook, inspect a result in Rho, then copy a selected-row question back
+to the same Harness conversation. The guide covers the local 0.1.2 package,
+project grant, installation and connection recovery.
 
 ## What to read next
 

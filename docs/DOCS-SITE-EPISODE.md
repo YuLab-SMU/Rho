@@ -257,7 +257,7 @@ https://yulab-smu.top/Rho/doc/setup.md 文档，按照步骤为我安装并配�
   3. Install.
   4. Start on `~/Rho/projects` and `~/Rho/state`, the folders a start without flags uses after
      0.5.3.
-  5. Install the skill from <https://yulab-smu.top/Rho/skills/rho/>.
+  5. Install the skill from <https://yulab-smu.top/Rho/skills/rho/SKILL.md>.
   6. Connect itself to the example project.
   7. Check R.
   8. Report.
@@ -498,3 +498,51 @@ feeds and `.nojekyll` were not changed.
   and byte-identical to the branch, and the 25 removed or renamed paths answered `404`. The live
   pages name 0.5.4, and the feeds, `.nojekyll`, the setup page and the Skill answered
   byte-identical to the branch.
+
+## DeepSeek Harness plugin guide
+
+2026-11-05. After dsh-rho 0.1.2 was installed and its source pushed, the user asked
+for Harness support on the documentation branch. The site's published integration
+record still described the earlier prototype, and the install page named only
+Claude Code and Codex. A reader had no current installation guide from either
+home page.
+
+[DeepSeek Harness plugin](DEEPSEEK-HARNESS.md) is now a reference page, also linked
+from the front page, documentation home, install page and its sidebar. It records
+the local tarball route, a project-scoped agent connection, complete Desktop
+profile overrides, Web's separate browser, both launcher entries and the explicit
+copy/paste handoff for a selected result. The install page distinguishes the
+Agent clients driven inside Rho from Harness as an external Agent. The guide pins
+the package build to the checked 0.1.2 source commit and names the observed Rho,
+Harness and Node versions. It claims neither a marketplace listing nor public
+package or Git-package installation.
+
+The existing [Desktop and model-loop evidence](DSH-RHO-EPISODE.md) supplies the
+integration facts. This change adds documentation and links; it changes no plugin,
+Rho runtime or existing service. The deployment replaces the front page and
+`docs/` on `gh-pages`, preserving the recorded demo, update feeds, setup page,
+Skill and images.
+
+The full rendered-site link check also found nine earlier broken targets: the
+home page's Agent activity route, a removed Status section, a raw Skill directory
+without an index, and six links whose GitHub heading anchors differ from
+VitePress's IDs. The route and two obsolete links were corrected. The assembler
+translates the four differing heading IDs for the site while preserving the
+source Markdown's GitHub anchors.
+
+### Guide checks
+
+- `docs:build` and `docs:check` pass with 54 source documents and 308 rewritten
+  links. The build retains its existing large-chunk warning.
+- The rendered front page and documentation comprise 61 HTML pages. A static
+  check resolves 3,956 local links and assets and 754 heading anchors, with no
+  missing targets. The 123 files outside the front page and documentation match
+  the prior `gh-pages` tree byte for byte.
+- In a real browser at 1440 and 391 CSS px, the guide, both home pages and install
+  page keep the page within the viewport; long commands scroll inside code blocks.
+  The new home-page button wraps into its own row at the narrow width. The three
+  guide links on the front page, documentation home and install page were followed
+  to the new guide. No new runtime or model episode was run for these documents.
+
+Local screenshots and the link and preservation reports are in
+`work/dsh-rho/docs-01/`.
