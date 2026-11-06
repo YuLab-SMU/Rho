@@ -27,6 +27,8 @@
             "agent.activity.capture",
             "agent.activity.outputs",
             "agent.activity.read",
+            "agent.sessions.list",
+            "agent.sessions.read",
             "annotation.create",
             "annotation.decide",
             "annotation.list",

@@ -1,8 +1,14 @@
 # Rho status
 
-Updated: 2026-11-05.
+Updated: 2026-11-06.
 
 ## Current focus
+[External conversations](EXTERNAL-CONVERSATIONS-EPISODE.md) now join native Harness
+questions, visible replies, operations and result versions in Conversations;
+input stays in Harness. The actual two-turn palette-change session was backfilled
+by the installed 0.1.5 adapter and checked in a real browser. Rho 0.5.5 publication
+is being verified separately. No native tool was replayed and no Core behavior changed.
+
 The [third-party plugin channel](THIRD-PARTY-PLUGINS.md) now installs independent packages; sclet and a generated package have real native/browser [evidence](THIRD-PARTY-PLUGINS-EPISODE.md). Source after 0.5.4; distribution remains separate.
 
 [dsh-rho 0.1.4](DSH-RHO-EPISODE.md#conversation-project-matching) binds each conversation’s tools and launcher to the same verified project folder. Six regressions, two real services and the original Desktop conversation pass; the local plugin is upgraded.
@@ -10,13 +16,7 @@ The [public market](https://yulab-smu.top/Rho/market/index.json) selects the sam
 historical evidence, macOS 0.5.1 and the offline reader retain their [episode](REVIEW-EVIDENCE-EPISODE.md).
 Native tools remain normal; Core is optional. No Core execution behavior changed. [P3 continuity](P3-CONTINUITY-EPISODE.md) reproduced a 64-turn stop and continued it after reopening; the restarted Notebook's in-memory state did not survive, and four native choices remained. Claude sessions now prefer Auto, and Rho sets no step or wall cap by default. Rerun so, P3 asked for no permission; the Agent's MCP bridge had cut Notebook calls at 30 s and then 300 s, and without those cuts P3 finished in the shared R session in 12.9 minutes.
 
-The [research method proposal](https://github.com/YuLab-SMU/Rho-paper) centers on purpose-driven
-composition: selecting materials, arranging related views and operations, and carrying their
-meaning into Agent continuation. Plugins supply information, compute and environment capabilities.
-The single-cell walkthrough distinguishes scientific purposes and how inputs and execution
-conditions change the workspace. Galaxy and JupyterLab constrain plugin-related novelty alongside
-interface and shared-context comparisons. Remote connections remain illustrative; novelty and
-human benefits are not established by existing Rho checks.
+The [research method proposal](https://github.com/YuLab-SMU/Rho-paper) centers on purpose-driven composition: selecting materials, arranging related views and operations, and carrying their meaning into Agent continuation. Plugins supply information, compute and environment capabilities. The single-cell walkthrough distinguishes scientific purposes and how inputs and execution conditions change the workspace. Galaxy and JupyterLab constrain plugin-related novelty alongside interface and shared-context comparisons. Remote connections remain illustrative; novelty and human benefits are not established by existing Rho checks.
 
 | Part | Current behavior | Evidence or remaining work |
 | --- | --- | --- |

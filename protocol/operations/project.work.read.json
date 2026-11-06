@@ -68,7 +68,8 @@
                 "acp",
                 "claude-cli",
                 "native-transcript",
-                "external-acp"
+                "external-acp",
+                "external-session"
               ]
             },
             "sessionId": {
@@ -573,7 +574,7 @@
             "resourceRefs"
           ]
         },
-        "maxItems": 80
+        "maxItems": 88
       },
       "files": {
         "type": "array",

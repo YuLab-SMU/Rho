@@ -81,19 +81,22 @@ test('one offline grant does not redirect either project to another service; ret
 
 async function hostFixture(t, f) {
   const hooks = {}, cleanups = [], mounts = [];
-  const agents = f.roots.map((cwd, i) => ({ session: { id: 'session-' + i, header: { cwd } } }));
+  const agents = f.roots.map((cwd, i) => ({ session: { id: 'session-' + i, header: { id: 'session-' + i, cwd, version: 4, createdAt: 1000 } } }));
+  const logs = agents.map(() => [{ seq: 0, time: 1000, type: 'turn/start', data: { turn: 1 } }]);
+  let cutsClosed = 0;
   const tools = { get: () => undefined, guard: fn => { hooks.guard = fn; return () => {}; } };
   for (const agent of agents) agent.ctx = { tools: { get: () => ({}) }, plugin: (_plugin, config) => { mounts.push({ agent, config }); const fiber = Promise.resolve(); fiber.dispose = async () => {}; return fiber; } };
   const ctx = {
     effect: fn => { cleanups.push(fn()); }, on: (name, fn) => { hooks[name] = fn; }, tools,
     agents: { list: () => agents, get: id => agents.find(value => value.session.id === id) },
+    sessionQuery: { listSessions: async () => agents.map(a => ({ header: a.session.header })), observeSession: async id => { const i = agents.findIndex(a => a.session.id === id); return { header: agents[i].session.header, events: logs[i], [Symbol.dispose]: () => cutsClosed++ }; } },
     sessionController: { inspect: () => { throw new Error('Unknown session'); } },
     connection: { fetch: { register: route => { hooks.route = route; return () => {}; } } },
   };
   await apply(ctx, { ...f.config, command: 'node', args: ['/selected/rho/cli.js'] });
   t.after(async () => { for (const cleanup of cleanups.reverse()) await cleanup?.(); });
   const request = (i, method = 'GET', extra = '') => hooks.route.fetch(new Request('http://harness/api/dsh-rho/workspace?sessionId=session-' + i + extra, { method }));
-  return { hooks, mounts, agents, ctx, request };
+  return { hooks, mounts, agents, ctx, request, logs, cutsClosed: () => cutsClosed };
 }
 
 test('the launcher and MCP use one per-conversation binding; no-session reads start nothing', async t => {
@@ -126,4 +129,24 @@ test('replacement connection files cannot split the already running tools from t
   assert.match(h.hooks.guard({ name: 'mcp__rho__rho_call', agent: h.agents[0] }), /not connected/);
   assert.equal((await h.request(0, 'POST')).status, 409);
   assert.equal(h.mounts.length, 2);
+});
+
+
+test('native backfill and retry retain one conversation without replaying tools', async t => {
+  const f = await fixture(t), h = await hostFixture(t, f);
+  const { listExternalSessions, readExternalSession } = require('../lib/observe.cjs');
+  // Use files here because the adapter exports only its public normalizer entry.
+  const dir = path.join(f.roots[0], '.rho/agent/external');
+  let files = (await fs.readdir(dir)).filter(n => n.endsWith('.json'));
+  assert.equal(files.length, 1); assert.ok(h.cutsClosed() >= 4);
+  const beforeMounts = h.mounts.length;
+  h.logs[0].push({ seq: 1, time: 2000, type: 'user/message', data: { source: { kind: 'user' }, content: 'Change plot colors' } });
+  const value = await (await h.request(0, 'POST')).json();
+  assert.equal(value.observationReady, true); assert.equal(h.mounts.length, beforeMounts);
+  const record = JSON.parse(await fs.readFile(path.join(dir, files[0]), 'utf8'));
+  assert.equal(record.turns[0].prompt, 'Change plot colors'); assert.equal(record.summary.sessionId, 'session-0');
+  h.ctx.sessionQuery.observeSession = async () => { throw new Error('native log unavailable'); };
+  const failed = await (await h.request(0, 'POST')).json();
+  assert.match(failed.observationError, /Earlier records remain/);
+  assert.deepEqual(JSON.parse(await fs.readFile(path.join(dir, files[0]), 'utf8')), record);
 });

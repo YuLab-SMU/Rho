@@ -1,0 +1,266 @@
+{
+  "method": "agent.sessions.read",
+  "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "projectId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "before": {
+        "minimum": 0,
+        "type": "integer"
+      },
+      "limit": {
+        "maximum": 20,
+        "minimum": 1,
+        "type": "integer"
+      },
+      "session": {
+        "pattern": "^x-[a-f0-9]{64}$",
+        "type": "string"
+      }
+    },
+    "required": [
+      "projectId",
+      "session"
+    ],
+    "type": "object"
+  },
+  "outputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "first": {
+        "minimum": 0,
+        "type": "integer"
+      },
+      "session": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "pattern": "^x-[a-f0-9]{64}$",
+            "type": "string"
+          },
+          "inputOwner": {
+            "const": "external"
+          },
+          "lastAt": {
+            "type": "string"
+          },
+          "observedAt": {
+            "type": "string"
+          },
+          "omittedTurns": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "problem": {
+            "type": "string"
+          },
+          "producer": {
+            "type": "string"
+          },
+          "sessionId": {
+            "type": "string"
+          },
+          "sourceCursor": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "state": {
+            "enum": [
+              "running",
+              "completed",
+              "failed",
+              "stopped",
+              "unknown"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "turns": {
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "producer",
+          "sessionId",
+          "title",
+          "lastAt",
+          "observedAt",
+          "state",
+          "turns",
+          "sourceCursor",
+          "omittedTurns",
+          "inputOwner"
+        ],
+        "type": "object"
+      },
+      "turns": {
+        "items": {
+          "additionalProperties": false,
+          "properties": {
+            "at": {
+              "type": "string"
+            },
+            "endedAt": {
+              "type": "string"
+            },
+            "id": {
+              "type": "string"
+            },
+            "messages": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "at": {
+                    "type": "string"
+                  },
+                  "text": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "at",
+                  "text"
+                ],
+                "type": "object"
+              },
+              "maxItems": 200,
+              "type": "array"
+            },
+            "omittedChars": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "omittedTools": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "prompt": {
+              "type": "string"
+            },
+            "reply": {
+              "type": "string"
+            },
+            "results": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "path": {
+                    "type": "string"
+                  },
+                  "projectId": {
+                    "type": "string"
+                  },
+                  "toolId": {
+                    "type": "string"
+                  },
+                  "version": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "path",
+                  "toolId"
+                ],
+                "type": "object"
+              },
+              "maxItems": 64,
+              "type": "array"
+            },
+            "state": {
+              "enum": [
+                "running",
+                "completed",
+                "failed",
+                "stopped",
+                "unknown"
+              ]
+            },
+            "tools": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "at": {
+                    "type": "string"
+                  },
+                  "detail": {
+                    "type": "string"
+                  },
+                  "exitCode": {
+                    "type": "integer"
+                  },
+                  "id": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "outcome": {
+                    "enum": [
+                      "requested",
+                      "returned",
+                      "failed",
+                      "unknown"
+                    ]
+                  },
+                  "output": {
+                    "type": "string"
+                  },
+                  "paths": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "maxItems": 32,
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "id",
+                  "at",
+                  "name",
+                  "detail",
+                  "output",
+                  "outcome",
+                  "paths"
+                ],
+                "type": "object"
+              },
+              "maxItems": 256,
+              "type": "array"
+            }
+          },
+          "required": [
+            "id",
+            "at",
+            "state",
+            "prompt",
+            "reply",
+            "messages",
+            "tools",
+            "results",
+            "omittedTools",
+            "omittedChars"
+          ],
+          "type": "object"
+        },
+        "maxItems": 20,
+        "type": "array"
+      }
+    },
+    "required": [
+      "session",
+      "first",
+      "turns"
+    ],
+    "type": "object"
+  },
+  "description": null
+}

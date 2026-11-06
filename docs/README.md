@@ -81,3 +81,5 @@ Repository policies cover [contributions](../CONTRIBUTING.md), [privacy](../PRIV
 [security](../SECURITY.md) and [artifact trust](../CODE_SIGNING_POLICY.md).
 Execution belongs to [Rho-core](https://github.com/YuLab-SMU/Rho-core); functional
 component APIs belong to [Rho-plugins](https://github.com/YuLab-SMU/Rho-plugins).
+
+- [External conversations episode](EXTERNAL-CONVERSATIONS-EPISODE.md): native Harness history, operations and exact result versions.

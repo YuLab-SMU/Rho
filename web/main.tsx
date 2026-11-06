@@ -8,6 +8,7 @@ import { AgentConversation } from './conversation.js';
 import { ProjectNavigation, sourceLabels, type Section, type SourceRow } from './project.js';
 import { sourceItems, sourceRowOrder, useProjectFiles, type SourceItem } from './sources.js';
 import { FormSwitch, savedForm, saveForm, useLiveValues, type Prepared } from '@rho-workspace/plugin-kernel/ui';
+import { useExternalConversations } from './external-conversations.js';
 import { useAgentNow, type AgentNow } from './agent-now.js';
 import { NotesPanel, useProjectNotes } from './project-notes.js';
 import { compositionName, defaultWorkspace, fileKey, openInWorkspace, processComposition, processConversation } from './canvas.js';
@@ -405,6 +406,7 @@ function App() {
   // The live sessions' values have a place in Sources wherever this tab may read the sessions.
   const readsValues = !!snapshot?.catalog.operations.some(o => o.method === 'kernel.read' && o.state === 'available' && o.authorized);
   const values = useLiveValues(client, project && screen !== 'home' ? project.id : undefined, snapshot?.cursor, readsValues);
+  const externalConversations = useExternalConversations(client, !link && project && snapshot?.project.id === project.id ? project.id : null);
   const agentNow = useAgentNow(client, project && snapshot?.project.id === project.id ? snapshot : null);
   // The notes are opened when they are needed: for the titles of the project's sessions, or to be
   // shown beside Studio. A project with neither reads nothing more as it opens.
@@ -536,7 +538,7 @@ function App() {
       </details>
       {screen === 'plugins' ? <><button className="nav-row" onClick={pick(showOverview)}><Icon name="back" size={14} /><span>Back to project</span></button><PluginNavigation catalog={snapshot?.catalog} pluginId={pluginId} onSelect={id => pick(() => choosePlugin(id))()} /></>
       : <ProjectNavigation project={project} snapshot={snapshot} current={here} sources={sources} partial={files.truncated}
-          agent={{ running: !!agentNow?.running, waiting: !!agentNow?.waiting, conversations: snapshot?.conversations?.length ?? 0 }} adding={addingSource}
+          agent={{ running: !!agentNow?.running, waiting: !!agentNow?.waiting, conversations: (snapshot?.conversations?.length ?? 0) + externalConversations.sessions.length }} adding={addingSource}
           sessions={shownConversations().map(c => ({ id: processComposition(c.conversationId), title: sessionTitle(c), running: !!agentNow?.running && agentNow.conversationId === c.conversationId, when: c.lastAt }))}
           onOverview={pick(showOverview)} onStudio={pick(studio)} onNewLayout={arrangeable ? pick(newWorkspace) : undefined} onLayout={id => pick(() => processConversation(id) ? showProcess(id) : layout(id))()}
           onSection={next => pick(() => next === 'graph' ? showGraph() : showSection(next))()} onSources={next => pick(() => showSources(next))()} onFile={(row, item) => pick(() => showFile(row, item))()} values={readsValues ? values : null} onValue={(language, valueName) => pick(() => openObject(language, valueName))()} onAddSource={() => void addSource()} />}

@@ -513,11 +513,11 @@ export class RhoService {
     const capabilities = new Capabilities(this.plugins, project);
     const state = await capabilities.state();
     // The shared project listing remains available alongside an Agent's native tools.
-    const available = Object.keys(operations).filter(m => !extensionManagement.includes(m) && !m.startsWith('agent.activity.') && !m.startsWith('session.') && !m.startsWith('conversation.') && (!m.startsWith('project.') || m === 'project.entries') && !m.startsWith('requirements.prepare') && !m.startsWith('workspace.restore') && !['task.routing.put', 'binding.activity.append', 'feedback.submit', 'view.observe', 'view.observations.read', 'task.map.respond', 'annotation.decide', 'evidence.export', 'evidence.preview', 'console.run', 'console.stop', 'kernel.stop'].includes(m));
+    const available = Object.keys(operations).filter(m => !extensionManagement.includes(m) && !m.startsWith('agent.activity.') && !m.startsWith('agent.sessions.') && !m.startsWith('session.') && !m.startsWith('conversation.') && (!m.startsWith('project.') || m === 'project.entries') && !m.startsWith('requirements.prepare') && !m.startsWith('workspace.restore') && !['task.routing.put', 'binding.activity.append', 'feedback.submit', 'view.observe', 'view.observations.read', 'task.map.respond', 'annotation.decide', 'evidence.export', 'evidence.preview', 'console.run', 'console.stop', 'kernel.stop'].includes(m));
     const profileMethods = profile === 'layered-presentation' ? ['binding.open', 'capability.index', 'capability.resolve', 'workspace.observe', 'workspace.enhance'] : available.filter(m => !['workspace.observe', 'workspace.enhance', ...(profile ? ['skill.list','skill.read','protocol.describe'] : [])].includes(m));
     const selected = methods ?? (profile === 'layered-presentation' ? profileMethods : (await Promise.all(profileMethods.map(async method => [method, await capabilities.isAvailable(method, state)] as const))).filter(([, enabled]) => enabled).map(([method]) => method));
     requireThat(profile !== 'layered-presentation' || selected.every(m => profileMethods.includes(m)), 'scope', 'The selected role cannot receive broader methods.');
-    requireThat(selected.every(m => !extensionManagement.includes(m) && !!operations[m] && !m.startsWith('session.') && !m.startsWith('conversation.') && (!m.startsWith('project.') || m === 'project.entries') && !['task.routing.put', 'console.run', 'console.stop', 'kernel.stop'].includes(m)), 'invalid', 'Unknown or operator-only Agent capability.');
+    requireThat(selected.every(m => !extensionManagement.includes(m) && !!operations[m] && !m.startsWith('agent.sessions.') && !m.startsWith('session.') && !m.startsWith('conversation.') && (!m.startsWith('project.') || m === 'project.entries') && !['task.routing.put', 'console.run', 'console.stop', 'kernel.stop'].includes(m)), 'invalid', 'Unknown or operator-only Agent capability.');
     requireThat(await Promise.all(selected.map(method => capabilities.isAvailable(method, state))).then(values => values.every(Boolean)), 'unavailable', 'A requested Agent operation has no selected provider.');
     requireThat(!profile || new Set(['capability.index', 'capability.resolve', ...selected]).size <= layeredGrantLimits.maxMethods, 'limit', `Layered connection methods exceed the ${layeredGrantLimits.maxMethods}-method profile; choose an explicit narrower grant.`, { limit: 'maxMethods', maximum: layeredGrantLimits.maxMethods });
     const token = randomBytes(32).toString('hex');
@@ -1027,6 +1027,12 @@ export class RhoService {
     }
     // The person at this machine talks to a conversation Rho started; Agents and narrower links
     // cannot start one, and an Agent started this way cannot start another.
+    if (method.startsWith('agent.sessions.')) {
+      requireThat(principal.id === localBrowserId, 'unauthorized', 'External conversation history belongs to the person at this machine.');
+      const agent = this.plugins.need('agent');
+      if (method === 'agent.sessions.list') return agent.listExternalSessions(p.root);
+      return agent.readExternalSession(p.root, b);
+    }
     if (method === 'project.work.read') {
       requireThat(principal.id === localBrowserId, 'scope', 'Project work is available to the person at this machine.');
       const agent = (await new Capabilities(this.plugins, p).state()).enabled.includes('agent') ? this.plugins.optional('agent') : null;
@@ -1043,7 +1049,7 @@ export class RhoService {
       }
       return projectWork({ project: p, cursor: (await this.events(p)).cursor, conversations: await this.conversations.work(p, b.limit),
         documents: await owners.documentSummaries(), activity: (await this.projectActivity(p)).entries,
-        native, external: agent?.readExternalAcp(p.root), inspect: agent?.observeSessionFiles });
+        native, external: agent?.readExternalAcp(p.root), observed: agent?.listExternalSessions(p.root), readObserved: agent?.readExternalSession, inspect: agent?.observeSessionFiles });
     }
     if (method.startsWith('conversation.')) {
       requireThat(principal.id === localBrowserId, 'unauthorized', 'Conversations started in Rho belong to the person at this machine. Open Rho in a browser on this machine.');

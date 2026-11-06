@@ -1,0 +1,100 @@
+{
+  "method": "agent.sessions.list",
+  "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "projectId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      }
+    },
+    "required": [
+      "projectId"
+    ],
+    "type": "object"
+  },
+  "outputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "omitted": {
+        "minimum": 0,
+        "type": "integer"
+      },
+      "sessions": {
+        "items": {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "pattern": "^x-[a-f0-9]{64}$",
+              "type": "string"
+            },
+            "inputOwner": {
+              "const": "external"
+            },
+            "lastAt": {
+              "type": "string"
+            },
+            "observedAt": {
+              "type": "string"
+            },
+            "omittedTurns": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "problem": {
+              "type": "string"
+            },
+            "producer": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "sourceCursor": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "state": {
+              "enum": [
+                "running",
+                "completed",
+                "failed",
+                "stopped",
+                "unknown"
+              ]
+            },
+            "title": {
+              "type": "string"
+            },
+            "turns": {
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "id",
+            "producer",
+            "sessionId",
+            "title",
+            "lastAt",
+            "observedAt",
+            "state",
+            "turns",
+            "sourceCursor",
+            "omittedTurns",
+            "inputOwner"
+          ],
+          "type": "object"
+        },
+        "maxItems": 64,
+        "type": "array"
+      }
+    },
+    "required": [
+      "sessions",
+      "omitted"
+    ],
+    "type": "object"
+  },
+  "description": null
+}

@@ -6,19 +6,19 @@ Rho interface in Harness Desktop's Browser pane beside your conversation. Harnes
 keeps its model and permissions; Rho keeps the shared Notebook, files, tables,
 figures and selected-result questions.
 
-The current public package is **dsh-rho 0.1.4**. It matches the current
-conversation's project folder to an existing Rho grant, then uses that same
-connection for both its tools and **Open Rho workspace**. The launcher shows the
-project name, full folder and service address. Missing or ambiguous matches show
-**Connect this project**, with the open button disabled and no Rho tool access.
-See the [workspace check](DSH-RHO-EPISODE.md#conversation-project-matching).
+The 0.1.5 adapter, with Rho 0.5.5, also shows existing and new Harness
+conversations under **Agent → Conversations**. It retains visible replies, tool
+operations and result references in the matching project. Input stays in Harness.
+**Connections** is for project access setup; it does not count conversations.
+Only exact matching project folders are observed. Missing or ambiguous matches
+show **Connect this project**, with the open button disabled and no Rho tool access.
 
-The checked combination is **Harness 0.2.1-rc.5**, **Rho 0.5.4** and **Node
-22.22.x** on macOS. The earlier real model loop remains in the
-[integration record](DSH-RHO-EPISODE.md#reuse-the-whole-rho-application). Version
-0.1.4's project matching was checked with real MCP calls and both Desktop entry
-points; it did not run another model analysis. TUI and other systems remain
-unverified for this plugin.
+The checked native format is **Harness 0.2.1-rc.5** (version-4 session log) on
+macOS. The [external conversation episode](EXTERNAL-CONVERSATIONS-EPISODE.md)
+records the actual history and browser check, including failures. The earlier
+[project matching check](DSH-RHO-EPISODE.md#conversation-project-matching) and
+[real model loop](DSH-RHO-EPISODE.md#reuse-the-whole-rho-application) retain their
+own scope. TUI and other systems remain unverified for this adapter.
 
 ## Public package and index
 
@@ -136,13 +136,18 @@ skills; the plugin does not copy or replace them.
 
 ## Optional: build a local tarball
 
-This selects the same fixed public source. Building the small launcher does not
-build or replace your Rho service:
+This selects the same fixed public source and its Agent component. Work in a
+fresh directory; these builds do not replace your running Rho service:
 
 ```sh
 git clone https://github.com/YuLab-SMU/Rho.git rho-harness
 cd rho-harness
 git checkout 4bc6f6bb3d439f8fe2eb1a5f4d960b428e6ce203
+git clone https://github.com/YuLab-SMU/Rho-plugins.git ../Rho-plugins
+git -C ../Rho-plugins checkout "$(node -p 'JSON.parse(require("node:fs").readFileSync("components.json")).plugins.commit')"
+npm --prefix ../Rho-plugins ci
+npm --prefix ../Rho-plugins run build
+npm ci
 npm --prefix adapters/dsh-rho ci --ignore-scripts
 npm --prefix adapters/dsh-rho run build
 npm --prefix adapters/dsh-rho test
@@ -151,7 +156,7 @@ npm pack ./adapters/dsh-rho --ignore-scripts \
   --pack-destination "$PWD/work/dsh-rho/package"
 ```
 
-The resulting file is `work/dsh-rho/package/dsh-rho-0.1.4.tgz`. Use it in
+The resulting file is `work/dsh-rho/package/dsh-rho-0.1.5.tgz`. Use it in
 **Plugins → Add plugin** in place of the Git target.
 
 ## Analyse, inspect and ask about a selection

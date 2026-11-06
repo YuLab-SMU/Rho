@@ -48,10 +48,11 @@ export function apply(ctx) {
     async function open() {
       try {
         if (!openBrowser) throw new Error('Open a conversation to use the Harness browser, or use the system browser below.');
-        const response = await fetch('/api/dsh-rho/workspace?' + new URLSearchParams({ sessionId }), { credentials: 'same-origin' });
+        const response = await fetch('/api/dsh-rho/workspace?' + new URLSearchParams({ sessionId }), { method: 'POST', credentials: 'same-origin' });
         const value = await response.json();
         if (selectedSession.current !== sessionId) return;
         if (!response.ok) { setResult(null); setDetails(value); throw new Error(value.error); }
+        setResult(value);
         openBrowser(value.url);
       } catch (failure) { if (selectedSession.current === sessionId) setError(failure.message); }
     }
@@ -67,6 +68,8 @@ export function apply(ctx) {
             {current && <a href={current.url} target="_blank" rel="noreferrer">Open in system browser</a>}
           </div>
           {!current && !error && <p role="status">Checking this project’s Rho connection…</p>}
+          {current?.observationReady && <p>Conversation, operations and results are visible in Rho. Input stays in Harness.</p>}
+          {current?.observationError && <p role="alert">{current.observationError} <button onClick={() => { retrySession.current = sessionId; retry(); }}>Try again</button></p>}
           {error && <div role="alert"><p>{error}</p>{details?.conversationRoot && <p className="rho-launcher-path">{details.conversationRoot}</p>}
             {!!details?.projects?.length && <><p className="rho-launcher-other">Configured Rho projects:</p><ul>{details.projects.map(project => <li key={project.url}><strong>{project.name}</strong><div className="rho-launcher-path">{project.root}</div></li>)}</ul></>}
             {details?.unavailable > 0 && <p>{details.unavailable} configured connection(s) could not be reached.</p>}

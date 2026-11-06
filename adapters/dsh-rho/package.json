@@ -1,11 +1,18 @@
 {
   "name": "dsh-rho",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Connect DeepSeek Harness to an existing Rho project and its full WebUI",
   "license": "AGPL-3.0-only",
   "author": "YuLab-SMU",
   "homepage": "https://yulab-smu.top/Rho/docs/reference/deepseek-harness.html",
-  "keywords": ["deepseek-harness", "dsh", "rho", "science", "data-analysis", "notebook"],
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "rho",
+    "science",
+    "data-analysis",
+    "notebook"
+  ],
   "type": "module",
   "repository": {
     "type": "git",
@@ -23,6 +30,9 @@
     "src/host.cjs",
     "src/connection.cjs",
     "lib/client.js",
+    "lib/observe.cjs",
+    "lib/observe-source.json",
+    "lib/observe.LICENSES.txt",
     "cordis.patch.yml",
     "README.md",
     "LICENSE",

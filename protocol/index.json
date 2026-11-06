@@ -74,6 +74,18 @@
       "bytes": 3705,
       "sha256": "64d31b4cefd29c0132bc82223775ada64f974df17216a06e8be5e7ff98461d1e"
     },
+    "agent.sessions.list": {
+      "summary": "agent.sessions.list",
+      "path": "operations/agent.sessions.list.json",
+      "bytes": 2202,
+      "sha256": "43d0306205db0acba77d71280e8b5aa23a47cbed66c05c8710a39e6285fd5e3b"
+    },
+    "agent.sessions.read": {
+      "summary": "agent.sessions.read",
+      "path": "operations/agent.sessions.read.json",
+      "bytes": 6355,
+      "sha256": "1804a39c7edaf0caaf328404936aab0cd4d3d9e1731d7d03a86cc57c642d9c10"
+    },
     "annotation.create": {
       "summary": "annotation.create",
       "path": "operations/annotation.create.json",
@@ -647,8 +659,8 @@
     "project.work.read": {
       "summary": "Person at this machine only: read linked Agent sessions, retained native activity identities, current referenced files and the shared notes document. Source cursors and resource versions remain independent. Does not start an Agent, collector or Host.",
       "path": "operations/project.work.read.json",
-      "bytes": 22226,
-      "sha256": "fb1426f26fa7bbb5c01671832b58cac79aa708bc056d8a3cc8e6f0cfc249d9ab"
+      "bytes": 22262,
+      "sha256": "51d070968ec8b567765acecb7c8ddc83411fe222c469641b2679cc00a5cb1008"
     },
     "protocol.describe": {
       "summary": "protocol.describe",
@@ -725,8 +737,8 @@
     "session.grant": {
       "summary": "session.grant",
       "path": "operations/session.grant.json",
-      "bytes": 4989,
-      "sha256": "5c6414c989032b5a09fca7c8b76c49102fb0cb0ce46cca4d4c23bf2e90b50dd3"
+      "bytes": 5059,
+      "sha256": "d5d0e15b50349fbec4affa99ceb1b98c79a6dbdce048e1305f8cd8ad31a3fdd2"
     },
     "skill.list": {
       "summary": "List the application and enabled provider Skills shipped in the selected package. Skills guide discovery but do not grant authorization.",

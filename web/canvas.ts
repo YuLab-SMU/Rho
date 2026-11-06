@@ -8,7 +8,7 @@ import { capturable } from './sources.js';
 // The person and the Agent share one workspace: what the Agent opens lands beside what the
 // person has open, in the same saved layout either of them can arrange.
 export const defaultWorkspace = 'workspace';
-const names: Record<string, string> = { workspace: 'Workspace', 'agent-canvas': 'Agent canvas', 'observed-outputs': 'Observed outputs' };
+const names: Record<string, string> = { workspace: 'Workspace', 'agent-canvas': 'Agent canvas', 'observed-outputs': 'Observed outputs', 'external-results': 'External results' };
 // The person's own pages after the first are numbered (see createWorkspace).
 export function compositionName(id: string) { return names[id] ?? (/^workspace-(\d+)$/.exec(id) ? 'Workspace ' + id.slice('workspace-'.length) : id); }
 // Each conversation started in Rho has its own Studio layout, derived from its work until the

@@ -7,6 +7,7 @@ import { BrandMark, ProviderMark } from './brand-marks.js';
 import { Icon } from './icons.js';
 import { OutsideAgents } from './outside-agents.js';
 import './agent-manage.css';
+import { ExternalConversationRow, useExternalConversations, type ExternalSummary } from './external-conversations.js';
 
 // The Agent page: the conversations started in Rho in this project, to find, continue, export
 // or clear away; and the Agents themselves, with the model and settings new conversations use.
@@ -56,15 +57,16 @@ export function AgentPage({ client, snapshot, exists, onContinue, onPath, onNew,
   useEffect(() => { if (unnamed) refreshAgentSettings(client, snapshot.project.id); }, [client, snapshot.project.id, unnamed]);
   const [tab, setTab] = useState<Tab>(() => { try { const kept = sessionStorage.getItem(tabKey); return kept === 'agents' || kept === 'outside' ? kept : 'conversations'; } catch { return 'conversations'; } });
   const choose = (next: Tab) => { setTab(next); try { sessionStorage.setItem(tabKey, next); } catch { /* The tab is remembered only while storage works. */ } };
-  const count = snapshot.conversations?.length ?? 0, outside = (snapshot.agents ?? []).filter(agent => !agent.conversationId && !agent.ended).length;
+  const external = useExternalConversations(client, snapshot.project.id);
+  const count = (snapshot.conversations?.length ?? 0) + external.sessions.length, outside = (snapshot.agents ?? []).filter(agent => !agent.conversationId && !agent.ended).length;
   return <div className="agent-page">
     <div className="agent-tabs" role="tablist" aria-label="Agent page">
       <button role="tab" aria-selected={tab === 'conversations'} onClick={() => choose('conversations')}>Conversations{count > 0 && <span className="tab-count">{count}</span>}</button>
       <button role="tab" aria-selected={tab === 'agents'} onClick={() => choose('agents')}>Agents</button>
-      <button role="tab" aria-selected={tab === 'outside'} onClick={() => choose('outside')}>Outside Rho{outside > 0 && <span className="tab-count">{outside}</span>}</button>
+      <button role="tab" aria-selected={tab === 'outside'} onClick={() => choose('outside')}>Connections{outside > 0 && <span className="tab-count">{outside}</span>}</button>
     </div>
     {tab === 'conversations' ? <>
-      <Conversations client={client} snapshot={snapshot} settings={settings} exists={exists} onContinue={onContinue} onPath={onPath} onNew={onNew} />
+      <Conversations client={client} snapshot={snapshot} settings={settings} exists={exists} onContinue={onContinue} onPath={onPath} onNew={onNew} onOpened={onOpened} external={external} />
       {extra}
     </> : tab === 'agents' ? <AgentsPanel state={settings} /> : <OutsideAgents client={client} snapshot={snapshot} onOpened={onOpened} />}
   </div>;
@@ -72,9 +74,9 @@ export function AgentPage({ client, snapshot, exists, onContinue, onPath, onNew,
 
 // ——— Conversations ———
 
-function Conversations({ client, snapshot, settings, exists, onContinue, onPath, onNew }: { client: BrowserClient; snapshot: WorkspaceSnapshot; settings: AgentSettingsState; exists: (path: string) => boolean; onContinue: (id: string) => void; onPath: (path: string) => void; onNew: () => void }) {
+function Conversations({ client, snapshot, settings, exists, onContinue, onPath, onNew, onOpened, external }: { onOpened: (compositionId: string, viewId?: string) => void; external: ReturnType<typeof useExternalConversations>; client: BrowserClient; snapshot: WorkspaceSnapshot; settings: AgentSettingsState; exists: (path: string) => boolean; onContinue: (id: string) => void; onPath: (path: string) => void; onNew: () => void }) {
   const projectId = snapshot.project.id;
-  const [query, setQuery] = useState(''), [agent, setAgent] = useState<'all' | 'claude-code' | 'codex'>('all');
+  const [query, setQuery] = useState(''), [agent, setAgent] = useState<'all' | 'claude-code' | 'codex' | 'outside'>('all');
   const [open, setOpen] = useState<string | null>(null), [showTrash, setShowTrash] = useState(false);
   const [trash, setTrash] = useState<Listed[] | null>(null), [problem, setProblem] = useState(''), [notice, setNotice] = useState<{ text: string; undo?: () => void } | null>(null);
   const list = useMemo(() => [...(snapshot.conversations ?? [])].sort((a, b) => Number(b.state === 'running') - Number(a.state === 'running') || b.lastAt.localeCompare(a.lastAt)), [snapshot.conversations]);
@@ -86,11 +88,13 @@ function Conversations({ client, snapshot, settings, exists, onContinue, onPath,
     return () => { live = false; };
   }, [client, projectId, signature]);
   useEffect(() => { if (!notice) return; const timer = setTimeout(() => setNotice(null), 8000); return () => clearTimeout(timer); }, [notice]);
-  const counts = { 'claude-code': list.filter(c => c.client !== 'codex').length, codex: list.filter(c => c.client === 'codex').length };
+  const counts = { 'claude-code': list.filter(c => c.client !== 'codex').length, codex: list.filter(c => c.client === 'codex').length, outside: external.sessions.length };
   const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
-  const shown = list.filter(c => (agent === 'all' || (agent === 'codex') === (c.client === 'codex'))
+  const shown = list.filter(c => (agent === 'all' || (agent !== 'outside' && (agent === 'codex') === (c.client === 'codex')))
     && words.every(word => [c.agentTitle, c.title, names(c, settings).modelFull, agentOf(c.client)].join(' ').toLowerCase().includes(word)));
-  const groups = [...new Set(shown.map(c => dayGroup(c.lastAt)))].map(label => ({ label, rows: shown.filter(c => dayGroup(c.lastAt) === label) }));
+  const combined: Array<Summary | ExternalSummary> = [...shown, ...external.sessions.filter(c => (agent === 'all' || agent === 'outside') && words.every(word => [c.title, c.producer, 'DeepSeek Harness Outside Rho', c.sessionId].join(' ').toLowerCase().includes(word)))];
+  combined.sort((a, b) => Number(b.state === 'running') - Number(a.state === 'running') || b.lastAt.localeCompare(a.lastAt));
+  const groups = [...new Set(combined.map(c => dayGroup(c.lastAt)))].map(label => ({ label, rows: combined.filter(c => dayGroup(c.lastAt) === label) }));
   async function act(method: 'conversation.trash' | 'conversation.restore' | 'conversation.delete', summary: Summary | Listed) {
     setProblem('');
     try {
@@ -103,26 +107,28 @@ function Conversations({ client, snapshot, settings, exists, onContinue, onPath,
       setTrash(next.conversations);
     } catch (error) { setProblem(error instanceof Error ? error.message : 'That did not work.'); }
   }
-  if (!list.length && !trash?.length) return <div className="empty-state agent-empty"><span className="empty-symbol"><Icon name="spark" size={26} stroke={1.5} /></span><h2>No conversations yet</h2>
+  if (!list.length && !external.sessions.length && !external.problem && !external.omitted && !trash?.length) return <div className="empty-state agent-empty"><span className="empty-symbol"><Icon name="spark" size={26} stroke={1.5} /></span><h2>No conversations yet</h2>
     <p>Ask the Agent to explore or change this project. What it reads, changes and runs is kept here.</p><button className="primary" onClick={onNew}><Icon name="prompt" size={16} />New conversation</button></div>;
   return <section className="conversations" aria-label="Conversations">
     <div className="conv-toolbar">
       <label className="conv-search"><Icon name="search" size={15} /><input type="search" placeholder="Search conversations" aria-label="Search conversations" value={query} onChange={event => setQuery(event.target.value)} /></label>
-      {counts['claude-code'] > 0 && counts.codex > 0 && <div className="agent-choice conv-filter" role="radiogroup" aria-label="Agent">
-        {(['all', 'claude-code', 'codex'] as const).map(which => <button key={which} role="radio" aria-checked={agent === which} className={agent === which ? 'selected' : ''} onClick={() => setAgent(which)}>
-          {which !== 'all' && <BrandMark brand={which} size={14} />}{which === 'all' ? 'All' : agentOf(which)}<span className="tab-count">{which === 'all' ? list.length : counts[which]}</span></button>)}
+      {Object.values(counts).filter(n => n > 0).length > 1 && <div className="agent-choice conv-filter" role="radiogroup" aria-label="Agent">
+        {(['all', 'claude-code', 'codex', 'outside'] as const).filter(which => which === 'all' || counts[which] > 0).map(which => <button key={which} role="radio" aria-checked={agent === which} className={agent === which ? 'selected' : ''} onClick={() => setAgent(which)}>
+          {which !== 'all' && which !== 'outside' && <BrandMark brand={which} size={14} />}{which === 'all' ? 'All' : which === 'outside' ? 'Outside Rho' : agentOf(which)}<span className="tab-count">{which === 'all' ? list.length + external.sessions.length : counts[which]}</span></button>)}
       </div>}
       <button className={'conv-trash-toggle' + (showTrash ? ' selected' : '')} aria-pressed={showTrash} onClick={() => setShowTrash(v => !v)}><Icon name="trash" size={15} />Trash{trash && trash.length > 0 && <span className="tab-count">{trash.length}</span>}</button>
     </div>
     {notice && <p className="conv-notice" role="status">{notice.text}{notice.undo && <button className="text-button" onClick={() => { notice.undo!(); setNotice(null); }}>Undo</button>}</p>}
     {problem && <p className="inline-error" role="alert">{problem}</p>}
+    {external.problem && <p className="inline-error" role="alert">External conversations: {external.problem} Retained entries stay visible; retrying automatically.</p>}
+    {external.omitted > 0 && <p role="status">{external.omitted} external records could not be included in this bounded read.</p>}
     {showTrash ? <TrashList trash={trash} settings={settings} onRestore={summary => void act('conversation.restore', summary)} onDelete={summary => void act('conversation.delete', summary)} />
       : groups.length ? groups.map(group => <div key={group.label} className="conv-day">
         <h3 className="conv-day-label">{group.label}</h3>
-        <ul className="conv-rows">{group.rows.map(summary => <ConversationRow key={summary.conversationId} client={client} snapshot={snapshot} summary={summary} settings={settings} expanded={open === summary.conversationId}
+        <ul className="conv-rows">{group.rows.map(summary => 'inputOwner' in summary ? <ExternalConversationRow key={summary.id} summary={summary} client={client} snapshot={snapshot} open={open === summary.id} onToggle={() => setOpen(id => id === summary.id ? null : summary.id)} onPath={onPath} onOpened={onOpened} /> : <ConversationRow key={summary.conversationId} client={client} snapshot={snapshot} summary={summary} settings={settings} expanded={open === summary.conversationId}
           onToggle={() => setOpen(id => id === summary.conversationId ? null : summary.conversationId)} exists={exists} onContinue={onContinue} onPath={onPath} onTrash={() => void act('conversation.trash', summary)} onProblem={setProblem} />)}</ul>
       </div>)
-      : <div className="empty-state compact"><p>{list.length ? 'No conversation matches “' + query.trim() + '”.' : 'Every conversation is in the trash.'}</p>{query && <button onClick={() => setQuery('')}>Clear search</button>}</div>}
+      : <div className="empty-state compact"><p>{list.length + external.sessions.length ? 'No conversation matches “' + query.trim() + '”.' : 'Every conversation is in the trash.'}</p>{query && <button onClick={() => setQuery('')}>Clear search</button>}</div>}
   </section>;
 }
 

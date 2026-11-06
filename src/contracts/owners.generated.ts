@@ -7277,6 +7277,360 @@ export const ownerContracts: OwnerContractSnapshot = {
           },
           "requires": []
         },
+        "agent.sessions.list": {
+          "effect": "read",
+          "inputSchema": {
+            "additionalProperties": false,
+            "properties": {},
+            "required": [],
+            "type": "object"
+          },
+          "outputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "omitted": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "sessions": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "id": {
+                      "pattern": "^x-[a-f0-9]{64}$",
+                      "type": "string"
+                    },
+                    "inputOwner": {
+                      "const": "external"
+                    },
+                    "lastAt": {
+                      "type": "string"
+                    },
+                    "observedAt": {
+                      "type": "string"
+                    },
+                    "omittedTurns": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "problem": {
+                      "type": "string"
+                    },
+                    "producer": {
+                      "type": "string"
+                    },
+                    "sessionId": {
+                      "type": "string"
+                    },
+                    "sourceCursor": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "state": {
+                      "enum": [
+                        "running",
+                        "completed",
+                        "failed",
+                        "stopped",
+                        "unknown"
+                      ]
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "turns": {
+                      "minimum": 0,
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "producer",
+                    "sessionId",
+                    "title",
+                    "lastAt",
+                    "observedAt",
+                    "state",
+                    "turns",
+                    "sourceCursor",
+                    "omittedTurns",
+                    "inputOwner"
+                  ],
+                  "type": "object"
+                },
+                "maxItems": 64,
+                "type": "array"
+              }
+            },
+            "required": [
+              "sessions",
+              "omitted"
+            ],
+            "type": "object"
+          },
+          "requires": []
+        },
+        "agent.sessions.read": {
+          "effect": "read",
+          "inputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "before": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "limit": {
+                "maximum": 20,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "session": {
+                "pattern": "^x-[a-f0-9]{64}$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "session"
+            ],
+            "type": "object"
+          },
+          "outputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "first": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "session": {
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "pattern": "^x-[a-f0-9]{64}$",
+                    "type": "string"
+                  },
+                  "inputOwner": {
+                    "const": "external"
+                  },
+                  "lastAt": {
+                    "type": "string"
+                  },
+                  "observedAt": {
+                    "type": "string"
+                  },
+                  "omittedTurns": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "problem": {
+                    "type": "string"
+                  },
+                  "producer": {
+                    "type": "string"
+                  },
+                  "sessionId": {
+                    "type": "string"
+                  },
+                  "sourceCursor": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "state": {
+                    "enum": [
+                      "running",
+                      "completed",
+                      "failed",
+                      "stopped",
+                      "unknown"
+                    ]
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "turns": {
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "id",
+                  "producer",
+                  "sessionId",
+                  "title",
+                  "lastAt",
+                  "observedAt",
+                  "state",
+                  "turns",
+                  "sourceCursor",
+                  "omittedTurns",
+                  "inputOwner"
+                ],
+                "type": "object"
+              },
+              "turns": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "at": {
+                      "type": "string"
+                    },
+                    "endedAt": {
+                      "type": "string"
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "messages": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "at": {
+                            "type": "string"
+                          },
+                          "text": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "at",
+                          "text"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 200,
+                      "type": "array"
+                    },
+                    "omittedChars": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "omittedTools": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "prompt": {
+                      "type": "string"
+                    },
+                    "reply": {
+                      "type": "string"
+                    },
+                    "results": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "path": {
+                            "type": "string"
+                          },
+                          "projectId": {
+                            "type": "string"
+                          },
+                          "toolId": {
+                            "type": "string"
+                          },
+                          "version": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "path",
+                          "toolId"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 64,
+                      "type": "array"
+                    },
+                    "state": {
+                      "enum": [
+                        "running",
+                        "completed",
+                        "failed",
+                        "stopped",
+                        "unknown"
+                      ]
+                    },
+                    "tools": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "at": {
+                            "type": "string"
+                          },
+                          "detail": {
+                            "type": "string"
+                          },
+                          "exitCode": {
+                            "type": "integer"
+                          },
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "outcome": {
+                            "enum": [
+                              "requested",
+                              "returned",
+                              "failed",
+                              "unknown"
+                            ]
+                          },
+                          "output": {
+                            "type": "string"
+                          },
+                          "paths": {
+                            "items": {
+                              "type": "string"
+                            },
+                            "maxItems": 32,
+                            "type": "array"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "at",
+                          "name",
+                          "detail",
+                          "output",
+                          "outcome",
+                          "paths"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 256,
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "at",
+                    "state",
+                    "prompt",
+                    "reply",
+                    "messages",
+                    "tools",
+                    "results",
+                    "omittedTools",
+                    "omittedChars"
+                  ],
+                  "type": "object"
+                },
+                "maxItems": 20,
+                "type": "array"
+              }
+            },
+            "required": [
+              "session",
+              "first",
+              "turns"
+            ],
+            "type": "object"
+          },
+          "requires": []
+        },
         "binding.activity": {
           "effect": "read",
           "inputSchema": {
@@ -24867,17 +25221,17 @@ export const ownerContracts: OwnerContractSnapshot = {
     },
     "agent": {
       "package": "@rho-workspace/plugin-agent",
-      "packageVersion": "0.4.28",
+      "packageVersion": "0.4.29",
       "entry": "./operations",
       "entryPath": "@rho-workspace/plugin-agent/dist/operations.js",
-      "entrySha256": "08bb1c852cb89a17a2e307831ed2df5d6d16cbccaaf2971ec251bb9a1a34261f",
+      "entrySha256": "3fd6d6999950895852bea81e744e74a5c9104c8f97c2c90ff0d4dbd54a990a57",
       "exports": {
-        "operationContracts": "59b4465ecd7f62a59fc19c9bb49143c0c587fc9f3ca06839b8c73ee6dc9e8902"
+        "operationContracts": "0286460194d99bf9ca79abd2a088317dad41f4dd3a7f3a02d75f047aed4238fb"
       }
     },
     "agent-feedback": {
       "package": "@rho-workspace/plugin-agent",
-      "packageVersion": "0.4.28",
+      "packageVersion": "0.4.29",
       "entry": "./feedback-contract",
       "entryPath": "@rho-workspace/plugin-agent/dist/feedback-contract.js",
       "entrySha256": "ecb1561d92b5953d2b786d29cfb57f6f8085d214dc1dec76f6e7bd7a5257cb75",
@@ -24887,7 +25241,7 @@ export const ownerContracts: OwnerContractSnapshot = {
     },
     "agent-native": {
       "package": "@rho-workspace/plugin-agent",
-      "packageVersion": "0.4.28",
+      "packageVersion": "0.4.29",
       "entry": "./contract",
       "entryPath": "@rho-workspace/plugin-agent/dist/contract.js",
       "entrySha256": "9e926081cb755a98d2b00d2a8488d8f4c6d25b3d5f1ec526d334ade633fe8a65",
@@ -24897,7 +25251,7 @@ export const ownerContracts: OwnerContractSnapshot = {
     },
     "agent-session": {
       "package": "@rho-workspace/plugin-agent",
-      "packageVersion": "0.4.28",
+      "packageVersion": "0.4.29",
       "entry": "./session-contract",
       "entryPath": "@rho-workspace/plugin-agent/dist/session-contract.js",
       "entrySha256": "bb5b118f965e208617781af3e8ad6b6739869bcc19f0092eab14468824693123",
