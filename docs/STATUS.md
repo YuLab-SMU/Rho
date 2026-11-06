@@ -3,6 +3,8 @@
 Updated: 2026-11-06.
 
 ## Current focus
+[Agent connection](AGENT-CONNECT-EPISODE.md) now uses one prompt for a local MCP Agent to configure itself. Conversations keeps its own new-conversation settings; grants and verified calls are separate. A real Claude client configured itself and a fresh session called rho_index with the matching project ID; browser recovery and 30 focused checks pass. Other clients remain unverified. Source after 0.5.5; no Core or Plugins changes.
+
 [External conversations](EXTERNAL-CONVERSATIONS-EPISODE.md) join native Harness questions, replies, operations and result versions in Conversations; input stays in Harness. The original two-turn palette-change session passes in installed Rho 0.5.5 and dsh-rho 0.1.5. CI passes on macOS/Linux/Windows, including four-platform offline installation. The v0.5.5 npm publication succeeded; registry visibility and the updated public Harness index are being checked separately. No native tool was replayed and no Core behavior changed.
 
 The [third-party plugin channel](THIRD-PARTY-PLUGINS.md) now installs independent packages; sclet and a generated package have real native/browser [evidence](THIRD-PARTY-PLUGINS-EPISODE.md). The application path is included in 0.5.5; external plugin packages retain their own delivery.

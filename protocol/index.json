@@ -740,6 +740,12 @@
       "bytes": 5059,
       "sha256": "d5d0e15b50349fbec4affa99ceb1b98c79a6dbdce048e1305f8cd8ad31a3fdd2"
     },
+    "session.instructions": {
+      "summary": "Person at this machine or operator only: read a prompt for the person's own MCP client to connect itself to this existing project. Returns local launcher paths, never credential contents. Reading or copying grants no access, edits no client configuration and starts no runtime.",
+      "path": "operations/session.instructions.json",
+      "bytes": 1057,
+      "sha256": "acc5dba3651bdd6db317d7a3062fd0d7f3dff3e1514d6d51c00a017c3d050181"
+    },
     "skill.list": {
       "summary": "List the application and enabled provider Skills shipped in the selected package. Skills guide discovery but do not grant authorization.",
       "path": "operations/skill.list.json",

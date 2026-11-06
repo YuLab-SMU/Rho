@@ -103,7 +103,8 @@ export const operations: Record<string, any> = { ...base.operations, ...extensio
   'conversation.settings.update': obj({ ...project, expectedVersion: integer, backend: { anyOf: [agentBackend, { type: 'null' }] }, choices: obj({ 'claude-acp': choices, 'codex-acp': choices, 'acp': choices }, []), describe: obj({ enabled: { type: 'boolean' } }, ['enabled']) }, ['projectId', 'expectedVersion']),
   'conversation.settings.check': obj({ ...project, backend: agentBackend }),
   // Claude Code or Codex running outside Rho, given this project and told how to start Rho's MCP server.
-  'session.connect': obj({ ...project, agent: outsideAgent })
+  'session.connect': obj({ ...project, agent: outsideAgent }),
+  'session.instructions': obj(project)
 };
 
 // Every owner-declared operation and response comes from the snapshot, scoped once.
@@ -352,6 +353,7 @@ export const responses: Record<string, any> = { ...base.responses, ...ownerRespo
   'conversation.settings.update': agentSettings,
   'conversation.settings.check': agentSettings,
   'session.connect': response({ principal: text, label: text, methods: integer, granted: { type: 'boolean' }, added: addedTo }),
+  'session.instructions': response({ request: text, prompt: text, command: array(text) }),
   'protocol.describe': response({ apiVersion: { const: '2.0' }, schemaVersion: { const: 2 }, revision: digest, entries: array(response({ method: text, summary: text })), next: { type: ['string', 'null'] }, complete: { type: 'boolean' }, contract: response({ method: text, inputSchema: { type: 'object' }, outputSchema: { type: 'object' }, definitions: { type: 'object' }, description: text }) }, ['apiVersion', 'schemaVersion', 'revision', 'entries', 'next', 'complete']),
   'capability.list': { ...catalog, properties: { ...catalog.properties, host: contract.cliSchema }, required: [...(catalog.required ?? []), 'host'] },
   'capability.configure': response({ version: positive, enabled: array(text), receipt: response({ changeId: text, author: text, version: positive, enabled: array(text), at: text }) }),
@@ -451,6 +453,7 @@ export const descriptions = {
   'conversation.settings.update': 'Person at this machine only: choose the Agent and its settings for new conversations, among the values that Agent last offered, and whether a model describes the files a message writes. A stale expectedVersion is refused.',
   'conversation.settings.check': 'Person at this machine only: start the chosen Agent in this project to read the settings it offers, then remove that session and end the process. No message is sent; one check per Agent runs at a time.',
   'session.connect': 'Person at this machine only: give Claude Code or Codex running outside Rho access to this project, then add Rho\'s MCP server with that Agent\'s own `mcp add` (Claude Code: for this project folder; Codex: in its user configuration). A grant whose connection still reaches this service is kept, so a connected session keeps working; a new grant the Agent refuses is removed. No message is sent and no Agent session starts.',
+  'session.instructions': 'Person at this machine or operator only: read a prompt for the person\'s own MCP client to connect itself to this existing project. Returns local launcher paths, never credential contents. Reading or copying grants no access, edits no client configuration and starts no runtime.',
   'conversation.read': 'Read a conversation started in Rho: the person\'s messages, the Agent\'s visible text and tool steps, and how each message ended. Reading starts and resumes nothing.',
   'project.work.read': 'Person at this machine only: read linked Agent sessions, retained native activity identities, current referenced files and the shared notes document. Source cursors and resource versions remain independent. Does not start an Agent, collector or Host.',
   'resource.register': 'Declare scoped existing bytes and their type/schema at the supplied digest. This read and registration starts no runtime.',

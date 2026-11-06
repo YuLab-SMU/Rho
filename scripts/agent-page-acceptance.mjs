@@ -1,7 +1,7 @@
 // Agent page acceptance: controlled ACP peers stand in for Claude Code and Codex in a disposable
 // project, through the real service and Chrome. No model credentials are used. The Claude Code
 // peer offers its own model names, models from two providers, effort and mode, and reports a
-// session title, context use and cost. It checks that the Agents tab asks an Agent what it offers
+// session title, context use and cost. It checks that the conversation settings ask an Agent what it offers
 // only when the person asks, shows its names, providers and models, and saves the model, effort
 // and default Agent; that conversations are rows with the Agent's title, model, effort, context
 // and cost, found by search and by Agent; that a row opens to its facts and what it did, with a
@@ -94,7 +94,7 @@ if (process.env.RHO_CONNECT_FAIL && !process.argv.includes('remove')) { process.
   await nav.getByRole('button', { name: 'Agent', exact: true }).click();
 
   // The Agents: nothing is asked until the person asks.
-  await page.getByRole('tab', { name: 'Agents' }).click();
+  await page.getByRole('button', { name: 'New conversation settings', exact: true }).click();
   const claude = page.locator('.agent-row').filter({ hasText: 'Claude Code' }), codex = page.locator('.agent-row').filter({ hasText: 'Codex' });
   assert.match(await claude.locator('.agent-row-status').textContent(), /Not asked yet/);
   assert.match(await codex.locator('.agent-row-status').textContent(), /Not asked yet/);
@@ -119,7 +119,7 @@ if (process.env.RHO_CONNECT_FAIL && !process.argv.includes('remove')) { process.
   await codex.locator('.agent-default').waitFor();
   await claude.getByRole('button', { name: 'Make default' }).click();
   await until(() => call('conversation.settings.read'), s => s.backend === 'claude-acp', 'Claude Code the default again');
-  passed('the Agents tab asks an Agent only when asked, shows its own names, providers and models, and saves the model, effort and default Agent');
+  passed('the conversation settings ask an Agent only when asked, shows its own names, providers and models, and saves the model, effort and default Agent');
 
   // The message box's settings: one chip naming the model and effort, and a short menu with a
   // row per setting; a value closes it, Escape steps back and then closes it, not the panel.
@@ -246,27 +246,27 @@ if (process.env.RHO_CONNECT_FAIL && !process.argv.includes('remove')) { process.
   await assert.rejects(call('conversation.read', { conversationId: second }), error => error.error?.kind === 'not_found');
   passed('the trash keeps a conversation until restored or deleted, with Undo, and never takes one the Agent is answering');
 
-  // Outside Rho: the person adds Rho to their own Claude Code with its own `mcp add`, and the
-  // steps say what happened; a refusal says why and leaves no access behind.
-  await page.getByRole('tab', { name: /^Outside Rho/ }).click();
+  // One brand-independent setup prompt. Reading or copying does not create a grant.
+  await page.getByRole('tab', { name: /^Connect your agent/ }).click();
   const outside = page.locator('.outside-agents');
-  assert.deepEqual(await outside.locator('.connect-step').evaluateAll(steps => steps.map(step => step.className)), ['connect-step waiting', 'connect-step next', 'connect-step waiting']);
-  await outside.getByRole('button', { name: /Add to Claude Code/ }).click();
-  await until(() => outside.locator('.connect-step.done').count(), n => n === 2, 'access and Rho in Claude Code done');
-  const [, add] = (await fs.readFile(cliLog, 'utf8')).trim().split('\n').map(line => JSON.parse(line));
-  assert.deepEqual(add.args.slice(0, 6), ['mcp', 'add', '-s', 'local', 'rho-ozone', '--']); assert.equal(add.cwd, opened.root);
-  await new RhoClient(JSON.parse(await fs.readFile(add.args.at(-1), 'utf8'))).call('observation.snapshot', { projectId: opened.id });
-  await until(() => outside.locator('.connect-step.done').count(), n => n === 3, 'the first call shown');
-  assert.match(await outside.getByRole('tab', { name: /^Claude Code/ }).innerText(), /Connected/);
+  await outside.getByRole('button', { name: 'Copy setup prompt', exact: true }).waitFor();
+  await outside.locator('summary').filter({ hasText: 'Full setup prompt' }).click();
+  const prompt = await outside.getByRole('textbox', { name: 'Full setup prompt' }).inputValue();
+  assert.match(prompt, /mcp\.name, mcp\.command and mcp\.args/);
+  assert.ok(prompt.includes(opened.id));
+  assert.equal((await call('observation.snapshot')).agents.filter(a => !a.conversationId).length, 0);
+  const grant = await admin.call('session.grant', { projectId: opened.id, externalSessionId: 'My-research-agent' });
+  await until(() => outside.innerText(), t => /Waiting for first successful call/.test(t), 'access shown without claiming a connection');
+  const connected = new RhoClient(JSON.parse(await fs.readFile(grant.connectionFile, 'utf8')));
+  await connected.call('observation.snapshot', { projectId: opened.id });
+  await until(() => outside.innerText(), t => /Call verified/.test(t), 'successful call shown');
+  await assert.rejects(connected.call('document.read', { projectId: opened.id, documentId: '0'.repeat(64) }));
+  await until(() => outside.innerText(), t => /Last call refused/.test(t), 'refused call shown');
+  await connected.call('observation.snapshot', { projectId: opened.id });
+  await until(() => outside.innerText(), t => /Call verified/.test(t), 'retry with the same connection shown');
+  await outside.locator('summary').filter({ hasText: 'Full setup prompt' }).click();
   await shot('04b-outside');
-  await outside.getByRole('tab', { name: /^Codex/ }).click();
-  process.env.RHO_CONNECT_FAIL = '1';
-  await outside.getByRole('button', { name: /Add to Codex/ }).click();
-  await outside.locator('.inline-error').filter({ hasText: 'Codex could not add Rho: config is locked.' }).waitFor();
-  delete process.env.RHO_CONNECT_FAIL;
-  assert.equal(await outside.locator('.connect-step.warn').count(), 1);
-  assert.equal((await call('observation.snapshot')).agents.some(agent => agent.label === 'Codex'), false);
-  passed('Outside Rho adds Rho to Claude Code with its own mcp add and shows its first call; a refused Codex leaves no access');
+  passed('the generic prompt grants nothing; an arbitrary Agent name and its actual call appear');
 
   const limitedId = (await call('conversation.start', { changeId: 'page-limit', text: 'limit', backend: 'claude-acp' })).conversation.conversationId;
   await ended(limitedId);
@@ -282,7 +282,7 @@ if (process.env.RHO_CONNECT_FAIL && !process.argv.includes('remove')) { process.
 
   for (const width of [1024, 390]) {
     await page.setViewportSize({ width, height: width === 390 ? 844 : 768 });
-    for (const tab of [/^Outside Rho/, 'Agents', /^Conversations/]) {
+    for (const tab of [/^Connect your agent/, /^Conversations/]) {
       if (width === 390 && !(await page.getByRole('tab', { name: tab }).isVisible())) continue;
       await page.getByRole('tab', { name: tab }).click();
       await page.waitForTimeout(300);

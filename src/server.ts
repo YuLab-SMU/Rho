@@ -19,7 +19,7 @@ import { Interactions, interactionLimits } from './interactions.js';
 import { TaskMap, taskMapLimits } from './task-map.js';
 import { Capabilities } from './capabilities.js';
 import { BrowserAccess, browserLimits, localBrowserId, localBrowserPrincipal } from './browser-access.js';
-import { addToAgent, connectLimits, mcpCommand, mcpName, outsideLabel, type OutsideAgent } from './agent-connect.js';
+import { addToAgent, connectionInstructions, connectLimits, mcpCommand, mcpName, outsideLabel, type OutsideAgent } from './agent-connect.js';
 import { NativeFolderPicker, nativeFolderLimits } from './native-folders.js';
 import { homedir } from 'node:os';
 import { serveWeb, servePageFrame, pageFramePath, extensionFramePath, webRoot, installedWebEntries } from './web-assets.js';
@@ -520,11 +520,21 @@ export class RhoService {
     requireThat(selected.every(m => !extensionManagement.includes(m) && !!operations[m] && !m.startsWith('agent.sessions.') && !m.startsWith('session.') && !m.startsWith('conversation.') && (!m.startsWith('project.') || m === 'project.entries') && !['task.routing.put', 'console.run', 'console.stop', 'kernel.stop'].includes(m)), 'invalid', 'Unknown or operator-only Agent capability.');
     requireThat(await Promise.all(selected.map(method => capabilities.isAvailable(method, state))).then(values => values.every(Boolean)), 'unavailable', 'A requested Agent operation has no selected provider.');
     requireThat(!profile || new Set(['capability.index', 'capability.resolve', ...selected]).size <= layeredGrantLimits.maxMethods, 'limit', `Layered connection methods exceed the ${layeredGrantLimits.maxMethods}-method profile; choose an explicit narrower grant.`, { limit: 'maxMethods', maximum: layeredGrantLimits.maxMethods });
-    const token = randomBytes(32).toString('hex');
     const id = 'agent:' + digest(projectId + ':' + externalSessionId).slice(0, 32);
+    const grantedMethods = [...new Set([...(profile ? ['capability.index', 'capability.resolve'] : ['protocol.describe', 'capability.list']), ...selected])];
+    const existing = this.state.principals.find(p => p.id === id);
+    const kept = await fs.readFile(file, 'utf8').then(text => JSON.parse(text), () => null);
+    // Repeating the same setup must not disconnect a client already using its grant.
+    // Changed scope, expired access or a stale address still requires a fresh credential.
+    if (existing && !(existing.expiresAt && Date.parse(existing.expiresAt) <= Date.now())
+      && kept?.url === this.url && kept.projectId === projectId && kept.externalSessionId === externalSessionId
+      && typeof kept.token === 'string' && digest(kept.token) === existing.tokenHash
+      && canonical([...existing.methods].sort()) === canonical([...grantedMethods].sort())
+      && kept.profile === profile && canonical(existing.pluginFilter ?? []) === canonical(pluginFilter ?? [])) return kept;
+    const token = randomBytes(32).toString('hex');
     this.state.principals = this.state.principals.filter(p => p.id !== id);
     requireThat(!pluginFilter || pluginFilter.every(id => this.plugins.isKnown(id)), 'invalid', 'Unknown MCP plugin filter.');
-    await this.state.addPrincipal({ id, tokenHash: digest(token), projectId, label: who.label ?? externalSessionId, ...(who.conversationId ? { conversationId: who.conversationId } : {}), methods: [...new Set([...(profile ? ['capability.index', 'capability.resolve'] : ['protocol.describe', 'capability.list']), ...selected])], ...(profile ? { profile } : {}), ...(pluginFilter ? { pluginFilter } : {}) });
+    await this.state.addPrincipal({ id, tokenHash: digest(token), projectId, label: who.label ?? externalSessionId, ...(who.conversationId ? { conversationId: who.conversationId } : {}), methods: grantedMethods, ...(profile ? { profile } : {}), ...(pluginFilter ? { pluginFilter } : {}) });
     const connection = { url: this.url, token, projectId, externalSessionId, methods: [...new Set([...(profile ? ['capability.index', 'capability.resolve'] : []), ...selected])], ...(profile ? { profile } : {}), ...(pluginFilter ? { pluginFilter } : {}), apiVersion: '2.0' as const };
     await atomicJson(file, connection); return connection;
   }
@@ -998,10 +1008,15 @@ export class RhoService {
       await this.emit(p, 'composition.changed', b.compositionId);
       return { document, viewId, composition };
     }
+    if (method === 'session.instructions') {
+      requireThat(principal.id === localBrowserId || principal.id === 'operator', 'unauthorized', 'Only the person at this machine can read Agent setup instructions.');
+      return connectionInstructions(p, this.state.directory);
+    }
     if (method === 'session.grant') {
       requireThat(principal.id === 'operator', 'unauthorized', 'Only the local operator may provision a project-scoped session.');
       const file = path.join(this.state.directory, 'agent-' + digest(p.id + ':' + b.externalSessionId) + '.json');
       const connection = await this.agentConnection(p.id, b.externalSessionId, file, b.methods, undefined, b.profile);
+      await this.emit(p, 'activity.changed', method);
       return { profile: connection.profile, connectionFile: file, projectId: p.id, methods: connection.methods, transport: 'stdio-mcp', externalSessionId: b.externalSessionId };
     }
     // The person's own Claude Code or Codex, outside Rho: the same grant the operator gives, kept

@@ -129,32 +129,28 @@ Check: no file failed, and the last command prints `name: rho`. New sessions loa
 
 ## 6. Connect yourself to the example project
 
-Use the state folder from step 2 if Rho was already set up. If `rho --help` lists
-`--agent claude-code|codex`, one command grants the project and adds Rho's MCP server to your
-client:
+Use the state folder from step 2 if Rho was already set up. Give this project a
+stable session name identifying your own Agent, then request its MCP configuration:
 
 ```sh
-rho --grant "$HOME/Rho/state/connection.json" --project "PA14 quorum sensing" --agent claude-code   # Codex: --agent codex
+rho --grant "$HOME/Rho/state/connection.json" --project "PA14 quorum sensing" --session YOUR_AGENT_NAME
 ```
 
-Otherwise (0.5.3), grant the project, then add the server yourself:
+The reply is one JSON line. Add a stdio MCP server with the returned `mcp.name`,
+`mcp.command` and `mcp.args` using your own client's supported configuration
+mechanism. Inspect your own help or documentation if needed; preserve unrelated
+settings and use private local configuration scoped to this project when available. Do not print connection-file
+contents. Rho does not need a built-in configuration form for your client.
 
-```sh
-rho --grant "$HOME/Rho/state/connection.json" --project "PA14 quorum sensing"   # Codex: add --session codex
-```
+If `rho --help` lists `--agent claude-code|codex`, those clients also have a shortcut:
+`rho --grant "$HOME/Rho/state/connection.json" --project "PA14 quorum sensing" --agent claude-code`
+(or `--agent codex`, without `--session`). Other MCP clients use the generic reply.
 
-It prints one JSON line.
-
-- **Claude Code:** `cd "$HOME/Rho/projects/PA14 quorum sensing"`, then run the command in the
-  reply's `claude` field there. The entry belongs to that folder.
-- **Codex:** run `codex mcp add <mcp.name> -- <mcp.command> <mcp.args…>`, with the values from
-  the reply's `mcp` field.
-- **Another client:** add a stdio MCP server named `mcp.name` that runs `mcp.command` with
-  `mcp.args`.
-
-Check: `claude mcp list` in the project folder, or `codex mcp list`, shows
-`rho-pa14-quorum-sensing`. Rho's tools (`rho_index`, `rho_resolve`, `rho_call`, `rho_read`)
-appear in a new session started in that folder, not in this one.
+Reload your MCP tools if supported, or start a new session in the project folder.
+Check that `rho_index` answers and names the correct project scope. A configuration
+entry alone is not a successful connection. If the current session cannot reload,
+tell the person what was configured and that verification needs a new session.
+A client without local stdio MCP support must report that limitation.
 
 ## 7. Check R for the Notebook
 

@@ -13,7 +13,7 @@ import { ExternalConversationRow, useExternalConversations, type ExternalSummary
 // or clear away; and the Agents themselves, with the model and settings new conversations use.
 type Summary = NonNullable<WorkspaceSnapshot['conversations']>[number];
 type Listed = RhoOutput<'conversation.list'>['conversations'][number];
-type Tab = 'conversations' | 'agents' | 'outside';
+type Tab = 'conversations' | 'outside';
 
 const tabKey = 'rho.agent.tab.v1';
 const backendOf = (summary: Pick<Summary, 'backend' | 'client'>): Backend | null => summary.backend === 'codex-acp' || summary.backend === 'claude-acp' || summary.backend === 'acp' ? summary.backend : summary.client === 'codex' ? 'codex-acp' : summary.client === 'acp' ? 'acp' : summary.backend === 'claude-cli' ? null : 'claude-acp';
@@ -55,20 +55,22 @@ export function AgentPage({ client, snapshot, exists, onContinue, onPath, onNew,
   // names here, they are read again each time that conversation changes.
   const unnamed = (snapshot.conversations ?? []).filter(c => { const backend = backendOf(c); return backend && !settings.offered(backend); }).map(c => c.conversationId + '@' + c.version).join();
   useEffect(() => { if (unnamed) refreshAgentSettings(client, snapshot.project.id); }, [client, snapshot.project.id, unnamed]);
-  const [tab, setTab] = useState<Tab>(() => { try { const kept = sessionStorage.getItem(tabKey); return kept === 'agents' || kept === 'outside' ? kept : 'conversations'; } catch { return 'conversations'; } });
+  const [tab, setTab] = useState<Tab>(() => { try { return sessionStorage.getItem(tabKey) === 'outside' ? 'outside' : 'conversations'; } catch { return 'conversations'; } });
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const choose = (next: Tab) => { setTab(next); try { sessionStorage.setItem(tabKey, next); } catch { /* The tab is remembered only while storage works. */ } };
   const external = useExternalConversations(client, snapshot.project.id);
   const count = (snapshot.conversations?.length ?? 0) + external.sessions.length, outside = (snapshot.agents ?? []).filter(agent => !agent.conversationId && !agent.ended).length;
   return <div className="agent-page">
     <div className="agent-tabs" role="tablist" aria-label="Agent page">
       <button role="tab" aria-selected={tab === 'conversations'} onClick={() => choose('conversations')}>Conversations{count > 0 && <span className="tab-count">{count}</span>}</button>
-      <button role="tab" aria-selected={tab === 'agents'} onClick={() => choose('agents')}>Agents</button>
-      <button role="tab" aria-selected={tab === 'outside'} onClick={() => choose('outside')}>Connections{outside > 0 && <span className="tab-count">{outside}</span>}</button>
+      <button role="tab" aria-selected={tab === 'outside'} onClick={() => choose('outside')}>Connect your agent{outside > 0 && <span className="tab-count">{outside}</span>}</button>
     </div>
     {tab === 'conversations' ? <>
+      <div className="conversation-settings"><button className="text-button" aria-expanded={settingsOpen} onClick={() => setSettingsOpen(value => !value)}>New conversation settings<Icon name="chevron" size={13} /></button>
+        {settingsOpen && <AgentsPanel state={settings} />}</div>
       <Conversations client={client} snapshot={snapshot} settings={settings} exists={exists} onContinue={onContinue} onPath={onPath} onNew={onNew} onOpened={onOpened} external={external} />
       {extra}
-    </> : tab === 'agents' ? <AgentsPanel state={settings} /> : <OutsideAgents client={client} snapshot={snapshot} onOpened={onOpened} />}
+    </> : <OutsideAgents key={snapshot.project.id} client={client} snapshot={snapshot} onOpened={onOpened} />}
   </div>;
 }
 
@@ -265,8 +267,8 @@ const providerOf = (value: { name: string; group?: string }) => value.group ?? s
 export function AgentsPanel({ state }: { state: AgentSettingsState }) {
   const [open, setOpen] = useState<Backend | null>(null);
   if (!state.settings) return <p className="muted" role={state.problem ? 'alert' : 'status'}>{state.problem || 'Reading…'}</p>;
-  return <section className="agents-panel" aria-label="Agents">
-    <p className="agents-intro">New conversations start with the Agent marked Default, using the model and settings chosen for it here. Rho sends these choices when a conversation starts; each Agent's own settings files are left as they are. A conversation already open changes from its panel.</p>
+  return <section className="agents-panel" aria-label="New conversations in Rho">
+    <p className="agents-intro">Choose the Agent and model for new conversations you start inside Rho. To connect an Agent you already use in another app, open “Connect your agent”.</p>
     <ul className="agent-rows">{backends.map(which => <AgentRow key={which} which={which} state={state} open={open === which} onToggle={() => setOpen(current => current === which ? null : which)} />)}</ul>
     {state.problem && <p className="inline-error" role="alert">{state.problem}</p>}
   </section>;

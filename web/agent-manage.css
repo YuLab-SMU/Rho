@@ -161,3 +161,8 @@
   .agent-tiers code { display: none; }
 }
 @media (prefers-reduced-motion: reduce) { .conv-chevron svg, .agent-details-toggle svg { transition: none; } }
+
+.conversation-settings { margin-bottom: 20px; }
+.conversation-settings > button { display: inline-flex; gap: 8px; align-items: center; }
+.conversation-settings > button[aria-expanded=true] > svg { transform: rotate(90deg); }
+.conversation-settings .agents-panel { margin-top: 16px; padding-bottom: 20px; border-bottom: 1px solid var(--color-hairline); }

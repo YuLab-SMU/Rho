@@ -22,6 +22,22 @@ export function mcpCommand(connectionFile: string) {
   return [process.execPath, fileURLToPath(new URL('./cli.js', import.meta.url)), '--mcp', connectionFile];
 }
 
+// Paths are data in an argv array, never an interpolated shell command. Reading these
+// instructions starts nothing, grants no access and includes no credential bytes.
+export function connectionInstructions(project: { id: string; root: string }, stateDirectory: string) {
+  const command = [process.execPath, fileURLToPath(new URL('./cli.js', import.meta.url)), '--grant', path.join(stateDirectory, 'connection.json'), '--project-id', project.id];
+  const request = `Connect yourself to my existing Rho project ${JSON.stringify(path.basename(project.root))} so we can work on it together.`;
+  const prompt = [request, '',
+    `Project folder: ${JSON.stringify(project.root)}. Project ID: ${project.id}. Rho is already running on this machine.`,
+    'Configure your own client using its supported MCP setup mechanism; inspect your own help or documentation if needed. Keep unrelated configuration, models and credentials intact. Use private local configuration, scoped to this project where supported, and keep connection settings out of version-controlled files. If you cannot run a local stdio MCP server, explain that limitation.',
+    'Run this program and argument array, appending --session and a stable name identifying your own Agent (1–128 characters from A–Z, a–z, 0–9, dot, underscore, colon, @ or hyphen). Reuse that name when retrying:',
+    JSON.stringify(command),
+    'Parse the JSON reply. Register a stdio MCP server using mcp.name, mcp.command and mcp.args exactly as returned. The connection files contain credentials: do not print their contents or put them in the project. Do not start another Rho service.',
+    'Reload your MCP tools if supported, or tell me to open a new session in the project folder. Then call rho_index through your configured client tools and verify scopeHint.projectId matches the project ID above. A direct protocol probe is useful diagnostics but does not prove your client loaded its tools. Report configuration and a successful tool call separately; do not claim connected before the call succeeds. If configuration or verification fails, report the actual error and continue from the same connection.',
+  ].join('\n');
+  return { request, prompt, command };
+}
+
 function run(binary: string, args: string[], cwd: string, limits: typeof connectLimits) {
   return new Promise<{ code: number | null; output: string }>((resolve, reject) => {
     const child = spawn(binary, args, { cwd, env: process.env, stdio: ['ignore', 'pipe', 'pipe'] });

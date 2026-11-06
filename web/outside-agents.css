@@ -1,61 +1,38 @@
-/* Agents outside Rho: the Agent on the left, its steps on the right, each in the state Rho
-   observes. A step that is done is a filled circle; the next one is the one to act on. */
-.outside-agents { display: flex; flex-direction: column; gap: 16px; min-width: 0; container-type: inline-size; }
-.outside-head h2 { font-size: 17px; font-weight: 650; letter-spacing: -.1px; }
-.outside-head p { max-width: 640px; margin-top: 4px; color: var(--color-muted); font-size: 13.5px; line-height: 1.55; }
-.outside-body { display: grid; grid-template-columns: 210px minmax(0, 1fr); min-height: 320px; border: 1px solid var(--color-hairline); border-radius: 14px; background: var(--color-surface); overflow: hidden; }
-.outside-rail { display: flex; flex-direction: column; gap: 2px; padding: 10px; border-right: 1px solid var(--color-divider); background: var(--color-well); }
-.outside-rail button { display: flex; justify-content: flex-start; align-items: center; gap: 10px; min-height: 44px; padding: 8px 10px; border: 0; border-radius: 9px; background: transparent; color: var(--color-ink); font-weight: 450; text-align: left; }
-.outside-rail button:hover { background: var(--color-hover); }
-.outside-rail button[aria-selected=true] { background: var(--color-surface); box-shadow: 0 1px 2px rgba(20, 30, 25, 0.1), 0 0 0 1px var(--color-hairline); font-weight: 600; }
-.rail-mark { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; color: var(--color-muted); }
-.rail-text { display: flex; flex-direction: column; min-width: 0; }
-.rail-text small { color: var(--color-meta); font-size: 11.5px; font-weight: 400; }
-.rail-text small.live { color: var(--color-verified); }
-.outside-panel { display: flex; flex-direction: column; gap: 12px; min-width: 0; padding: 26px 30px 28px; }
-.connect-steps { display: flex; flex-direction: column; gap: 22px; margin: 0; padding: 0; list-style: none; }
-.connect-step { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 14px; }
-.step-mark { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border: 1.5px solid var(--color-control-border); border-radius: 50%; background: var(--color-surface); color: var(--color-meta); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
-.connect-step.done .step-mark { border-color: var(--color-accent); background: var(--color-accent); color: #fff; }
-.connect-step.next .step-mark { border-color: var(--color-accent); color: var(--color-accent-strong); }
-.connect-step.warn .step-mark { border-color: var(--color-amber); background: var(--color-amber-soft); color: var(--color-amber); }
-.step-body { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding-top: 3px; }
-.step-body > strong { font-size: 14.5px; font-weight: 600; }
-.step-body > p { color: var(--color-muted); font-size: 13px; line-height: 1.55; }
-.connect-step.waiting .step-body > strong { color: var(--color-muted); }
-.connect-card { display: flex; align-items: center; gap: 16px; padding: 14px 16px; border-radius: 11px; background: var(--color-well); }
-.connect-card > div { display: flex; flex: 1; flex-direction: column; gap: 4px; min-width: 0; font-size: 13.5px; }
-.connect-card small { color: var(--color-meta); font-size: 12px; }
-.connect-card code, .command-line code { font-size: 12px; }
-.connect-card > button { flex: none; gap: 7px; min-height: 34px; padding: 6px 14px; border-radius: 9px; }
-.connect-card > button:not(.primary) { background: var(--color-surface); }
-.folder-chip { align-self: flex-start; gap: 7px; max-width: 100%; min-height: 28px; padding: 4px 10px; border: 1px solid var(--color-hairline); border-radius: 999px; background: var(--color-surface); color: var(--color-muted); font: 12px/1.4 var(--font-mono); }
-.folder-chip > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.connect-try { display: flex; flex-direction: column; gap: 10px; margin-left: 40px; }
-.connect-try > p { color: var(--color-muted); font-size: 13px; }
-.prompt-pills { display: flex; flex-wrap: wrap; gap: 8px; }
-.prompt-pill { gap: 8px; max-width: 100%; min-height: 34px; padding: 6px 14px 6px 12px; border: 1px solid var(--color-hairline); border-radius: 999px; background: var(--color-surface); color: var(--color-ink); font-size: 13px; font-weight: 400; text-align: left; }
-.prompt-pill:hover { border-color: var(--color-hairline-strong); background: var(--color-hover); }
-.prompt-pill > svg { flex: none; color: var(--color-meta); }
-.command-line { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 8px 8px 8px 12px; border-radius: 9px; background: var(--color-well); }
-.command-line code { flex: 1; min-width: 0; overflow-wrap: anywhere; }
-.seen-sessions { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; font-size: 13px; }
-.seen-sessions span { margin-left: 8px; color: var(--color-meta); }
-.outside-others h3 { margin-bottom: 8px; color: var(--color-muted); font-size: 13px; font-weight: 600; }
-.outside-others ul { margin: 0; padding: 0; border: 1px solid var(--color-hairline); border-radius: 11px; background: var(--color-surface); list-style: none; font-size: 13px; }
-.outside-others li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; padding: 10px 14px; }
-.outside-others li + li { border-top: 1px solid var(--color-divider); }
-.outside-others li > span { color: var(--color-muted); }
-.outside-others li > small { margin-left: auto; color: var(--color-meta); font-size: 12px; }
-.outside-host > summary { color: var(--color-muted); font-size: 13px; cursor: pointer; }
+/* One setup prompt for the person's own Agent; connection facts follow separately. */
+.outside-agents { display: flex; flex-direction: column; gap: 20px; min-width: 0; container-type: inline-size; }
+.outside-head h2 { font-size: 20px; font-weight: 650; letter-spacing: -.25px; }
+.outside-head p { max-width: 680px; margin-top: 7px; color: var(--color-muted); font-size: 14px; line-height: 1.6; }
+.connect-prompt-card { padding: 24px; border: 1px solid var(--color-hairline); border-radius: 14px; background: var(--color-well); }
+.connect-eyebrow { color: var(--color-muted); font-size: 12px; font-weight: 600; }
+.connect-request { max-width: 760px; margin: 12px 0 20px; font-size: 19px; line-height: 1.55; overflow-wrap: anywhere; }
+.connect-prompt-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; }
+.connect-prompt-actions button { gap: 8px; min-height: 38px; white-space: normal; }
+.connect-prompt-actions > span, .connect-copy-status { font-size: 12px; color: var(--color-muted); }
+.connect-copy-status { margin-top: 12px; }
+.connect-full-prompt { margin-top: 18px; }
+.connect-full-prompt summary, .outside-advanced > summary, .outside-host > summary { cursor: pointer; color: var(--color-muted); font-size: 13px; }
+.connect-full-prompt textarea { display: block; width: 100%; margin-top: 12px; padding: 12px; resize: vertical; border: 1px solid var(--color-hairline); border-radius: 8px; background: var(--color-surface); color: var(--color-ink); font: 12px/1.6 var(--font-mono); }
+.connect-explanation { max-width: 740px; color: var(--color-muted); font-size: 13px; line-height: 1.6; }
+.outside-connections h3 { margin-bottom: 12px; font-size: 14px; font-weight: 600; }
+.outside-connections ul { margin: 0; padding: 0; border: 1px solid var(--color-hairline); border-radius: 12px; list-style: none; }
+.outside-connections li { padding: 16px 18px; min-width: 0; overflow-wrap: anywhere; }
+.outside-connections li + li { border-top: 1px solid var(--color-divider); }
+.connection-name { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 14px; font-size: 14px; }
+.connection-status { color: var(--color-meta); font-size: 12px; }
+.connection-status.verified { color: var(--color-verified); }
+.connection-status.warn { color: var(--color-amber); }
+.outside-connections li p { margin-top: 6px; color: var(--color-muted); font-size: 13px; }
+.outside-connections li small { display: block; margin-top: 6px; color: var(--color-meta); font-size: 12px; }
+.connections-empty { display: flex; align-items: flex-start; gap: 12px; padding: 20px; border: 1px dashed var(--color-hairline); border-radius: 12px; color: var(--color-muted); font-size: 13px; }
+.connections-empty > svg { flex: none; }
+.connections-empty strong { font-weight: 500; color: var(--color-ink); }
+.connections-empty p { margin-top: 6px; line-height: 1.55; }
+.outside-advanced > p { margin: 12px 0; max-width: 740px; color: var(--color-muted); font-size: 13px; line-height: 1.6; }
 .outside-host[open] > summary { margin-bottom: 12px; }
-/* Narrow: the Agents become a row above their steps. */
+.seen-sessions { padding: 0; list-style: none; font-size: 13px; }
+.seen-sessions span { margin-left: 8px; color: var(--color-meta); }
 @container (max-width: 620px) {
-  .outside-body { grid-template-columns: minmax(0, 1fr); min-height: 0; }
-  .outside-rail { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; padding: 8px; border-right: 0; border-bottom: 1px solid var(--color-divider); }
-  .outside-rail button { flex-direction: column; justify-content: flex-start; gap: 4px; min-width: 0; padding: 8px 4px; text-align: center; }
-  .rail-text { align-items: center; }
-  .outside-panel { padding: 20px 16px 22px; }
-  .connect-card { flex-direction: column; align-items: stretch; }
-  .connect-try { margin-left: 0; }
+  .connect-prompt-card { padding: 18px; }
+  .connect-request { font-size: 17px; }
+  .connect-prompt-actions { align-items: flex-start; flex-direction: column; }
 }

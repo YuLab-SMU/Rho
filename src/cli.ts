@@ -37,10 +37,11 @@ Start Rho:
   rho --root PROJECTS_DIRECTORY --state-dir SERVICE_STATE [--core ABSOLUTE_CORE_BINARY] [--rscript ABSOLUTE_RSCRIPT] [--python PYTHON] [--ssh SSH] [--serverctl SERVERCTL] [--claude CLAUDE_CODE_BINARY] [--codex CODEX_BINARY] [--agent-backend claude-acp|codex-acp|claude-cli|acp] [--acp-command JSON_ARGV] [--port PORT] [--limits JSON_FILE] [--plugins documents,files,...] [--example on|off] [--open]
 A narrower browser link (optional):
   rho --pair PRIVATE_CONNECTION_FILE [--root PROJECTS_RELATIVE_DIRECTORY] [--open]
-Add Rho to your own Claude Code or Codex for one project, as the project page's button does:
+Add Rho to your own Claude Code or Codex for one project:
   rho --grant PRIVATE_CONNECTION_FILE --project PROJECTS_RELATIVE_DIRECTORY --agent claude-code|codex
-Give an Agent access to one project, and the command that adds it to Claude Code:
+Give any MCP Agent access to one project and print its stdio MCP configuration:
   rho --grant PRIVATE_CONNECTION_FILE --project PROJECTS_RELATIVE_DIRECTORY [--session NAME]
+  rho --grant PRIVATE_CONNECTION_FILE --project-id EXISTING_PROJECT_ID --session NAME
 Serve that access to the Agent over MCP (stdio):
   rho --mcp AGENT_CONNECTION_FILE
 Observe an external ACP client (use this as its agent command):
@@ -55,7 +56,7 @@ PRIVATE_CONNECTION_FILE is the connectionFile the running service printed; it an
 connection file are credentials.
 `;
 const options = { example: { type: 'string' }, 'verify-evidence': { type: 'string' }, acp: { type: 'string' }, 'acp-agent': { type: 'string' }, root: { type: 'string' }, 'state-dir': { type: 'string' }, core: { type: 'string' }, rscript: { type: 'string' }, python: { type: 'string' }, ssh: { type: 'string' }, serverctl: { type: 'string' }, claude: { type: 'string' }, codex: { type: 'string' }, 'agent-backend': { type: 'string' }, 'acp-command': { type: 'string' }, port: { type: 'string' }, limits: { type: 'string' }, plugins: { type: 'string' }, pair: { type: 'string' }, open: { type: 'boolean' },
-  grant: { type: 'string' }, project: { type: 'string' }, session: { type: 'string' }, agent: { type: 'string' }, mcp: { type: 'string' }, help: { type: 'boolean', short: 'h' } } as const;
+  grant: { type: 'string' }, project: { type: 'string' }, 'project-id': { type: 'string' }, session: { type: 'string' }, agent: { type: 'string' }, mcp: { type: 'string' }, help: { type: 'boolean', short: 'h' } } as const;
 // A command that is refused says why and what to do. A service that is not running is the
 // common case for --grant and --pair; anything without a known reason keeps its stack.
 function refuse(error: unknown, url?: string): never {
@@ -91,13 +92,16 @@ if (values.acp) {
   // Access comes from whoever runs Rho: the operator's connection grants one project to one
   // Agent session, and the reply says how Claude Code starts that session's MCP server.
   if (values.grant) {
-    if (!values.project) { process.stderr.write('--grant needs --project, the project folder relative to the service root.\n\n' + usage); process.exit(2); }
+    if (!!values.project === !!values['project-id']) { process.stderr.write('--grant needs exactly one of --project (a folder relative to the service root) or --project-id (an existing project).\n\n' + usage); process.exit(2); }
     if (values.agent !== undefined && !['claude-code', 'codex'].includes(values.agent)) { process.stderr.write('Choose --agent claude-code or codex.\n'); process.exit(2); }
     if (values.agent !== undefined && values.session !== undefined) { process.stderr.write('--agent names the session itself; leave out --session.\n'); process.exit(2); }
     const { RhoClient } = await import('./client.js');
     const client = await RhoClient.fromFile(path.resolve(values.grant)).catch(error => refuse(error));
     try {
-      const project = await client.call('project.open', { path: values.project });
+      const project = values['project-id']
+        ? (await client.call('project.list', {})).find(p => p.id === values['project-id'])
+        : await client.call('project.open', { path: values.project! });
+      if (!project) { process.stderr.write('Project is not registered or is outside this connection’s scope. Open the project in Rho and copy its setup prompt again.\n'); process.exit(1); }
       // The same as the project page's button: the grant that Agent keeps, then its own
       // `mcp add`, recorded so the page shows it under that Agent.
       if (values.agent) {

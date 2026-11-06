@@ -120,3 +120,48 @@ test('an Agent that refuses, is missing or does not finish says so and leaves no
     await assert.rejects(s.call('session.connect', { agent: 'codex' }), error => error.error.kind === 'limit' && /within 0.4 s/.test(error.error.message));
   } finally { delete process.env.RHO_CONNECT_FAIL; await s.service.close(); }
 });
+
+test('generic setup instructions are read-only, local, credential-free and usable for an arbitrary Agent identity', async () => {
+  const s = await setup();
+  let selectedRoot;
+  try {
+    const before = s.service.state.principals.length;
+    const info = await s.call('session.instructions');
+    assert.match(info.prompt, /mcp\.name, mcp\.command and mcp\.args/);
+    assert.equal(info.command.at(-1), s.project.id);
+    assert.equal(info.command.at(-2), '--project-id');
+    assert.ok(!info.prompt.includes(s.service.adminToken));
+    assert.deepEqual(await s.call('session.instructions'), info);
+    assert.equal(s.service.state.principals.length, before, 'reading instructions grants nothing');
+    assert.deepEqual(await s.calls(), [], 'no Agent CLI or runtime starts');
+
+    const { execFile } = await import('node:child_process');
+    const grant = () => new Promise((resolve, reject) => execFile(info.command[0], [...info.command.slice(1), '--session', 'research-agent'], { timeout: 30000 }, (error, stdout) => error ? reject(error) : resolve(JSON.parse(stdout))));
+    const connected = await grant();
+    assert.equal(connected.projectId, s.project.id);
+    const original = JSON.parse(await fs.readFile(connected.connectionFile, 'utf8'));
+    const agent = new CheckedClient(original);
+    const snapshot = await agent.call('observation.snapshot', { projectId: s.project.id });
+    assert.ok(snapshot.agents.some(a => a.label === 'research-agent'));
+    await grant();
+    assert.equal(JSON.parse(await fs.readFile(connected.connectionFile, 'utf8')).token, original.token, 'retry preserves the active grant');
+    await agent.call('observation.snapshot', { projectId: s.project.id });
+    await assert.rejects(agent.call('session.instructions', { projectId: s.project.id }), e => e.error?.kind === 'unauthorized');
+    const pairing = await s.service.browser.createPairing();
+    const paired = new BrowserClient(await BrowserClient.pair(s.service.url, pairing.code, (url, init) => fetch(url, { ...init, headers: { ...init.headers, origin: s.service.url } })));
+    await assert.rejects(paired.call('session.instructions', { projectId: s.project.id }), e => e.error?.kind === 'unauthorized');
+    await fs.mkdir(path.join(s.root, 'other'));
+    const other = await s.operator.call('project.open', { path: 'other' });
+    await assert.rejects(agent.call('observation.snapshot', { projectId: other.id }), e => e.error?.kind === 'scope');
+    selectedRoot = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'rho-selected-connect-')));
+    {
+      const selected = await s.service.state.openSelected(selectedRoot, s.service.state.principals.find(p => p.id === 'browser:local'), 256);
+      const info = await s.person.call('session.instructions', { projectId: selected.id });
+      const registered = await new Promise((resolve, reject) => execFile(info.command[0], [...info.command.slice(1), '--session', 'outside-root'], { timeout: 30000 }, (error, stdout) => error ? reject(error) : resolve(JSON.parse(stdout))));
+      assert.equal(registered.projectId, selected.id, 'existing projects chosen outside the service root connect by identity');
+    }
+    await s.operator.call('session.grant', { projectId: s.project.id, externalSessionId: 'research-agent', methods: ['document.read'] });
+    assert.notEqual(JSON.parse(await fs.readFile(connected.connectionFile, 'utf8')).token, original.token, 'changing scope replaces the credential');
+    await assert.rejects(agent.call('observation.snapshot', { projectId: s.project.id }), e => e.error?.kind === 'unauthorized');
+  } finally { await s.service.close(); if (selectedRoot) await fs.rm(selectedRoot, { recursive: true, force: true }); }
+});

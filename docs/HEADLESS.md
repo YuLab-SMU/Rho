@@ -132,38 +132,47 @@ Exact Host and supplied Origin are checked. The bearer credential is project
 scoped for external callers. CLI shutdown stops only Hosts started by this
 service and reports confirmation separately. Existing Hosts keep their owner.
 
-### Connect Claude Code or Codex
+### Connect your own Agent
 
-The running service's operator connection adds Rho to the person's own Claude Code
-or Codex for one project, as the project page's "Add to …" button does:
+The project's **Agent → Connect your agent** page offers one prompt for any Agent
+that can configure and run a local stdio MCP server. `session.instructions` is a
+read-only operation for the local browser or operator: it returns the current
+Node/launcher paths and existing project ID, without credential contents. Reading
+or copying starts no Agent, grants no access and edits no client configuration.
+The Agent uses its own supported configuration mechanism; Rho needs no additional
+brand-specific form. The [connection episode](AGENT-CONNECT-EPISODE.md) records the
+actual clients checked and the limits.
 
-```sh
-rho --grant /absolute/service-state/connection.json --project PROJECT_FOLDER --agent claude-code|codex
-```
-
-It gives that Agent its own grant to the project (kept when it still reaches the
-service), runs that Agent's `mcp remove` and `mcp add` on this machine — Claude Code's
-with `-s local` in the project folder, Codex's for every folder — and records it, so the
-page shows it under that Agent. The JSON reply names the project, its root, the number
-of granted methods, whether a new grant was made, and what was added (`name`, `scope`,
-`at`). A session that was already open does not have the tools; a new one does.
-
-Without `--agent`, the same connection grants one project to one Agent session and
-prints how Claude Code starts that session's MCP server:
+The running service's operator connection grants one project to a named Agent:
 
 ```sh
-rho --grant /absolute/service-state/connection.json --project PROJECT_FOLDER [--session NAME]
+rho --grant /absolute/service-state/connection.json \
+  --project-id EXISTING_PROJECT_ID --session my-agent
 ```
 
-`--project` is the folder relative to `--root`; `--session` defaults to
-`claude-code`, the session `--agent claude-code` uses, and `--session codex` is the one
-`--agent codex` uses. When the service is not running, both forms say so and exit 1. The JSON reply names the project, the private session connection
-file, the number of granted methods (the server default), an `mcp` entry
-(`name`, `command`, `args`) for an MCP configuration file, and the equivalent
-`claude mcp add rho-<folder> -- … --mcp <file>` command. `rho --mcp FILE` serves
-that grant on stdio with the four tools `rho_index`, `rho_resolve`, `rho_call` and
-`rho_read`; nothing else writes to stdout in that mode. Every connection file is a
-credential. `rho --help` prints the usage; an unknown option exits 2 with it.
+`--project-id` selects an already registered project, including one chosen outside
+the service's projects folder. The older `--project PROJECT_FOLDER` form remains
+available for a folder relative to `--root`; select exactly one form. Choose a
+stable session name for each Agent and reuse it on retry. Without `--session`, the
+legacy default is `claude-code`.
+
+The JSON reply supplies `mcp.name`, `mcp.command` and `mcp.args` for the Agent to
+register in its own client. `rho --mcp FILE` serves that project grant on stdio with
+`rho_index`, `rho_resolve`, `rho_call` and `rho_read`. Connection files are credentials;
+keep their contents out of prompts and projects. The reply also retains the older
+`claude` command for compatibility.
+
+Repeating the same grant keeps a valid credential with the same project, methods
+and profile; changing scope, expired access or stale connection data requires a
+fresh one. A client may need to reload its tools or open a new session. A saved
+entry alone does not verify a connection: call `rho_index` in that client and check
+its project scope. The page observes grants and actual calls separately and does
+not claim that an old successful call means the Agent is online now.
+
+The existing `--agent claude-code|codex` shortcut and `session.connect` remain
+available. They use those clients' own `mcp add` commands (Claude Code in the project
+folder, Codex in user configuration). They are no longer the page's setup workflow.
+A stopped service is reported with exit 1; an unknown CLI option exits 2 with usage.
 
 Agent 0.4.11 provides persistent Claude and Codex ACP entries and retains each
 tool step's human title, ACP category and one identifying input (command, file path,
