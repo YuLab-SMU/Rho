@@ -112,6 +112,25 @@ two conversations, the 72-operation recoloring turn, the registered image previe
 the original registration call and a working exact-version image view. It has no
 external-session input box. No R analysis was rerun.
 
-At 19:17 UTC the public npm version endpoint still returned 404 despite successful
-publication. Registry availability and public Pages delivery are being checked
-separately; the installed package above came from the retained CI candidate.
+The public npm endpoint still returned 404 at 19:17 UTC, then served 0.5.5 at
+19:31:51 UTC, about 17 minutes after the publication receipt. The downloaded
+25,626,879-byte registry tarball matched the CI candidate's SHA-256 and npm's
+SHA-512 integrity. The person's installation was then updated through the official
+registry to exact version 0.5.5; its lock records the registry URL and that same
+integrity. This is an unsigned npm/WebUI delivery, not a signed desktop release.
+
+The 0.1.5 market index and guide were deployed to Pages at `40a3c745` from source
+`76d0594d`. The public index, guide, Status and episode returned HTTP 200 and
+matched deployed bytes. The public index parser returned the same fixed adapter
+commit. The rendered guide was inspected. Local Pages checks covered 4,242 links
+and assets and 786 anchors, with all 123 files outside the front page, docs and
+market unchanged. The front page is advanced only after npm serves the version.
+The original Harness window was also refreshed: the native input remains beside
+Rho's two-conversation list and the recoloring result.
+
+The online installation audit reported four affected dependency entries (three
+high and one moderate), including transitive parent entries. The underlying
+packages are MCP SDK 1.29.0 and Hono node-server 1.19.18, both unchanged from
+installed 0.5.4. Rho's MCP implementation imports the stdio transport; this episode
+does not assess every advisory's reachability or resolve those existing dependency
+findings. The raw audit is kept with local delivery evidence.

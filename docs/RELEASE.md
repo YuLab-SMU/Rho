@@ -204,5 +204,7 @@ registry serves it: 0.5.4 appeared 55 minutes after `npm publish` returned.
 
 The 0.5.5 [external-conversation delivery](EXTERNAL-CONVERSATIONS-EPISODE.md#verification-and-delivery)
 passed the same CI and offline installation checks, then published the retained
-candidate with provenance on 2026-11-06. Its record distinguishes registry
-availability from the publication receipt and the installed candidate.
+candidate with provenance on 2026-11-06. The registry served it about 17 minutes
+later; the downloaded bytes matched the tested candidate and were installed
+through npm. Its record retains the source identities, checks and dependency
+audit findings.
