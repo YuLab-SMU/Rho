@@ -79,6 +79,39 @@ tests failed and it was stopped. The corrected invocation explicitly selected
 the installed, unchanged Core binary and finished with 312 passes, two skips and
 no failures (314 tests). The final adapter suite passed all seven checks.
 
-Publication and installed package evidence will be recorded after the checked
-source combination completes the release workflow. The source change alone is
-not registry or installed-version evidence.
+Agent source is published at
+[`00e5c24b`](https://github.com/YuLab-SMU/Rho-plugins/commit/00e5c24bfdfd37a0afc795e6c98391ec9a26ca76).
+The application candidate and prebuilt adapter are published at
+[`50ccd85b`](https://github.com/YuLab-SMU/Rho/commit/50ccd85b907c08621fd90efde9a76b375af0ee3e).
+A fresh Harness home installed that exact Git subdirectory with install scripts
+disabled and an empty package store. All twelve distribution files matched the
+published commit. Harness's official index parser accepted the generated 0.1.5
+index and returned that same pinned target. The installer reported the MCP-client
+peer supplied by Harness at runtime; it did not build the adapter.
+
+The person's Desktop installer then upgraded the existing plugin from that
+public Git target. Its detail page showed 0.1.5, the selected commit and one
+running component. The installed runtime files matched the published package.
+Backfill again retained one session, 910 events and the same two turns. The PNG's
+SHA-256 still matched its original registered version.
+
+[CI 42276270326](https://github.com/YuLab-SMU/Rho/actions/runs/42276270326)
+passed: macOS and Linux each had 312 passes and two skips; Windows had 297 passes
+and 17 skips, with no failures. One candidate passed offline installation on
+macOS arm64, Linux x64/arm64 and Windows x64, plus Node 24 and 26 on Linux x64.
+Its SHA-256 is `2e037ad09caf981f66bf7d27a42b936e5507af3a757ccc8e6e05c3c97b1b02c6`.
+[Release 42277885433](https://github.com/YuLab-SMU/Rho/actions/runs/42277885433)
+verified and published that candidate as `@rho-workspace/rho@0.5.5`, with provenance,
+from tag `v0.5.5`, without rebuilding, at 19:15 UTC on November 6.
+
+The exact candidate was installed offline into the person's existing installation.
+After checking both registered projects had no active operations or conversations,
+the temporary WebUI was replaced with installed 0.5.5 on the same port and state.
+Its composition matches the CI source identities. The real browser again showed
+two conversations, the 72-operation recoloring turn, the registered image preview,
+the original registration call and a working exact-version image view. It has no
+external-session input box. No R analysis was rerun.
+
+At 19:17 UTC the public npm version endpoint still returned 404 despite successful
+publication. Registry availability and public Pages delivery are being checked
+separately; the installed package above came from the retained CI candidate.

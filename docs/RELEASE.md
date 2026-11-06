@@ -44,15 +44,16 @@ establish a signed desktop distribution or require creating Rho-releases.
 
 ## DeepSeek Harness plugin
 
-The independent **dsh-rho 0.1.4 prototype** is distributed as a prebuilt package
+The independent **dsh-rho 0.1.5 prototype** is distributed as a prebuilt package
 from an immutable Git commit, through the
 [Rho Harness index](https://yulab-smu.top/Rho/market/index.json). Its
-[distribution record](DSH-RHO-EPISODE.md#public-workspace-fix) separates the
+[distribution record](EXTERNAL-CONVERSATIONS-EPISODE.md#verification-and-delivery) separates the
 source, packed file inventory, public installation and index checks. The index
 is generated from the selected commit's manifest and timestamp; it does not
 follow `main` at install time. This is Rho’s own index, added explicitly in
 Harness; it is not an official default source. This plugin delivery publishes no npm package and
-changes no installed user profile or running Rho. It is separate from the future
+uses Harness’s native installer for profile updates. The selected application
+version is installed separately. It is separate from the future
 signed application distribution below.
 
 ## Official distribution
@@ -200,3 +201,8 @@ exist before the first tag. `@rho-workspace/rho@0.5.2` and `0.5.3` were publishe
 2026-11-02, and `0.5.4` on 2026-11-05, with provenance ([CI episode](CI-EPISODE.md#publication)).
 Since July 2026 npm scans a version before serving it, so a release is installable only when the
 registry serves it: 0.5.4 appeared 55 minutes after `npm publish` returned.
+
+The 0.5.5 [external-conversation delivery](EXTERNAL-CONVERSATIONS-EPISODE.md#verification-and-delivery)
+passed the same CI and offline installation checks, then published the retained
+candidate with provenance on 2026-11-06. Its record distinguishes registry
+availability from the publication receipt and the installed candidate.
