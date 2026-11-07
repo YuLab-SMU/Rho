@@ -148,7 +148,7 @@ test('generic setup instructions are read-only, local, credential-free and usabl
     assert.equal(connected.codex, connected.claude.replace(/^claude /, 'codex '));
     assert.deepEqual(connected.opencode.merge.mcp[connected.mcp.name], { type: 'local', command: server, enabled: true });
     assert.equal(connected.opencode.file, path.join(s.project.root, '.opencode', 'opencode.json'));
-    assert.match(connected.dsh.file, /profiles\/desktop\/cordis\.patch\.yml$/);
+    assert.match(connected.dsh.file, /profiles[\\/]desktop[\\/]cordis\.patch\.yml$/);
     for (const part of [connected.mcp.name, '@deepseek-ai/dsh-mcp-client', 'stdio', ...server]) assert.ok(connected.dsh.append.includes(JSON.stringify(part)) || connected.dsh.append.includes(part), part);
     assert.ok(!JSON.stringify(connected).includes(original.token), 'the reply holds no credential');
     // The MCP bridge names its client; the person's screen shows it with that grant.
