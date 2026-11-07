@@ -50,10 +50,15 @@ const stopFile = (root: string) => path.join(root, '.rho', 'host.stop');
 // Each argument reaches cmd as a variable inside quotes, where neither its expansion nor & ^ ( )
 // apply, and a Windows path holds no quote; a backslash that would end up before the closing
 // quote (a drive root) is doubled, so it does not escape it.
+// R on Windows sets these locale categories from the environment, and Windows has no C.UTF-8: given
+// one, as an Agent's Git Bash gives LC_CTYPE, a run's R warned at startup and printed "3 × 2" as
+// "3 <U+00D7> 2". The Host's runs take the system's own locale instead, UTF-8 there.
+const posixUtf8 = /^(C|POSIX)\.UTF-?8$/i, rLocale = /^LC_(ALL|CTYPE|COLLATE|TIME|MONETARY)$/;
 function startOnWindows(binary: string, args: string[], root: string) {
   const values = [binary, ...args].map(value => value.endsWith('\\') ? value + '\\' : value);
   const line = values.map((_, i) => `"%RHO_HOST_ARG${i}%"`).join(' ');
-  const env = { ...process.env, RHO_CORE_STOP_FILE: stopFile(root), ...Object.fromEntries(values.map((value, i) => ['RHO_HOST_ARG' + i, value])) };
+  const inherited = Object.entries(process.env).filter(([name, value]) => !(rLocale.test(name.toUpperCase()) && posixUtf8.test(value ?? '')));
+  const env = { ...Object.fromEntries(inherited), RHO_CORE_STOP_FILE: stopFile(root), ...Object.fromEntries(values.map((value, i) => ['RHO_HOST_ARG' + i, value])) };
   return spawn(path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'cmd.exe'), ['/d', '/v:off', '/s', '/c', `"${line}"`], { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true, windowsVerbatimArguments: true, env });
 }
 export class CoreBridge {
