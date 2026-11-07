@@ -21,6 +21,8 @@ const contentDir = join(repo, 'site', 'content');
 const navFile = join(repo, 'site', '.vitepress', 'generated', 'navigation.json');
 const linkFile = join(repo, 'site', '.vitepress', 'generated', 'links.json');
 const blobBase = 'https://github.com/YuLab-SMU/Rho/blob/main';
+// An image is fetched from the file itself: a blob URL answers with GitHub's page, not the image.
+const rawBase = 'https://raw.githubusercontent.com/YuLab-SMU/Rho/main';
 
 // Section of every published document. A document appears once: the section is
 // where a reader should meet it first, not every place it is relevant.
@@ -171,7 +173,7 @@ function rewriteLinks(markdown, name) {
       rewritten.push({ from: name, target, url });
       return `${bang}[${text}](${url}${title ?? ''})`;
     }
-    const url = `${blobBase}/docs/${path}${anchor ? `#${anchor}` : ''}`;
+    const url = bang ? `${rawBase}/docs/${path}` : `${blobBase}/docs/${path}${anchor ? `#${anchor}` : ''}`;
     rewritten.push({ from: name, target, url });
     return `${bang}[${text}](${url}${title ?? ''})`;
   });
