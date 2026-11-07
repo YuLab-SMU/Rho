@@ -55,7 +55,7 @@ function scoped(input: JsonSchema): JsonSchema {
 }
 
 const ownerOperations: Record<string, OwnerOperationContract> = {};
-for (const owner of ['documents', 'files', 'r', 'requirements', 'tables', 'media', 'charts', 'agent', 'console', 'kernel', 'skills']) {
+for (const owner of ['documents', 'files', 'r', 'requirements', 'tables', 'media', 'charts', 'agent', 'console', 'kernel', 'figures', 'skills']) {
   for (const [method, contract] of Object.entries(ownerSchemaRecord(owner, 'operationContracts') as unknown as Record<string, OwnerOperationContract>)) {
     ownerOperations[method] = contract;
   }
@@ -464,6 +464,8 @@ export const descriptions = {
   'kernel.events': 'Who ran each cell of the live sessions and when, newest first, for the timeline: its language and place, how it ended and its purpose or first line. No code or output.',
   'kernel.inspect': 'One value of a live session, as its session describes it: what kind of thing it is (a table, a model, a vector, a list, a function or a value), short facts, and one page of its rows, elements or parts, each part with the code that reaches it. Never starts a session or waits for a cell: while a cell runs or waits the answer is busy. A reading that takes too long is interrupted.',
   'kernel.plot': 'One plot a cell kept, as PNG bytes.',
+  'figure.read': 'What a plot a cell drew shows: its layers, mappings, panels and data, the rows behind marks, and the marks people and Agents selected.',
+  'figure.select': 'Keeps a set of a figure\'s marks with a note, shown highlighted in the plot; the plot and its data do not change.',
   'kernel.interrupt': 'Interrupt one cell: a running cell stops and its session and values stay; a waiting cell is not run. A cell that has ended is returned unchanged.',
   'kernel.stop': 'Person at this machine only: end one live session. Its values are gone, the running cell ends with an error and waiting cells are not run. A session that has ended is returned unchanged.',
   'conversation.delete': 'Person at this machine only: delete Rho\'s record of a conversation in the trash. The Agent\'s own session files are not touched. Repeating the request that started it is then refused.',
@@ -498,4 +500,4 @@ export const errorKinds = base.errorKinds;
 export const errorSchema = base.definitions.error;
 export const errorEnvelope = obj({ apiVersion: { const: '2.0' }, ok: { const: false }, error: errorSchema });
 export const responseEnvelope = (method: string) => obj({ apiVersion: { const: '2.0' }, ok: { const: true }, value: responses[method] });
-export const protocol = { ...base, apiVersion: '2.0', schemaVersion: 2, transport: 'HTTP JSON POST /api/v2/{operation}; GET /api/v2/events', eventTypes: [...new Set([...base.eventTypes, 'project.sources.changed', 'capability.changed', 'view.closed', 'interaction.selection.changed', 'annotation.changed', 'context.changed', 'workspace.restored', 'task.routing.changed', 'binding.native.changed', 'feedback.changed', 'task.map.changed', 'feedback.changed', 'activity.changed', 'resource.changed', 'conversation.changed', 'console.changed', 'kernel.changed', 'skills.changed'])], operations, responses, descriptions: orderedDescriptions, definitions, errorEnvelope, status: 'One versioned contract. Retained operations stay observable through the current API; requests this contract does not accept receive a typed refusal rather than a second dialect.' };
+export const protocol = { ...base, apiVersion: '2.0', schemaVersion: 2, transport: 'HTTP JSON POST /api/v2/{operation}; GET /api/v2/events', eventTypes: [...new Set([...base.eventTypes, 'project.sources.changed', 'capability.changed', 'view.closed', 'interaction.selection.changed', 'annotation.changed', 'context.changed', 'workspace.restored', 'task.routing.changed', 'binding.native.changed', 'feedback.changed', 'task.map.changed', 'feedback.changed', 'activity.changed', 'resource.changed', 'conversation.changed', 'console.changed', 'kernel.changed', 'figure.changed', 'skills.changed'])], operations, responses, descriptions: orderedDescriptions, definitions, errorEnvelope, status: 'One versioned contract. Retained operations stay observable through the current API; requests this contract does not accept receive a typed refusal rather than a second dialect.' };

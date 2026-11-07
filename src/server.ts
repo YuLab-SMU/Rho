@@ -210,6 +210,7 @@ export class RhoService {
   conversations: Conversations;
   private consoles = new Map<string, import('@rho-workspace/plugin-console').ConsoleRunner>();
   private kernels = new Map<string, import('@rho-workspace/plugin-kernel').KernelHost>();
+  private figures = new Map<string, import('@rho-workspace/plugin-figures').Figures>();
   private skillHosts = new Map<string, import('@rho-workspace/plugin-skills').SkillsHost>();
   private feedback(project: Project, owners = this.plugins.project(project.root, project.id)) {
     const agent = owners.need('agent');
@@ -383,7 +384,8 @@ export class RhoService {
       // start/send already holds the service's project serializer while this
       // observation is frozen, before the conversation is recorded or launched.
       uiContext: (project, location, limits) => captureUiContext(project, location,
-        id => new Workspace(project, this.plugins.project(project.root, project.id), this.config.workspace).read(id), limits),
+        id => new Workspace(project, this.plugins.project(project.root, project.id), this.config.workspace).read(id), limits,
+        this.plugins.optional('figures') ? (cellId, plot, selectionId, rows) => this.figuresFor(project).brief(cellId, plot, selectionId, rows) : undefined),
       context: async (project, id) => {
         const context = await this.plugins.project(project.root, project.id).need('agent').peekContext(id);
         requireThat(context.projectId === project.id, 'scope', 'The context belongs to another project.');
@@ -772,8 +774,21 @@ export class RhoService {
         if (pending || this.closing) return;
         pending = setTimeout(() => { pending = undefined; void this.serial(p.id, () => this.emit(p, 'kernel.changed', p.id, localBrowserId)).catch(() => {}); }, 250);
       };
-      host = new KernelHost(p.root, { limits: this.config.kernel, rscript: this.bridge.rscript, python: this.config.python, ssh: this.config.ssh, serverctl: this.config.serverctl, onChange: changed });
+      // With the figures plugin, each local R session describes the ggplots it draws.
+      const figures = this.plugins.optional('figures');
+      host = new KernelHost(p.root, { limits: this.config.kernel, rscript: this.bridge.rscript, python: this.config.python, ssh: this.config.ssh, serverctl: this.config.serverctl, onChange: changed,
+        ...(figures ? { extensions: { r: [figures.rExtension] } } : {}) });
       this.kernels.set(p.id, host);
+    }
+    return host;
+  }
+  // The figures the project's live R session drew, read from the records its cells kept.
+  private figuresFor(p: Project) {
+    let host = this.figures.get(p.id);
+    if (!host) {
+      const { Figures } = this.plugins.need('figures');
+      host = new Figures(p.root, { record: (cellId, plot) => this.kernelFor(p).figureRecord(cellId, plot) });
+      this.figures.set(p.id, host);
     }
     return host;
   }
@@ -1188,6 +1203,18 @@ export class RhoService {
       if (method === 'kernel.place.copy') return host.copy(b.placeId, b.path, principal.id);
       if (method === 'kernel.servers') return host.servers();
       if (method === 'kernel.server.skill') return host.serverSkill(b.server, b.name);
+    }
+    // A plot the live R session drew, with its marks bound to their rows. The person and their
+    // Agent read it and keep the marks they point to; a kept selection reaches open pages.
+    if (method.startsWith('figure.')) {
+      await capabilities.assertAvailable(method, principal);
+      const figures = this.figuresFor(p);
+      if (method === 'figure.read') return figures.read({ cellId: b.cellId, plot: b.plot, form: b.form, marks: b.marks, selection: b.selection, where: b.where, limit: b.limit });
+      if (method === 'figure.select') {
+        const result = await figures.select({ cellId: b.cellId, plot: b.plot, marks: b.marks, note: b.note, changeId: b.changeId }, principal.id);
+        await this.emit(p, 'figure.changed', b.cellId + ':' + b.plot, principal.id);
+        return result;
+      }
     }
     // How work is done in the project: the person and their Agent read its skills, and record and
     // undo changes to them, each kept with who made it, why and from what.

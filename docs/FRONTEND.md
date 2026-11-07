@@ -124,6 +124,14 @@ inspect what happened. The application gives those actions direct places:
   the reader is there, also when it is shown again or resized. Only the reader's own
   wheel, touch, keys or scroll bar take it off the end
   ([episode](SIMULATED-PROJECT-EPISODE.md#the-notebook)).
+- **Figures.** An R plot built with ggplot2 (directly or by a package on it) is drawn in the
+  cell and in the Plots view from its figure record. Pointing at a mark shows its row;
+  click, Shift/⌘-click or drag selects, Esc clears, and the rows behind the selection are
+  listed by layer. **Ask the Agent** keeps the selection and opens the Agent panel with it
+  attached to the next message; the chip's × detaches it. Marks the Agent pointed at appear
+  as an amber chip above the plot with its note, shown on the plot when the person has
+  nothing selected. A plot nothing described stays a picture; one that failed says why
+  under it ([episode](FIGURES-EPISODE.md)).
 - **Two forms.** Notebook | Console switches how the same sessions read: as a notebook (above)
   or as a console, one transcript as R or Python print it at a terminal. Each cell is its code
   after the prompt (`>`/`+` in R, `>>>`/`...` in Python, a new statement at the prompt) and what

@@ -20387,6 +20387,50 @@ export const ownerContracts: OwnerContractSnapshot = {
                     "items": {
                       "additionalProperties": false,
                       "properties": {
+                        "figure": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "bound": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "describer": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "geoms": {
+                              "items": {
+                                "type": "string"
+                              },
+                              "type": "array"
+                            },
+                            "kind": {
+                              "type": "string"
+                            },
+                            "layers": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "marks": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "title": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "describer",
+                            "layers",
+                            "marks",
+                            "bound",
+                            "geoms"
+                          ],
+                          "type": "object"
+                        },
+                        "figureProblem": {
+                          "type": "string"
+                        },
                         "height": {
                           "type": "integer"
                         },
@@ -21649,6 +21693,50 @@ export const ownerContracts: OwnerContractSnapshot = {
                       "items": {
                         "additionalProperties": false,
                         "properties": {
+                          "figure": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "bound": {
+                                "minimum": 0,
+                                "type": "integer"
+                              },
+                              "describer": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "geoms": {
+                                "items": {
+                                  "type": "string"
+                                },
+                                "type": "array"
+                              },
+                              "kind": {
+                                "type": "string"
+                              },
+                              "layers": {
+                                "minimum": 0,
+                                "type": "integer"
+                              },
+                              "marks": {
+                                "minimum": 0,
+                                "type": "integer"
+                              },
+                              "title": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "describer",
+                              "layers",
+                              "marks",
+                              "bound",
+                              "geoms"
+                            ],
+                            "type": "object"
+                          },
+                          "figureProblem": {
+                            "type": "string"
+                          },
                           "height": {
                             "type": "integer"
                           },
@@ -22201,6 +22289,50 @@ export const ownerContracts: OwnerContractSnapshot = {
                     "items": {
                       "additionalProperties": false,
                       "properties": {
+                        "figure": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "bound": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "describer": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "geoms": {
+                              "items": {
+                                "type": "string"
+                              },
+                              "type": "array"
+                            },
+                            "kind": {
+                              "type": "string"
+                            },
+                            "layers": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "marks": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "title": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "describer",
+                            "layers",
+                            "marks",
+                            "bound",
+                            "geoms"
+                          ],
+                          "type": "object"
+                        },
+                        "figureProblem": {
+                          "type": "string"
+                        },
                         "height": {
                           "type": "integer"
                         },
@@ -23037,6 +23169,392 @@ export const ownerContracts: OwnerContractSnapshot = {
             },
             "required": [
               "session"
+            ],
+            "type": "object"
+          },
+          "requires": []
+        }
+      }
+    },
+    "figures": {
+      "operationContracts": {
+        "figure.read": {
+          "effect": "read",
+          "inputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "cellId": {
+                "pattern": "^k-[a-f0-9]{16}$",
+                "type": "string"
+              },
+              "form": {
+                "enum": [
+                  "summary",
+                  "view",
+                  "selections"
+                ]
+              },
+              "limit": {
+                "maximum": 500,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "marks": {
+                "items": {
+                  "pattern": "^\\d{1,4}\\.\\d{1,7}$",
+                  "type": "string"
+                },
+                "maxItems": 5000,
+                "type": "array"
+              },
+              "plot": {
+                "maximum": 64,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "selection": {
+                "pattern": "^f-[a-f0-9]{16}$",
+                "type": "string"
+              },
+              "where": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "column": {
+                      "maxLength": 256,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "layer": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "op": {
+                      "enum": [
+                        "eq",
+                        "ne",
+                        "lt",
+                        "le",
+                        "gt",
+                        "ge",
+                        "in",
+                        "contains"
+                      ]
+                    },
+                    "value": {
+                      "anyOf": [
+                        {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "boolean"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        {
+                          "items": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "boolean"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "maxItems": 500,
+                          "type": "array"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "column",
+                    "op",
+                    "value"
+                  ],
+                  "type": "object"
+                },
+                "maxItems": 8,
+                "minItems": 1,
+                "type": "array"
+              }
+            },
+            "required": [
+              "cellId",
+              "plot"
+            ],
+            "type": "object"
+          },
+          "outputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "figure": {
+                "type": "object"
+              },
+              "matched": {
+                "type": "object"
+              },
+              "record": {
+                "type": "object"
+              },
+              "rows": {
+                "items": {
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "rowsTotal": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "selections": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "at": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "by": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "cellId": {
+                      "pattern": "^k-[a-f0-9]{16}$",
+                      "type": "string"
+                    },
+                    "changeId": {
+                      "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+                      "type": "string"
+                    },
+                    "count": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "digest": {
+                      "pattern": "^[a-f0-9]{64}$",
+                      "type": "string"
+                    },
+                    "layers": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "geom": {
+                            "type": "string"
+                          },
+                          "layer": {
+                            "minimum": 0,
+                            "type": "integer"
+                          },
+                          "marks": {
+                            "minimum": 0,
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "layer",
+                          "geom",
+                          "marks"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "marks": {
+                      "items": {
+                        "pattern": "^\\d{1,4}\\.\\d{1,7}$",
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "note": {
+                      "type": "string"
+                    },
+                    "plot": {
+                      "maximum": 64,
+                      "minimum": 1,
+                      "type": "integer"
+                    },
+                    "selectionId": {
+                      "pattern": "^f-[a-f0-9]{16}$",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "selectionId",
+                    "cellId",
+                    "plot",
+                    "digest",
+                    "by",
+                    "at",
+                    "changeId",
+                    "note",
+                    "count",
+                    "layers"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "summary": {
+                "type": "object"
+              }
+            },
+            "required": [
+              "figure",
+              "selections"
+            ],
+            "type": "object"
+          },
+          "requires": []
+        },
+        "figure.select": {
+          "effect": "metadata",
+          "inputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "cellId": {
+                "pattern": "^k-[a-f0-9]{16}$",
+                "type": "string"
+              },
+              "changeId": {
+                "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+                "type": "string"
+              },
+              "marks": {
+                "items": {
+                  "pattern": "^\\d{1,4}\\.\\d{1,7}$",
+                  "type": "string"
+                },
+                "maxItems": 5000,
+                "minItems": 1,
+                "type": "array"
+              },
+              "note": {
+                "maxLength": 500,
+                "type": "string"
+              },
+              "plot": {
+                "maximum": 64,
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "cellId",
+              "plot",
+              "marks",
+              "changeId"
+            ],
+            "type": "object"
+          },
+          "outputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "selection": {
+                "additionalProperties": false,
+                "properties": {
+                  "at": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "by": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "cellId": {
+                    "pattern": "^k-[a-f0-9]{16}$",
+                    "type": "string"
+                  },
+                  "changeId": {
+                    "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+                    "type": "string"
+                  },
+                  "count": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "digest": {
+                    "pattern": "^[a-f0-9]{64}$",
+                    "type": "string"
+                  },
+                  "layers": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "geom": {
+                          "type": "string"
+                        },
+                        "layer": {
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "marks": {
+                          "minimum": 0,
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "layer",
+                        "geom",
+                        "marks"
+                      ],
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
+                  "marks": {
+                    "items": {
+                      "pattern": "^\\d{1,4}\\.\\d{1,7}$",
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "note": {
+                    "type": "string"
+                  },
+                  "plot": {
+                    "maximum": 64,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "selectionId": {
+                    "pattern": "^f-[a-f0-9]{16}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "selectionId",
+                  "cellId",
+                  "plot",
+                  "digest",
+                  "by",
+                  "at",
+                  "changeId",
+                  "note",
+                  "count",
+                  "layers"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "selection"
             ],
             "type": "object"
           },
@@ -25394,12 +25912,22 @@ export const ownerContracts: OwnerContractSnapshot = {
     },
     "kernel": {
       "package": "@rho-workspace/plugin-kernel",
-      "packageVersion": "0.5.6",
+      "packageVersion": "0.5.7",
       "entry": "./operations",
       "entryPath": "@rho-workspace/plugin-kernel/dist/operations.js",
       "entrySha256": "d984240d0953961897503d15419347712e5f80e23a3386074ff461e8655e7a46",
       "exports": {
-        "operationContracts": "738c966d85f5bcf6d65e313dad3221bac8974f430c86f46e119d67777ef7c788"
+        "operationContracts": "9108a8b192d1bfeceea36dd6d240dcc39758d9d852f46b2087b10b64f7e5eaff"
+      }
+    },
+    "figures": {
+      "package": "@rho-workspace/plugin-figures",
+      "packageVersion": "0.1.0",
+      "entry": "./operations",
+      "entryPath": "@rho-workspace/plugin-figures/dist/operations.js",
+      "entrySha256": "9a8473403e0f4fcb512395bcd7124904c826e52fafcea99d06cd5e7bdcab3c05",
+      "exports": {
+        "operationContracts": "b2586f5779f8c09ae2974d40e401b1995be24c852521078099b7e149b37adbf0"
       }
     },
     "skills": {

@@ -159,7 +159,7 @@ function TurnView({ turn, running, observation, projectRoot, choose, choosing, a
   const answerText = answer.map(block => block.kind === 'text' ? block.step.text ?? '' : '').join('\n\n').trim();
   const model = turn.model ? valueName(modelSetting(observation?.config?.options), turn.model) : '';
   return <li className={'turn ' + turn.state}>
-    <div className="turn-person"><p data-user-text="">{turn.text}</p>{turn.uiContext?.workspace && <small className="turn-place">Studio · {turn.uiContext.workspace.title}</small>}</div>
+    <div className="turn-person"><p data-user-text="">{turn.text}</p>{turn.uiContext?.workspace && <small className="turn-place">Studio · {turn.uiContext.workspace.title}</small>}{figureNote(turn.uiContext?.figureSelection)}</div>
     {(work.length > 0 || choices.length > 0) && <details className="turn-work" open={open} onToggle={event => { const next = event.currentTarget.open; if (next !== open) setShown(next); }}>
       <summary><span className="turn-work-label">{running ? 'Working' : 'Worked'}</span>{said && <span className="turn-work-said">{said}</span>}</summary>
       <div className="turn-work-body">
@@ -332,12 +332,19 @@ function ConversationSwitcher({ list, openId, title, mark, onOpen, onAll }: {
 
 // replayAt shows the open conversation as it stood at that moment, in step with its Studio;
 // onStarted names the conversation a message went to once the service has it.
-export function AgentConversation({ snapshot, client, uiContext, selectedId, onSelected, onOpen, onSent, onStarted, onClose, onAll, replayOf, replayAt: replaying = null, onNow, sessions, onPath }: {
+// The selected marks a message carried, as its sender sees them under their words.
+function figureNote(brief: any) {
+  if (!brief) return null;
+  return <small className="turn-place">{brief.unavailable ? 'A figure selection that could not be read' : `${brief.count} selected mark${brief.count === 1 ? '' : 's'} · plot ${brief.plot}${brief.cell ? ' of cell ' + brief.cell : ''}`}</small>;
+}
+export function AgentConversation({ snapshot, client, uiContext, attachment, onDetach, selectedId, onSelected, onOpen, onSent, onStarted, onClose, onAll, replayOf, replayAt: replaying = null, onNow, sessions, onPath }: {
   snapshot: WorkspaceSnapshot; client: BrowserClient; selectedId?: string | null; onSelected?: () => void; onOpen?: (id: string | null) => void; onSent?: () => void; onStarted?: (conversationId: string) => void; onClose?: () => void; onAll?: () => void;
   replayOf?: string | null; replayAt?: number | null; onNow?: () => void;
   // Every Agent session in the project folder (agent.sessions.list), and opening a file it names.
   sessions?: ExternalSummary[]; onPath?: (path: string) => void;
   uiContext?: UiLocation;
+  // Marks selected in a figure that go with the next message (uiContext names them), and dropping them.
+  attachment?: { label: string; count: number } | null; onDetach?: () => void;
 }) {
   const projectId = snapshot.project.id, openKey = 'rho.conversation.open.v1:' + projectId;
   const [openId, setOpenId] = useState<string | null>(() => stored(openKey));
@@ -438,6 +445,7 @@ export function AgentConversation({ snapshot, client, uiContext, selectedId, onS
     setFollowing(true); setUnseen(false); onSent?.();
     void deliver(sessionOpen ? { kind: 'start', changeId: 'm-' + crypto.randomUUID(), text, uiContext, continue: { session: openId!, copy } }
       : openId ? { kind: 'send', conversationId: openId, changeId: 'm-' + crypto.randomUUID(), text, uiContext } : { kind: 'start', changeId: 'm-' + crypto.randomUUID(), text, uiContext });
+    if (attachment) onDetach?.();
   }
   function continueWork(turn: Turn) {
     if (!openId || busy || pending || answering || !agentTurnLimit(turn)) return;
@@ -523,9 +531,11 @@ export function AgentConversation({ snapshot, client, uiContext, selectedId, onS
         {session.resume && !session.open && <CopyCommand text={session.resume} />}
       </div>}
       <div className="composer-box" onMouseDown={event => { if (event.target === event.currentTarget) { event.preventDefault(); input.current?.focus(); } }}>
+        {attachment && <div className="composer-attachment" role="status" title="These marks and their rows go with your next message"><Icon name="chart" size={14} /><span>{attachment.label}</span>
+          <button type="button" className="icon-button" aria-label="Don't send the selected marks" title="Don't send the selected marks" onClick={onDetach}><Icon name="close" size={13} /></button></div>}
         <label htmlFor="conversation-input" className="visually-hidden">{openId ? 'Message ' + agentName : 'Start a conversation'}</label>
         <textarea id="conversation-input" ref={input} rows={2} value={text} readOnly={!!waiting} disabled={blocked && !waiting}
-          placeholder={blocked ? 'Continue it where it is open, or continue a copy.' : answering ? agentName + ' is answering. You can write your next message.' : sessionOpen ? 'Continue this session with ' + agentName + '…' : openId ? 'Reply to ' + agentName + '…' : 'What should ' + agentName + ' look at or change?'} onChange={e => edit(e.target.value)}
+          placeholder={blocked ? 'Continue it where it is open, or continue a copy.' : attachment && !answering ? 'Ask about the selected marks…' : answering ? agentName + ' is answering. You can write your next message.' : sessionOpen ? 'Continue this session with ' + agentName + '…' : openId ? 'Reply to ' + agentName + '…' : 'What should ' + agentName + ' look at or change?'} onChange={e => edit(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !answering && canSend) { e.preventDefault(); send(); } }} />
         <div className="composer-bar">
           {sessionOpen ? <span /> : openId ? (openClient && <OpenSettings options={read?.observation?.config?.options ?? settings.offered(openBackend)?.options ?? null} values={read?.config ?? {}} agent={agentName}

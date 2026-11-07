@@ -39,7 +39,7 @@ async function source(directory, paths, committedFiles = []) {
   }
   return { commit, tree, buildInputsSha256: sha(JSON.stringify(inventory)), localOverride: changed ? 'explicit-dirty-build-inputs' : null };
 }
-const pluginIds = ['documents', 'files', 'r', 'requirements', 'tables', 'media', 'charts', 'agent', 'annotations', 'console', 'kernel', 'skills'];
+const pluginIds = ['documents', 'files', 'r', 'requirements', 'tables', 'media', 'charts', 'agent', 'annotations', 'console', 'kernel', 'figures', 'skills'];
 const selected = values['select-plugins'] === undefined ? pluginIds : values['select-plugins'].split(',').filter(Boolean);
 if (new Set(selected).size !== selected.length || selected.some(id => !pluginIds.includes(id))) throw new Error('Select unique known plugin IDs.');
 process.env.RHO_UI_PLUGINS = selected.join(',');
@@ -137,8 +137,9 @@ for (const [id, dependency] of [['tables', 'csv-parse'], ['agent', '@modelcontex
 if (result.files.some(f => /(^|\/)node_modules\/(@openai\/codex-|@anthropic-ai\/claude-agent-sdk-)[^/]+\//.test(f.path))) throw new Error('A native Agent client entered the package.');
 if (result.files.some(f => f.path.endsWith('.node'))) throw new Error('A native Node addon entered the package; it would bind the package to the packing platform.');
 const firstParty = file => !file.startsWith('node_modules/') || file.startsWith('node_modules/@rho-workspace/');
-// The project Rho ships (example/) is an ordinary project with its own R scripts; no other R enters.
-const shippedR = file => file === 'node_modules/@rho-workspace/plugin-kernel/runners/runner.R' || file.startsWith('example/');
+// The project Rho ships (example/) is an ordinary project with its own R scripts; besides it only
+// the Notebook's runner and the R file its sessions source to describe plots enter.
+const shippedR = file => ['node_modules/@rho-workspace/plugin-kernel/runners/runner.R', 'node_modules/@rho-workspace/plugin-figures/r/figures.R'].includes(file) || file.startsWith('example/');
 if (result.files.some(f => (firstParty(f.path) && /(^|\/)examples\//.test(f.path)) || (/\.R$/.test(f.path) && !shippedR(f.path)) || f.path.includes('@rho-workspace/headless'))) throw new Error('An aggregate package or project recipe leaked into the application.');
 const artifact = path.join(destination, result.filename);
 const report = { ...composition, artifact: { filename: result.filename, bytes: result.size, sha256: sha(await fs.readFile(artifact)), integrity: result.integrity, files: result.entryCount } };

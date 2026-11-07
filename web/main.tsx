@@ -22,6 +22,7 @@ import { pluginPresentation } from '../src/plugin-presentation.js';
 import { ProjectRail, railProjects, useProjectStates } from './project-rail.js';
 import { shortcut } from './platform.js';
 import { ShellContext, shellServices } from './shell-services.js';
+import type { FigureAsk } from '@rho-workspace/plugin-figures/ui';
 import './theme.css';
 import './plugins.css';
 import './access.css';
@@ -88,6 +89,9 @@ function App() {
   const [project, setProject] = useState<ProjectSummary | null>(null);
   const [snapshot, setSnapshot] = useState<WorkspaceSnapshot | null>(null);
   const [agentOpen, setAgentOpen] = useState(false);
+  // Marks the person selected in a figure and asked about: they go with the next message.
+  const [figureAsk, setFigureAsk] = useState<FigureAsk | null>(null);
+  useEffect(() => setFigureAsk(null), [project?.id]);
   const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
   // An open workspace can contribute recorded activity to the optional inspector.
   const [agentSlot, setAgentSlot] = useState<HTMLElement | null>(null);
@@ -533,7 +537,9 @@ function App() {
   const shellNow = useRef({ snapshot, files: files.files }); shellNow.current = { snapshot, files: files.files };
   const reviewNavigation=useRef<(id?:string,anchor?:any)=>void>(()=>{});
   reviewNavigation.current=(id,anchor)=>{showSection('review');setReviewId(id??'');setReviewAnchor(anchor??null);};
-  const shell = useMemo(() => shellServices(client, () => shellNow.current, path => linked.current(path), (id, anchor) => reviewNavigation.current(id,anchor)), [client]);
+  const askFigure = useRef<(ask: FigureAsk) => void>(() => {});
+  askFigure.current = ask => { setFigureAsk(ask); setAgentOpen(true); setContext(false); };
+  const shell = useMemo(() => shellServices(client, () => shellNow.current, path => linked.current(path), (id, anchor) => reviewNavigation.current(id,anchor), ask => askFigure.current(ask)), [client]);
   const fileOnScreen = section === 'file' && shownFile ? sources?.[shownFile.row].find(item => item.key === shownFile.key) : undefined;
   const here = screen === 'plugins' ? 'plugins' : screen !== 'project' ? '' : studioOpen ? 'studio:' + (composition?.compositionId ?? compositionId) : section === 'sources' ? 'sources:' + category : section === 'file' && shownFile ? 'file:' + shownFile.row + ':' + shownFile.key : section === 'documents' ? 'files' : section;
   const openConversation = (id: string) => { setSelectedConversation(id); setAgentOpen(true); setContext(false); };
@@ -579,13 +585,14 @@ function App() {
     accessOpen={context && !feedbackContext} accessTrigger={contextTrigger} onAccess={pick(() => { setFeedbackContext(false); setContext(v => feedbackContext || !v); setAgentOpen(false); })} />;
   const closeAgent = () => { setAgentOpen(false); agentReturn(); };
   // A conversation's own header holds its title, the recent conversations and Close.
+  const figureContext = figureAsk ? { figure: { cellId: figureAsk.cellId, plot: figureAsk.plot, selectionId: figureAsk.selectionId } } : {};
   const uiContext: UiLocation = studioOpen
-    ? { page: 'studio', compositionId: shownId, ...(!shownProcess ? { compositionVersion: composition?.version ?? 0 } : composition ? { compositionVersion: composition.version } : {}), replayAt: replay.at }
-    : { page: screen === 'plugins' ? 'plugins' : section === 'sources' ? 'sources:' + category : section, ...(section === 'file' && fileOnScreen ? { path: fileOnScreen.path } : {}) };
+    ? { page: 'studio', compositionId: shownId, ...(!shownProcess ? { compositionVersion: composition?.version ?? 0 } : composition ? { compositionVersion: composition.version } : {}), replayAt: replay.at, ...figureContext }
+    : { page: screen === 'plugins' ? 'plugins' : section === 'sources' ? 'sources:' + category : section, ...(section === 'file' && fileOnScreen ? { path: fileOnScreen.path } : {}), ...figureContext };
   const agentContents = <>
     {(link || !snapshot) && <div className="drawer-heading"><h2>Agent</h2><button className="icon-button" aria-label="Close Agent" onClick={closeAgent}><Icon name="close" size={18} /></button></div>}
     {snapshot && (link ? <AgentRequest key={snapshot.project.id} snapshot={snapshot} principalId={connection.principalId ?? 'local'} />
-      : <AgentConversation key={snapshot.project.id} snapshot={snapshot} client={client} uiContext={uiContext} selectedId={selectedConversation} onSelected={() => setSelectedConversation(null)} onOpen={id => address(snapshot.project.id, id)} onSent={() => { if (!studioOpen) follow(undefined, false); }} onStarted={id => { if (shownProcess) follow(id, true); }}
+      : <AgentConversation key={snapshot.project.id} snapshot={snapshot} client={client} uiContext={uiContext} attachment={figureAsk} onDetach={() => setFigureAsk(null)} selectedId={selectedConversation} onSelected={() => setSelectedConversation(null)} onOpen={id => address(snapshot.project.id, id)} onSent={() => { if (!studioOpen) follow(undefined, false); }} onStarted={id => { if (shownProcess) follow(id, true); }}
         replayOf={processConversation(shownId)} replayAt={studioOpen ? replay.at : null} onNow={() => setReplay(r => ({ ...r, at: null, playing: false }))}
         onClose={closeAgent} onAll={() => { showSection('agent'); if (narrow) setAgentOpen(false); }} sessions={externalConversations.sessions} onPath={showPath} />)}
     <div ref={setAgentSlot} className="agent-slot" />

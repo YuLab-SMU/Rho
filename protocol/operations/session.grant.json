@@ -82,6 +82,8 @@
             "feedback.read",
             "feedback.status",
             "feedback.submit",
+            "figure.read",
+            "figure.select",
             "interaction.selection.read",
             "interaction.selection.set",
             "kernel.events",

@@ -2490,6 +2490,7 @@
     "conversation.changed",
     "console.changed",
     "kernel.changed",
+    "figure.changed",
     "skills.changed"
   ],
   "compatibility": "Major API path changes for incompatible fields/semantics; additive optional fields allowed. Per-resource versions are independent.",

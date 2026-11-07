@@ -97,6 +97,12 @@ export interface ShellServices {
   // Runs code from a view (a script's line) as the person's cell in the live session of its
   // language, on a page that shows the Notebook; absent where the person cannot run code there.
   runCode?(run: { viewId: string; language: 'r' | 'python'; code: string; purpose: string }): Promise<void>;
+  // Draws a plot whose marks are bound to their rows (the figures plugin), with the picture standing
+  // in until it is read; asking about a selection hands it to the Agent panel's next message.
+  figure?(slot: {
+    client: { call(method: string, input: any, signal?: AbortSignal): Promise<any> }; projectId: string; cellId: string; plot: number; width: number; height: number; label: string;
+    name?: string; fit?: boolean; cursor?: number; fallback: ReactNode; author?: (by: string) => { name: string; mine: boolean };
+  }): ReactNode;
 }
 export interface UiContribution {
   entryVersion: '0.1-draft';

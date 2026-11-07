@@ -5,7 +5,7 @@
 // value an accepted response carries. The service, the Node client and the browser
 // client are all written against these types; runtime validation stays with Ajv.
 //
-// Contract identity: apiVersion 2.0, schemaVersion 2, 147 operations.
+// Contract identity: apiVersion 2.0, schemaVersion 2, 149 operations.
 export interface RhoOperationError {
   kind:
     | 'invalid'
@@ -5759,6 +5759,11 @@ export interface ConversationDecideOutput {
       compositionVersion?: number;
       replayAt?: number | null;
       path?: string;
+      figure?: {
+        cellId: string;
+        plot: number;
+        selectionId: string;
+      };
       capturedAt: string;
       project: {
         id: string;
@@ -5779,6 +5784,7 @@ export interface ConversationDecideOutput {
           title: string;
         }[];
       };
+      figureSelection?: {};
     };
     descriptions?: {
       path: string;
@@ -6062,6 +6068,11 @@ export interface ConversationPermissionOutput {
       compositionVersion?: number;
       replayAt?: number | null;
       path?: string;
+      figure?: {
+        cellId: string;
+        plot: number;
+        selectionId: string;
+      };
       capturedAt: string;
       project: {
         id: string;
@@ -6082,6 +6093,7 @@ export interface ConversationPermissionOutput {
           title: string;
         }[];
       };
+      figureSelection?: {};
     };
     descriptions?: {
       path: string;
@@ -6390,6 +6402,11 @@ export interface ConversationReadOutput {
       compositionVersion?: number;
       replayAt?: number | null;
       path?: string;
+      figure?: {
+        cellId: string;
+        plot: number;
+        selectionId: string;
+      };
       capturedAt: string;
       project: {
         id: string;
@@ -6410,6 +6427,7 @@ export interface ConversationReadOutput {
           title: string;
         }[];
       };
+      figureSelection?: {};
     };
     descriptions?: {
       path: string;
@@ -6570,6 +6588,11 @@ export interface ConversationSendInput {
     compositionVersion?: number;
     replayAt?: number | null;
     path?: string;
+    figure?: {
+      cellId: string;
+      plot: number;
+      selectionId: string;
+    };
   };
   continuationOf?: string;
 }
@@ -6691,6 +6714,11 @@ export interface ConversationSendOutput {
       compositionVersion?: number;
       replayAt?: number | null;
       path?: string;
+      figure?: {
+        cellId: string;
+        plot: number;
+        selectionId: string;
+      };
       capturedAt: string;
       project: {
         id: string;
@@ -6711,6 +6739,7 @@ export interface ConversationSendOutput {
           title: string;
         }[];
       };
+      figureSelection?: {};
     };
     descriptions?: {
       path: string;
@@ -7035,6 +7064,11 @@ export interface ConversationStartInput {
     compositionVersion?: number;
     replayAt?: number | null;
     path?: string;
+    figure?: {
+      cellId: string;
+      plot: number;
+      selectionId: string;
+    };
   };
   continue?: {
     session: string;
@@ -7159,6 +7193,11 @@ export interface ConversationStartOutput {
       compositionVersion?: number;
       replayAt?: number | null;
       path?: string;
+      figure?: {
+        cellId: string;
+        plot: number;
+        selectionId: string;
+      };
       capturedAt: string;
       project: {
         id: string;
@@ -7179,6 +7218,7 @@ export interface ConversationStartOutput {
           title: string;
         }[];
       };
+      figureSelection?: {};
     };
     descriptions?: {
       path: string;
@@ -7399,6 +7439,11 @@ export interface ConversationStopOutput {
       compositionVersion?: number;
       replayAt?: number | null;
       path?: string;
+      figure?: {
+        cellId: string;
+        plot: number;
+        selectionId: string;
+      };
       capturedAt: string;
       project: {
         id: string;
@@ -7419,6 +7464,7 @@ export interface ConversationStopOutput {
           title: string;
         }[];
       };
+      figureSelection?: {};
     };
     descriptions?: {
       path: string;
@@ -9027,6 +9073,88 @@ export interface FeedbackSubmitOutput {
   submissionId: string;
 }
 
+export interface FigureReadInput {
+  projectId: string;
+  cellId: string;
+  form?: 'summary' | 'view' | 'selections';
+  limit?: number;
+  /**
+   * @maxItems 5000
+   */
+  marks?: string[];
+  plot: number;
+  selection?: string;
+  /**
+   * @minItems 1
+   * @maxItems 8
+   */
+  where?: {
+    column: string;
+    layer?: number;
+    op: 'eq' | 'ne' | 'lt' | 'le' | 'gt' | 'ge' | 'in' | 'contains';
+    value: (string | number | boolean | null) | (string | number | boolean | null)[];
+  }[];
+}
+
+export interface FigureReadOutput {
+  figure: {};
+  matched?: {};
+  record?: {};
+  rows?: {}[];
+  rowsTotal?: number;
+  selections: {
+    at: string;
+    by: string;
+    cellId: string;
+    changeId: string;
+    count: number;
+    digest: string;
+    layers: {
+      geom: string;
+      layer: number;
+      marks: number;
+    }[];
+    marks?: string[];
+    note: string;
+    plot: number;
+    selectionId: string;
+  }[];
+  summary?: {};
+}
+
+export interface FigureSelectInput {
+  projectId: string;
+  cellId: string;
+  changeId: string;
+  /**
+   * @minItems 1
+   * @maxItems 5000
+   */
+  marks: string[];
+  note?: string;
+  plot: number;
+}
+
+export interface FigureSelectOutput {
+  selection: {
+    at: string;
+    by: string;
+    cellId: string;
+    changeId: string;
+    count: number;
+    digest: string;
+    layers: {
+      geom: string;
+      layer: number;
+      marks: number;
+    }[];
+    marks?: string[];
+    note: string;
+    plot: number;
+    selectionId: string;
+  };
+}
+
 export interface InteractionSelectionReadInput {
   projectId: string;
   scope:
@@ -9310,6 +9438,16 @@ export interface KernelInterruptOutput {
     language: 'r' | 'python';
     number: number;
     outputs: {
+      figure?: {
+        bound: number;
+        describer: string;
+        geoms: string[];
+        kind?: string;
+        layers: number;
+        marks: number;
+        title?: string;
+      };
+      figureProblem?: string;
       height?: number;
       kind: 'stdout' | 'stderr' | 'warning' | 'error' | 'plot';
       plot?: number;
@@ -9536,6 +9674,16 @@ export interface KernelReadOutput {
     language: 'r' | 'python';
     number: number;
     outputs: {
+      figure?: {
+        bound: number;
+        describer: string;
+        geoms: string[];
+        kind?: string;
+        layers: number;
+        marks: number;
+        title?: string;
+      };
+      figureProblem?: string;
       height?: number;
       kind: 'stdout' | 'stderr' | 'warning' | 'error' | 'plot';
       plot?: number;
@@ -9623,6 +9771,16 @@ export interface KernelRunOutput {
     language: 'r' | 'python';
     number: number;
     outputs: {
+      figure?: {
+        bound: number;
+        describer: string;
+        geoms: string[];
+        kind?: string;
+        layers: number;
+        marks: number;
+        title?: string;
+      };
+      figureProblem?: string;
       height?: number;
       kind: 'stdout' | 'stderr' | 'warning' | 'error' | 'plot';
       plot?: number;
@@ -12639,6 +12797,8 @@ export interface SessionGrantInput {
     | 'feedback.read'
     | 'feedback.status'
     | 'feedback.submit'
+    | 'figure.read'
+    | 'figure.select'
     | 'interaction.selection.read'
     | 'interaction.selection.set'
     | 'kernel.events'
@@ -14729,6 +14889,8 @@ export interface RhoOperations {
   "feedback.read": { input: FeedbackReadInput; output: FeedbackReadOutput };
   "feedback.status": { input: FeedbackStatusInput; output: FeedbackStatusOutput };
   "feedback.submit": { input: FeedbackSubmitInput; output: FeedbackSubmitOutput };
+  "figure.read": { input: FigureReadInput; output: FigureReadOutput };
+  "figure.select": { input: FigureSelectInput; output: FigureSelectOutput };
   "interaction.selection.read": { input: InteractionSelectionReadInput; output: InteractionSelectionReadOutput };
   "interaction.selection.set": { input: InteractionSelectionSetInput; output: InteractionSelectionSetOutput };
   "kernel.events": { input: KernelEventsInput; output: KernelEventsOutput };
@@ -14801,5 +14963,5 @@ export type RhoInput<M extends RhoMethod> = RhoOperations[M]['input'];
 export type RhoOutput<M extends RhoMethod> = RhoOperations[M]['output'];
 
 /** The names a caller may pass to protocol.describe / protocol.validate. */
-export const rhoMethods = ["action.cancel","action.export","action.list","action.lookup","action.observe","action.output","action.retry","action.submit","agent.activity.capture","agent.activity.outputs","agent.activity.read","agent.sessions.list","agent.sessions.read","annotation.create","annotation.decide","annotation.list","annotation.read","annotation.reply","artifact.check","binding.activity","binding.activity.append","binding.close","binding.list","binding.open","capability.configure","capability.index","capability.list","capability.resolve","composition.apply","composition.delete","composition.put","composition.read","composition.undo","console.events","console.list","console.output","console.run","console.stop","context.create","context.read","conversation.agents.add","conversation.agents.remove","conversation.configure","conversation.decide","conversation.delete","conversation.list","conversation.permission","conversation.read","conversation.restore","conversation.send","conversation.settings.check","conversation.settings.read","conversation.settings.update","conversation.start","conversation.stop","conversation.trash","data.compare","data.page","data.plot","document.abandonSave","document.change.read","document.edit","document.history","document.open","document.read","document.revert","document.save","document.undo","document.undoOwn","evidence.export","evidence.preview","extension.call","extension.content","extension.describe","extension.install","extension.list","extension.manage","extension.market.change","extension.read","feedback.read","feedback.status","feedback.submit","interaction.selection.read","interaction.selection.set","kernel.events","kernel.inspect","kernel.interrupt","kernel.place.check","kernel.place.copy","kernel.place.list","kernel.place.set","kernel.places","kernel.plot","kernel.read","kernel.run","kernel.server.skill","kernel.servers","kernel.stop","media.describe","object.read","observation.snapshot","project.create","project.createWorkspace","project.doctor","project.entries","project.list","project.open","project.openFile","project.pick","project.runs","project.source.add","project.source.pick","project.work.read","protocol.describe","protocol.validate","requirements.check","requirements.prepare","resource.capture","resource.list","resource.read","resource.register","selection.set","session.browser.pair","session.browser.revoke","session.connect","session.grant","session.instructions","skill.list","skill.read","skills.change","skills.list","skills.read","skills.undo","task.map.declare","task.map.present","task.map.read","task.map.respond","task.routing.put","view.close","view.observations.read","view.observe","view.protection.set","workspace.enhance","workspace.export","workspace.observe","workspace.restore","workspace.save"] as const satisfies readonly RhoMethod[];
+export const rhoMethods = ["action.cancel","action.export","action.list","action.lookup","action.observe","action.output","action.retry","action.submit","agent.activity.capture","agent.activity.outputs","agent.activity.read","agent.sessions.list","agent.sessions.read","annotation.create","annotation.decide","annotation.list","annotation.read","annotation.reply","artifact.check","binding.activity","binding.activity.append","binding.close","binding.list","binding.open","capability.configure","capability.index","capability.list","capability.resolve","composition.apply","composition.delete","composition.put","composition.read","composition.undo","console.events","console.list","console.output","console.run","console.stop","context.create","context.read","conversation.agents.add","conversation.agents.remove","conversation.configure","conversation.decide","conversation.delete","conversation.list","conversation.permission","conversation.read","conversation.restore","conversation.send","conversation.settings.check","conversation.settings.read","conversation.settings.update","conversation.start","conversation.stop","conversation.trash","data.compare","data.page","data.plot","document.abandonSave","document.change.read","document.edit","document.history","document.open","document.read","document.revert","document.save","document.undo","document.undoOwn","evidence.export","evidence.preview","extension.call","extension.content","extension.describe","extension.install","extension.list","extension.manage","extension.market.change","extension.read","feedback.read","feedback.status","feedback.submit","figure.read","figure.select","interaction.selection.read","interaction.selection.set","kernel.events","kernel.inspect","kernel.interrupt","kernel.place.check","kernel.place.copy","kernel.place.list","kernel.place.set","kernel.places","kernel.plot","kernel.read","kernel.run","kernel.server.skill","kernel.servers","kernel.stop","media.describe","object.read","observation.snapshot","project.create","project.createWorkspace","project.doctor","project.entries","project.list","project.open","project.openFile","project.pick","project.runs","project.source.add","project.source.pick","project.work.read","protocol.describe","protocol.validate","requirements.check","requirements.prepare","resource.capture","resource.list","resource.read","resource.register","selection.set","session.browser.pair","session.browser.revoke","session.connect","session.grant","session.instructions","skill.list","skill.read","skills.change","skills.list","skills.read","skills.undo","task.map.declare","task.map.present","task.map.read","task.map.respond","task.routing.put","view.close","view.observations.read","view.observe","view.protection.set","workspace.enhance","workspace.export","workspace.observe","workspace.restore","workspace.save"] as const satisfies readonly RhoMethod[];
 export type RhoInputFor<M extends RhoMethod> = RhoOperations[M]['input'];

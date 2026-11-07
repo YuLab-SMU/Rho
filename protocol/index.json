@@ -4,8 +4,8 @@
   "schemaVersion": 2,
   "shared": {
     "path": "operations/shared.json",
-    "bytes": 75412,
-    "sha256": "d71c814419bfab48fcc6fe8c60e498a9cf59c83725d88787e938396c8b12c9a8"
+    "bytes": 75434,
+    "sha256": "c1ef5858bc0662f02d42c19c8cefdabfc7c66a2944308d49991fa44ec2137442"
   },
   "operations": {
     "action.cancel": {
@@ -269,8 +269,8 @@
     "conversation.decide": {
       "summary": "Person at this machine only: say to use an answer, or that it needs changes and why. The decision holds for the file versions that message kept when it was given and says nothing of later versions. A new decision supersedes the one before; none is removed. Refused while the Agent is still answering.",
       "path": "operations/conversation.decide.json",
-      "bytes": 39467,
-      "sha256": "9d6266dba23e1cad9cc8f065f276b7f0d0005c78392fa54f020ceb807399072d"
+      "bytes": 40299,
+      "sha256": "45eb254da27b30a3c63628a03e313bf14f398dec0d47c4a5c00aa6722b388012"
     },
     "conversation.delete": {
       "summary": "Person at this machine only: delete Rho's record of a conversation in the trash. The Agent's own session files are not touched. Repeating the request that started it is then refused.",
@@ -287,14 +287,14 @@
     "conversation.permission": {
       "summary": "Person at this machine only: record an offered choice for a pending Agent permission request. The original request identity is retained; repeated identical choices do not respond twice.",
       "path": "operations/conversation.permission.json",
-      "bytes": 39286,
-      "sha256": "75e2d331d6c5263f7fdb523f4f7e2a302b6501c674e4d558587c89de1f8dd37a"
+      "bytes": 40118,
+      "sha256": "eaf39842eaac29b7f0ddd3f44c41a793b37fc53929e76d9bd3733eb1f83d10a1"
     },
     "conversation.read": {
       "summary": "Read a conversation started in Rho: the person's messages, the Agent's visible text and tool steps, and how each message ended. Reading starts and resumes nothing.",
       "path": "operations/conversation.read.json",
-      "bytes": 54718,
-      "sha256": "5c155fdb11dc8cc435f1b05c82fecd143784b0b717ce1d75099f0992be8b3dae"
+      "bytes": 55604,
+      "sha256": "3cba5584bd0ba0dbc6afbbe19a0f907c566f431655bdac435b8d2a33764c5358"
     },
     "conversation.restore": {
       "summary": "Person at this machine only: return a conversation from the trash to the project's conversations, within the project's conversation limit.",
@@ -305,8 +305,8 @@
     "conversation.send": {
       "summary": "Person at this machine only: send the next message to a conversation started in Rho. A continuationOf links a new message to the latest confirmed Agent turn-limit stop; the original request is not resent. Refused while the previous message is being answered. A repeated changeId with the same input returns the original message.",
       "path": "operations/conversation.send.json",
-      "bytes": 40451,
-      "sha256": "3dbe3c14e878d90c32cbb48b918f783367739e678b863a8a28bed5d7bcd08cb6"
+      "bytes": 41934,
+      "sha256": "7c0ac97f08e013a87ef771ee99dbe21e1de14c5f3d71d8ba38890cbf7caa11d4"
     },
     "conversation.settings.check": {
       "summary": "Person at this machine only: start the chosen Agent in this project to read the settings it offers, then remove that session and end the process. No message is sent; one check per Agent runs at a time.",
@@ -329,14 +329,14 @@
     "conversation.start": {
       "summary": "Person at this machine only: start a conversation with the selected Claude Code or Codex Agent in this project. Rho selects the Agent plugin backend, attaches this project's MCP grant and records the message before sending it. Without backend or config, the person's saved Agent and settings are used and recorded with the conversation. A repeated changeId with the same text returns the original conversation and starts nothing. With continue, the message continues an Agent session listed by agent.sessions.list (one started in a terminal, an editor or the Agent's own app) through that same session, or through a copy of it with copy; a session another live window holds open is refused unless copied.",
       "path": "operations/conversation.start.json",
-      "bytes": 41477,
-      "sha256": "7815647d121f40424d20d2ff86374c480a2c4d10840b3158cd3da949f5ff45b9"
+      "bytes": 42960,
+      "sha256": "7fc9a8c82d4e330a65ad04822fc48ca3bc75585b3732910b022a630c5979bbba"
     },
     "conversation.stop": {
       "summary": "Person at this machine only: ask the original Agent to stop answering one message. ACP cancellation is confirmed by the original prompt response; a lost connection keeps the outcome unknown. Legacy CLI conversations confirm process exit. Steps already taken stay done.",
       "path": "operations/conversation.stop.json",
-      "bytes": 39113,
-      "sha256": "58db8a87339dcf0778b861bfad427b76ac9f322964b046d9041771e337226e99"
+      "bytes": 39945,
+      "sha256": "f3ca6f1b7230029e5b4585de4da84feee27603cbdf56d9b200468919bbc03108"
     },
     "conversation.trash": {
       "summary": "Person at this machine only: move a conversation that is not being answered to the trash. It is kept whole and not continued until restored; an idle connection to its Agent ends.",
@@ -500,6 +500,18 @@
       "bytes": 9488,
       "sha256": "4285b03a126e4f7ebd09748e557fc944700d43c804d870142cd84c93653131c1"
     },
+    "figure.read": {
+      "summary": "What a plot a cell drew shows: its layers, mappings, panels and data, the rows behind marks, and the marks people and Agents selected.",
+      "path": "operations/figure.read.json",
+      "bytes": 5874,
+      "sha256": "f6d8cc0609e97b6cd60b538e1a84664e5767c3a614ffb90ac574e15081328df6"
+    },
+    "figure.select": {
+      "summary": "Keeps a set of a figure's marks with a note, shown highlighted in the plot; the plot and its data do not change.",
+      "path": "operations/figure.select.json",
+      "bytes": 3267,
+      "sha256": "1814798e5d02670cab9498485960863146bc7bc9e980f62dae21122b58a025ae"
+    },
     "interaction.selection.read": {
       "summary": "interaction.selection.read",
       "path": "operations/interaction.selection.read.json",
@@ -527,8 +539,8 @@
     "kernel.interrupt": {
       "summary": "Interrupt one cell: a running cell stops and its session and values stay; a waiting cell is not run. A cell that has ended is returned unchanged.",
       "path": "operations/kernel.interrupt.json",
-      "bytes": 6360,
-      "sha256": "79636eab4cc83f34976c3a4097be5ee13777b17765e7955d55807a800eab287b"
+      "bytes": 7738,
+      "sha256": "0170819945ea13eab568b952f494cf7500a4fd7cdf88f46776e793a4bcd82e2e"
     },
     "kernel.place.check": {
       "summary": "Connect to a place on a server and report its system, machine, the folder after its setup lines, and R and Python there. Runs the place's setup lines; starts no session.",
@@ -569,14 +581,14 @@
     "kernel.read": {
       "summary": "The live sessions and their cells, oldest cell first: code, purpose, who ran it, what it printed, its plots and how it ended, and each session's variables. Reading never starts a session.",
       "path": "operations/kernel.read.json",
-      "bytes": 13302,
-      "sha256": "cfbc1a18a6c1414d45bbc9ba3baf7ddc009baad91f15194031f5de902f60d29f"
+      "bytes": 14768,
+      "sha256": "de2992bf30e9bf8bb489239f1bba3fc31cbadc0217f5fe30dd77ce360f2bd459"
     },
     "kernel.run": {
       "summary": "Run a cell of R or Python in the project's live session of that language, which the Agent and the person share: what one cell defines stays for the next. Starts the session when none is live, on this machine or at a place on one of the person's servers (place, or where kernel.places says that language runs next). interpreter names the program a session on this machine starts with, in a folder of the project such as .venv/bin/python; the project keeps it for that language's later sessions, and each cell records the program and version that ran it. The same changeId from the same caller returns the same cell and never runs it twice. waitMs waits for the cell to end.",
       "path": "operations/kernel.run.json",
-      "bytes": 13162,
-      "sha256": "f6a48db022b54b204f5c685fdb16737caf6dfa973cbd5184cbbb877a4032bbb5"
+      "bytes": 14540,
+      "sha256": "f4f115beaa80fa3c1d34a9dbf5089b24e72a22ab14f7f6f1daa75d454f6b9671"
     },
     "kernel.server.skill": {
       "summary": "One skill bound to a server, as its file reads now: how that server is used. Read it before naming a place there or running work on it.",
@@ -761,8 +773,8 @@
     "session.grant": {
       "summary": "session.grant",
       "path": "operations/session.grant.json",
-      "bytes": 5132,
-      "sha256": "db4dfca2110f737cd5c72735c62fd1cd7e8f8d370e5b7f3c3cbc877e493f88c1"
+      "bytes": 5188,
+      "sha256": "2e23b33da965d9085eddabde5a22e5d25b3eb2c90adb438905b4616e3f36559b"
     },
     "session.instructions": {
       "summary": "Person at this machine or operator only: read a prompt for the person's own MCP client to connect itself to this existing project. Returns local launcher paths, never credential contents. Reading or copying grants no access, edits no client configuration and starts no runtime.",

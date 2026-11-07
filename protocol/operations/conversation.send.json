@@ -61,6 +61,30 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 1024
+          },
+          "figure": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "cellId": {
+                "type": "string",
+                "pattern": "^k-[a-f0-9]{16}$"
+              },
+              "plot": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 64
+              },
+              "selectionId": {
+                "type": "string",
+                "pattern": "^f-[a-f0-9]{16}$"
+              }
+            },
+            "required": [
+              "cellId",
+              "plot",
+              "selectionId"
+            ]
           }
         },
         "required": [
@@ -702,6 +726,30 @@
                 "minLength": 1,
                 "maxLength": 1024
               },
+              "figure": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "cellId": {
+                    "type": "string",
+                    "pattern": "^k-[a-f0-9]{16}$"
+                  },
+                  "plot": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 64
+                  },
+                  "selectionId": {
+                    "type": "string",
+                    "pattern": "^f-[a-f0-9]{16}$"
+                  }
+                },
+                "required": [
+                  "cellId",
+                  "plot",
+                  "selectionId"
+                ]
+              },
               "capturedAt": {
                 "type": "string",
                 "format": "date-time"
@@ -823,6 +871,9 @@
                   "omittedViews",
                   "views"
                 ]
+              },
+              "figureSelection": {
+                "type": "object"
               }
             },
             "required": [

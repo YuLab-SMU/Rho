@@ -49,10 +49,12 @@ export const consoleMethods = ['console.run', 'console.list', 'console.events', 
 // The project's live R and Python sessions, which the person shares with their Agent.
 export const kernelMethods = ['kernel.run', 'kernel.read', 'kernel.events', 'kernel.inspect', 'kernel.plot', 'kernel.interrupt', 'kernel.stop', 'kernel.places', 'kernel.place.set', 'kernel.place.check', 'kernel.place.list', 'kernel.place.copy', 'kernel.servers', 'kernel.server.skill'];
 export const skillsMethods = ['skills.list', 'skills.read', 'skills.change', 'skills.undo'];
+// The figures the live R session drew: the person reads them and keeps the marks they ask about.
+export const figureMethods = ['figure.read', 'figure.select'];
 export function localBrowserPrincipal(root: string): Principal {
   // The empty token hash can never match a request digest, so no header impersonates this
   // identity: it is chosen because the request carried no credential at all.
-  return { id: localBrowserId, kind: 'browser', tokenHash: '', projectRoot: root, methods: [...extensionMethods, ...browserMethods, ...conversationMethods, ...consoleMethods, ...kernelMethods, ...skillsMethods] };
+  return { id: localBrowserId, kind: 'browser', tokenHash: '', projectRoot: root, methods: [...extensionMethods, ...browserMethods, ...conversationMethods, ...consoleMethods, ...kernelMethods, ...skillsMethods, ...figureMethods] };
 }
 interface Pairing { hash: string; root: string; methods: string[]; expires: number; selectedProjects: string[] }
 export class BrowserAccess {

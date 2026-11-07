@@ -161,6 +161,50 @@
             "items": {
               "additionalProperties": false,
               "properties": {
+                "figure": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "bound": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "describer": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "geoms": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "kind": {
+                      "type": "string"
+                    },
+                    "layers": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "marks": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "title": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "describer",
+                    "layers",
+                    "marks",
+                    "bound",
+                    "geoms"
+                  ],
+                  "type": "object"
+                },
+                "figureProblem": {
+                  "type": "string"
+                },
                 "height": {
                   "type": "integer"
                 },

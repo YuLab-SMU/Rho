@@ -1,0 +1,142 @@
+{
+  "method": "figure.select",
+  "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "projectId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "cellId": {
+        "pattern": "^k-[a-f0-9]{16}$",
+        "type": "string"
+      },
+      "changeId": {
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+        "type": "string"
+      },
+      "marks": {
+        "items": {
+          "pattern": "^\\d{1,4}\\.\\d{1,7}$",
+          "type": "string"
+        },
+        "maxItems": 5000,
+        "minItems": 1,
+        "type": "array"
+      },
+      "note": {
+        "maxLength": 500,
+        "type": "string"
+      },
+      "plot": {
+        "maximum": 64,
+        "minimum": 1,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "projectId",
+      "cellId",
+      "plot",
+      "marks",
+      "changeId"
+    ],
+    "type": "object"
+  },
+  "outputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "selection": {
+        "additionalProperties": false,
+        "properties": {
+          "at": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "by": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "cellId": {
+            "pattern": "^k-[a-f0-9]{16}$",
+            "type": "string"
+          },
+          "changeId": {
+            "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+            "type": "string"
+          },
+          "count": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "digest": {
+            "pattern": "^[a-f0-9]{64}$",
+            "type": "string"
+          },
+          "layers": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "geom": {
+                  "type": "string"
+                },
+                "layer": {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "marks": {
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "layer",
+                "geom",
+                "marks"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "marks": {
+            "items": {
+              "pattern": "^\\d{1,4}\\.\\d{1,7}$",
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "note": {
+            "type": "string"
+          },
+          "plot": {
+            "maximum": 64,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "selectionId": {
+            "pattern": "^f-[a-f0-9]{16}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "selectionId",
+          "cellId",
+          "plot",
+          "digest",
+          "by",
+          "at",
+          "changeId",
+          "note",
+          "count",
+          "layers"
+        ],
+        "type": "object"
+      }
+    },
+    "required": [
+      "selection"
+    ],
+    "type": "object"
+  },
+  "description": "Keeps a set of a figure's marks with a note, shown highlighted in the plot; the plot and its data do not change."
+}

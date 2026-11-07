@@ -5,12 +5,14 @@ import type { Entry } from './project.js';
 import { highlight, languageExtensions } from './languages.js';
 import { readFile, readImage } from './previews.js';
 import { AgentMarkdown } from './markdown.js';
+import { SemanticFigure, type FigureAsk } from '@rho-workspace/plugin-figures/ui';
 
 // The services the shell gives every view on the project screen (see ShellServices).
 export const ShellContext = createContext<ShellServices | undefined>(undefined);
 // Read through `current` so the services stay one object while the project changes.
-export function shellServices(client: BrowserClient, current: () => { snapshot: WorkspaceSnapshot | null; files: Entry[] }, openPath: (path: string) => void, openReview?: ShellServices['openReview']): ShellServices {
+export function shellServices(client: BrowserClient, current: () => { snapshot: WorkspaceSnapshot | null; files: Entry[] }, openPath: (path: string) => void, openReview?: ShellServices['openReview'], askFigure?: (ask: FigureAsk) => void): ShellServices {
   return {
+    figure: slot => createElement(SemanticFigure, { ...slot, onAsk: askFigure }),
     openPath, openReview,
     imageUrl(path) {
       const { snapshot, files } = current(), file = files.find(f => f.path === path);

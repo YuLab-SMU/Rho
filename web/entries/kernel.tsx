@@ -29,7 +29,7 @@ function Variables({ client, snapshot }: UiViewProps) {
   const page = useContext(WorkspaceViewsContext);
   return <VariablesPane client={client} snapshot={snapshot} onObject={page?.openValue} />;
 }
-const Plots = ({ client, snapshot }: UiViewProps) => <PlotsPane client={client} snapshot={snapshot} />;
+const Plots = ({ client, snapshot, shell }: UiViewProps) => <PlotsPane client={client} snapshot={snapshot} shell={shell} />;
 function Flow({ client, snapshot, shell }: UiViewProps) {
   const page = useContext(WorkspaceViewsContext);
   return <FlowPane client={client} snapshot={snapshot} shell={shell} onObject={page?.openValue} onPath={shell?.openPath} onRemote={page?.openRemote} />;

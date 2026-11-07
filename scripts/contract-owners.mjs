@@ -34,6 +34,7 @@ const owners = [
   { id: 'annotations', package: '@rho-workspace/plugin-annotations', entry: './contract', take: ['inputs', 'outputs'] },
   { id: 'console', package: '@rho-workspace/plugin-console', entry: './operations', take: ['operationContracts'] },
   { id: 'kernel', package: '@rho-workspace/plugin-kernel', entry: './operations', take: ['operationContracts'] },
+  { id: 'figures', package: '@rho-workspace/plugin-figures', entry: './operations', take: ['operationContracts'] },
   { id: 'skills', package: '@rho-workspace/plugin-skills', entry: './operations', take: ['operationContracts'] },
   { id: 'entry-files', package: '@rho-workspace/plugin-files', entry: './contract', take: ['declarationSchema'] },
   { id: 'entry-tables', package: '@rho-workspace/plugin-tables', entry: './contract', take: ['declarationSchema', 'columnSchema', 'tableFormatSchema'] },

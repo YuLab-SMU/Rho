@@ -97,6 +97,7 @@
     "test:media": "node --test ../Rho-plugins/test/owners.test.mjs",
     "test:console": "node --test ../Rho-plugins/test/console.test.mjs && node --test --test-name-pattern='Console commands' test/answer-decisions.test.mjs",
     "test:notebook": "node --test ../Rho-plugins/test/kernel.test.mjs && node --test test/notebook.test.mjs",
+    "test:figures": "node --test ../Rho-plugins/test/figures.test.mjs && node --test test/figures.test.mjs",
     "test:screen-check": "npm run build && node --test test/screen-check.test.mjs test/screen-check-skill.test.mjs",
     "test:skills": "node --test ../Rho-plugins/test/skills.test.mjs",
     "test:requirements": "node --test --test-name-pattern='base-R requirements' ../Rho-plugins/test/resources.test.mjs",
@@ -148,6 +149,7 @@
     "@rho-workspace/plugin-documents": "file:../Rho-plugins/plugins/documents",
     "@rho-workspace/plugin-files": "file:../Rho-plugins/plugins/files",
     "@rho-workspace/plugin-kernel": "file:../Rho-plugins/plugins/kernel",
+    "@rho-workspace/plugin-figures": "file:../Rho-plugins/plugins/figures",
     "@rho-workspace/plugin-media": "file:../Rho-plugins/plugins/media",
     "@rho-workspace/plugin-r": "file:../Rho-plugins/plugins/r",
     "@rho-workspace/plugin-requirements": "file:../Rho-plugins/plugins/requirements",
@@ -197,6 +199,7 @@
     "@rho-workspace/plugin-annotations",
     "@rho-workspace/plugin-console",
     "@rho-workspace/plugin-kernel",
+    "@rho-workspace/plugin-figures",
     "@rho-workspace/plugin-skills",
     "playwright-core"
   ],
