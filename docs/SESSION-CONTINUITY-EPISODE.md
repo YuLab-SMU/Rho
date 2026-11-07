@@ -137,7 +137,9 @@ Harness as available, with Claude Code still the default.
   `acp-conversations.test.mjs`: that test took a finished turn as settled
   before the folder comparison was attached to it (an older race, seen under
   load). It now waits for the comparison. The full suite then passed: 315
-  tests, 2 skipped, none failed.
+  tests, 2 skipped, none failed. CI run 42357593474 for `94d363d1` then passed
+  every job: the four Cores, tests on macOS, Linux and Windows, the packed
+  candidate and its offline installs.
 - The screens were read at each step. The Agents tab and held-session notice
   were shot again after the narrow-width and link-spacing fixes. In the final
   run, "continue a copy" read as plain text beside the notice; it is now
