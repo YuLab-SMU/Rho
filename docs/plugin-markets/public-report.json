@@ -1,0 +1,25 @@
+{
+  "passed": true,
+  "url": "https://raw.githubusercontent.com/YuLab-SMU/Rho/main/site/market/rho.json",
+  "checks": [
+    "CLI adds the published HTTPS index and lists its retained digest",
+    "the browser finds the public entry by clusterProfiler and displays its public source",
+    "the full public HTTPS URL and market controls fit the 390 px view",
+    "the public Git package installs at the selected identity and its actual view opens",
+    "explicit public refresh succeeds and no scientific runtime has started"
+  ],
+  "errors": [],
+  "index": {
+    "title": "YuLab Rho plugins",
+    "digest": "db154efd40f9d214ce100883cce2a8096d3f71e28939949180a4bfb9f47315c6",
+    "fetchedAt": "2026-11-07T19:58:47.089Z",
+    "source": "git+https://github.com/YuLab-SMU/Rho-plugins.git#50d2427683e9077a5141b011c9696c51a00c90c5:plugins/semantic-figures"
+  },
+  "browser": "156.0.8078.81",
+  "installed": {
+    "id": "yulab.semantic-figures",
+    "version": "0.1.0",
+    "digest": "947fb22423e8c8a40f0c1fcbb1dba90b67321a1f96c10574f5cffe2ef650c685",
+    "sourceCommit": "50d2427683e9077a5141b011c9696c51a00c90c5"
+  }
+}

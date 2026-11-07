@@ -67,7 +67,7 @@ test('indexes reject incompatible formats, duplicate ids and unpinned or local p
 });
 
 test('source count, streamed bytes, entry count and timeout bounds refuse new data without replacing cached data', async t => {
-  const { manager, state, url } = await fixture(t, { maxMarkets: 1, maxMarketBytes: 2048, maxMarketEntries: 1, marketTimeoutMs: 60 });
+  const { manager, state, url } = await fixture(t, { maxMarkets: 1, maxMarketBytes: 2048, maxMarketEntries: 1, marketTimeoutMs: 1000 });
   let [market] = (await manager.changeMarket({ action: 'add', url })).markets;
   await assert.rejects(manager.changeMarket({ action: 'add', url: url + '/other' }), /maxMarkets/);
   const digest = market.digest;
@@ -75,7 +75,7 @@ test('source count, streamed bytes, entry count and timeout bounds refuse new da
   [market] = (await change(manager, market)).markets; assert.match(market.error, /maxMarketBytes/); assert.equal(market.digest, digest);
   state.chunked = false; state.body = JSON.stringify({ ...index, plugins: [index.plugins[0], { ...index.plugins[0], id: 'other' }] });
   [market] = (await change(manager, market)).markets; assert.match(market.error, /maxMarketEntries/);
-  state.body = JSON.stringify(index); state.delay = 200;
+  state.body = JSON.stringify(index); state.delay = 2000;
   [market] = (await change(manager, market)).markets; assert.match(market.error, /marketTimeoutMs/); assert.equal(market.digest, digest);
 });
 

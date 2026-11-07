@@ -54,13 +54,34 @@ package digest.
 
 The new operation also needed an explicit top-level object schema for Rho's
 discovery projection. Its focused projection and HTTP/CLI checks pass. A broader
-all-operation adapter probe reached an existing missing-effect-contract refusal
-outside this new operation; that broad adapter path is not claimed as passing.
+all-operation adapter probe stopped at a missing-effect-contract refusal; that
+broad adapter path was not investigated further and is not claimed as passing.
+
+## Published HTTPS index
+
+The [public index](https://raw.githubusercontent.com/YuLab-SMU/Rho/main/site/market/rho.json)
+was published in Rho commit `1be1be80`. A fresh disposable service added that exact
+URL through the CLI, then the browser found `clusterProfiler`, installed the
+fixed public Git package and opened Interactive figures. A second explicit
+refresh of the public URL succeeded. The full public URL and controls also fit
+the 390 px view without horizontal overflow. The returned package digest matched the
+controlled episode, and no scientific runtime started. This run also included
+the Plugins page changes from `7f923118`; the controlled failure/recovery episode
+was repeated on that combination afterward.
+
+![The real HTTPS index, before installation](plugin-markets/public-search.png)
+
+The [public report](plugin-markets/public-report.json) keeps the exact URL, index
+digest, package digest, timestamp and browser. Repeat with
+`node scripts/plugin-markets-public-episode.mjs`; this uses the real HTTPS and
+Git endpoints and closes its owned browser and service. Both episode scripts
+leave disposable state and evidence in their output folder for inspection.
 
 ## Verification and limits
 
 - `npm run build` and `npm run check:contracts` passed.
-- `node --test test/extension-markets.test.mjs test/extensions.test.mjs`: 9 passed.
+- `node --test test/extension-markets.test.mjs test/extensions.test.mjs test/protocol.test.mjs test/validate.test.mjs`:
+  15 passed on the combined source, including 9 extension checks.
   These cover restart/cache behavior, invalid formats and sources, streamed size,
   entry/source/time limits, stale revisions and digests, actual staged package
   identity/version mismatches, CLI/API consistency and Agent authorization.
@@ -73,9 +94,10 @@ outside this new operation; that broad adapter path is not claimed as passing.
   `RHO_MARKET_EPISODE` selects a disposable output folder; the script closes its
   browser, service and fixture server after the run.
 
-The new [public HTTPS index](https://raw.githubusercontent.com/YuLab-SMU/Rho/main/site/market/rho.json)
-is included in this source change; verification of that published endpoint is
-pending publication. The controlled HTTP fixture is not evidence of a published
-HTTPS index. This pass does not establish independent-user usability, other OS
-behavior, registry publication, market signing, automatic updates, or installation
-into the person's running Rho. No npm release was made.
+Both browser runs passed with no page errors. Screenshots were read after the
+combined run; the narrow layout wraps the source URL and stacks its controls.
+The four changed documentation pages were rendered and inspected, and the
+documentation build and link/assembly check passed. This pass does not establish
+independent-user usability, other OS behavior, registry publication, market
+signing, automatic updates, or installation into the person's running Rho. No
+npm release was made.
