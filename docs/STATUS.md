@@ -4,6 +4,8 @@ Updated: 2026-11-07.
 
 ## Current focus
 
+[Semantic figures](SEMANTIC-FIGURES-EPISODE.md): an independently installed plugin with separate ggtree and enrichplot adapters runs clade selection across rectangular/circular layouts and term/gene linking between dotplot and cnetplot. The real R/Chrome episode and five owner checks passed, including reopening, stale selection, bad input and changed-source behavior. Stage 1; the Plugins frame and small plot labels still cost scrolling and reading. No Studio integration, automatic Agent interpretation or semantic migration; no npm delivery or change to the user’s running instance.
+
 [Plugin disclosure](PLUGIN-DISCLOSURE-EPISODE.md): the Plugins page searches views, Skills and operations, reads full digest-bound instructions, identifies UI extension packages and exposes native integrations and the shared MCP entry. One owner-derived listing supplies live and retained records for all 12 owners; absent entries keep their descriptions. Rho workspace Skills have their own ownership, and independently installed packages expose every Skill and view. The 26 focused checks and both real Chrome checks passed. Source after 0.5.6 with Agent 0.4.33; no npm delivery or change to the person's running instance.
 
 [Studio context](STUDIO-CONTEXT-EPISODE.md): each Agent-panel message freezes its sending tab and Studio workspace; an empty layout can be deleted and restored through conditional composition operations. A real OpenCode/GLM run deleted Workspace 3, identified Workspace 2 on the next message, deleted a recreated version and restored the named layout. Project files stayed intact. Source after 0.5.6; no new npm delivery or change to the person's running instance.
@@ -120,9 +122,7 @@ from rho-bio-eval ran in Rho: bix-18 (Python) had 4 of 5 answers in range twice,
 miss being a proportion against a range written as a percentage; bix-51 (R) had 7 of 7.
 The Choices and the Console were redrawn from what these runs showed.
 
-The [Notebook](SIMULATED-PROJECT-EPISODE.md#the-notebook) (Notebook 0.1.0) keeps a live R
-and a live Python session per project that the person shares with the Agent. Its page lists
-cells in the order they ran with who ran them and why, the code, output streamed as it is
+The [Notebook](SIMULATED-PROJECT-EPISODE.md#the-notebook) (Notebook 0.1.0) keeps a live R and a live Python session per project that the person shares with the Agent. Its page lists cells in the order they ran with who ran them and why, the code, output streamed as it is
 printed with messages and warnings in place, plots, and the session's variables; the person
 runs, edits, reruns and interrupts cells, and only they stop a session. A conversation's
 Studio shows the cells its Agent ran. In fresh quick checks the Agent ran its script in the

@@ -88,3 +88,5 @@ Execution belongs to [Rho-core](https://github.com/YuLab-SMU/Rho-core); function
 component APIs belong to [Rho-plugins](https://github.com/YuLab-SMU/Rho-plugins).
 
 - [External conversations episode](EXTERNAL-CONVERSATIONS-EPISODE.md): native Harness history, operations and exact result versions.
+
+- [Semantic figures episode](SEMANTIC-FIGURES-EPISODE.md): native ggtree clade selection across layouts and enrichplot term/gene linking through an independently installed plugin.

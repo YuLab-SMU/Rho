@@ -1,0 +1,249 @@
+{
+  "at": "2026-11-07T19:19:30.668Z",
+  "passed": true,
+  "plugin": {
+    "name": "@rho-workspace/plugin-semantic-figures",
+    "version": "0.1.0",
+    "digest": "947fb22423e8c8a40f0c1fcbb1dba90b67321a1f96c10574f5cffe2ef650c685"
+  },
+  "ggtree": {
+    "id": "285caaa8e3c9561e90b9482f36618397",
+    "cellId": "k-7908b1b33bc897c9",
+    "digest": "0c814682a6a4c5ec428c1c731a30bf1b7c345eb2838b37dc3e6e7c404979ec1e",
+    "source": {
+      "path": "data/bird-orders.rds",
+      "sha256": "3374d6f1509493cadbc0f0072192498a7e51ec851b9cbd2fe7d7307c14bb5f19",
+      "class": "phylo"
+    },
+    "versions": {
+      "ggplot2": "4.0.3.9000",
+      "svglite": "2.2.2",
+      "xml2": "1.4.1",
+      "jsonlite": "2.0.0",
+      "digest": "0.6.39",
+      "ggtree": "4.0.1",
+      "ape": "5.8.1",
+      "R": "4.5.2"
+    },
+    "entities": 45,
+    "plots": [
+      {
+        "id": "rectangular",
+        "boundMarks": 45
+      },
+      {
+        "id": "circular",
+        "boundMarks": 45
+      }
+    ],
+    "output": "Warning: Unknown or uninitialised column: `subgroup`.\nWarning: Unknown or uninitialised column: `subgroup`.\nWarning: Unknown or uninitialised column: `subgroup`.\nWarning: Unknown or uninitialised column: `subgroup`.\n\nCaptured ggtree: 45 selectable entities; native plots and bindings saved.\n"
+  },
+  "enrichplot": {
+    "id": "ceeee089200b7fb996b783b846cbf9e6",
+    "cellId": "k-68f9d70cc6d8ae5c",
+    "digest": "8468cc4b66dc978d1315801ef294cf2eb94853ea3072e77cd6e7064d4ca6516f",
+    "source": {
+      "path": "results/go-bp.rds",
+      "sha256": "0ad48fd1a42ab380674ad8c1436c5978da02c57afb66fd6732f248d5551ac3b2",
+      "class": "enrichResult"
+    },
+    "versions": {
+      "ggplot2": "4.0.3.9000",
+      "svglite": "2.2.2",
+      "xml2": "1.4.1",
+      "jsonlite": "2.0.0",
+      "digest": "0.6.39",
+      "enrichplot": "1.30.4",
+      "R": "4.5.2"
+    },
+    "entities": 20,
+    "plots": [
+      {
+        "id": "dotplot",
+        "boundMarks": 3
+      },
+      {
+        "id": "cnetplot",
+        "boundMarks": 20
+      }
+    ],
+    "output": "\n\nCaptured enrichplot: 20 selectable entities; native plots and bindings saved.\n"
+  },
+  "clade": {
+    "key": "clade:d7d60a47e50094cd82d6d6857ad6e5cd2f1d8699f9f0dcc68b53e5802008495b",
+    "kind": "clade",
+    "label": "Clade of 5 tips",
+    "members": [
+      "Struthioniformes",
+      "Tinamiformes",
+      "Craciformes",
+      "Galliformes",
+      "Anseriformes"
+    ],
+    "related": [
+      "clade:06e505a59c0c9f826727b466c3ee957f27db015607980106b2890ed2bf8d8da5",
+      "clade:db73e2df1f8d918773615cb15c88115538197132b227cd36d540951b998d70cb",
+      "clade:fc54d7db209bed5645337791c18b864ed1804b3bd94d571321c23b98369a9155",
+      "clade:3aeca1db91d90f6af016cdae150fe2bca2609c7d9e3620c946ef1ed342b63f7c",
+      "clade:0f05429b4113bd9a9da11feb89e5045e51f4c66b8c53c620e80cd1171190e785",
+      "clade:d7d60a47e50094cd82d6d6857ad6e5cd2f1d8699f9f0dcc68b53e5802008495b",
+      "clade:90c7b49fda492619986d96ed828b5babe730d12fbc2e7c04ad18d43664fba6e2",
+      "clade:22a9ee1b73176da86c5d6406ca0958a5a00cddcffd3b0679f0513b3d2bf0617a",
+      "clade:e04620fc93fd32c755bfb41687d53ba0063ac5082b740a2d3787f90014329ebc"
+    ],
+    "attributes": {
+      "nodeInSnapshot": 25,
+      "tipCount": 5
+    }
+  },
+  "term": {
+    "key": "term:GO:1905818",
+    "kind": "term",
+    "label": "regulation of chromosome separation",
+    "members": [
+      "55143",
+      "991",
+      "10403",
+      "23397",
+      "9787",
+      "11065",
+      "220134",
+      "4085",
+      "332",
+      "7272",
+      "64151",
+      "9212",
+      "9319",
+      "891"
+    ],
+    "related": [
+      "term:GO:1905818",
+      "gene:55143",
+      "gene:991",
+      "gene:10403",
+      "gene:23397",
+      "gene:9787",
+      "gene:11065",
+      "gene:220134",
+      "gene:4085",
+      "gene:332",
+      "gene:7272",
+      "gene:64151",
+      "gene:9212",
+      "gene:9319",
+      "gene:891"
+    ],
+    "attributes": {
+      "ID": "GO:1905818",
+      "adjustedP": 5.910708713707e-13,
+      "geneRatio": "14/109",
+      "count": 14
+    }
+  },
+  "gene": {
+    "key": "gene:55143",
+    "kind": "gene",
+    "label": "55143",
+    "members": [
+      "GO:1905818",
+      "GO:0051304",
+      "GO:0033045"
+    ],
+    "related": [
+      "gene:55143",
+      "term:GO:1905818",
+      "term:GO:0051304",
+      "term:GO:0033045"
+    ],
+    "attributes": {
+      "termsShown": 3
+    }
+  },
+  "checks": [
+    "packed independent plugin captured real ggtree and clusterProfiler/enrichplot outputs in Rho",
+    "clicking a clade selects exact descendants; rectangular/circular switch retains selection and Agent-readable members",
+    "closing and reopening the plugin restores the acknowledged semantic selection",
+    "dotplot term selects matching cnetplot genes; keyboard selection of a shared gene links its terms back to dotplot",
+    "a delayed selection receipt stays with its original figure when the view switches to another capture",
+    "stale selection write is refused and leaves the acknowledged selection intact",
+    "invalid R object fails visibly; correcting the source makes a new successful capture without replacing earlier figures",
+    "captures restore the shared R random state, including an originally absent seed",
+    "changed original file is reported while its captured figure and selection remain available"
+  ],
+  "widths": [
+    {
+      "viewport": 1440,
+      "width": 987,
+      "overflow": false,
+      "svg": [
+        {
+          "width": 342,
+          "height": 246.234375
+        },
+        {
+          "width": 342,
+          "height": 230.84375
+        }
+      ]
+    },
+    {
+      "viewport": 1024,
+      "width": 625,
+      "overflow": false,
+      "svg": [
+        {
+          "width": 285.5,
+          "height": 205.546875
+        },
+        {
+          "width": 285.5,
+          "height": 192.703125
+        }
+      ]
+    },
+    {
+      "viewport": 768,
+      "width": 390,
+      "overflow": false,
+      "svg": [
+        {
+          "width": 364,
+          "height": 262.078125
+        },
+        {
+          "width": 364,
+          "height": 245.6875
+        }
+      ]
+    },
+    {
+      "viewport": 390,
+      "width": 322,
+      "overflow": false,
+      "svg": [
+        {
+          "width": 296,
+          "height": 213.109375
+        },
+        {
+          "width": 296,
+          "height": 199.796875
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "browser": "156.0.8078.81",
+  "composition": {
+    "rhoSource": "e2345c599d6f7a6aca543efe64dae112aae1edd2",
+    "basePluginsSource": "b451e8df8361bc0ff95e9b037c22b10cb754587d",
+    "override": "independently installed semantic-figures 0.1.0 tarball",
+    "runtimeChangesToRho": false,
+    "pluginSource": "50d2427683e9077a5141b011c9696c51a00c90c5"
+  },
+  "enrichmentPreparation": {
+    "clusterProfiler": "4.18.4",
+    "recipe": "examples/semantic-figures/prepare.R",
+    "biologicalClaim": false
+  }
+}
