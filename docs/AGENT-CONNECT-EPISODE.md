@@ -153,6 +153,11 @@ Runs after the change:
 - **The person's own 47101 page.** It serves the rebuilt pages from disk. With
   its earlier service still running, it showed `dsh-deepseek-agent` as DeepSeek Harness and a
   WorkBuddy window under its initial.
+- **Hermes Agent.** It connected itself to PA14 as `hermes-agent-yonghe` and
+  is listed under its initial. Its code leaves the Python MCP SDK's default
+  `clientInfo`, `mcp` 0.1.0, which would have named its window `mcp`. A
+  library's default name is now ignored, and the session name the Agent chose
+  names the window. The Agent page acceptance sends `mcp/0.1.0` and checks this.
 
 Checks: the full Rho suite passed (315, none failed, 2 skipped). The
 connection test now also covers the ready entries, the absence of credentials in

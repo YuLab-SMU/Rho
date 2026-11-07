@@ -259,9 +259,14 @@ if (process.env.RHO_CONNECT_FAIL && !process.argv.includes('remove')) { process.
   // A connected window is listed with the other Agents, under its own name, above the prompt.
   const listed = page.locator('.agents-tab .agent-rows');
   await until(() => listed.innerText(), t => /Waiting for first successful call/.test(t), 'access shown without claiming a connection');
-  const connected = new RhoClient(JSON.parse(await fs.readFile(grant.connectionFile, 'utf8')));
-  await connected.call('observation.snapshot', { projectId: opened.id });
+  const connection = JSON.parse(await fs.readFile(grant.connectionFile, 'utf8'));
+  const connected = new RhoClient(connection);
+  // Its MCP client leaves the Python SDK's default name, as Hermes does; the Agent's own session name stays.
+  const defaultNamed = await fetch(new URL('/api/v2/observation.snapshot', connection.url), { method: 'POST', headers: { authorization: 'Bearer ' + connection.token, 'content-type': 'application/json', 'x-rho-client': 'mcp/0.1.0' }, body: JSON.stringify({ projectId: opened.id }) });
+  assert.equal(defaultNamed.status, 200);
   await until(() => listed.innerText(), t => /Call verified/.test(t) && /My-research-agent/.test(t), 'successful call shown');
+  assert.deepEqual((await call('observation.snapshot')).agents.find(a => a.label === 'My-research-agent').client, { name: 'mcp', version: '0.1.0' });
+  assert.doesNotMatch(await listed.innerText(), /\bmcp 0\.1\.0\b/, 'a library default name does not name the Agent');
   await assert.rejects(connected.call('document.read', { projectId: opened.id, documentId: '0'.repeat(64) }));
   await until(() => listed.innerText(), t => /Last call refused/.test(t), 'refused call shown');
   await connected.call('observation.snapshot', { projectId: opened.id });

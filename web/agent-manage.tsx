@@ -291,7 +291,13 @@ function AgentsTab({ state, client, snapshot, onOpened }: { state: AgentSettings
 }
 
 type Window = NonNullable<WorkspaceSnapshot['agents']>[number];
-const windowName = (window: Window) => window.client?.name ?? window.label ?? 'Agent session';
+// A client that leaves its MCP library's default name says nothing about the Agent:
+// Hermes sends the Python SDK's `mcp`. The session name the Agent chose names it then.
+const ownClient = (window: Window) => window.client && !/^mcp$/i.test(window.client.name) ? window.client : null;
+const windowName = (window: Window) => {
+  const client = ownClient(window)?.name;
+  return client && brandOf(client) ? client : window.label ?? client ?? 'Agent session';
+};
 const keyOfName = (name: string) => brandOf(name) ?? 'name:' + name.toLowerCase();
 
 export function AgentsPanel({ state, snapshot }: { state: AgentSettingsState; snapshot?: WorkspaceSnapshot }) {
@@ -368,7 +374,7 @@ function AgentWindows({ windows, snapshot }: { windows: Window[]; snapshot: Work
     const state = agent.ended ? 'Access ended' : agent.last?.outcome === 'rejected' ? 'Last call refused' : agent.last?.outcome === 'returned' ? 'Call verified' : 'Waiting for first successful call';
     return <li key={agent.principal} className="agent-window" data-rho-agent-session={agent.ended ? 'ended' : 'granted'}>
       <div className="agent-window-line"><span className={'agent-window-state ' + tone}><span className="status-dot" aria-hidden="true" />{state}</span>
-        <span>Own window <strong>{agent.label ?? 'Agent session'}</strong>{agent.client ? <span className="agent-window-client"> · {agent.client.name}{agent.client.version ? ' ' + agent.client.version : ''}</span> : null}</span></div>
+        <span>Own window <strong>{agent.label ?? 'Agent session'}</strong>{ownClient(agent) ? <span className="agent-window-client"> · {agent.client!.name}{agent.client!.version ? ' ' + agent.client!.version : ''}</span> : null}</span></div>
       <small>{agent.ended ? 'Ask your Agent to connect again using the setup prompt below.' : abilities(agent, snapshot)}{agent.last ? <> · last call {day(agent.last.at).toLowerCase()} · <code>{agent.last.method}</code></> : null}</small>
       {!agent.ended && !agent.last && <small>Access is ready. Configuration has not been verified. Ask your Agent to call rho_index.</small>}
       {!agent.ended && agent.last?.outcome === 'rejected' && <small>Ask your Agent to check the error and retry with the same connection.</small>}
