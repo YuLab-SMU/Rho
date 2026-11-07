@@ -122,7 +122,7 @@ function Conversations({ client, snapshot, settings, exists, onContinue, onPath,
       <label className="conv-search"><Icon name="search" size={15} /><input type="search" placeholder="Search conversations" aria-label="Search conversations" value={query} onChange={event => setQuery(event.target.value)} /></label>
       {Object.values(counts).filter(n => n > 0).length > 1 && <div className="agent-choice conv-filter" role="radiogroup" aria-label="Agent">
         {(['all', ...agentKeys] as const).filter(which => which === 'all' || counts[which] > 0).map(which => <button key={which} role="radio" aria-checked={agent === which} className={agent === which ? 'selected' : ''} onClick={() => setAgent(which)}>
-          {which !== 'all' && <BrandMark brand={which === 'other' ? 'deepseek' : which} size={14} />}{which === 'all' ? 'All' : agentNames[which]}<span className="tab-count">{which === 'all' ? all.length : counts[which]}</span></button>)}
+          {which !== 'all' && <BrandMark brand={which === 'other' ? 'deepseek-harness' : which} size={14} />}{which === 'all' ? 'All' : agentNames[which]}<span className="tab-count">{which === 'all' ? all.length : counts[which]}</span></button>)}
       </div>}
       <button className={'conv-trash-toggle' + (showTrash ? ' selected' : '')} aria-pressed={showTrash} onClick={() => setShowTrash(v => !v)}><Icon name="trash" size={15} />Trash{trash && trash.length > 0 && <span className="tab-count">{trash.length}</span>}</button>
     </div>

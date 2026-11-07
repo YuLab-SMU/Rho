@@ -166,6 +166,7 @@
     "@lezer/highlight": "1.2.5",
     "@lezer/markdown": "1.8.0",
     "@playwright/test": "1.64.1",
+    "@rho-workspace/plugin-agent-icons": "file:../Rho-plugins/plugins/agent-icons",
     "@rho-workspace/plugin-html": "file:../Rho-plugins/plugins/html",
     "@rho-workspace/plugin-markdown": "file:../Rho-plugins/plugins/markdown",
     "@types/node": "22.20.0",

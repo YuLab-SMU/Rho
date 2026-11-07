@@ -158,16 +158,27 @@ Runs after the change:
   `clientInfo`, `mcp` 0.1.0, which would have named its window `mcp`. A
   library's default name is now ignored, and the session name the Agent chose
   names the window. The Agent page acceptance sends `mcp/0.1.0` and checks this.
+- **Marks from a plugin.** Rho drew four marks of its own, so Hermes and
+  WorkBuddy showed initials. The person supplied a collection of 54 Agent and
+  maker icons, each compared with its product's site. It is now the Agent icons
+  plugin in Rho-plugins, which has 62 entries: Claude Code, Codex, OpenCode and
+  Nous Research (for Hermes) were added from the same lobehub version. A
+  disposable service had windows named as on the PA14 page. It showed Hermes
+  Agent, WorkBuddy, DeepSeek Harness and OpenCode with their marks, and
+  My-research-agent with its initial, at 1440 and 390 px.
 
 Checks: the full Rho suite passed (315, none failed, 2 skipped). The
 connection test now also covers the ready entries, the absence of credentials in
 the reply, a stored client name, and an unprintable name being ignored. 33
-Agent plugin tests and the Agent page acceptance in Chrome passed.
+Agent plugin tests, 4 Agent icons tests and the Agent page acceptance in Chrome
+passed.
 
 Limits:
 
 - Harness was not run again with the `dsh` entry. Only the person's own Desktop
   run is measured, and the entry assumes the `desktop` profile.
 - What name Harness's MCP client sends was not observed.
+- An Agent is still known only by words in its name. One whose name has no
+  word in the catalog shows its initial, and an Agent cannot give its own icon.
 - The person's 47101 service runs the earlier server until it is restarted. It
   does not yet keep client names or give ready entries.

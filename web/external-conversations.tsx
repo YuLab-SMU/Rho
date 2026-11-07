@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { BrowserClient, WorkspaceSnapshot } from '../src/browser.js';
 import type { RhoOutput } from '../src/contract.generated.js';
-import { BrandMark } from './brand-marks.js';
+import { ProviderMark } from './brand-marks.js';
 import { Icon } from './icons.js';
 import { openInWorkspace } from './canvas.js';
 import { readBytes } from './previews.js';
@@ -29,7 +29,6 @@ export function useExternalConversations(client: BrowserClient, projectId: strin
 }
 // The Agent a session belongs to, in a person's words and marks.
 export const sessionAgent = (summary: Pick<ExternalSummary, 'producer'>) => summary.producer === 'dsh' ? 'DeepSeek Harness' : summary.producer === 'codex' ? 'Codex' : summary.producer === 'claude-code' ? 'Claude Code' : summary.producer;
-export const sessionBrand = (summary: Pick<ExternalSummary, 'producer'>) => summary.producer === 'codex' ? 'codex' as const : summary.producer === 'claude-code' ? 'claude-code' as const : 'deepseek' as const;
 export const sessionWhere = (summary: Pick<ExternalSummary, 'producer' | 'where'>) => summary.where ?? (summary.producer === 'dsh' ? 'DeepSeek Harness' : 'another window');
 type Result = RhoOutput<'agent.sessions.read'>['turns'][number]['results'][number];
 export function ExternalResult({ result, client, snapshot, onPath, onOpened }: { result: Result; client: BrowserClient; snapshot: WorkspaceSnapshot; onPath: (path: string) => void; onOpened: (compositionId: string, viewId?: string) => void }) {
@@ -72,7 +71,7 @@ export function SessionRow({ summary, onOpen }: { summary: ExternalSummary; onOp
   return <li className={'conv-row native-row' + (running ? ' running' : '')}>
     <div className="conv-line">
       <button className="conv-toggle" onClick={onOpen}>
-        <BrandMark brand={sessionBrand(summary)} size={20} />
+        <ProviderMark name={sessionAgent(summary)} size={20} />
         <span className="conv-text"><span className="conv-title">{summary.title}</span>
           <span className="conv-meta">{meta.map((part, i) => <span key={i}>{part}</span>)}
             {summary.open ? <span className="conv-state elsewhere">{running && <span className="pulse-dot" aria-hidden="true" />}Open in {summary.open.where}</span>

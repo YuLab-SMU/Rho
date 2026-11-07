@@ -262,8 +262,9 @@ inspect what happened. The application gives those actions direct places:
   from their own windows. A window sits under the Agent it belongs to, named by its
   MCP client's own name (`clientInfo`) or else by the session name the Agent chose;
   each window shows its name, a waiting, verified, refused or ended state, what its
-  grant allows and its last call. Each Agent has its maker's mark, or an initial
-  when Rho has none. Below the list, one setup prompt is for the person's own local
+  grant allows and its last call. Marks and Agent names come from the Agent icons
+  plugin, by the words of the name an Agent gave; a name it does not know shows
+  its initial. Below the list, one setup prompt is for the person's own local
   MCP client. The prompt names the running installation and exact existing
   project; the Agent configures its own client. Reading or copying grants no
   access. Copy failure leaves selectable text; request failure

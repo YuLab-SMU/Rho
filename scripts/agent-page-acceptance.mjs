@@ -104,8 +104,8 @@ if (process.env.RHO_CONNECT_FAIL && !process.argv.includes('remove')) { process.
   await until(() => claude.locator('.agent-details').innerText(), t => /claude-test-peer 1\.2\.0, checked today/.test(t), 'Claude Code asked');
   assert.deepEqual(await claude.locator('.agent-tiers code').allTextContents(), ['default', 'opus', 'sonnet'], 'Claude Code\'s own names');
   assert.match(await claude.locator('.agent-tiers li').nth(1).textContent(), /Custom Opus model \(lab\/opus-5-5\)/);
-  assert.deepEqual(await claude.locator('.agent-provider').evaluateAll(chips => chips.map(chip => chip.querySelector('span:not(.provider-mark)').textContent + ' ' + chip.querySelector('small').textContent)), ['routing group 2', 'DeepSeek 1']);
-  assert.equal(await claude.locator('.agent-provider').filter({ hasText: 'DeepSeek' }).locator('svg.maker-deepseek').count(), 1, 'DeepSeek in its own mark');
+  assert.deepEqual(await claude.locator('.agent-provider').evaluateAll(chips => chips.map(chip => chip.querySelector('span:not(.provider-mark):not(.maker-mark)').textContent + ' ' + chip.querySelector('small').textContent)), ['routing group 2', 'DeepSeek 1']);
+  assert.equal(await claude.locator('.agent-provider').filter({ hasText: 'DeepSeek' }).locator('.maker-mark.maker-deepseek').count(), 1, 'DeepSeek in its own mark');
   await claude.locator('.agent-provider').filter({ hasText: 'DeepSeek' }).click();
   await claude.locator('.agent-model-list').getByRole('button', { name: /DeepSeek V4\.1/ }).click();
   await until(() => call('conversation.settings.read'), s => s.choices['claude-acp']?.model === 'deepseek/deepseek-v4.1', 'the model saved');
@@ -167,7 +167,7 @@ if (process.env.RHO_CONNECT_FAIL && !process.argv.includes('remove')) { process.
   assert.equal(await row.locator('.conv-context').textContent(), '12K / 200K');
   assert.equal(await row.locator('.conv-cost').textContent(), '$0.042');
   assert.match(await other.locator('.conv-meta').textContent(), /GPT-5\.6.*1 message/);
-  assert.equal(await other.locator('svg.maker-codex').count(), 1);
+  assert.equal(await other.locator('.maker-mark.maker-codex').count(), 1);
   await page.locator('.conv-filter').getByRole('radio', { name: /Codex/ }).click();
   assert.deepEqual(await page.locator('.conv-row .conv-title').allTextContents(), ['List the data files.']);
   await page.locator('.conv-filter').getByRole('radio', { name: /All/ }).click();
