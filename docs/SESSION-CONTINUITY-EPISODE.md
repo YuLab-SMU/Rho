@@ -207,6 +207,29 @@ An inventory of this exact tarball found 86,586,989 unpacked bytes: 25,484,472 i
 the four Core binaries and 38,768,199 in bundled dependencies. These measurements
 do not identify which content, if any, caused this version's delay.
 
+The website was assembled from checked source `515ec7b1` and published as
+`gh-pages` commit `da2822a9`. Only `index.html` and `docs/` changed; all 124 files
+outside them, including the recorded demo, update feeds, setup, Skills and market,
+kept their original bytes. The generated new record page had two whitespace-only
+lines normalized before committing. Local checks covered 4,488 links and assets
+and 806 anchors across 66 HTML pages. The updated home/version area, Status and
+this delivery record were inspected at 1440 and 390 pixels without page overflow
+or page errors.
+
+[Pages run 42366857163](https://github.com/YuLab-SMU/Rho/actions/runs/42366857163)
+first stayed in `syncing_files` until the action's ten-minute timeout. Its
+cancellation request was acknowledged; a later deployment read returned an empty
+status, retained as unknown. Rerunning only the failed deploy job reused the
+8,913,779-byte built site artifact on the same commit and succeeded on attempt 2.
+The native deployment read then said `succeed`. The legacy latest-build endpoint
+still returned `errored` with its earlier 11:18:13 UTC timestamp; that read is kept
+separate from the retry and public delivery facts.
+
+At 11:22:57 UTC, all 97 added or changed public files matched the selected website
+bytes, including the homepage and the updated Status and episode. Eight unchanged
+public files had already matched during the first read and were reused, giving
+105 checked paths in the retained report. The public homepage names npm 0.5.6.
+
 This is the existing npm/WebUI release route. No existing service is replaced
 and no signed desktop build is published. The independently delivered dsh-rho
 0.1.5 and its pinned market entry do not change. The real-model coverage and
