@@ -1,0 +1,6 @@
+{
+  "source": "git+https://github.com/YuLab-SMU/Rho-plugins.git#82df99f8cbab868c30949692172c6cf11db2f5c0:examples/sclet-plugin",
+  "sourceCommit": "82df99f8cbab868c30949692172c6cf11db2f5c0",
+  "digest": "a9055d5b14b0718158dc63656906ecbf88d1d5d486a2c760f7dfd4b0321f867e",
+  "matchesTestedTarball": true
+}

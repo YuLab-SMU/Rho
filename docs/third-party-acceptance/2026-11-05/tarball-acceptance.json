@@ -1,0 +1,65 @@
+{
+  "at": "2026-11-05T12:00:40.701Z",
+  "node": "v22.22.3",
+  "platform": "darwin",
+  "source": "/tmp/rho-third-party-sclet/rho-workspace-sclet-plugin-0.1.0.tgz",
+  "digest": "a9055d5b14b0718158dc63656906ecbf88d1d5d486a2c760f7dfd4b0321f867e",
+  "packages": "sclet 1.1.0 \nSingleCellExperiment 1.32.0 \njsonlite 2.0.0 \nR libraries: /private/tmp/rho-third-party-sclet/library; /Users/xiayh/Library/R/arm64/4.5/library; /Library/Frameworks/R.framework/Versions/4.5-arm64/Resources/library \n",
+  "notes": [
+    {
+      "operation": "check",
+      "cellId": "k-62e1c778d778b330",
+      "state": "done"
+    },
+    {
+      "operation": "ledger",
+      "cellId": "k-4319f2cc84a80993",
+      "state": "done"
+    },
+    {
+      "operation": "registry",
+      "cellId": "k-d50d9efd48c2a9b7",
+      "state": "done"
+    },
+    {
+      "operation": "skill",
+      "cellId": "k-5882abfba53dd910",
+      "state": "done"
+    },
+    {
+      "operation": "validate",
+      "cellId": "k-43cf6ff090a34c42",
+      "state": "done"
+    },
+    {
+      "operation": "record",
+      "cellId": "k-5c816b2e90de79a1",
+      "state": "done"
+    },
+    {
+      "operation": "report",
+      "cellId": "k-e752d8153920373d",
+      "state": "done"
+    },
+    {
+      "operation": "ledger",
+      "cellId": "k-16d041af68d00456",
+      "state": "done"
+    },
+    {
+      "operation": "validate",
+      "cellId": "k-549aa30c8ad3dcd3",
+      "state": "done"
+    }
+  ],
+  "execution": {
+    "status": "completed",
+    "execution_id": "ai_execution_plan_plugin-acceptance_20261105070037_hh40fiyx_20261105070038",
+    "success_assessment": [],
+    "object": "sce",
+    "fingerprint": "sclet-ai-6c3307b7"
+  },
+  "report": "# plugin-acceptance - smoke-report\n\n- Recorded: 2026-11-05 07:00:38.388292\n- Data: 200 genes x 60 cells\n- Ledger fingerprint at record time: `sclet-ai-6c3307b7`; now: `sclet-ai-58d3574e`\n- Findings: 0\n\n## Summary\n\nA synthetic 200-gene, 60-cell input completed normalization, variable feature selection, scaling and PCA. This verifies software integration; no biological conclusion is claimed.\n\n## Findings (claim levels derived by the engine)\n\n| Finding | Evidence cited | Recorded level | Engine audit |\n|---|---|---|---|\n| (no findings) | - | - | - |\n\n## Evidence\n\n| Evidence | claim_level | parents | dependency_group |\n|---|---|---|---|\n| (none cited) | - | - | - |\n\n## Warnings and recommendations\n\n- Warning: Synthetic input, not evidence for a biological hypothesis.\n\n## Executed steps (from the execution records)\n\n### ai_execution_plan_plugin-acceptance_20261105070037_hh40fiyx_20261105070038\n\n| step | action | status | seconds |\n|---|---|---|---|\n| normalize | normalize_data | completed | 0.01 |\n| hvg | find_variable_features | completed | 0.03 |\n| scale | scale_data | completed | 0.01 |\n| pca | run_pca | completed | 0.03 |\n\n\n## Verification\n\n- Citations resolve: nothing cited\n- Claim levels re-derived: every recorded level matches the engine\n- Result: all checks passed\n\n> Rendered and re-checked from the ledger by `RenderAIReport()`; numbers and citations come from the records, not from a model. \n",
+  "lifecycle": "disable/remove retained original cell and live R session",
+  "passed": true
+}

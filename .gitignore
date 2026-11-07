@@ -8,6 +8,9 @@ __pycache__/
 # Local work, runtime state and diagnostics
 /work/
 /vendor/
+# Regenerable local reports; selected evidence is retained under docs/.
+/output/third-party-plugins/
+/output/viz/
 *.tgz
 .worktrees/
 .rho/

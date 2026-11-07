@@ -115,6 +115,29 @@ scientific acceptance passed from source and from the packed artifact. Changed
 Markdown links/anchors and rendered pages were checked. Native/browser evidence
 and the machine-readable acceptance outputs are separate from source publication.
 
+## Retained machine records
+
+On 2026-11-07 the three original outputs from this episode were moved, byte for
+byte, out of the generated `output/third-party-plugins/` directory and into
+`docs/third-party-acceptance/2026-11-05/`:
+
+- [Source acceptance](third-party-acceptance/2026-11-05/acceptance.json): the local
+  source installation, nine operation results, completed synthetic analysis,
+  native report and preservation of the original cell and live R session.
+- [Tarball acceptance](third-party-acceptance/2026-11-05/tarball-acceptance.json):
+  the same check against the independently packed artifact.
+- [Public installation](third-party-acceptance/2026-11-05/public-install.json):
+  the selected public Git commit, runtime-tree digest and match to the tested
+  tarball. The local source and packaged tree have different digests; only the
+  tarball and public installation are recorded as matching.
+
+[SHA256SUMS](third-party-acceptance/2026-11-05/SHA256SUMS) records their original
+bytes. From that directory, `shasum -a 256 -c SHA256SUMS` verifies the archive.
+The records retain the machine's paths as observed; they are historical evidence,
+not current installation locations or a new scientific run. Future generated
+reports in `output/third-party-plugins/` are ignored instead of overwriting this
+dated evidence.
+
 ## Retained boundaries
 
 Native code remains trusted code with the user's OS authority. The child process

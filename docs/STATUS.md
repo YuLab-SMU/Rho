@@ -262,6 +262,7 @@ replayed. Agents now read that "in the notebook" means Rho's sessions, untested 
   standalone previews receive no project credentials and start no runtime
   ([authoring](PLUGIN-AUTHORING.md)).
 - `rho-screen-check` opens a page at four widths in a real browser, reports what it measures beside a screenshot per width, and changes nothing on the page ([record](SCREEN-CHECK-EPISODE.md)).
+  [Checkout cleanup](SCREEN-CHECK-EPISODE.md#checkout-cleanup-on-2026-11-07) removed eight superseded probes and five unused dsh bundles; the [sclet machine records](THIRD-PARTY-PLUGINS-EPISODE.md#retained-machine-records) are now versioned and generated reports are ignored.
 
 Earlier observations remain in the [home/project](HOME-PROJECT-EPISODE.md), [sidebar/canvas](AGENT-CANVAS-EPISODE.md),
 [Graph](GRAPH-EPISODE.md), [Agent page](AGENT-PAGE-EPISODE.md), [Agent activity](AGENT-ACTIVITY.md) and

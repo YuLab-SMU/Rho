@@ -80,4 +80,28 @@ Both were fixed in Rho, not in the agent plugin. The preview asks for a capture 
 - The release route has not run: `pack-local` bundles every dependency, so `playwright-core` also enters the release candidate, and the candidate's size and the Windows install time are unmeasured.
 - Installations that copied the example before this keep their copy, which is never overwritten. The preview stops asking for those files, but their observer still reports the prefixed paths missing.
 - The mid-word sidebar cut is not detected by the tool.
-- Nothing is committed or pushed. The eight probe scripts are unchanged and still untracked.
+- At the end of this trial, the changes had not been committed or pushed, and the eight probe scripts were still untracked.
+
+## Checkout cleanup on 2026-11-07
+
+The eight probes were removed after confirming that their reusable checks are
+already in `scripts/screen-check.mjs` and `scripts/browser-checks.mjs`, with their
+differences recorded above. No fixed local-page paths or one-off scripts enter
+the package. The five untracked dsh-rho prototype artifacts under
+`adapters/dsh-rho/lib/` were also removed: `index.cjs`, `store.mjs`,
+`store-next.mjs`, `composition.json` and `THIRD_PARTY_LICENSES.txt`. Their old
+TypeScript entries were removed in `be6f3943`; the current adapter uses
+`src/host.cjs` and the separately retained observation bundle.
+
+The [sclet acceptance reports](THIRD-PARTY-PLUGINS-EPISODE.md#retained-machine-records)
+were retained as evidence. The standalone commit-count chart was moved to the
+ignored local folder `work/checkout-cleanup/2026-11-07/`; its generating script
+was not among the untracked files, so it is kept as a historical image rather
+than added to the product. Only `output/third-party-plugins/` and `output/viz/`
+were newly ignored; existing tracked design and PDF artifacts remain tracked.
+
+Checks on the current checkout after removal: `npm run test:screen-check` passed
+20 of 20 with no skips; `npm test --prefix adapters/dsh-rho` passed 7 of 7;
+the three archived reports passed their SHA-256 checks. The documentation build
+and coverage check passed, and 86 local links and anchors in the three changed
+documents resolved. These checks do not rerun the historical sclet analysis.
