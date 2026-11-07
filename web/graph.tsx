@@ -597,8 +597,8 @@ const tickSteps = [10e3, 30e3, 60e3, 120e3, 300e3, 600e3, 900e3, 1800e3, 3600e3,
 
 // What happened when, one lane per conversation and one for each other doer the plugins name (the
 // person's cells and commands): each message a band, each action a block in its kind's colour,
-// refused, failed or unknown ones marked. A pause longer than half a minute is folded to a fixed
-// gap that says how long it was. Pointing at a block names it; pressing moves the playhead.
+// refused, failed or unknown ones marked. A pause longer than half a minute is folded to a gap,
+// which says how long it was when it has room. Pointing at a block names it; pressing moves the playhead.
 type Block = { key: string; at: number; lane: number; kind: TimelineKind; failed: boolean; event?: GraphEvent; mark?: EventMark };
 const markEnds: Partial<Record<EventMark['outcome'], string>> = { failed: 'Failed', stopped: 'Stopped', unknown: 'Outcome unknown' };
 function Timeline({ graph, marks = [], cursor, playing, running, speed, onSpeed, onCursor, onPlay, compact = false }: { graph: Graph; marks?: EventMark[]; cursor: number | null; playing: boolean; running: boolean; speed: number; onSpeed: (speed: number) => void; onCursor: (at: number | null) => void; onPlay: () => void; compact?: boolean }) {
@@ -637,7 +637,9 @@ function Timeline({ graph, marks = [], cursor, playing, running, speed, onSpeed,
     return [...graph.events.map(e => ({ key: e.key, at: e.at, lane: laneOf.get(e.turn) ?? 0, kind: kindOfAction(e.action), failed: failed(e), event: e })),
       ...marks.map(m => ({ key: m.key, at: m.at, lane: laneIndex.get(m.lane) ?? 0, kind: kindOfAction(m.action), failed: m.failed, mark: m }))].sort((a, b) => a.at - b.at);
   }, [graph.events, graph.turns, marks, laneIndex]);
-  const gap = 44, usable = Math.max(100, width - gap * Math.max(0, stretches.length - 1));
+  // Pauses take at most half the track, so many of them narrow instead of pushing the work past
+  // its end: the example's twenty pauses in the Overview's 329 px track drew the plot 980 px wide.
+  const gap = Math.min(44, width / 2 / Math.max(1, stretches.length - 1)), usable = width - gap * Math.max(0, stretches.length - 1);
   const widths = stretchSizes(stretches, blocks, usable);
   const offsets: number[] = []; let x = 0;
   stretches.forEach((_, i) => { offsets.push(x); x += widths[i] + gap; });
@@ -681,12 +683,14 @@ function Timeline({ graph, marks = [], cursor, playing, running, speed, onSpeed,
   const duration = graph.turns.reduce((sum, t) => sum + (t.end - t.start), 0);
   const counts = timelineKinds.map(k => ({ ...k, count: blocks.filter(b => b.kind === k.key).length })).filter(k => k.count > 0);
   const refused = blocks.filter(b => b.failed).length, conversations = lanes.filter(l => l.who === 'conversation').length, yours = marks.filter(m => m.who === 'person').length;
-  // Each stretch's ticks, at the shortest step that leaves 72 px between labels.
-  const ticks = stretches.flatMap((s, i) => {
+  // Each stretch's ticks, at the shortest step that leaves 72 px between labels; a label nearer the
+  // one before it than 60 px, in another stretch too, or one that would start past the end, is left out.
+  const ticks: Array<{ at: number; x: number; first: boolean; label: string }> = [];
+  stretches.forEach((s, i) => {
     const w = widthOf(i), length = s.end - s.start, step = tickSteps.find(t => w * t / length >= 72) ?? tickSteps.at(-1)!;
-    const out = [{ at: s.start, x: offsets[i], first: true }];
-    for (let t = Math.ceil(s.start / step) * step; t < s.end; t += step) { const tx = toX(t); if (tx - out.at(-1)!.x >= 60 && offsets[i] + w - tx >= 24) out.push({ at: t, x: tx, first: false }); }
-    return out.map(tick => ({ ...tick, label: clock(tick.at, step < 60e3) }));
+    const add = (at: number, tx: number, first: boolean) => { if (!ticks.length || tx - ticks.at(-1)!.x >= 60) ticks.push({ at, x: tx, first, label: clock(at, step < 60e3) }); };
+    if (offsets[i] <= width - 48) add(s.start, offsets[i], true);
+    for (let t = Math.ceil(s.start / step) * step; t < s.end; t += step) { const tx = toX(t); if (offsets[i] + w - tx >= 24) add(t, tx, false); }
   });
   const pauses = stretches.slice(1).map((s, i) => ({ x: offsets[i + 1] - gap, length: s.start - stretches[i].end }));
   const nodes = useMemo(() => new Map(graph.nodes.map(n => [n.id, n])), [graph.nodes]);
@@ -736,7 +740,7 @@ function Timeline({ graph, marks = [], cursor, playing, running, speed, onSpeed,
         </div>
         <div className="tl-axis" aria-hidden="true">
           {ticks.map(t => <span key={t.at + ':' + t.x} className={t.first ? 'first' : ''} style={{ left: t.x }}>{t.label}</span>)}
-          {pauses.map((p, i) => <small key={i} style={{ left: p.x + gap / 2 }} title={'A pause of ' + span(p.length)}>{span(p.length)}</small>)}
+          {gap >= 40 && pauses.map((p, i) => <small key={i} style={{ left: p.x + gap / 2 }} title={'A pause of ' + span(p.length)}>{span(p.length)}</small>)}
         </div>
       </div>
     </div>
