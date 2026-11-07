@@ -182,3 +182,77 @@ Limits:
   word in the catalog shows its initial, and an Agent cannot give its own icon.
 - The person's 47101 service runs the earlier server until it is restarted. It
   does not yet keep client names or give ready entries.
+
+## One command
+
+2026-11-07. The person found the setup prompt too complicated, even with Rho
+installed and running. The prompt had six paragraphs:
+
+- configuration rules;
+- an argument array with the paths of Node, Rho's `cli.js` and the operator
+  connection file;
+- the characters a session name may use;
+- how to read the JSON reply, and the ready entries;
+- how to verify the connection.
+
+All of it was for the Agent, but the person copied and read it.
+
+The prompt now names the project and gives one command:
+
+> Connect yourself to my Rho project "PA14 quorum sensing" so we can work on it
+> together.
+>
+> Rho is already running on this machine. Run this command with a short, stable
+> name for yourself in place of NAME, and follow its reply:
+>
+> `rho connect "/Users/me/Rho/projects/PA14 quorum sensing" --as NAME`
+
+`rho connect` finds the project holding that folder in the Rho running for the
+state folder, grants it under that name, and replies with the rest. The prompt
+names `--state-dir` only for a state folder other than `~/Rho/state`. It uses
+Node and `cli.js` only when the first `rho` on the service's PATH is not this
+installation. A missing name, `NAME` itself, a folder that is not a project and
+a stopped Rho are refused, with what to do next.
+
+Runs with OpenCode 1.19.5, in a disposable project. As before, the trials used
+its own model and no auto-approval, with `rho` on PATH and a disposable state
+folder:
+
+- **The trial's `rho` was not executable.** The first run used a link to the
+  worktree's `dist/cli.js`, which tsc leaves without the execute bit; npm sets
+  it on installation. OpenCode looked for another `rho` and found Rho-core's
+  old debug binary, which has no `connect`.
+- **Connected too early.** With `rho` executable, `rho connect` answered at
+  2 s. OpenCode wrote the project's `.opencode/opencode.json` and finished in
+  62 s with 7 tool calls. It then started the MCP server itself over stdio and
+  reported "connected". It had also passed `scopeHint` to `rho_index` as an
+  argument. The reply said both less clearly than the old prompt had.
+- **Reply clarified.** Step 2 now says to stop and ask for a new session when
+  the client loads servers only at start. Step 3 says to call `rho_index` with
+  no arguments. A paragraph says that starting the server yourself does not
+  connect your client. In a fresh project, OpenCode configured itself in 32 s
+  with 5 tool calls. It said that it needed a new session and did not claim a
+  connection. The new session called `rho-oc-study3_rho_index` through its own
+  tools in 4 s, with the right project, and Rho recorded `opencode 1.19.5`.
+  Setup had taken 213 s with the first prompt and 90 s with ready entries.
+
+OpenCode twice stopped after its own `init` with no output, before any model
+call. Once, another OpenCode started on the same machine at the same time. The
+other time was the first start after OpenCode had installed `@opencode-ai/plugin`
+into the new `.opencode` folder: it ran no MCP server and used no CPU. The next
+start in each case worked. This is the stall the
+[OpenCode episode](OPENCODE-EPISODE.md#observation-through-opencodes-own-plugin)
+saw after adding a plugin.
+
+Checks: the connection test covers the prompt's three lines and its command. It
+also covers the refusals, the reply's steps, `--json` and the absence of
+credentials.
+
+Limits:
+
+- Only OpenCode was run.
+- The prompt's `rho` is found on the service's PATH. An Agent app started
+  without that PATH, such as some desktop apps, would not find it. The
+  OpenCode run shows that the Agent then searches for it.
+- A setup from source with its own state folder still shows `--state-dir`, and
+  Node with `cli.js` when `rho` is not linked.

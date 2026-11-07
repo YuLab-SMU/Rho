@@ -278,8 +278,8 @@ inspect what happened. The application gives those actions direct places:
   grant allows and its last call. Marks and Agent names come from the Agent icons
   plugin, by the words of the name an Agent gave; a name it does not know shows
   its initial. Below the list, one setup prompt is for the person's own local
-  MCP client. The prompt names the running installation and exact existing
-  project; the Agent configures its own client. Reading or copying grants no
+  MCP client. The prompt names the project and gives one `rho connect` command,
+  whose reply tells the Agent how to configure its own client. Reading or copying grants no
   access. Copy failure leaves selectable text; request failure
   offers retry. ACP observations and Host activity remain under a disclosure
   ([connection episode](AGENT-CONNECT-EPISODE.md)). Conversation rows retain title,

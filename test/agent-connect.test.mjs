@@ -127,17 +127,27 @@ test('generic setup instructions are read-only, local, credential-free and usabl
   try {
     const before = s.service.state.principals.length;
     const info = await s.call('session.instructions');
-    assert.match(info.prompt, /mcp\.name, mcp\.command and mcp\.args/);
-    assert.equal(info.command.at(-1), s.project.id);
-    assert.equal(info.command.at(-2), '--project-id');
+    // The prompt is the request and one command; `rho connect` tells the Agent the rest.
+    assert.equal(info.prompt.split('\n').filter(Boolean).length, 3);
+    assert.ok(info.prompt.endsWith(' --as NAME'));
+    assert.deepEqual(info.command.slice(-4), ['connect', s.project.root, '--state-dir', s.service.state.directory]);
+    assert.doesNotMatch(info.prompt, /--grant|connection\.json|mcp\.args/);
     assert.ok(!info.prompt.includes(s.service.adminToken));
     assert.deepEqual(await s.call('session.instructions'), info);
     assert.equal(s.service.state.principals.length, before, 'reading instructions grants nothing');
     assert.deepEqual(await s.calls(), [], 'no Agent CLI or runtime starts');
 
     const { execFile } = await import('node:child_process');
-    const grant = () => new Promise((resolve, reject) => execFile(info.command[0], [...info.command.slice(1), '--session', 'research-agent'], { timeout: 30000 }, (error, stdout) => error ? reject(error) : resolve(JSON.parse(stdout))));
-    const connected = await grant();
+    const connect = (...extra) => new Promise(resolve => execFile(info.command[0], [...info.command.slice(1), ...extra], { timeout: 30000 }, (error, stdout, stderr) => resolve({ code: error?.code ?? 0, stdout, stderr })));
+    const unnamed = await connect();
+    assert.equal(unnamed.code, 2);
+    assert.match(unnamed.stderr, /Add --as and a short, stable name for yourself/);
+    assert.equal((await connect('--as', 'NAME')).code, 2, 'the placeholder is not a name');
+    const told = await connect('--as', 'research-agent');
+    assert.equal(told.code, 0, told.stderr);
+    for (const step of ['name: rho-', '- OpenCode: merge into', `scopeHint.projectId must be ${s.project.id}`, 'run this command again with the same --as name', 'You are connected only when rho_index answers through your own tools']) assert.ok(told.stdout.includes(step), step);
+    assert.ok(!told.stdout.includes(s.service.adminToken));
+    const connected = JSON.parse((await connect('--as', 'research-agent', '--json')).stdout);
     assert.equal(connected.projectId, s.project.id);
     const original = JSON.parse(await fs.readFile(connected.connectionFile, 'utf8'));
     const agent = new CheckedClient(original);
@@ -150,7 +160,7 @@ test('generic setup instructions are read-only, local, credential-free and usabl
     assert.equal(connected.opencode.file, path.join(s.project.root, '.opencode', 'opencode.json'));
     assert.match(connected.dsh.file, /profiles[\\/]desktop[\\/]cordis\.patch\.yml$/);
     for (const part of [connected.mcp.name, '@deepseek-ai/dsh-mcp-client', 'stdio', ...server]) assert.ok(connected.dsh.append.includes(JSON.stringify(part)) || connected.dsh.append.includes(part), part);
-    assert.ok(!JSON.stringify(connected).includes(original.token), 'the reply holds no credential');
+    assert.ok(!JSON.stringify(connected).includes(original.token) && !told.stdout.includes(original.token), 'the reply holds no credential');
     // The MCP bridge names its client; the person's screen shows it with that grant.
     const named = await fetch(new URL('/api/v2/observation.snapshot', original.url), { method: 'POST', headers: { authorization: 'Bearer ' + original.token, 'content-type': 'application/json', 'x-rho-client': 'dsh-mcp-client/0.3.1' }, body: JSON.stringify({ projectId: s.project.id }) });
     assert.equal(named.status, 200);
@@ -158,7 +168,7 @@ test('generic setup instructions are read-only, local, credential-free and usabl
     assert.deepEqual(shown.agents.find(a => a.label === 'research-agent').client, { name: 'dsh-mcp-client', version: '0.3.1' });
     await fetch(new URL('/api/v2/observation.snapshot', original.url), { method: 'POST', headers: { authorization: 'Bearer ' + original.token, 'content-type': 'application/json', 'x-rho-client': 'bad%07name' }, body: JSON.stringify({ projectId: s.project.id }) });
     assert.deepEqual((await s.call('observation.snapshot')).agents.find(a => a.label === 'research-agent').client, { name: 'dsh-mcp-client', version: '0.3.1' }, 'an unprintable name is ignored');
-    await grant();
+    assert.equal((await connect('--as', 'research-agent')).code, 0);
     assert.equal(JSON.parse(await fs.readFile(connected.connectionFile, 'utf8')).token, original.token, 'retry preserves the active grant');
     await agent.call('observation.snapshot', { projectId: s.project.id });
     await assert.rejects(agent.call('session.instructions', { projectId: s.project.id }), e => e.error?.kind === 'unauthorized');
@@ -172,7 +182,7 @@ test('generic setup instructions are read-only, local, credential-free and usabl
     {
       const selected = await s.service.state.openSelected(selectedRoot, s.service.state.principals.find(p => p.id === 'browser:local'), 256);
       const info = await s.person.call('session.instructions', { projectId: selected.id });
-      const registered = await new Promise((resolve, reject) => execFile(info.command[0], [...info.command.slice(1), '--session', 'outside-root'], { timeout: 30000 }, (error, stdout) => error ? reject(error) : resolve(JSON.parse(stdout))));
+      const registered = await new Promise((resolve, reject) => execFile(info.command[0], [...info.command.slice(1), '--as', 'outside-root', '--json'], { timeout: 30000 }, (error, stdout) => error ? reject(error) : resolve(JSON.parse(stdout))));
       assert.equal(registered.projectId, selected.id, 'existing projects chosen outside the service root connect by identity');
     }
     await s.operator.call('session.grant', { projectId: s.project.id, externalSessionId: 'research-agent', methods: ['document.read'] });

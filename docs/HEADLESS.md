@@ -146,15 +146,40 @@ service and reports confirmation separately. Existing Hosts keep their owner.
 ### Connect your own Agent
 
 The project's **Agent → Agents** tab offers one prompt for any Agent
-that can configure and run a local stdio MCP server. `session.instructions` is a
-read-only operation for the local browser or operator: it returns the current
-Node/launcher paths and existing project ID, without credential contents. Reading
-or copying starts no Agent, grants no access and edits no client configuration.
-The Agent uses its own supported configuration mechanism and writes its own entry;
-the grant reply's ready entries only spare it the search. The [connection episode](AGENT-CONNECT-EPISODE.md) records the
-actual clients checked and the limits.
+that can configure and run a local stdio MCP server. The prompt names the project
+and gives one command:
 
-The running service's operator connection grants one project to a named Agent:
+```sh
+rho connect "/absolute/project folder" --as NAME
+```
+
+The Agent puts a short, stable name for itself in place of `NAME`. The prompt adds
+`--state-dir` when the service's state folder is not `~/Rho/state`. When the first
+`rho` on the service's PATH is not this installation, the prompt starts the command
+with this Node and `cli.js` instead.
+
+`rho connect` finds the innermost project holding the folder in the Rho running for
+that state, grants it to the named Agent and tells the Agent the rest in its reply:
+
+- the MCP server to add, and the ready entries below;
+- to keep the entry private and out of version control;
+- to call `rho_index` and check the project ID.
+
+`--json` prints the `--grant` reply instead. The command refuses, without a grant:
+
+- a missing or placeholder name (exit 2);
+- a folder that is not a project, or a state folder no Rho has used (exit 1);
+- a stopped service, naming its last address (exit 1).
+
+`session.instructions` is a read-only operation for the local browser or operator.
+It returns the prompt and the command, without credential contents. Reading or
+copying starts no Agent, grants no access and edits no client configuration. The
+Agent uses its own supported configuration mechanism and writes its own entry; the
+ready entries only spare it the search. The [connection episode](AGENT-CONNECT-EPISODE.md)
+records the actual clients checked and the limits.
+
+The running service's operator connection also grants one project to a named Agent
+directly, which setup prompts gave before `rho connect`:
 
 ```sh
 rho --grant /absolute/service-state/connection.json \

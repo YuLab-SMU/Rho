@@ -45,6 +45,8 @@ Stop the Rho running for a state folder (~/Rho/state without --state-dir), as Ct
   rho --stop [--state-dir SERVICE_STATE]
 A narrower browser link (optional):
   rho --pair PRIVATE_CONNECTION_FILE [--root PROJECTS_RELATIVE_DIRECTORY] [--open]
+Connect yourself, an Agent, to a project of the running Rho (what a setup prompt asks):
+  rho connect [PROJECT_FOLDER] --as NAME [--state-dir SERVICE_STATE] [--json]
 Add Rho to your own Claude Code or Codex for one project:
   rho --grant PRIVATE_CONNECTION_FILE --project PROJECTS_RELATIVE_DIRECTORY --agent claude-code|codex
 Give any MCP Agent access to one project and print its stdio MCP configuration:
@@ -91,6 +93,8 @@ function refuse(error: unknown, url?: string): never {
 if (process.argv[2] === 'plugin') {
   try { await (await import('./plugin-cli.js')).pluginCli(process.argv.slice(3)); }
   catch (error) { process.stderr.write((error instanceof Error ? error.message : String(error)) + '\n'); process.exitCode = 1; }
+} else if (process.argv[2] === 'connect') {
+  process.exitCode = await (await import('./connect-cli.js')).connectCli(process.argv.slice(3));
 } else {
 let parsed;
 try { parsed = parseArgs({ options }); }
@@ -163,12 +167,8 @@ if (values.acp) {
         process.stdout.write(JSON.stringify({ projectId: project.id, root: project.root, agent: values.agent, methods: connected.methods, granted: connected.granted, added: connected.added }) + '\n');
         process.exit(0);
       }
-      const session = values.session ?? 'claude-code';
-      const granted = await client.call('session.grant', { projectId: project.id, externalSessionId: session });
-      const { clientEntries, mcpCommand, mcpName } = await import('./agent-connect.js');
-      const command = mcpCommand(granted.connectionFile), name = mcpName(project.root);
-      process.stdout.write(JSON.stringify({ projectId: project.id, session, connectionFile: granted.connectionFile, methods: granted.methods.length,
-        mcp: { name, command: command[0], args: command.slice(1) }, ...clientEntries(name, command, project.root) }) + '\n');
+      const { grantReply } = await import('./connect-cli.js');
+      process.stdout.write(JSON.stringify(await grantReply(client, project, values.session ?? 'claude-code')) + '\n');
       process.exit(0);
     } catch (error) { refuse(error, client.connection.url); }
   }

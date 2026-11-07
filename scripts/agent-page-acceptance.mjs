@@ -252,8 +252,8 @@ if (process.env.RHO_CONNECT_FAIL && !process.argv.includes('remove')) { process.
   await outside.getByRole('button', { name: 'Copy setup prompt', exact: true }).waitFor();
   await outside.locator('summary').filter({ hasText: 'Full setup prompt' }).click();
   const prompt = await outside.getByRole('textbox', { name: 'Full setup prompt' }).inputValue();
-  assert.match(prompt, /mcp\.name, mcp\.command and mcp\.args/);
-  assert.ok(prompt.includes(opened.id));
+  assert.match(prompt, / connect .* --as NAME$/);
+  assert.ok(prompt.includes(opened.root), 'the prompt names the project by its folder');
   assert.equal((await call('observation.snapshot')).agents.filter(a => !a.conversationId).length, 0);
   const grant = await admin.call('session.grant', { projectId: opened.id, externalSessionId: 'My-research-agent' });
   // A connected window is listed with the other Agents, under its own name, above the prompt.

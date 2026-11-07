@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -40,18 +41,41 @@ export function clientEntries(name: string, command: string[], root: string, env
   };
 }
 
-// Paths are data in an argv array, never an interpolated shell command. Reading these
-// instructions starts nothing, grants no access and includes no credential bytes.
-export function connectionInstructions(project: { id: string; root: string }, stateDirectory: string) {
-  const command = [process.execPath, fileURLToPath(new URL('./cli.js', import.meta.url)), '--grant', path.join(stateDirectory, 'connection.json'), '--project-id', project.id];
-  const request = `Connect yourself to my existing Rho project ${JSON.stringify(path.basename(project.root))} so we can work on it together.`;
+// The state folder of a Rho started without --state-dir, which `rho --stop` and `rho connect`
+// also take without it.
+export const defaultStateDirectory = () => path.join(os.homedir(), 'Rho', 'state');
+
+// How a shell runs this Rho: `rho` when the first `rho` on PATH is this installation (npm's
+// link, or its .cmd shim on Windows), otherwise this Node with this cli.js.
+export async function launcher(env: NodeJS.ProcessEnv = process.env, platform: NodeJS.Platform = process.platform) {
+  const cli = fileURLToPath(new URL('./cli.js', import.meta.url)), real = await fs.realpath(cli).catch(() => cli);
+  for (const dir of (env.PATH ?? '').split(path.delimiter).filter(Boolean)) {
+    const candidate = path.join(dir, platform === 'win32' ? 'rho.cmd' : 'rho');
+    let target: string | null;
+    try {
+      if (platform === 'win32') {
+        const shim = (await fs.readFile(candidate, 'utf8')).match(/"%dp0%\\([^"]*?cli\.js)"/i);
+        target = shim ? await fs.realpath(path.resolve(dir, shim[1]!)).catch(() => null) : null;
+      } else target = await fs.realpath(candidate);
+    } catch { continue; }
+    return target === real ? ['rho'] : [process.execPath, cli];
+  }
+  return [process.execPath, cli];
+}
+// A command line to read and paste: plain words as they are, anything else in double quotes.
+export function commandLine(argv: string[], platform: NodeJS.Platform = process.platform) {
+  return argv.map(arg => /^[A-Za-z0-9_./:@=+,-]+$/.test(arg) ? arg : platform === 'win32' ? `"${arg}"` : `"${arg.replace(/(["\\$`])/g, '\\$1')}"`).join(' ');
+}
+
+// The prompt names the project and one command; `rho connect` tells the Agent the rest. Reading
+// these instructions starts nothing, grants no access and includes no credential bytes.
+export async function connectionInstructions(project: { id: string; root: string }, stateDirectory: string) {
+  const state = path.resolve(stateDirectory) === path.resolve(defaultStateDirectory()) ? [] : ['--state-dir', stateDirectory];
+  const command = [...await launcher(), 'connect', project.root, ...state];
+  const request = `Connect yourself to my Rho project ${JSON.stringify(path.basename(project.root))} so we can work on it together.`;
   const prompt = [request, '',
-    `Project folder: ${JSON.stringify(project.root)}. Project ID: ${project.id}. Rho is already running on this machine.`,
-    'Configure your own client using its supported MCP setup mechanism; inspect your own help or documentation if needed. Keep unrelated configuration, models and credentials intact. Use private local configuration, scoped to this project where supported, and keep connection settings out of version-controlled files. If you cannot run a local stdio MCP server, explain that limitation.',
-    'Run this program and argument array, appending --session and a stable name identifying your own Agent (1–128 characters from A–Z, a–z, 0–9, dot, underscore, colon, @ or hyphen). Reuse that name when retrying:',
-    JSON.stringify(command),
-    'Parse the JSON reply. Register a stdio MCP server using mcp.name, mcp.command and mcp.args exactly as returned. If the reply has a ready entry for your client, use it: claude or codex (a command to run in the project folder), opencode (merge into the named file) or dsh (append to the named DeepSeek Harness profile patch, which reloads by itself). The connection files contain credentials: do not print their contents or put them in the project. Do not start another Rho service.',
-    'Reload your MCP tools if supported, or tell me to open a new session in the project folder. Then call rho_index through your configured client tools and verify scopeHint.projectId matches the project ID above. A direct protocol probe is useful diagnostics but does not prove your client loaded its tools. Report configuration and a successful tool call separately; do not claim connected before the call succeeds. If configuration or verification fails, report the actual error and continue from the same connection.',
+    'Rho is already running on this machine. Run this command with a short, stable name for yourself in place of NAME, and follow its reply:',
+    '', commandLine([...command, '--as', 'NAME']),
   ].join('\n');
   return { request, prompt, command };
 }

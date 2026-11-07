@@ -10,22 +10,37 @@ An Agent works with Rho in one of two ways.
 A grant covers one project. Each project needs its own grant, which adds an MCP server named
 `rho-<folder>`.
 
-## Use the project’s setup prompt
+## Connect with one command
 
-In versions with **Agent → Agents** (earlier: **Connect your agent**), use the supplied prompt. It names
-this running installation and the exact existing project. Configure yourself with
-your own supported MCP mechanism; use your own help or documentation when needed.
-Preserve unrelated configuration and use private local configuration scoped to this project when available. A client
-that cannot run a local stdio MCP server cannot use this connection.
+In versions after 0.5.6, the project's setup prompt (**Agent → Agents**) gives one command:
 
-The prompt’s `--project-id` selects an existing project, including folders chosen
-outside Rho’s projects folder. Do not replace it with a guessed relative path.
-Use a stable `--session` name identifying your own Agent and reuse it on retries.
+```sh
+rho connect "/Users/me/Rho/projects/PA14 quorum sensing" --as my-agent
+```
+
+- **Project folder.** Give the project's folder, or run the command in it. Rho uses the project
+  that holds that folder.
+- **`--as`.** A short, stable name for yourself, from A–Z, a–z, 0–9, dot, underscore, colon,
+  @ or hyphen. Use the same name when you retry; use another name for a second Agent.
+- **`--state-dir`.** The prompt adds it when Rho runs with a state folder other than
+  `~/Rho/state`.
+- **Launcher.** When `rho` on the person's PATH is not the Rho that is running, the prompt
+  starts the command with that Rho's Node and `cli.js` instead.
+
+The reply tells you the rest:
+
+- the MCP server to add: its name, command and arguments;
+- ready entries for Claude Code, Codex, OpenCode and DeepSeek Harness;
+- how to check the connection with `rho_index`.
+
+`--json` prints the reply as JSON, in the same form as `--grant` below. If the folder is not a
+project, the name is missing or Rho is not running, the command says so and exits non-zero.
 
 ## Grant one project (every version)
 
 The service must be running. `--project` is the folder's name relative to `--root`. Quote
-names that contain spaces.
+names that contain spaces. Older setup prompts give `--grant` with `--project-id` instead, which
+selects an existing project, including folders chosen outside Rho's projects folder.
 
 ```sh
 rho --grant ~/Rho/state/connection.json --project "PA14 quorum sensing" --session my-agent
@@ -42,7 +57,8 @@ The reply is one JSON line:
  "dsh":{"file":"~/.dsh/profiles/desktop/cordis.patch.yml","append":"- insert:\n    - id: \"mcp-rho-…\"\n      name: \"@deepseek-ai/dsh-mcp-client\"\n…"}}
 ```
 
-Rho 0.5.6 and earlier return only `mcp` and `claude`.
+Rho 0.5.6 and earlier return only `mcp` and `claude`. The same entries follow `rho connect`.
+Whichever command you used, configure your client like this:
 
 - **Any MCP client:** register the returned `mcp.name`, `mcp.command` and `mcp.args`
   with your own supported configuration mechanism. Keep connection-file contents private.
@@ -61,7 +77,7 @@ Rho 0.5.6 and earlier return only `mcp` and `claude`.
   that profile; check for the `--mcp` process instead. Checked on 2026-11-07, where finding
   this mechanism took the Agent most of nine minutes.
 
-Use the same `--session` name when retrying (the legacy default is `claude-code`).
+Use the same `--session` (or `--as`) name when retrying (the legacy default is `claude-code`).
 Current source keeps a valid grant with unchanged scope; older versions may replace its
 credential, so a running client may need to reconnect. Use another `--session` name to
 give a second Agent its own identity.
