@@ -10,6 +10,10 @@ import { spawn } from 'node:child_process';
 // A widened link is optional: the fragment carries a one-time code, which no request or Referer
 // sends and which the page redeems and removes. Opening the plain url needs no code at all.
 const link = (url: string, code: string) => url + '/#pair=' + code;
+// What Ctrl+C does, asked by another program: Windows has no signal one process can send to Rho
+// there, so `rho --stop` leaves this file in the state folder and the running launcher looks for it,
+// as Rho asks its Host to stop on Windows.
+const stopRequest = (stateDirectory: string) => path.join(stateDirectory, 'service.stop');
 function openBrowser(target: string) {
   const [command, args] = process.platform === 'darwin' ? ['open', [target]] : process.platform === 'win32' ? ['cmd', ['/c', 'start', '""', target]] : ['xdg-open', [target]];
   spawn(command, args, { stdio: 'ignore', detached: true }).on('error', () => process.stderr.write('Could not open a browser. Open openUrl from the output instead.\n')).unref();
@@ -37,6 +41,8 @@ Start Rho on ~/Rho/projects and ~/Rho/state, and say where it is and what is mis
   rho
 Start Rho:
   rho --root PROJECTS_DIRECTORY --state-dir SERVICE_STATE [--core ABSOLUTE_CORE_BINARY] [--rscript ABSOLUTE_RSCRIPT] [--python PYTHON] [--ssh SSH] [--serverctl SERVERCTL] [--claude CLAUDE_CODE_BINARY] [--codex CODEX_BINARY] [--agent-backend claude-acp|codex-acp|claude-cli|acp] [--acp-command JSON_ARGV] [--port PORT] [--limits JSON_FILE] [--plugins documents,files,...] [--example on|off] [--open]
+Stop the Rho running for a state folder (~/Rho/state without --state-dir), as Ctrl+C in its window does:
+  rho --stop [--state-dir SERVICE_STATE]
 A narrower browser link (optional):
   rho --pair PRIVATE_CONNECTION_FILE [--root PROJECTS_RELATIVE_DIRECTORY] [--open]
 Add Rho to your own Claude Code or Codex for one project:
@@ -72,7 +78,7 @@ async function harnessAcp() {
   return undefined;
 }
 const options = { example: { type: 'string' }, 'verify-evidence': { type: 'string' }, acp: { type: 'string' }, 'acp-agent': { type: 'string' }, root: { type: 'string' }, 'state-dir': { type: 'string' }, core: { type: 'string' }, rscript: { type: 'string' }, python: { type: 'string' }, ssh: { type: 'string' }, serverctl: { type: 'string' }, claude: { type: 'string' }, codex: { type: 'string' }, 'agent-backend': { type: 'string' }, 'acp-command': { type: 'string' }, port: { type: 'string' }, limits: { type: 'string' }, plugins: { type: 'string' }, pair: { type: 'string' }, open: { type: 'boolean' },
-  grant: { type: 'string' }, project: { type: 'string' }, 'project-id': { type: 'string' }, session: { type: 'string' }, agent: { type: 'string' }, mcp: { type: 'string' }, help: { type: 'boolean', short: 'h' } } as const;
+  grant: { type: 'string' }, project: { type: 'string' }, 'project-id': { type: 'string' }, session: { type: 'string' }, agent: { type: 'string' }, mcp: { type: 'string' }, stop: { type: 'boolean' }, help: { type: 'boolean', short: 'h' } } as const;
 // A command that is refused says why and what to do. A service that is not running is the
 // common case for --grant and --pair; anything without a known reason keeps its stack.
 function refuse(error: unknown, url?: string): never {
@@ -95,6 +101,38 @@ if (values['verify-evidence']) {
   process.exit(process.exitCode ?? 0);
 }
 if (values.help) { process.stdout.write(usage); process.exit(0); }
+if (values.stop) {
+  const { lease } = await import('./state.js');
+  const directory = path.resolve(values['state-dir'] ?? path.join(os.homedir(), 'Rho', 'state'));
+  // The state's writer lock says whether a service runs there: a lock this command can take is free.
+  // A folder without a connection file was never a Rho state, and gets no lock file of its own.
+  const running = () => lease(directory).then(async release => { await release(); return false; }, (e: { kind?: string }) => { if (e?.kind === 'conflict') return true; throw e; });
+  const asked = () => fs.access(stopRequest(directory)).then(() => true, () => false);
+  const connection = await fs.readFile(path.join(directory, 'connection.json'), 'utf8').then(text => JSON.parse(text) as { pid?: unknown }).catch(() => null);
+  if (!connection || !await running()) { process.stderr.write(`Rho is not running for ${directory}.\n`); process.exit(1); }
+  await fs.writeFile(stopRequest(directory), '');
+  // The launcher takes the request within a second and then stops as on Ctrl+C: its output ends
+  // with the {"shutdown":…} line, and the lock is free once its state is written.
+  const since = Date.now();
+  while (await running()) {
+    if (Date.now() - since > 10000 && await asked()) {
+      await fs.rm(stopRequest(directory), { force: true });
+      process.stderr.write(`The Rho running for ${directory} did not take the stop request: it is a version without --stop. Stop it with Ctrl+C in its own window (Ctrl+Break on Windows).\n`); process.exit(1);
+    }
+    if (Date.now() - since > 120000) { process.stderr.write(`Rho for ${directory} is still stopping after two minutes. Its output ends with a {"shutdown":…} line once it has stopped.\n`); process.exit(1); }
+    await new Promise(resolve => setTimeout(resolve, 250));
+  }
+  // The lock is released before the launcher prints its report and ends, and on Windows the log
+  // it writes stays open until then: a start right after would find that file in use.
+  const pid = Number.isInteger(connection.pid) ? connection.pid as number : 0;
+  const alive = () => { try { process.kill(pid, 0); return true; } catch (e) { return (e as NodeJS.ErrnoException).code === 'EPERM'; } };
+  for (let i = 0; pid && alive(); i++) {
+    if (i === 40) { process.stderr.write(`Rho for ${directory} has closed its state, but its process ${pid} has not ended after 10 s.\n`); process.exit(1); }
+    await new Promise(resolve => setTimeout(resolve, 250));
+  }
+  process.stdout.write(JSON.stringify({ stopped: { state: directory } }) + '\n');
+  process.exit(0);
+}
 // The Agent's side of a grant: its MCP server reads the connection file and speaks on stdio,
 // so nothing else may write to stdout in this mode.
 if (values.acp) {
@@ -186,6 +224,8 @@ if (values.acp) {
     const running = typeof held === 'string' ? await fs.readFile(path.join(held, 'connection.json'), 'utf8').then(text => String(JSON.parse(text).url), () => '') : '';
     return refuse(running ? Object.assign(error, { message: `Rho is already running for ${held} at ${running}. Open that url, or stop that service before starting it again.` }) : error);
   });
+  // A request left by a --stop that this state's earlier service never took is not for this start.
+  await fs.rm(stopRequest(service.state.directory), { force: true });
   // The narrow conclusion a person needs on one line: what was selected, where state
   // lives, and how to open it. It stays inside `ready` so a parser reading line one is
   // unaffected. Opening this url on this machine is the access; no link is minted.
@@ -234,10 +274,15 @@ if (values.acp) {
     if (process.stdout.isTTY) openBrowser(service.url);
   }
   if (values.open) openBrowser(service.url);
-  let closing = false;
+  let closing = false, asked: NodeJS.Timeout | undefined;
+  const stop = async () => { if (closing) return; closing = true; clearInterval(asked); const reports = await service.close(); process.stdout.write(JSON.stringify({ shutdown: reports }) + '\n'); };
   // Windows has no SIGTERM another process can send, and a console may pass on Ctrl+C turned off;
   // there Ctrl+Break on Rho's console (SIGBREAK) stops it in order too.
-  for (const signal of ['SIGTERM', 'SIGINT', ...(process.platform === 'win32' ? ['SIGBREAK'] as const : [])] as const) process.on(signal, async () => { if (closing) return; closing = true; const reports = await service.close(); process.stdout.write(JSON.stringify({ shutdown: reports }) + '\n'); });
+  for (const signal of ['SIGTERM', 'SIGINT', ...(process.platform === 'win32' ? ['SIGBREAK'] as const : [])] as const) process.on(signal, stop);
+  // A program with no console to share, such as an Agent that started Rho in the background on
+  // Windows, asks with rho --stop. Removing the request is what takes it.
+  asked = setInterval(() => { fs.rm(stopRequest(service.state.directory)).then(stop, () => {}); }, 500);
+  asked.unref();
 }
 
 }

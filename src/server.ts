@@ -484,7 +484,8 @@ export class RhoService {
       await listen(0);
     }
     this.url = 'http://127.0.0.1:' + (this.server.address() as any).port;
-    await atomicJson(connectionFile, { url: this.url, token: this.adminToken, apiVersion: '2.0' });
+    // The process that serves it, so rho --stop can say when it has ended and not only closed.
+    await atomicJson(connectionFile, { url: this.url, token: this.adminToken, apiVersion: '2.0', pid: process.pid });
     // An Agent's connection holds the address it was given. When the address changed, each one
     // that named the earlier address follows, so the Agent's next session reaches this service
     // with the grant it already has. Its token and methods are unchanged.
