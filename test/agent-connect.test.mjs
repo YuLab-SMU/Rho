@@ -190,3 +190,33 @@ test('generic setup instructions are read-only, local, credential-free and usabl
     await assert.rejects(agent.call('observation.snapshot', { projectId: s.project.id }), e => e.error?.kind === 'unauthorized');
   } finally { await s.service.close(); if (selectedRoot) await fs.rm(selectedRoot, { recursive: true, force: true }); }
 });
+
+test('rho connect finds the running Rho that holds the folder, so the prompt needs no state folder', async () => {
+  const s = await setup();
+  const scratch = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'rho-running-')));
+  const runningDir = path.join(scratch, 'running'), home = path.join(scratch, 'home');
+  const before = process.env.RHO_RUNNING_DIR;
+  process.env.RHO_RUNNING_DIR = runningDir;
+  try {
+    const { announce, withdraw } = await import('../dist/running.js');
+    assert.ok((await s.call('session.instructions')).command.includes('--state-dir'), 'a Rho that left no note names its state folder');
+    await announce({ stateDirectory: s.service.state.directory, url: s.service.url, pid: process.pid });
+    const info = await s.call('session.instructions');
+    assert.ok(!info.command.includes('--state-dir') && !info.prompt.includes('--state-dir'));
+    assert.ok(!info.prompt.includes('connection.json'));
+    // The person's own ~/Rho/state is never asked: the Agent's home here is an empty folder.
+    const { execFile } = await import('node:child_process');
+    const run = (...extra) => new Promise(resolve => execFile(info.command[0], [...info.command.slice(1), ...extra],
+      { env: { ...process.env, RHO_RUNNING_DIR: runningDir, HOME: home, USERPROFILE: home }, timeout: 30000 }, (error, stdout, stderr) => resolve({ code: error?.code ?? 0, stdout, stderr })));
+    const found = await run('--as', 'found-agent', '--json');
+    assert.equal(found.code, 0, found.stderr);
+    assert.equal(JSON.parse(found.stdout).projectId, s.project.id);
+    await withdraw(s.service.state.directory);
+    const lost = await run('--as', 'found-agent');
+    assert.equal(lost.code, 1);
+    assert.match(lost.stderr, /Rho is not running on this machine/);
+  } finally {
+    if (before === undefined) delete process.env.RHO_RUNNING_DIR; else process.env.RHO_RUNNING_DIR = before;
+    await s.service.close(); await fs.rm(scratch, { recursive: true, force: true });
+  }
+});

@@ -244,9 +244,31 @@ start in each case worked. This is the stall the
 [OpenCode episode](OPENCODE-EPISODE.md#observation-through-opencodes-own-plugin)
 saw after adding a plugin.
 
+**A start from source.** The person then copied the prompt from their own Rho.
+That Rho had been started from source with its own state folder, with no `rho`
+on PATH. The command still began with Node and `cli.js` and ended with
+`--state-dir`. Two changes followed:
+
+- **Running notes.** Each Rho started from the CLI now leaves a note in
+  `~/Rho/running/` with its state folder, address and process ID, and no
+  credential. Without `--state-dir`, `rho connect` asks the running Rhos which
+  of them holds the folder. The prompt names `--state-dir` only for a Rho with
+  no note.
+- **Executable `cli.js`.** The build now marks `dist/cli.js` executable. tsc had
+  left it without the execute bit after every build, so a checkout linked onto
+  PATH would not run, as in the first OpenCode run.
+
+This checkout's `rho` was then linked into the person's npm `bin` folder. A Rho
+started with `rho` on a disposable state gave the prompt command
+`rho connect /private/tmp/rho-e2e/projects/study --as NAME`. Run from the
+project folder with an empty home, the command connected. After `rho --stop`,
+the note was gone and the command said that Rho is not running.
+
 Checks: the connection test covers the prompt's three lines and its command. It
-also covers the refusals, the reply's steps, `--json` and the absence of
-credentials.
+also covers the refusals, the reply's steps, `--json`, the absence of
+credentials and finding a noted Rho without its state folder. The test that
+gives a fake Agent 0.4 s failed once in four runs on its own on this machine;
+it is unchanged.
 
 Limits:
 
@@ -254,5 +276,4 @@ Limits:
 - The prompt's `rho` is found on the service's PATH. An Agent app started
   without that PATH, such as some desktop apps, would not find it. The
   OpenCode run shows that the Agent then searches for it.
-- A setup from source with its own state folder still shows `--state-dir`, and
-  Node with `cli.js` when `rho` is not linked.
+- A source checkout shows Node and `cli.js` until its `rho` is linked onto PATH.

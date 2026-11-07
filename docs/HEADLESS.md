@@ -153,13 +153,24 @@ and gives one command:
 rho connect "/absolute/project folder" --as NAME
 ```
 
-The Agent puts a short, stable name for itself in place of `NAME`. The prompt adds
-`--state-dir` when the service's state folder is not `~/Rho/state`. When the first
-`rho` on the service's PATH is not this installation, the prompt starts the command
-with this Node and `cli.js` instead.
+The Agent puts a short, stable name for itself in place of `NAME`.
 
-`rho connect` finds the innermost project holding the folder in the Rho running for
-that state, grants it to the named Agent and tells the Agent the rest in its reply:
+Each Rho started from the command line writes a note in `~/Rho/running/`: its state
+folder, address and process ID, with no credential. It removes the note when it
+stops, and a note whose process is gone is ignored. `RHO_RUNNING_DIR` moves that
+folder.
+
+Without `--state-dir`, `rho connect` asks each running Rho with a note, and the Rho
+on `~/Rho/state`, which of them holds the folder. It refuses when more than one does.
+The prompt adds `--state-dir` only for a Rho that has no note and does not use
+`~/Rho/state`, such as one started by a program rather than the CLI.
+
+When the first `rho` on the service's PATH is not this installation, or cannot run,
+the prompt starts the command with this Node and `cli.js` instead. The build marks
+`dist/cli.js` executable, so a source checkout linked onto PATH keeps working.
+
+`rho connect` finds the innermost project holding the folder, grants it to the named
+Agent and tells the Agent the rest in its reply:
 
 - the MCP server to add, and the ready entries below;
 - to keep the entry private and out of version control;
@@ -169,7 +180,8 @@ that state, grants it to the named Agent and tells the Agent the rest in its rep
 
 - a missing or placeholder name (exit 2);
 - a folder that is not a project, or a state folder no Rho has used (exit 1);
-- a stopped service, naming its last address (exit 1).
+- a folder that more than one running Rho holds (exit 1);
+- no running Rho, naming the last address it knows (exit 1).
 
 `session.instructions` is a read-only operation for the local browser or operator.
 It returns the prompt and the command, without credential contents. Reading or

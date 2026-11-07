@@ -22,8 +22,8 @@ rho connect "/Users/me/Rho/projects/PA14 quorum sensing" --as my-agent
   that holds that folder.
 - **`--as`.** A short, stable name for yourself, from A–Z, a–z, 0–9, dot, underscore, colon,
   @ or hyphen. Use the same name when you retry; use another name for a second Agent.
-- **`--state-dir`.** The prompt adds it when Rho runs with a state folder other than
-  `~/Rho/state`.
+- **`--state-dir`.** Not needed in most cases: Rho finds the running Rho that holds the folder.
+  Add it with that Rho's state folder when the command says more than one Rho holds it.
 - **Launcher.** When `rho` on the person's PATH is not the Rho that is running, the prompt
   starts the command with that Rho's Node and `cli.js` instead.
 

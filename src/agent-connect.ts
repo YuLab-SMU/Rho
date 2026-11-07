@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Fault } from '@rho-workspace/plugin-contracts';
+import { announced } from './running.js';
 
 // Adding Rho to an Agent that runs outside Rho: the project-scoped MCP server it starts, under
 // a name that says which project, written by the Agent's own `mcp add` so its configuration
@@ -56,7 +57,7 @@ export async function launcher(env: NodeJS.ProcessEnv = process.env, platform: N
       if (platform === 'win32') {
         const shim = (await fs.readFile(candidate, 'utf8')).match(/"%dp0%\\([^"]*?cli\.js)"/i);
         target = shim ? await fs.realpath(path.resolve(dir, shim[1]!)).catch(() => null) : null;
-      } else target = await fs.realpath(candidate);
+      } else { target = await fs.realpath(candidate); await fs.access(candidate, fs.constants.X_OK).catch(() => { target = null; }); }
     } catch { continue; }
     return target === real ? ['rho'] : [process.execPath, cli];
   }
@@ -67,10 +68,13 @@ export function commandLine(argv: string[], platform: NodeJS.Platform = process.
   return argv.map(arg => /^[A-Za-z0-9_./:@=+,-]+$/.test(arg) ? arg : platform === 'win32' ? `"${arg}"` : `"${arg.replace(/(["\\$`])/g, '\\$1')}"`).join(' ');
 }
 
-// The prompt names the project and one command; `rho connect` tells the Agent the rest. Reading
+// The prompt names the project and one command; `rho connect` tells the Agent the rest. It names
+// --state-dir only when `rho connect` would not find this Rho itself: a state folder other than
+// ~/Rho/state that no running note points to (a service started without the CLI). Reading
 // these instructions starts nothing, grants no access and includes no credential bytes.
 export async function connectionInstructions(project: { id: string; root: string }, stateDirectory: string) {
-  const state = path.resolve(stateDirectory) === path.resolve(defaultStateDirectory()) ? [] : ['--state-dir', stateDirectory];
+  const found = path.resolve(stateDirectory) === path.resolve(defaultStateDirectory()) || await announced(stateDirectory);
+  const state = found ? [] : ['--state-dir', stateDirectory];
   const command = [...await launcher(), 'connect', project.root, ...state];
   const request = `Connect yourself to my Rho project ${JSON.stringify(path.basename(project.root))} so we can work on it together.`;
   const prompt = [request, '',

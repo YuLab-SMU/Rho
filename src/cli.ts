@@ -225,6 +225,9 @@ if (values.acp) {
   });
   // A request left by a --stop that this state's earlier service never took is not for this start.
   await fs.rm(stopRequest(service.state.directory), { force: true });
+  // Where `rho connect` finds this Rho without being given its state folder.
+  const { announce, withdraw } = await import('./running.js');
+  await announce({ stateDirectory: service.state.directory, url: service.url, pid: process.pid }).catch(() => {});
   // The narrow conclusion a person needs on one line: what was selected, where state
   // lives, and how to open it. It stays inside `ready` so a parser reading line one is
   // unaffected. Opening this url on this machine is the access; no link is minted.
@@ -274,7 +277,7 @@ if (values.acp) {
   }
   if (values.open) openBrowser(service.url);
   let closing = false, asked: NodeJS.Timeout | undefined;
-  const stop = async () => { if (closing) return; closing = true; clearInterval(asked); const reports = await service.close(); process.stdout.write(JSON.stringify({ shutdown: reports }) + '\n'); };
+  const stop = async () => { if (closing) return; closing = true; clearInterval(asked); await withdraw(service.state.directory).catch(() => {}); const reports = await service.close(); process.stdout.write(JSON.stringify({ shutdown: reports }) + '\n'); };
   // Windows has no SIGTERM another process can send, and a console may pass on Ctrl+C turned off;
   // there Ctrl+Break on Rho's console (SIGBREAK) stops it in order too.
   for (const signal of ['SIGTERM', 'SIGINT', ...(process.platform === 'win32' ? ['SIGBREAK'] as const : [])] as const) process.on(signal, stop);
