@@ -415,6 +415,7 @@ export class RhoService {
         return [await writeClaudePlugin(path.join(this.state.directory, 'claude-plugins'), { name: 'rho', version: selectedPluginVersions.agent, description: 'Skills and hooks of the plugins selected in Rho.', ...declared })];
       },
       changed: async (project, conversationId) => { void this.serial(project.id, () => this.emit(project, 'conversation.changed', conversationId, localBrowserId)).catch(() => {}); },
+      nativeSession: async (project, producer, sessionId) => (await import('@rho-workspace/plugin-agent/native-sessions')).nativeSession(project.root, producer, sessionId),
       // The person's own Claude Code when one is named, with no tools and in an empty folder of
       // Rho's state, so it reads only what it is given and loads no project instructions. What
       // a call cost comes from Claude Code when it knows the model's price, else from models.dev.
@@ -683,6 +684,29 @@ export class RhoService {
   // What the project's Agents did, for the person's screen:
   // only principals whose grant names this project, only the fields the activity record
   // keeps. A grant is the scope; an Agent need not have opened a binding.
+  // Every Agent session in the project folder, wherever it was started: Harness conversations Rho
+  // observes and the sessions Claude Code and Codex keep in their own files. Each names the Agent
+  // Rho continues it with and the Rho conversation that already continues it. Reads files only.
+  private async agentSessions(p: Project) {
+    const agent = this.plugins.optional('agent');
+    const external = agent ? agent.listExternalSessions(p.root) : { sessions: [], omitted: 0 };
+    const native = (await import('@rho-workspace/plugin-agent/native-sessions')).listNativeSessions(p.root);
+    const conversations = [...await this.conversations.list(p, {}), ...await this.conversations.list(p, { trashed: true })];
+    const bySession = new Map(conversations.filter(c => c.sessionId).map(c => [c.sessionId!, c]));
+    const sessions = [...external.sessions, ...native.sessions].flatMap(s => {
+      const conversation = bySession.get(s.sessionId);
+      if (conversation?.trashedAt) return [];
+      const continueWith = s.producer === 'claude-code' ? 'claude-acp' as const : s.producer === 'codex' ? 'codex-acp' as const : s.producer === 'dsh' && this.config.acpCommand ? 'acp' as const : null;
+      // Harness reports a turn in progress, not whether a window holds the session idle; a turn
+      // Rho itself is running is Rho's.
+      const open = s.producer === 'dsh' && s.state === 'running' && conversation?.state !== 'running' ? { where: 'DeepSeek Harness' } : s.open;
+      return [{ ...s, continueWith, ...(open !== undefined ? { open } : {}), ...(conversation ? { conversationId: conversation.conversationId } : {}) }];
+    });
+    // A session held only by Rho's own connection is not open elsewhere.
+    for (const s of sessions) if (s.open && s.conversationId && await this.conversations.owns(p, s.conversationId, s.open.pid)) s.open = null;
+    sessions.sort((a, b) => b.lastAt.localeCompare(a.lastAt));
+    return { sessions: sessions.slice(0, 128), omitted: external.omitted + native.omitted + Math.max(0, sessions.length - 128) };
+  }
   private async projectActivity(p: Project) {
     const agent = this.plugins.project(p.root, p.id).agent;
     if (!agent) return { cursor: 0, retainedFrom: 1, entries: [] };
@@ -1043,10 +1067,15 @@ export class RhoService {
     // The person at this machine talks to a conversation Rho started; Agents and narrower links
     // cannot start one, and an Agent started this way cannot start another.
     if (method.startsWith('agent.sessions.')) {
-      requireThat(principal.id === localBrowserId, 'unauthorized', 'External conversation history belongs to the person at this machine.');
-      const agent = this.plugins.need('agent');
-      if (method === 'agent.sessions.list') return agent.listExternalSessions(p.root);
-      return agent.readExternalSession(p.root, b);
+      requireThat(principal.id === localBrowserId, 'unauthorized', 'Agent session history belongs to the person at this machine.');
+      if (method === 'agent.sessions.list') return this.agentSessions(p);
+      const listed = (await this.agentSessions(p)).sessions.find(s => s.id === b.session);
+      requireThat(listed, 'not_found', 'That Agent session is not in this project.');
+      const read = listed.producer === 'claude-code' || listed.producer === 'codex'
+        ? await (await import('@rho-workspace/plugin-agent/native-sessions')).readNativeSession(p.root, b)
+        : this.plugins.need('agent').readExternalSession(p.root, b);
+      requireThat(read, 'not_found', 'That Agent session is no longer in this project.');
+      return { ...read, session: { ...read.session, ...listed } };
     }
     if (method === 'project.work.read') {
       requireThat(principal.id === localBrowserId, 'scope', 'Project work is available to the person at this machine.');
@@ -1078,8 +1107,24 @@ export class RhoService {
       if (method === 'conversation.delete') return this.conversations.delete(p, principal.id, b);
       if (method === 'conversation.settings.read') return this.conversations.settings();
       this.plugins.need('agent');
+      if (method === 'conversation.start' && b.continue) {
+        const listed = (await this.agentSessions(p)).sessions.find(s => s.id === b.continue.session);
+        requireThat(listed, 'not_found', 'That Agent session is not in this project. Nothing was sent.');
+        requireThat(listed.continueWith, 'condition', listed.producer === 'dsh'
+          ? 'Rho continues DeepSeek Harness sessions through Harness\'s ACP command. Start Rho with --agent-backend acp --acp-command \'["dsh","acp"]\', or continue in Harness. Nothing was sent.'
+          : 'Rho cannot continue this Agent\'s sessions. Nothing was sent.');
+        requireThat(!listed.conversationId, 'conflict', 'This session already continues as a conversation here. Open it to send your message.');
+        requireThat(!b.continue.copy || listed.producer !== 'dsh', 'condition', 'DeepSeek Harness cannot copy a session. Continue it in place once it is not answering. Nothing was sent.');
+        requireThat(!listed.open || listed.producer !== 'dsh', 'condition', 'DeepSeek Harness is answering in this session now. Continue it once that turn ends. Nothing was sent.', { heldBy: 'DeepSeek Harness' });
+        return this.conversations.start(p, principal.id, { ...b, continue: { producer: listed.producer as 'claude-code' | 'codex' | 'dsh', sessionId: listed.sessionId, title: listed.title, where: listed.where ?? (listed.producer === 'dsh' ? 'DeepSeek Harness' : 'another window'), copy: !!b.continue.copy, backend: listed.continueWith } });
+      }
       if (method === 'conversation.start') return this.conversations.start(p, principal.id, b);
-      if (method === 'conversation.send') return this.conversations.send(p, principal.id, b);
+      if (method === 'conversation.send') {
+        // A Harness session reports its own turns through its adapter; Rho does not write into one it is answering.
+        const listed = (await this.agentSessions(p)).sessions.find(s => s.conversationId === b.conversationId && s.producer === 'dsh');
+        requireThat(!listed?.open, 'condition', 'DeepSeek Harness is answering in this session now. Send once that turn ends. Nothing was sent.', { heldBy: 'DeepSeek Harness' });
+        return this.conversations.send(p, principal.id, b);
+      }
       if (method === 'conversation.configure') return this.conversations.configure(p, principal.id, b);
       if (method === 'conversation.settings.update') return this.conversations.updateSettings(b);
       if (method === 'conversation.settings.check') return this.conversations.check(p, b);

@@ -34,8 +34,8 @@ export function OutsideAgents({ client, snapshot, onOpened }: { client: BrowserC
   }
   return <section className="outside-agents" aria-label="Connect your agent">
     <header className="outside-head">
-      <h2>Bring your own Agent</h2>
-      <p>Keep using the Agent you already work with. Give it this prompt to connect to {name}; it will configure its own connection.</p>
+      <h2>Use {name} from your own Agent window</h2>
+      <p>To work on this project from Claude Code in a terminal, Codex, or any Agent with MCP tools, give it this prompt. It connects itself to this project's Notebook and files. Its sessions in this folder appear under Conversations either way.</p>
     </header>
     <div className="connect-prompt-card">
       <span className="connect-eyebrow">Paste into your Agent</span>
@@ -46,9 +46,9 @@ export function OutsideAgents({ client, snapshot, onOpened }: { client: BrowserC
       {!instructions && !problem && <p role="status" className="muted">Loading setup instructions…</p>}
       {instructions && <details className="connect-full-prompt"><summary>Full setup prompt</summary><textarea aria-label="Full setup prompt" readOnly rows={8} value={instructions.prompt} /></details>}
     </div>
-    <p className="connect-explanation">Your Agent keeps its chat, model and account settings. Rho shares this project's files, Notebook and workspace. If your client needs a new session to load its tools, your Agent will tell you.</p>
+    <p className="connect-explanation">If your client needs a new session to load its tools, your Agent will tell you.</p>
     <section className="outside-connections" aria-label="Project connections">
-      <h3>Agents with access to this project</h3>
+      <h3>Agent windows connected to this project</h3>
       {outside.length ? <ul>{outside.map(agent => <li key={agent.principal} data-rho-agent-session={agent.ended ? 'ended' : 'granted'}>
         <div className="connection-name"><strong>{agent.label ?? 'Agent session'}</strong><span className={'connection-status ' + (agent.ended || agent.last?.outcome === 'rejected' ? 'warn' : agent.last?.outcome === 'returned' ? 'verified' : '')}>
           {agent.ended ? 'Access ended' : agent.last?.outcome === 'rejected' ? 'Last call refused' : agent.last?.outcome === 'returned' ? 'Call verified' : 'Waiting for first successful call'}</span></div>

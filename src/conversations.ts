@@ -9,6 +9,7 @@ import type { AgentConversation, AgentPermission, ConversationStep, Conversation
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { atomicJson, canonical, digest, Fault, now, readJson, requireThat } from '@rho-workspace/plugin-contracts';
+import { acpEnvironment, missingClient } from '@rho-workspace/plugin-agent/acp-command';
 import type { Project } from './state.js';
 
 // Rho holds user messages and their original identities. The selected Agent plugin
@@ -153,6 +154,9 @@ interface Conversation {
   // Moved to the trash by the person: kept whole, not listed with the project's conversations,
   // and not continued until restored.
   trashedAt?: string | null; trashedBy?: string | null;
+  // The Agent session this conversation continues, started outside Rho, and the session it
+  // copies when it continues a copy (ACP session/fork) until its own session exists.
+  origin?: { producer: string; sessionId: string; where: string; copy: boolean }; forkFrom?: string;
 }
 type Backend = 'claude-acp' | 'codex-acp' | 'acp';
 const backends: Backend[] = ['claude-acp', 'codex-acp', 'acp'];
@@ -173,6 +177,7 @@ interface Summary {
   // using and costing, its session identity and whether it is in the trash.
   listed?: 1 | 2; turnLimit?: boolean; waitingPermission?: boolean; backend?: string; agentTitle?: string | null; adapter?: { name: string; version?: string } | null; model?: string | null; config?: Choices;
   usage?: { used: number; size: number; cost: { amount: number; currency: string } | null } | null; costUsd?: number | null; sessionId?: string | null; trashedAt?: string | null;
+  origin?: { producer: string; where: string; copyOf?: string } | null;
 }
 interface Index { format: 1; conversations: Summary[]; deleted?: Array<{ conversationId: string; changeId: string; requestDigest: string; deletedAt: string; deletedBy: string }> }
 interface Live { project: Project; conversation: Conversation; turn: Turn; controller: AbortController; stop(reason: StopReason, by: string): void; done: Promise<void>; before?: Disk | null; captures?: Promise<void>[]; attempts?: number; seen?: Map<string, string>; tried?: Set<string>;
@@ -198,7 +203,13 @@ export interface ConversationPorts {
   modelFacts?(model: string): Promise<{ images: boolean; listed: string } | null>;
   // Whether the project's live R and Python sessions are selected, which the session is told about.
   notebook?(): boolean;
+  // The Agent's own record of this session: a live process holding it open (a terminal, an editor,
+  // the Agent's own app, or Rho's own connection) and when it last changed. Rho does not write
+  // into a session another process holds.
+  nativeSession?(project: Project, producer: 'claude-code' | 'codex', sessionId: string): Promise<{ open: { where: string; since?: string; pid?: number } | null; lastAt: string } | null>;
 }
+// A session started elsewhere that this conversation continues: in place, or as a copy.
+export interface ContinueSession { producer: 'claude-code' | 'codex' | 'dsh'; sessionId: string; title: string; where: string; copy: boolean; backend: 'claude-acp' | 'codex-acp' | 'acp' }
 export interface DescribeRequest {
   path: string; facts: string; request: string; model: string | null; strategy: Strategy;
   excerpt?: string; context?: string; image?: { mediaType: 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp'; data: Buffer };
@@ -288,7 +299,8 @@ export class Conversations {
     return { conversationId: c.id, changeId: c.changeId, requestDigest: c.requestDigest, title: c.title, client: c.client, principal: c.principal, createdAt: c.createdAt, updatedAt: c.updatedAt, version: c.version, turns: c.turns.length, state: last?.state ?? 'idle', lastAt: last?.endedAt ?? last?.sentAt ?? c.createdAt,
       listed: 2, turnLimit: !!last && agentTurnLimit(last), waitingPermission: last?.state === 'running' && !!last.permissions?.some(p => p.state === 'pending'), backend: c.backend ?? 'claude-cli', agentTitle: c.observation?.info?.title ?? null, adapter: c.adapter ?? null, model: [...c.turns].reverse().find(t => t.model)?.model ?? null, config: c.config ?? {},
       usage: usage ? { used: usage.used, size: usage.size, cost: usage.cost ?? null } : null, costUsd: costs.length ? costs.reduce((a, b) => a + b, 0) : null,
-      sessionId: c.acpSessionId ?? c.nativeSessionId ?? null, trashedAt: c.trashedAt ?? null };
+      sessionId: c.acpSessionId ?? c.nativeSessionId ?? null, trashedAt: c.trashedAt ?? null,
+      origin: c.origin ? { producer: c.origin.producer, where: c.origin.where, ...(c.origin.copy ? { copyOf: c.origin.sessionId } : {}) } : null };
   }
   private async write(project: Project, c: Conversation) {
     const directory = await this.folder(project);
@@ -426,10 +438,12 @@ export class Conversations {
   // conversation or message and starts nothing; changed words under that identity are refused.
   // Without an Agent or settings named in the request, the person's saved ones are used and
   // recorded with the conversation.
-  async start(project: Project, by: string, input: { changeId: string; text: string; contexts?: string[]; backend?: Backend; config?: Choices }) {
+  async start(project: Project, by: string, input: { changeId: string; text: string; contexts?: string[]; backend?: Backend; config?: Choices; continue?: ContinueSession }) {
     requireThat(!input.backend || backends.includes(input.backend), 'invalid', 'Choose Claude Code or Codex.');
     if (input.config) this.choices(input.config);
-    const text = this.message(input.text), requestDigest = digest(canonical({ text, ...(input.contexts?.length ? { contexts: input.contexts } : {}), ...(input.backend ? { backend: input.backend } : {}), ...(input.config ? { config: input.config } : {}) }));
+    const from = input.continue;
+    const text = this.message(input.text), requestDigest = digest(canonical({ text, ...(input.contexts?.length ? { contexts: input.contexts } : {}), ...(input.backend ? { backend: input.backend } : {}), ...(input.config ? { config: input.config } : {}),
+      ...(from ? { continue: { producer: from.producer, sessionId: from.sessionId, copy: from.copy } } : {}) }));
     return this.serial(project.id, async () => {
       const index = await this.index(project), existing = index.conversations.find(x => x.changeId === input.changeId);
       requireThat(!index.deleted?.some(x => x.changeId === input.changeId), 'conflict', 'That request started a conversation that was later deleted. It is not started again.');
@@ -438,12 +452,22 @@ export class Conversations {
         const c = await this.load(project, existing.conversationId); return this.reply(project, c, c.turns[0]);
       }
       requireThat(index.conversations.filter(x => !x.trashedAt).length < this.limits.maxConversations, 'limit', `This project keeps at most ${this.limits.maxConversations} conversations started in Rho. Move one to the trash to start another.`, { limit: 'maxConversations', maximum: this.limits.maxConversations });
+      if (from && !from.copy) {
+        const already = index.conversations.find(x => x.sessionId === from.sessionId);
+        requireThat(!already, 'conflict', already?.trashedAt ? 'This session is a conversation in the trash. Restore it to continue.' : 'This session already continues as a conversation here. Open it to send your message.');
+        await this.notHeld(project, from.producer, from.sessionId, false);
+      }
       this.capacity();
       const saved = await this.readSettings();
-      const backend = input.backend ?? saved.backend ?? this.config.backend ?? 'claude-acp';
+      const backend = from?.backend ?? input.backend ?? saved.backend ?? this.config.backend ?? 'claude-acp';
       const config = backend === 'claude-cli' ? undefined : input.config ?? saved.choices[backend];
       const at = now(), c: Conversation = { format: 2, backend, id: 'c-' + randomBytes(8).toString('hex'), changeId: input.changeId, requestDigest, createdAt: at, createdBy: by, updatedAt: at, version: 0, client: backend === 'codex-acp' ? 'codex' : backend === 'acp' ? 'acp' : 'claude-code', nativeSessionId: backend === 'claude-cli' ? randomUUID() : null, confirmed: false, principal: null, title: titleOf(text), turns: [], ...(config && Object.keys(config).length ? { config } : {}) };
       for (const id of input.contexts ?? []) await this.ports.context?.(project, id);
+      if (from) {
+        c.origin = { producer: from.producer, sessionId: from.sessionId, where: from.where, copy: from.copy };
+        if (from.copy) c.forkFrom = from.sessionId; else c.acpSessionId = from.sessionId;
+        c.title = from.title;
+      }
       const turn = this.turn(input.changeId, requestDigest, by, text, 1);
       if (input.contexts?.length) turn.contexts = [...input.contexts];
       c.turns.push(turn);
@@ -452,6 +476,26 @@ export class Conversations {
       this.launch(project, c, turn);
       return this.reply(project, c, turn);
     });
+  }
+  /** Whether a process holding a session open is Rho's own connection to this conversation: the
+   * Agent its adapter started. */
+  async owns(project: Project, conversationId: string, pid: number | undefined) {
+    const adapter = (this.drivers.get(project.id + '/' + conversationId)?.driver as { pid?: number | null } | undefined)?.pid;
+    if (!adapter || !pid || process.platform === 'win32') return false;
+    const { execFile } = await import('node:child_process');
+    let current = pid;
+    for (let depth = 0; depth < 4 && current > 1; depth++) {
+      const parent = await new Promise<number>(resolve => execFile('ps', ['-o', 'ppid=', '-p', String(current)], { timeout: 2000 }, (error, out) => resolve(error ? 0 : Number(String(out).trim()))));
+      if (parent === adapter) return true;
+      current = parent;
+    }
+    return false;
+  }
+  private async notHeld(project: Project, producer: string, sessionId: string, existing: boolean, conversationId?: string) {
+    if (producer !== 'claude-code' && producer !== 'codex') return;
+    const found = await this.ports.nativeSession?.(project, producer, sessionId) ?? null;
+    const holder = found?.open && !(conversationId && await this.owns(project, conversationId, found.open.pid)) ? found.open : null;
+    requireThat(!holder, 'condition', `This session is open in ${holder?.where ?? 'another window'}. Close it there to continue here${existing ? '' : ', or continue a copy'}. Nothing was sent.`, { heldBy: holder?.where ?? null });
   }
   async send(project: Project, by: string, input: { conversationId: string; changeId: string; text: string; contexts?: string[]; continuationOf?: string }) {
     const text = this.message(input.text), requestDigest = digest(canonical({ text, ...(input.contexts?.length ? { contexts: input.contexts } : {}), ...(input.continuationOf ? { continuationOf: input.continuationOf } : {}) }));
@@ -470,6 +514,8 @@ export class Conversations {
         requireThat(!alive, 'conflict', `The Agent from before Rho restarted may still be answering (process ${last.pid}). End that process before sending another message.`);
       }
       requireThat(c.turns.length < this.limits.maxTurns, 'limit', `A conversation keeps at most ${this.limits.maxTurns} messages. Start a new conversation.`, { limit: 'maxTurns', maximum: this.limits.maxTurns });
+      // A session continued in a terminal or another app may be open there now.
+      if (c.acpSessionId && (c.client === 'claude-code' || c.client === 'codex')) await this.notHeld(project, c.client, c.acpSessionId, true, c.id);
       requireThat(Buffer.byteLength(JSON.stringify({ ...c, observation: undefined })) + this.limits.maxObservationBytes + this.limits.maxTurnBytes + this.limits.maxMessageBytes <= this.limits.maxRecordBytes, 'limit', 'This conversation has reached the size Rho keeps. Start a new conversation.', { limit: 'maxRecordBytes', maximum: this.limits.maxRecordBytes });
       this.capacity();
       for (const old of c.turns) if (old.state === 'running') Object.assign(old, this.view(project, c, old));
@@ -524,7 +570,19 @@ export class Conversations {
   }
   private settingsView(s: AgentSettings) {
     const service = this.config.backend ?? 'claude-acp';
-    return { version: s.version, updatedAt: s.updatedAt, backend: s.backend, serviceBackend: service, choices: s.choices, offered: s.offered, checking: [...this.checks.keys()], describe: { enabled: s.describe?.enabled !== false } };
+    return { version: s.version, updatedAt: s.updatedAt, backend: s.backend, serviceBackend: service, choices: s.choices, offered: s.offered, checking: [...this.checks.keys()], describe: { enabled: s.describe?.enabled !== false }, agents: this.agents() };
+  }
+  // Which Agents this service can start: the person's installed clients, found as the adapters
+  // find them, and an ACP command the person named. Looking starts nothing.
+  private agents() {
+    const found = (problem: string | null) => problem ? { found: false, problem } : { found: true };
+    const command = this.config.acpCommand;
+    return {
+      // A command the embedding names is its own choice and is not looked for, as the adapters do.
+      'claude-acp': found(this.config.claudeAcp?.command ? null : missingClient('claude', acpEnvironment('claude', { ...process.env }, this.binary))),
+      'codex-acp': found(this.config.codexAcp?.command ? null : missingClient('codex', acpEnvironment('codex', { ...process.env }, this.config.codex))),
+      acp: command ? { found: true, name: /(^|[\\/])dsh(\.[a-z]+)?$/i.test(command.file) || command.args.some(a => /(^|[\\/])dsh(\.[a-z]+)?$/i.test(a)) ? 'DeepSeek Harness' : null } : { found: false, problem: 'Start Rho with --agent-backend acp --acp-command to use another ACP Agent.' }
+    };
   }
   async settings() { return this.settingsView(await this.readSettings()); }
   // The person's Agent and settings for new conversations. Each Agent's choices are replaced as a
@@ -691,11 +749,18 @@ export class Conversations {
         }).catch(() => {}), this.limits.idleMs); entry.timer.unref(); }
       });
   }
+  private async changedElsewhere(project: Project, c: Conversation) {
+    if (!c.acpSessionId || (c.client !== 'claude-code' && c.client !== 'codex')) return false;
+    const previous = c.turns.at(-2), found = await this.ports.nativeSession?.(project, c.client, c.acpSessionId).catch(() => null);
+    return !!found && !!previous?.endedAt && Date.parse(found.lastAt) > Date.parse(previous.endedAt) + 5000;
+  }
   private async driver(project: Project, c: Conversation) {
     return this.serial('driver-pool', async () => {
       const key = project.id + '/' + c.id, old = this.drivers.get(key);
       if (old?.timer) clearTimeout(old.timer);
-      if (old?.driver.connected) return old.driver;
+      // An open connection keeps the session as it last saw it. When the session went on in
+      // another window since, it is opened again from the Agent's own record.
+      if (old?.driver.connected && !await this.changedElsewhere(project, c)) return old.driver;
       if (old) await this.retire(key);
       if (this.drivers.size >= this.limits.maxConnections) {
         const idle = [...this.drivers].find(([k]) => ![...this.live.values()].some(x => x.project.id + '/' + x.conversation.id === k));
@@ -718,7 +783,7 @@ export class Conversations {
       } };
       // Every session started here is told about the project's shared notes and its section.
       const instructions = notesInstructions(c.id, { notebook: !!this.ports.notebook?.() });
-      const common = { cwd: project.root, mcpServers, limits: this.limits, sessionId: c.acpSessionId, config: c.config, instructions, ...observed };
+      const common = { cwd: project.root, mcpServers, limits: this.limits, sessionId: c.acpSessionId, ...(!c.acpSessionId && c.forkFrom ? { forkFrom: c.forkFrom } : {}), config: c.config, instructions, ...observed };
       const driver = c.backend === 'codex-acp'
         ? new CodexAcpConversation({ ...this.config.codexAcp, ...common, codex: this.config.codex })
         : c.backend === 'claude-acp'

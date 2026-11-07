@@ -538,7 +538,7 @@ function App() {
       </details>
       {screen === 'plugins' ? <><button className="nav-row" onClick={pick(showOverview)}><Icon name="back" size={14} /><span>Back to project</span></button><PluginNavigation catalog={snapshot?.catalog} pluginId={pluginId} onSelect={id => pick(() => choosePlugin(id))()} /></>
       : <ProjectNavigation project={project} snapshot={snapshot} current={here} sources={sources} partial={files.truncated}
-          agent={{ running: !!agentNow?.running, waiting: !!agentNow?.waiting, conversations: (snapshot?.conversations?.length ?? 0) + externalConversations.sessions.length }} adding={addingSource}
+          agent={{ running: !!agentNow?.running, waiting: !!agentNow?.waiting, conversations: (snapshot?.conversations?.length ?? 0) + externalConversations.sessions.filter(s => !s.conversationId).length }} adding={addingSource}
           sessions={shownConversations().map(c => ({ id: processComposition(c.conversationId), title: sessionTitle(c), running: !!agentNow?.running && agentNow.conversationId === c.conversationId, when: c.lastAt }))}
           onOverview={pick(showOverview)} onStudio={pick(studio)} onNewLayout={arrangeable ? pick(newWorkspace) : undefined} onLayout={id => pick(() => processConversation(id) ? showProcess(id) : layout(id))()}
           onSection={next => pick(() => next === 'graph' ? showGraph() : showSection(next))()} onSources={next => pick(() => showSources(next))()} onFile={(row, item) => pick(() => showFile(row, item))()} values={readsValues ? values : null} onValue={(language, valueName) => pick(() => openObject(language, valueName))()} onAddSource={() => void addSource()} />}
@@ -563,7 +563,7 @@ function App() {
     {snapshot && (link ? <AgentRequest key={snapshot.project.id} snapshot={snapshot} principalId={connection.principalId ?? 'local'} />
       : <AgentConversation key={snapshot.project.id} snapshot={snapshot} client={client} selectedId={selectedConversation} onSelected={() => setSelectedConversation(null)} onOpen={id => address(snapshot.project.id, id)} onSent={() => { if (!studioOpen) follow(undefined, false); }} onStarted={id => { if (shownProcess) follow(id, true); }}
         replayOf={processConversation(shownId)} replayAt={studioOpen ? replay.at : null} onNow={() => setReplay(r => ({ ...r, at: null, playing: false }))}
-        onClose={closeAgent} onAll={() => { showSection('agent'); if (narrow) setAgentOpen(false); }} />)}
+        onClose={closeAgent} onAll={() => { showSection('agent'); if (narrow) setAgentOpen(false); }} sessions={externalConversations.sessions} onPath={showPath} />)}
     <div ref={setAgentSlot} className="agent-slot" />
   </>;
   // Where this tab is: the projects list, then the project, then the open workspace. The page

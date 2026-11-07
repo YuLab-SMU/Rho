@@ -93,16 +93,15 @@ if (process.env.RHO_CONNECT_FAIL && !process.argv.includes('remove')) { process.
   const nav = page.locator('.project-nav');
   await nav.getByRole('button', { name: 'Agent', exact: true }).click();
 
-  // The Agents: nothing is asked until the person asks.
-  await page.getByRole('button', { name: 'New conversation settings', exact: true }).click();
+  // The Agents: one row per Agent this service can start; nothing is asked until the person asks.
+  await page.getByRole('tab', { name: 'Agents', exact: true }).click();
   const claude = page.locator('.agent-row').filter({ hasText: 'Claude Code' }), codex = page.locator('.agent-row').filter({ hasText: 'Codex' });
-  assert.match(await claude.locator('.agent-row-status').textContent(), /Not asked yet/);
-  assert.match(await codex.locator('.agent-row-status').textContent(), /Not asked yet/);
-  assert.equal(await claude.locator('.agent-default').count(), 1, 'Claude Code is the default');
-  await claude.getByRole('button', { name: 'Details' }).click();
+  assert.equal(await claude.getByRole('radio', { name: 'Use Claude Code for new conversations' }).getAttribute('aria-checked'), 'true', 'Claude Code is the default');
+  assert.equal(await codex.getByRole('radio', { name: 'Use Codex for new conversations' }).getAttribute('aria-checked'), 'false');
+  await claude.getByRole('button', { name: 'Show Claude Code settings' }).click();
+  await claude.getByText('Rho has not asked Claude Code', { exact: false }).waitFor();
   await claude.getByRole('button', { name: 'Ask Claude Code' }).click();
-  await until(() => claude.locator('.agent-row-status').textContent(), t => /^Checked today .* · 6 models from 2 providers$/.test(t), 'Claude Code asked');
-  assert.match(await claude.locator('.agent-row-version').textContent(), /claude-test-peer 1\.2\.0/);
+  await until(() => claude.locator('.agent-details').innerText(), t => /claude-test-peer 1\.2\.0, checked today/.test(t), 'Claude Code asked');
   assert.deepEqual(await claude.locator('.agent-tiers code').allTextContents(), ['default', 'opus', 'sonnet'], 'Claude Code\'s own names');
   assert.match(await claude.locator('.agent-tiers li').nth(1).textContent(), /Custom Opus model \(lab\/opus-5-5\)/);
   assert.deepEqual(await claude.locator('.agent-provider').evaluateAll(chips => chips.map(chip => chip.querySelector('span:not(.provider-mark)').textContent + ' ' + chip.querySelector('small').textContent)), ['routing group 2', 'DeepSeek 1']);
@@ -114,11 +113,12 @@ if (process.env.RHO_CONNECT_FAIL && !process.argv.includes('remove')) { process.
   await claude.getByRole('combobox', { name: 'Effort' }).selectOption('high');
   await until(() => call('conversation.settings.read'), s => s.choices['claude-acp']?.effort === 'high', 'the effort saved');
   await shot('01-agents');
-  await codex.getByRole('button', { name: 'Make default' }).click();
+  await codex.getByRole('radio', { name: 'Use Codex for new conversations' }).click();
   await until(() => call('conversation.settings.read'), s => s.backend === 'codex-acp', 'Codex made the default');
-  await codex.locator('.agent-default').waitFor();
-  await claude.getByRole('button', { name: 'Make default' }).click();
+  await until(() => codex.getByRole('radio', { name: 'Use Codex for new conversations' }).getAttribute('aria-checked'), v => v === 'true', 'Codex shown as the default');
+  await claude.getByRole('radio', { name: 'Use Claude Code for new conversations' }).click();
   await until(() => call('conversation.settings.read'), s => s.backend === 'claude-acp', 'Claude Code the default again');
+  await page.getByRole('tab', { name: /^Conversations/ }).click();
   passed('the conversation settings ask an Agent only when asked, shows its own names, providers and models, and saves the model, effort and default Agent');
 
   // The message box's settings: one chip naming the model and effort, and a short menu with a
@@ -247,7 +247,7 @@ if (process.env.RHO_CONNECT_FAIL && !process.argv.includes('remove')) { process.
   passed('the trash keeps a conversation until restored or deleted, with Undo, and never takes one the Agent is answering');
 
   // One brand-independent setup prompt. Reading or copying does not create a grant.
-  await page.getByRole('tab', { name: /^Connect your agent/ }).click();
+  await page.getByRole('tab', { name: 'Agents', exact: true }).click();
   const outside = page.locator('.outside-agents');
   await outside.getByRole('button', { name: 'Copy setup prompt', exact: true }).waitFor();
   await outside.locator('summary').filter({ hasText: 'Full setup prompt' }).click();
@@ -282,7 +282,7 @@ if (process.env.RHO_CONNECT_FAIL && !process.argv.includes('remove')) { process.
 
   for (const width of [1024, 390]) {
     await page.setViewportSize({ width, height: width === 390 ? 844 : 768 });
-    for (const tab of [/^Connect your agent/, /^Conversations/]) {
+    for (const tab of [/^Agents/, /^Conversations/]) {
       if (width === 390 && !(await page.getByRole('tab', { name: tab }).isVisible())) continue;
       await page.getByRole('tab', { name: tab }).click();
       await page.waitForTimeout(300);

@@ -112,10 +112,15 @@ shared Documents buffer. Its cursor is an invalidation cursor, not a transaction
 or a common resource version. ACP and native transcript identities are not merged
 merely because their ID strings match.
 
-Each Agent session has one input, held by whoever started it (the user's decision of
-2026-10-25). A session started outside Rho keeps its input in its own window; Rho
-shows its work; feedback uses the separately selected feedback entry. A conversation started in Rho is held
-by Rho: the Agent panel is its input, and the conversation outlives the panel, a
+A session of the same Agent continues wherever it started (the user's decision of
+2026-11-07, replacing the 2026-10-25 rule that its starter held its input). Rho lists
+Claude Code and Codex sessions in the project folder from the Agents' own records,
+and Harness sessions from the dsh-rho observation. Continuing one loads that native
+session over ACP; Rho adds no session identity of its own. While another process
+holds the session (Claude Code's live-session registry, Codex's thread lock, a
+Harness turn in progress), Rho refuses to write into it and offers a copy (ACP fork)
+instead ([episode](SESSION-CONTINUITY-EPISODE.md)). A conversation started or
+continued in Rho has the Agent panel as its input, and outlives the panel, a
 reload and a service restart. A message whose outcome Rho did not observe stays
 unknown and is not sent again. Agent 0.4.11 owns the Claude and Codex ACP connections,
 permission requests and session loading; it retains each tool's bounded human title,

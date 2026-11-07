@@ -34,9 +34,9 @@ try {
   const page = await context.newPage(); page.setDefaultTimeout(15000); page.on('pageerror', e => report.browserErrors.push(e.message));
   await page.goto(service.url + '/#project=' + project.id);
   await page.locator('.project-nav').getByRole('button', { name: 'Agent', exact: true }).click();
-  await page.getByRole('tab', { name: 'Connect your agent', exact: true }).click();
+  await page.getByRole('tab', { name: 'Agents', exact: true }).click();
   const pane = page.locator('.outside-agents');
-  const reload = async () => { await page.reload(); await page.locator('.project-nav').getByRole('button', { name: 'Agent', exact: true }).click(); await page.getByRole('tab', { name: /^Connect your agent/ }).click(); };
+  const reload = async () => { await page.reload(); await page.locator('.project-nav').getByRole('button', { name: 'Agent', exact: true }).click(); await page.getByRole('tab', { name: 'Agents', exact: true }).click(); };
   await pane.getByRole('button', { name: 'Copy setup prompt', exact: true }).click();
   const prompt = await page.evaluate(() => navigator.clipboard.readText());
   assert.equal(prompt, (await call('session.instructions')).prompt);
@@ -98,9 +98,7 @@ try {
   await wait(() => pane.innerText(), text => text.includes('Call verified'), 'verified call did not appear');
   await inspectResponsive(page, { name: 'verified', evidence, report });
   check('a new real client session loaded its own configuration and called rho_index successfully');
-  await page.getByRole('tab', { name: /^Conversations/ }).click();
-  await page.getByRole('button', { name: 'New conversation settings', exact: true }).click();
-  await page.getByRole('region', { name: 'New conversations in Rho', exact: true }).waitFor();
+  await page.getByRole('radiogroup', { name: 'Agent for new conversations', exact: true }).waitFor();
   await page.screenshot({ path: path.join(evidence, 'conversation-settings.png'), fullPage: true });
   assert.deepEqual(report.browserErrors, []);
   report.passed = true;

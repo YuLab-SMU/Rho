@@ -249,11 +249,16 @@ inspect what happened. The application gives those actions direct places:
 - **Files** opens documents, browses the project's folder and the source folders it
   works in, and filters the current folder. A source folder is named as the person
   named it and opens one level at a time, the same way any other folder does.
-- **Agent** (the sidebar row) has two tabs. Conversations lists sessions by day,
-  searchable and by Agent, with Continue, Markdown export and the trash. New
-  conversation settings folds the default Agent, model and settings into this tab;
-  those choices apply only to conversations started inside Rho. Connect your agent
-  offers one setup prompt for the person's own local MCP client. The prompt names
+- **Agent** (the sidebar row) has two tabs. Conversations lists every session in
+  the project folder by day, searchable and by Agent: Rho's conversations, Claude
+  Code and Codex sessions read from the Agents' own records, and observed Harness
+  conversations. Each row names where the session started (Terminal, VS Code, Codex
+  app, Script…) and whether another window has it open now, and offers Continue,
+  the terminal resume command, Markdown export and the trash
+  ([session continuity](SESSION-CONTINUITY-EPISODE.md)). Agents lists the Agents
+  this service can start, with the one new conversations use, its model and folded
+  settings; an Agent not found on this computer is greyed out. Below it, one setup
+  prompt is for the person's own local MCP client. The prompt names
   the running installation and exact existing project; the Agent configures its
   own client. Reading or copying grants no access. Connections are listed by their
   actual session labels, with access waiting for a call, a verified last call,
@@ -571,8 +576,9 @@ Shared notes opens `project-notes.md` in the existing Documents owner. A failed 
 view and offers Refresh. The cursor invalidates the read model; individual sources
 and resources retain their own versions. See the [observed loop](ACP-EPISODE.md#shared-workspace-loop).
 External ACP sessions use the same work surface with their own source identity,
-plans, usage and read-only latest reply. Their input and permission choices stay
-in the original client. The visible Overview rereads external projections every
+plans, usage and read-only latest reply there. Their permission choices stay in the
+original client; the Agent panel continues such a session in the folder once no
+other window holds it. The visible Overview rereads external projections every
 1.5 seconds; it does not start a collector, Agent or Host. Turn cancellation keeps
 unfinished tool outcomes unknown and does not claim all native processes exited.
 
@@ -606,7 +612,10 @@ A conversation's messages, steps and endings belong to the service's record, not
 the tab. The tab keeps only an unsent message per conversation and the identity of
 a message being sent. When the reply to a send is lost, Retry sends that same message
 once; when the service refuses it, the words go back into the box. A session started
-elsewhere has no message box in Rho: its input stays in its own window.
+elsewhere opens in the same panel with its history, its turns marked with where they
+were sent, and its next message continues that session. While another window holds
+it, the box is disabled with where it is open and a link to continue a copy; Rho
+reloads a session whose record changed after its own last message.
 
 The palette and responsive dialogs use native dialog focus containment and Escape.
 Typography, color and layout are implemented in the three CSS files under `web/`.

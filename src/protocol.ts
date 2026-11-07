@@ -87,7 +87,8 @@ export const operations: Record<string, any> = { ...base.operations, ...extensio
   'data.compare': obj({ ...project, left: ref, right: ref, options: obj({ leftKey: text, rightKey: text, leftNamespace: text, rightNamespace: text, mapping: { const: 'equal-string' }, leftField: text, rightField: text, join: { enum: ['left', 'inner', 'full'] } }) }),
   'media.describe': obj({ ...project, resource: ref }),
   // A conversation the person starts in Rho: their words, under a request identity they hold.
-  'conversation.start': obj({ ...project, changeId, text: { type: 'string', minLength: 1, maxLength: 16384 }, backend: agentBackend, config: choices, contexts: { ...array(digest), maxItems: 8 } }, ['projectId', 'changeId', 'text']),
+  'conversation.start': obj({ ...project, changeId, text: { type: 'string', minLength: 1, maxLength: 16384 }, backend: agentBackend, config: choices, contexts: { ...array(digest), maxItems: 8 },
+    continue: obj({ session: { type: 'string', pattern: '^x-[a-f0-9]{64}$' }, copy: { type: 'boolean' } }, ['session']) }, ['projectId', 'changeId', 'text']),
   'conversation.send': obj({ ...project, conversationId: changeId, changeId, text: { type: 'string', minLength: 1, maxLength: 16384 }, contexts: { ...array(digest), maxItems: 8 }, continuationOf: changeId }, ['projectId','conversationId','changeId','text']),
   'conversation.permission': obj({ ...project, conversationId: changeId, turnId: changeId, permissionId: changeId, optionId: { type: 'string', minLength: 1, maxLength: 256 } }),
   'conversation.stop': obj({ ...project, conversationId: changeId, turnId: changeId }),
@@ -217,7 +218,8 @@ const catalog = { ...contract.capabilityCatalogSchema };
 const conversationSummary = response({ conversationId: text, title: text, client: text, principal: { anyOf: [text, { type: 'null' }] }, createdAt: text, updatedAt: text, version: integer, turns: integer, state: { enum: ['idle', 'running', 'completed', 'failed', 'stopped', 'unknown'] }, lastAt: text,
   backend: text, agentTitle: { anyOf: [text, { type: 'null' }] }, adapter: { anyOf: [response({ name: text, version: text }, ['name']), { type: 'null' }] }, model: { anyOf: [text, { type: 'null' }] }, config: choices, turnLimit: { type: 'boolean' }, waitingPermission: { type: 'boolean' },
   usage: { anyOf: [response({ used: { type: 'number', minimum: 0 }, size: { type: 'number', minimum: 0 }, cost: { anyOf: [response({ amount: { type: 'number' }, currency: text }), { type: 'null' }] } }), { type: 'null' }] },
-  costUsd: { anyOf: [{ type: 'number' }, { type: 'null' }] }, sessionId: { anyOf: [text, { type: 'null' }] }, trashedAt: { anyOf: [text, { type: 'null' }] } },
+  costUsd: { anyOf: [{ type: 'number' }, { type: 'null' }] }, sessionId: { anyOf: [text, { type: 'null' }] }, trashedAt: { anyOf: [text, { type: 'null' }] },
+  origin: { anyOf: [response({ producer: text, where: text, copyOf: text }, ['producer', 'where']), { type: 'null' }] } },
   ['conversationId', 'title', 'client', 'principal', 'createdAt', 'updatedAt', 'version', 'turns', 'state', 'lastAt']);
 const sessionObservation = ownerSchema('agent-session', 'sessionObservationSchema');
 // What one Agent offered, from a check or a conversation's first session, and the person's choices.
@@ -225,7 +227,9 @@ const offered = response({ at: text, source: { enum: ['check', 'conversation'] }
 const agentSettings = response({ version: integer, updatedAt: { anyOf: [text, { type: 'null' }] }, backend: { anyOf: [agentBackend, { type: 'null' }] }, serviceBackend: { enum: ['claude-acp', 'codex-acp', 'claude-cli', 'acp'] },
   choices: response({ 'claude-acp': choices, 'codex-acp': choices, 'acp': choices }, []), offered: response({ 'claude-acp': offered, 'codex-acp': offered, 'acp': offered }, []), checking: array(agentBackend),
   // Whether a model describes the files a message writes; the facts are read either way.
-  describe: response({ enabled: { type: 'boolean' } }) }, ['version', 'updatedAt', 'backend', 'serviceBackend', 'choices', 'offered', 'checking']);
+  describe: response({ enabled: { type: 'boolean' } }),
+  // Which Agents this service can start, without starting them.
+  agents: response(Object.fromEntries(['claude-acp', 'codex-acp', 'acp'].map(k => [k, response({ found: { type: 'boolean' }, problem: text, name: { anyOf: [text, { type: 'null' }] } }, ['found'])]))) }, ['version', 'updatedAt', 'backend', 'serviceBackend', 'choices', 'offered', 'checking']);
 // A tool step keeps its original identity, the Agent's bounded human title, its ACP
 // category and one identifying input (command, path, pattern or query), for a command the
 // Agent's own few words on what it is for (purpose), when it was
@@ -416,7 +420,7 @@ export const descriptions = {
   'action.submit': 'Execute the explicitly selected project R script snapshot and requirements. Persist operationId before delivery; identical retries retain the original Core identity. Output directory is the first R argument, followed by explicit args or frozen resource paths. Artifact paths are output-relative; completion is run-directory-relative, returned as plan.completion, so an inventory can remain beside immutable producer artifacts.',
   'binding.activity.append': 'Registered native adapter only: retain original CLI tool and artifact-ready observations. This does not execute, validate, or present artifacts.',
   'task.routing.put': 'Control plane only: conditionally assign one task and business binding to this project without starting a native session.',
-  'conversation.start': 'Person at this machine only: start a conversation with the selected Claude Code or Codex Agent in this project. Rho selects the Agent plugin backend, attaches this project\'s MCP grant and records the message before sending it. Without backend or config, the person\'s saved Agent and settings are used and recorded with the conversation. A repeated changeId with the same text returns the original conversation and starts nothing.',
+  'conversation.start': 'Person at this machine only: start a conversation with the selected Claude Code or Codex Agent in this project. Rho selects the Agent plugin backend, attaches this project\'s MCP grant and records the message before sending it. Without backend or config, the person\'s saved Agent and settings are used and recorded with the conversation. A repeated changeId with the same text returns the original conversation and starts nothing. With continue, the message continues an Agent session listed by agent.sessions.list (one started in a terminal, an editor or the Agent\'s own app) through that same session, or through a copy of it with copy; a session another live window holds open is refused unless copied.',
   'conversation.send': 'Person at this machine only: send the next message to a conversation started in Rho. A continuationOf links a new message to the latest confirmed Agent turn-limit stop; the original request is not resent. Refused while the previous message is being answered. A repeated changeId with the same input returns the original message.',
   'conversation.decide': 'Person at this machine only: say to use an answer, or that it needs changes and why. The decision holds for the file versions that message kept when it was given and says nothing of later versions. A new decision supersedes the one before; none is removed. Refused while the Agent is still answering.',
   'conversation.stop': 'Person at this machine only: ask the original Agent to stop answering one message. ACP cancellation is confirmed by the original prompt response; a lost connection keeps the outcome unknown. Legacy CLI conversations confirm process exit. Steps already taken stay done.',

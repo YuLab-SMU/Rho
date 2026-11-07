@@ -254,6 +254,35 @@
                 "type": "null"
               }
             ]
+          },
+          "origin": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "producer": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "where": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "copyOf": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "producer",
+                  "where"
+                ],
+                "additionalProperties": true
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [

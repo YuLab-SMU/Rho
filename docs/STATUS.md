@@ -1,11 +1,11 @@
 # Rho status
 
-Updated: 2026-11-06.
+Updated: 2026-11-07.
 
 ## Current focus
-[Agent connection](AGENT-CONNECT-EPISODE.md) now uses one prompt for a local MCP Agent to configure itself. Conversations keeps its own new-conversation settings; grants and verified calls are separate. A real Claude client configured itself and a fresh session called rho_index with the matching project ID; browser recovery and 30 focused checks pass. Other clients remain unverified. Source after 0.5.5; no Core or Plugins changes.
+[Session continuity](SESSION-CONTINUITY-EPISODE.md): a Claude Code, Codex or Harness session in the project folder continues in Rho's Agent panel under its own session ID, wherever it started; sessions from outside Rho are no longer read-only. Conversations is one list read from each Agent's own records. A session open in another window is refused with where it is open, or continues as a copy. The Agents tab replaces new-conversation settings and holds the [connection prompt](AGENT-CONNECT-EPISODE.md). A real Claude Code passed all 8 steps (Rho and terminal in turn, held refusal, copy); Harness resumed both ways through `dsh acp`; Codex only with a test Agent. Source after 0.5.5 with Agent 0.4.30; not released.
 
-[External conversations](EXTERNAL-CONVERSATIONS-EPISODE.md) join native Harness questions, replies, operations and result versions in Conversations; input stays in Harness. The original two-turn palette-change session passes in installed Rho 0.5.5 and dsh-rho 0.1.5. CI passes on macOS/Linux/Windows, including four-platform offline installation. Rho 0.5.5 is available from npm with bytes matching the tested candidate; the public Harness index selects 0.1.5. The installed original session passes in both the browser and Harness window. No native tool was replayed and no Core behavior changed. The episode retains the unchanged MCP SDK/Hono dependency audit findings.
+[External conversations](EXTERNAL-CONVERSATIONS-EPISODE.md) join native Harness questions, replies, operations and result versions in Conversations; their input is now continued in Rho as above. The original two-turn palette-change session passes in installed Rho 0.5.5 and dsh-rho 0.1.5. CI passes on macOS/Linux/Windows, including four-platform offline installation. Rho 0.5.5 is available from npm with bytes matching the tested candidate; the public Harness index selects 0.1.5. The installed original session passes in both the browser and Harness window. No native tool was replayed and no Core behavior changed. The episode retains the unchanged MCP SDK/Hono dependency audit findings.
 
 The [third-party plugin channel](THIRD-PARTY-PLUGINS.md) now installs independent packages; sclet and a generated package have real native/browser [evidence](THIRD-PARTY-PLUGINS-EPISODE.md). The application path is included in 0.5.5; external plugin packages retain their own delivery.
 

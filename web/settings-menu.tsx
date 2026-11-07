@@ -15,7 +15,7 @@ const switchOf = (option: SettingOption) => option.type === 'boolean'
 
 export function SettingsMenu({ agent, options, values, allowDefault, disabled, disabledNote, agents, checking, checkProblem, onCheck, onChoose, describe }: {
   agent: string; options: SettingOption[] | null; values: Record<string, SettingValue>; allowDefault: boolean;
-  disabled?: boolean; disabledNote?: string; agents?: { current: Backend; choose: (which: Backend) => void };
+  disabled?: boolean; disabledNote?: string; agents?: { current: Backend; choose: (which: Backend) => void; offered?: Backend[]; name?: (which: Backend) => string };
   checking?: boolean; checkProblem?: string; onCheck?: () => void;
   onChoose: (id: string, value: SettingValue | null) => void; describe: string;
 }) {
@@ -93,9 +93,9 @@ export function SettingsMenu({ agent, options, values, allowDefault, disabled, d
         </> : <NotAsked agent={agent} checking={checking} checkProblem={checkProblem} onCheck={onCheck} />}
       </> : <>
         <div className="menu-head"><button data-item className="menu-back" aria-label="Back" title="Back" onClick={back}><Icon name="back" size={14} /></button><span>{view.kind === 'agent' ? 'Agent' : option ? labelOf(option) : ''}</span></div>
-        {view.kind === 'agent' && agents ? <div className="menu-choices" role="radiogroup" aria-label="Agent">{backends.map(which => <button key={which} data-item role="radio" aria-checked={which === agents.current} className="menu-choice"
+        {view.kind === 'agent' && agents ? <div className="menu-choices" role="radiogroup" aria-label="Agent">{(agents.offered ?? backends).map(which => <button key={which} data-item role="radio" aria-checked={which === agents.current} className="menu-choice"
           onClick={() => { if (which !== agents.current) agents.choose(which); back(); }}>
-          <BrandMark brand={which === 'codex-acp' ? 'codex' : which === 'acp' ? 'deepseek' : 'claude-code'} size={14} /><span className="menu-choice-text">{agentLabel[which]}</span>{which === agents.current && <Icon name="check" size={14} />}
+          <BrandMark brand={which === 'codex-acp' ? 'codex' : which === 'acp' ? 'deepseek' : 'claude-code'} size={14} /><span className="menu-choice-text">{agents.name?.(which) ?? agentLabel[which]}</span>{which === agents.current && <Icon name="check" size={14} />}
         </button>)}</div>
           : option && option === model && model.values?.length ? <ModelList option={model} value={chosen(model) as string | null ?? (allowDefault ? null : model.current as string)} agent={agent} allowDefault={allowDefault}
             onChoose={value => pick(model, value)} onEscape={back} />
@@ -117,10 +117,12 @@ export function SettingsMenu({ agent, options, values, allowDefault, disabled, d
 
 // For a new conversation: the saved Agent and its choices, kept for every project.
 export function ComposerSettings({ state }: { state: AgentSettingsState }) {
-  const { backend } = state, agent = agentLabel[backend];
+  const { backend } = state, agent = state.name(backend);
   if (!state.settings) return null;
+  // Only the Agents this service can start, and the one already chosen.
+  const offered = backends.filter(which => which === backend || state.available(which)?.found !== false);
   return <SettingsMenu agent={agent} options={state.offered(backend)?.options ?? null} values={state.choices(backend)} allowDefault
-    agents={{ current: backend, choose: which => void state.chooseAgent(which) }} checking={state.checking.has(backend)} checkProblem={state.checkProblem[backend]}
+    agents={{ current: backend, choose: which => void state.chooseAgent(which), offered, name: state.name }} checking={state.checking.has(backend)} checkProblem={state.checkProblem[backend]}
     onCheck={() => void state.check(backend)} onChoose={(id, value) => void state.choose(backend, id, value)} describe="Settings for a new conversation" />;
 }
 

@@ -505,6 +505,98 @@
           "enabled"
         ],
         "additionalProperties": true
+      },
+      "agents": {
+        "type": "object",
+        "properties": {
+          "claude-acp": {
+            "type": "object",
+            "properties": {
+              "found": {
+                "type": "boolean"
+              },
+              "problem": {
+                "type": "string",
+                "minLength": 1
+              },
+              "name": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "found"
+            ],
+            "additionalProperties": true
+          },
+          "codex-acp": {
+            "type": "object",
+            "properties": {
+              "found": {
+                "type": "boolean"
+              },
+              "problem": {
+                "type": "string",
+                "minLength": 1
+              },
+              "name": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "found"
+            ],
+            "additionalProperties": true
+          },
+          "acp": {
+            "type": "object",
+            "properties": {
+              "found": {
+                "type": "boolean"
+              },
+              "problem": {
+                "type": "string",
+                "minLength": 1
+              },
+              "name": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "found"
+            ],
+            "additionalProperties": true
+          }
+        },
+        "required": [
+          "claude-acp",
+          "codex-acp",
+          "acp"
+        ],
+        "additionalProperties": true
       }
     },
     "required": [

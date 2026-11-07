@@ -12,7 +12,7 @@
         "type": "integer"
       },
       "limit": {
-        "maximum": 20,
+        "maximum": 50,
         "minimum": 1,
         "type": "integer"
       },
@@ -37,6 +37,21 @@
       "session": {
         "additionalProperties": false,
         "properties": {
+          "bytes": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "continueWith": {
+            "enum": [
+              "claude-acp",
+              "codex-acp",
+              "acp",
+              null
+            ]
+          },
+          "conversationId": {
+            "type": "string"
+          },
           "id": {
             "pattern": "^x-[a-f0-9]{64}$",
             "type": "string"
@@ -54,10 +69,39 @@
             "minimum": 0,
             "type": "integer"
           },
+          "open": {
+            "anyOf": [
+              {
+                "type": "null"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "pid": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "since": {
+                    "type": "string"
+                  },
+                  "where": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "where"
+                ],
+                "type": "object"
+              }
+            ]
+          },
           "problem": {
             "type": "string"
           },
           "producer": {
+            "type": "string"
+          },
+          "resume": {
             "type": "string"
           },
           "sessionId": {
@@ -82,6 +126,9 @@
           "turns": {
             "minimum": 0,
             "type": "integer"
+          },
+          "where": {
+            "type": "string"
           }
         },
         "required": [
@@ -94,8 +141,7 @@
           "state",
           "turns",
           "sourceCursor",
-          "omittedTurns",
-          "inputOwner"
+          "omittedTurns"
         ],
         "type": "object"
       },
@@ -235,6 +281,9 @@
               },
               "maxItems": 256,
               "type": "array"
+            },
+            "where": {
+              "type": "string"
             }
           },
           "required": [
@@ -251,7 +300,7 @@
           ],
           "type": "object"
         },
-        "maxItems": 20,
+        "maxItems": 50,
         "type": "array"
       }
     },

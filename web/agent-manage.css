@@ -73,8 +73,8 @@
 .agents-intro { max-width: 76ch; margin: 0; color: var(--color-muted); font-size: 13px; line-height: 1.5; }
 .agent-rows { margin: 0; padding: 0; list-style: none; border: 1px solid var(--color-hairline); border-radius: 12px; background: var(--color-surface); }
 .agent-row + .agent-row { border-top: 1px solid var(--color-divider); }
-.agent-row-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 14px; padding: 14px 16px; }
-.agent-row-mark { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 10px; background: var(--color-well); }
+.agent-row-head { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 12px 14px 12px 16px; }
+.agent-row-mark { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 9px; background: var(--color-well); }
 .agent-row-name { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .agent-row-name > div { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; }
 .agent-row-name strong { font-size: 15px; }
@@ -94,7 +94,7 @@
 .agent-model-value { display: inline-flex; align-items: center; gap: 7px; min-width: 0; }
 .agent-model-value > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .agent-model-value small { color: var(--color-meta); font-size: 11px; }
-.agent-details { display: flex; flex-direction: column; padding: 0 16px 6px 70px; border-top: 1px solid var(--color-divider); }
+.agent-details { display: flex; flex-direction: column; padding: 0 16px 6px 96px; border-top: 1px solid var(--color-divider); }
 .agent-details-empty { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 0; padding: 14px 0; color: var(--color-muted); font-size: 13px; }
 .agent-detail-row { display: grid; grid-template-columns: 128px minmax(0, 1fr); gap: 14px; padding: 13px 0; }
 .agent-detail-row + .agent-detail-row { border-top: 1px solid var(--color-divider); }
@@ -153,8 +153,9 @@
   .conv-actions { margin-left: auto; }
   .conv-meter { display: none; }
   .conv-trash-toggle { margin-left: 0; }
-  .agent-row-head { grid-template-columns: auto minmax(0, 1fr); }
-  .agent-row-actions { grid-column: 1 / -1; justify-content: flex-start; }
+  .agent-row-head { grid-template-columns: auto auto minmax(0, 1fr); }
+  .agent-row-actions { grid-column: 3 / -1; flex-wrap: nowrap; justify-content: flex-start; min-width: 0; }
+  .agent-row-model { min-width: 0; }
   .agent-row-model .setting-chip { min-width: 0; }
   .agent-detail-row { grid-template-columns: minmax(0, 1fr); gap: 6px; }
   .agent-tiers li { grid-template-columns: minmax(0, 1fr) auto; }
@@ -162,7 +163,20 @@
 }
 @media (prefers-reduced-motion: reduce) { .conv-chevron svg, .agent-details-toggle svg { transition: none; } }
 
-.conversation-settings { margin-bottom: 20px; }
-.conversation-settings > button { display: inline-flex; gap: 8px; align-items: center; }
-.conversation-settings > button[aria-expanded=true] > svg { transform: rotate(90deg); }
-.conversation-settings .agents-panel { margin-top: 16px; padding-bottom: 20px; border-bottom: 1px solid var(--color-hairline); }
+/* Agents tab: the Agents Rho runs here, then the setup for an Agent run elsewhere. */
+.agents-tab { display: flex; flex-direction: column; gap: 40px; min-width: 0; }
+.agents-section { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.agents-section-head h2 { font-size: 20px; font-weight: 650; letter-spacing: -.25px; }
+.agents-section-head p { max-width: 680px; margin-top: 7px; color: var(--color-muted); font-size: 14px; line-height: 1.6; }
+.agent-radio { flex: none; display: grid; place-items: center; width: 22px; height: 22px; min-height: 0; padding: 0; border: 0; border-radius: 50%; background: transparent; }
+.agent-radio > span { width: 16px; height: 16px; border: 1.5px solid var(--color-hairline-strong); border-radius: 50%; background: var(--color-surface); transition: border-color .12s; }
+.agent-radio[aria-checked=true] > span { border: 5px solid var(--color-accent); }
+.agent-radio:not(:disabled):hover > span { border-color: var(--color-accent); }
+.agent-radio:disabled { cursor: default; opacity: .45; }
+.agent-row.missing .agent-row-mark { opacity: .5; filter: grayscale(1); }
+.agent-row.missing strong { color: var(--color-muted); }
+.agent-row-status.missing { color: var(--color-meta); }
+.agent-row.default .agent-row-status { color: var(--color-accent-strong); }
+.conv-state.elsewhere { color: var(--color-amber-text); }
+.native-row .conv-line { grid-template-columns: minmax(0, 1fr) auto; }
+.native-row .conv-continue { min-width: 76px; }

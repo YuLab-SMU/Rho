@@ -1,5 +1,10 @@
 # External conversations in the project
 
+> Superseded in part on 2026-11-07: these conversations are no longer read-only.
+> [Session continuity](SESSION-CONTINUITY-EPISODE.md) continues a Harness session
+> in Rho through `dsh acp`, and lists Claude Code and Codex sessions from their own
+> records. The observation described here is unchanged.
+
 2026-11-06. A person changed a volcano plot's palette in DeepSeek Harness, then
 opened the same project in Rho. The file and registered image version existed,
 but Conversations still showed only the earlier Rho conversation. Outside Rho

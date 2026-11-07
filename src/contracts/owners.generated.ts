@@ -7296,6 +7296,21 @@ export const ownerContracts: OwnerContractSnapshot = {
                 "items": {
                   "additionalProperties": false,
                   "properties": {
+                    "bytes": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "continueWith": {
+                      "enum": [
+                        "claude-acp",
+                        "codex-acp",
+                        "acp",
+                        null
+                      ]
+                    },
+                    "conversationId": {
+                      "type": "string"
+                    },
                     "id": {
                       "pattern": "^x-[a-f0-9]{64}$",
                       "type": "string"
@@ -7313,10 +7328,39 @@ export const ownerContracts: OwnerContractSnapshot = {
                       "minimum": 0,
                       "type": "integer"
                     },
+                    "open": {
+                      "anyOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "pid": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "since": {
+                              "type": "string"
+                            },
+                            "where": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "where"
+                          ],
+                          "type": "object"
+                        }
+                      ]
+                    },
                     "problem": {
                       "type": "string"
                     },
                     "producer": {
+                      "type": "string"
+                    },
+                    "resume": {
                       "type": "string"
                     },
                     "sessionId": {
@@ -7341,6 +7385,9 @@ export const ownerContracts: OwnerContractSnapshot = {
                     "turns": {
                       "minimum": 0,
                       "type": "integer"
+                    },
+                    "where": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -7353,12 +7400,11 @@ export const ownerContracts: OwnerContractSnapshot = {
                     "state",
                     "turns",
                     "sourceCursor",
-                    "omittedTurns",
-                    "inputOwner"
+                    "omittedTurns"
                   ],
                   "type": "object"
                 },
-                "maxItems": 64,
+                "maxItems": 128,
                 "type": "array"
               }
             },
@@ -7380,7 +7426,7 @@ export const ownerContracts: OwnerContractSnapshot = {
                 "type": "integer"
               },
               "limit": {
-                "maximum": 20,
+                "maximum": 50,
                 "minimum": 1,
                 "type": "integer"
               },
@@ -7404,6 +7450,21 @@ export const ownerContracts: OwnerContractSnapshot = {
               "session": {
                 "additionalProperties": false,
                 "properties": {
+                  "bytes": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "continueWith": {
+                    "enum": [
+                      "claude-acp",
+                      "codex-acp",
+                      "acp",
+                      null
+                    ]
+                  },
+                  "conversationId": {
+                    "type": "string"
+                  },
                   "id": {
                     "pattern": "^x-[a-f0-9]{64}$",
                     "type": "string"
@@ -7421,10 +7482,39 @@ export const ownerContracts: OwnerContractSnapshot = {
                     "minimum": 0,
                     "type": "integer"
                   },
+                  "open": {
+                    "anyOf": [
+                      {
+                        "type": "null"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "pid": {
+                            "minimum": 0,
+                            "type": "integer"
+                          },
+                          "since": {
+                            "type": "string"
+                          },
+                          "where": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "where"
+                        ],
+                        "type": "object"
+                      }
+                    ]
+                  },
                   "problem": {
                     "type": "string"
                   },
                   "producer": {
+                    "type": "string"
+                  },
+                  "resume": {
                     "type": "string"
                   },
                   "sessionId": {
@@ -7449,6 +7539,9 @@ export const ownerContracts: OwnerContractSnapshot = {
                   "turns": {
                     "minimum": 0,
                     "type": "integer"
+                  },
+                  "where": {
+                    "type": "string"
                   }
                 },
                 "required": [
@@ -7461,8 +7554,7 @@ export const ownerContracts: OwnerContractSnapshot = {
                   "state",
                   "turns",
                   "sourceCursor",
-                  "omittedTurns",
-                  "inputOwner"
+                  "omittedTurns"
                 ],
                 "type": "object"
               },
@@ -7602,6 +7694,9 @@ export const ownerContracts: OwnerContractSnapshot = {
                       },
                       "maxItems": 256,
                       "type": "array"
+                    },
+                    "where": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -7618,7 +7713,7 @@ export const ownerContracts: OwnerContractSnapshot = {
                   ],
                   "type": "object"
                 },
-                "maxItems": 20,
+                "maxItems": 50,
                 "type": "array"
               }
             },
@@ -25221,17 +25316,17 @@ export const ownerContracts: OwnerContractSnapshot = {
     },
     "agent": {
       "package": "@rho-workspace/plugin-agent",
-      "packageVersion": "0.4.29",
+      "packageVersion": "0.4.30",
       "entry": "./operations",
       "entryPath": "@rho-workspace/plugin-agent/dist/operations.js",
       "entrySha256": "3fd6d6999950895852bea81e744e74a5c9104c8f97c2c90ff0d4dbd54a990a57",
       "exports": {
-        "operationContracts": "0286460194d99bf9ca79abd2a088317dad41f4dd3a7f3a02d75f047aed4238fb"
+        "operationContracts": "56e2d050a1ea6ea946a1f07123a932ee312a74cef7970e4228b061cb63fcf12d"
       }
     },
     "agent-feedback": {
       "package": "@rho-workspace/plugin-agent",
-      "packageVersion": "0.4.29",
+      "packageVersion": "0.4.30",
       "entry": "./feedback-contract",
       "entryPath": "@rho-workspace/plugin-agent/dist/feedback-contract.js",
       "entrySha256": "ecb1561d92b5953d2b786d29cfb57f6f8085d214dc1dec76f6e7bd7a5257cb75",
@@ -25241,7 +25336,7 @@ export const ownerContracts: OwnerContractSnapshot = {
     },
     "agent-native": {
       "package": "@rho-workspace/plugin-agent",
-      "packageVersion": "0.4.29",
+      "packageVersion": "0.4.30",
       "entry": "./contract",
       "entryPath": "@rho-workspace/plugin-agent/dist/contract.js",
       "entrySha256": "9e926081cb755a98d2b00d2a8488d8f4c6d25b3d5f1ec526d334ade633fe8a65",
@@ -25251,7 +25346,7 @@ export const ownerContracts: OwnerContractSnapshot = {
     },
     "agent-session": {
       "package": "@rho-workspace/plugin-agent",
-      "packageVersion": "0.4.29",
+      "packageVersion": "0.4.30",
       "entry": "./session-contract",
       "entryPath": "@rho-workspace/plugin-agent/dist/session-contract.js",
       "entrySha256": "bb5b118f965e208617781af3e8ad6b6739869bcc19f0092eab14468824693123",

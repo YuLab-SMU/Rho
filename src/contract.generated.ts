@@ -2073,21 +2073,31 @@ export interface AgentSessionsListInput {
 export interface AgentSessionsListOutput {
   omitted: number;
   /**
-   * @maxItems 64
+   * @maxItems 128
    */
   sessions: {
+    bytes?: number;
+    continueWith?: 'claude-acp' | 'codex-acp' | 'acp' | null;
+    conversationId?: string;
     id: string;
-    inputOwner: 'external';
+    inputOwner?: 'external';
     lastAt: string;
     observedAt: string;
     omittedTurns: number;
+    open?: null | {
+      pid?: number;
+      since?: string;
+      where: string;
+    };
     problem?: string;
     producer: string;
+    resume?: string;
     sessionId: string;
     sourceCursor: number;
     state: 'running' | 'completed' | 'failed' | 'stopped' | 'unknown';
     title: string;
     turns: number;
+    where?: string;
   }[];
 }
 
@@ -2101,21 +2111,31 @@ export interface AgentSessionsReadInput {
 export interface AgentSessionsReadOutput {
   first: number;
   session: {
+    bytes?: number;
+    continueWith?: 'claude-acp' | 'codex-acp' | 'acp' | null;
+    conversationId?: string;
     id: string;
-    inputOwner: 'external';
+    inputOwner?: 'external';
     lastAt: string;
     observedAt: string;
     omittedTurns: number;
+    open?: null | {
+      pid?: number;
+      since?: string;
+      where: string;
+    };
     problem?: string;
     producer: string;
+    resume?: string;
     sessionId: string;
     sourceCursor: number;
     state: 'running' | 'completed' | 'failed' | 'stopped' | 'unknown';
     title: string;
     turns: number;
+    where?: string;
   };
   /**
-   * @maxItems 20
+   * @maxItems 50
    */
   turns: {
     at: string;
@@ -2159,6 +2179,7 @@ export interface AgentSessionsReadOutput {
        */
       paths: string[];
     }[];
+    where?: string;
   }[];
 }
 
@@ -5047,6 +5068,11 @@ export interface ConversationConfigureOutput {
     costUsd?: number | null;
     sessionId?: string | null;
     trashedAt?: string | null;
+    origin?: {
+      producer: string;
+      where: string;
+      copyOf?: string;
+    } | null;
   };
   observation: {
     at: string;
@@ -5180,6 +5206,11 @@ export interface ConversationDecideOutput {
     costUsd?: number | null;
     sessionId?: string | null;
     trashedAt?: string | null;
+    origin?: {
+      producer: string;
+      where: string;
+      copyOf?: string;
+    } | null;
   };
   turn: {
     id: string;
@@ -5400,6 +5431,11 @@ export interface ConversationListOutput {
     costUsd?: number | null;
     sessionId?: string | null;
     trashedAt?: string | null;
+    origin?: {
+      producer: string;
+      where: string;
+      copyOf?: string;
+    } | null;
   }[];
 }
 
@@ -5446,6 +5482,11 @@ export interface ConversationPermissionOutput {
     costUsd?: number | null;
     sessionId?: string | null;
     trashedAt?: string | null;
+    origin?: {
+      producer: string;
+      where: string;
+      copyOf?: string;
+    } | null;
   };
   turn: {
     id: string;
@@ -5655,6 +5696,11 @@ export interface ConversationReadOutput {
     costUsd?: number | null;
     sessionId?: string | null;
     trashedAt?: string | null;
+    origin?: {
+      producer: string;
+      where: string;
+      copyOf?: string;
+    } | null;
   };
   observation?: {
     at: string;
@@ -5949,6 +5995,11 @@ export interface ConversationRestoreOutput {
     costUsd?: number | null;
     sessionId?: string | null;
     trashedAt?: string | null;
+    origin?: {
+      producer: string;
+      where: string;
+      copyOf?: string;
+    } | null;
   };
 }
 
@@ -5999,6 +6050,11 @@ export interface ConversationSendOutput {
     costUsd?: number | null;
     sessionId?: string | null;
     trashedAt?: string | null;
+    origin?: {
+      producer: string;
+      where: string;
+      copyOf?: string;
+    } | null;
   };
   turn: {
     id: string;
@@ -6271,6 +6327,23 @@ export interface ConversationSettingsCheckOutput {
   describe?: {
     enabled: boolean;
   };
+  agents?: {
+    'claude-acp': {
+      found: boolean;
+      problem?: string;
+      name?: string | null;
+    };
+    'codex-acp': {
+      found: boolean;
+      problem?: string;
+      name?: string | null;
+    };
+    acp: {
+      found: boolean;
+      problem?: string;
+      name?: string | null;
+    };
+  };
 }
 
 export interface ConversationSettingsReadInput {
@@ -6376,6 +6449,23 @@ export interface ConversationSettingsReadOutput {
   checking: ('claude-acp' | 'codex-acp' | 'acp')[];
   describe?: {
     enabled: boolean;
+  };
+  agents?: {
+    'claude-acp': {
+      found: boolean;
+      problem?: string;
+      name?: string | null;
+    };
+    'codex-acp': {
+      found: boolean;
+      problem?: string;
+      name?: string | null;
+    };
+    acp: {
+      found: boolean;
+      problem?: string;
+      name?: string | null;
+    };
   };
 }
 
@@ -6499,6 +6589,23 @@ export interface ConversationSettingsUpdateOutput {
   describe?: {
     enabled: boolean;
   };
+  agents?: {
+    'claude-acp': {
+      found: boolean;
+      problem?: string;
+      name?: string | null;
+    };
+    'codex-acp': {
+      found: boolean;
+      problem?: string;
+      name?: string | null;
+    };
+    acp: {
+      found: boolean;
+      problem?: string;
+      name?: string | null;
+    };
+  };
 }
 
 export interface ConversationStartInput {
@@ -6513,6 +6620,10 @@ export interface ConversationStartInput {
    * @maxItems 8
    */
   contexts?: string[];
+  continue?: {
+    session: string;
+    copy?: boolean;
+  };
 }
 
 export interface ConversationStartOutput {
@@ -6550,6 +6661,11 @@ export interface ConversationStartOutput {
     costUsd?: number | null;
     sessionId?: string | null;
     trashedAt?: string | null;
+    origin?: {
+      producer: string;
+      where: string;
+      copyOf?: string;
+    } | null;
   };
   turn: {
     id: string;
@@ -6758,6 +6874,11 @@ export interface ConversationStopOutput {
     costUsd?: number | null;
     sessionId?: string | null;
     trashedAt?: string | null;
+    origin?: {
+      producer: string;
+      where: string;
+      copyOf?: string;
+    } | null;
   };
   turn: {
     id: string;
@@ -6965,6 +7086,11 @@ export interface ConversationTrashOutput {
     costUsd?: number | null;
     sessionId?: string | null;
     trashedAt?: string | null;
+    origin?: {
+      producer: string;
+      where: string;
+      copyOf?: string;
+    } | null;
   };
 }
 
@@ -10314,6 +10440,11 @@ export interface ObservationSnapshotOutput {
     costUsd?: number | null;
     sessionId?: string | null;
     trashedAt?: string | null;
+    origin?: {
+      producer: string;
+      where: string;
+      copyOf?: string;
+    } | null;
   }[];
   selection: {
     resource: {

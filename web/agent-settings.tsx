@@ -49,6 +49,9 @@ export function useAgentSettings(client: BrowserClient, projectId: string) {
   }
   return {
     settings, backend, problem: store.problem, checking: store.checking, checkProblem: store.checkProblem,
+    // Whether this service can start the Agent, and the name an ACP command was recognized as.
+    available: (which: Backend) => settings?.agents?.[which] ?? null,
+    name: (which: Backend) => (which === 'acp' && settings?.agents?.acp?.name) || agentLabel[which],
     offered: (which: Backend) => settings?.offered[which] ?? null,
     choices: (which: Backend) => (settings?.choices[which] ?? {}) as Record<string, SettingValue>,
     chooseAgent: (which: Backend) => update(() => ({ backend: which })),

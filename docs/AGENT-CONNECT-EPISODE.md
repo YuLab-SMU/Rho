@@ -3,6 +3,10 @@
 Date: 2026-11-06. Source changes after Rho 0.5.5; package publication and installation
 are separate. This episode changes Rho only. Core and Plugins are unchanged.
 
+> Superseded in part on 2026-11-07: the Agent page now has Conversations and
+> Agents; the setup prompt sits under Agents, and New conversation settings became
+> the Agents list ([session continuity](SESSION-CONTINUITY-EPISODE.md)).
+
 ## Question and observed problem
 
 The person could not tell whether Agents or Connections was where to connect their

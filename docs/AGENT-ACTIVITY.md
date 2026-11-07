@@ -1,10 +1,10 @@
 # Agent activity in Rho
 
-**Activity from the project Host**, at the foot of the Agent page's Outside Rho tab,
+**Activity from the project Host**, at the foot of the Agent page's Agents tab,
 shows selected Claude Code and dsh observations retained by Core; it is read only
 while open, and opening it brings it into view. It shows tool requests,
-corresponding returns, refusals, native exit codes and output files. External sessions keep their input in their original
-window; opening this view sends no message and starts no Agent or Host.
+corresponding returns, refusals, native exit codes and output files. Opening this view sends no message and starts no Agent or Host; a session
+is continued from Conversations ([session continuity](SESSION-CONTINUITY-EPISODE.md)).
 
 ## Connect an existing session
 

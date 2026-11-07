@@ -15,14 +15,16 @@ import type { Spend } from '../src/file-describer.js';
 import { stepFocus, useOutside } from './popover.js';
 import { turnAt } from '../src/replay.js';
 import { clock as clockAt } from './timeline-kinds.js';
+import { sessionAgent, sessionBrand, sessionWhere, type ExternalSummary, type SessionTurn } from './external-conversations.js';
 
-// A conversation the person starts here. Rho holds its input, so this panel is where it
-// continues: the person's messages, the Agent's words as they arrive, the actions it takes
-// and how each message ended. A session started in another window keeps that window as its entry.
+// A conversation with an Agent in this project: the person's messages, the Agent's words as they
+// arrive, the actions it takes and how each message ended. A session started in a terminal, an
+// editor or the Agent's own app opens here too, with its history from the Agent's own record, and
+// the next message continues that same session (or a copy, while another window holds it open).
 type Read = RhoOutput<'conversation.read'>;
 type Turn = Read['turns'][number];
 type Observation = Read['observation'];
-type Pending = { kind: 'start' | 'send'; changeId: string; text: string; conversationId?: string; continuationOf?: string; backend?: 'claude-acp' | 'codex-acp' | 'acp' };
+type Pending = { kind: 'start' | 'send'; changeId: string; text: string; conversationId?: string; continuationOf?: string; backend?: 'claude-acp' | 'codex-acp' | 'acp'; continue?: { session: string; copy: boolean } };
 const stored = (key: string) => { try { return sessionStorage.getItem(key); } catch { return null; } };
 const store = (key: string, value: string | null) => { try { if (value === null) sessionStorage.removeItem(key); else sessionStorage.setItem(key, value); return true; } catch { return false; } };
 const clock = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
@@ -187,6 +189,42 @@ function TurnView({ turn, running, observation, projectRoot, choose, choosing, a
   </li>;
 }
 
+// A message of the session sent from another window (or before Rho continued it), as the Agent's
+// own record keeps it: what was asked, the steps taken and the answer.
+function OutsideTurn({ turn, where, onPath }: { turn: SessionTurn; where: string; onPath?: (path: string) => void }) {
+  const tools = turn.tools, said = turn.messages.length;
+  const failed = tools.filter(t => t.outcome === 'failed').length;
+  const ending = turn.state === 'running' ? 'Working' : turn.state === 'stopped' ? 'Stopped' : turn.state === 'failed' ? 'Failed' : turn.state === 'unknown' ? 'Outcome unknown' : 'Answered';
+  return <li className={'turn outside ' + turn.state}>
+    <div className="turn-person"><p data-user-text="">{turn.prompt}</p></div>
+    {(tools.length > 0 || said > 0) && <details className="turn-work">
+      <summary><span className="turn-work-label">{turn.state === 'running' ? 'Working' : 'Worked'}</span><span className="turn-work-said">{[tools.length ? tools.length + (tools.length === 1 ? ' step' : ' steps') : '', failed ? failed + ' failed' : '', turn.omittedTools ? turn.omittedTools + ' not shown' : ''].filter(Boolean).join(' · ')}</span></summary>
+      <div className="turn-work-body">
+        {said > 0 && turn.messages.map((message, i) => <div key={'m' + i} className="turn-text-block"><AgentMarkdown text={message.text} streaming={false} /></div>)}
+        {tools.length > 0 && <ul className="activity-list">{tools.map(tool => <li key={tool.id} className="activity-row" data-outcome={tool.outcome}>
+          <details><summary><span className={'activity-icon ' + tool.outcome} aria-hidden="true"><Icon name={/^(Bash|Command|exec)/i.test(tool.name) ? 'prompt' : /Edit|Write|File/i.test(tool.name) ? 'pencil' : /Read|View/i.test(tool.name) ? 'file' : /Grep|Glob|Search/i.test(tool.name) ? 'search' : 'tool'} size={13} /></span>
+            <span className="activity-verb">{tool.name.replace(/^mcp__([^_]+)__/, '$1 · ')}</span>{tool.detail && <span className="activity-target text" title={tool.detail}>{tool.detail.split('\n')[0]}</span>}
+            {tool.outcome === 'failed' && <span className="activity-flag">{tool.exitCode ? 'exit ' + tool.exitCode : 'failed'}</span>}{tool.outcome === 'unknown' && <span className="activity-flag unknown">unknown</span>}</summary>
+            <dl className="activity-details">{tool.detail && <><dt>Input</dt><dd><code>{tool.detail}</code></dd></>}
+              {tool.output && <><dt className="activity-printed">Returned</dt><dd className="activity-printed"><pre className="activity-output">{tool.output}</pre></dd></>}</dl>
+          </details></li>)}</ul>}
+      </div>
+    </details>}
+    {turn.results.length > 0 && <ul className="outside-results">{turn.results.map((result, i) => <li key={i}><button className="text-button" onClick={() => onPath?.(result.path)}>{result.path}</button>{result.version && <small>version {result.version.slice(0, 12)} recorded</small>}</li>)}</ul>}
+    {turn.reply ? <div className="turn-text-block"><AgentMarkdown text={turn.reply} streaming={false} /></div> : null}
+    <div className="turn-foot">
+      <p className={'turn-ending ' + turn.state}>{turn.state === 'running' && <span className="turn-spinner" aria-hidden="true" />}{ending}</p>
+      <span className="turn-meta"><span className="turn-where">In {turn.where ?? where}</span><span title={new Date(turn.at).toLocaleString()}>{clock(turn.at)}</span></span>
+      {turn.reply && <CopyButton text={turn.reply} label="Copy answer" />}
+    </div>
+  </li>;
+}
+function CopyCommand({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  return <button className="text-button session-command" title={text} onClick={() => navigator.clipboard.writeText(text).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }, () => {})}>
+    <Icon name={copied ? 'check' : 'prompt'} size={13} />{copied ? 'Copied' : 'Copy terminal command'}</button>;
+}
+
 // Below the message box: the session's plan and how much of its context it has used, as the
 // Agent reported them. The whole record opens above it.
 function SessionStrip({ observation, agent, spend, describing, onDescribing }: { observation: NonNullable<Observation>; agent: string;
@@ -293,9 +331,11 @@ function ConversationSwitcher({ list, openId, title, brand, onOpen, onAll }: {
 
 // replayAt shows the open conversation as it stood at that moment, in step with its Studio;
 // onStarted names the conversation a message went to once the service has it.
-export function AgentConversation({ snapshot, client, selectedId, onSelected, onOpen, onSent, onStarted, onClose, onAll, replayOf, replayAt: replaying = null, onNow }: {
+export function AgentConversation({ snapshot, client, selectedId, onSelected, onOpen, onSent, onStarted, onClose, onAll, replayOf, replayAt: replaying = null, onNow, sessions, onPath }: {
   snapshot: WorkspaceSnapshot; client: BrowserClient; selectedId?: string | null; onSelected?: () => void; onOpen?: (id: string | null) => void; onSent?: () => void; onStarted?: (conversationId: string) => void; onClose?: () => void; onAll?: () => void;
   replayOf?: string | null; replayAt?: number | null; onNow?: () => void;
+  // Every Agent session in the project folder (agent.sessions.list), and opening a file it names.
+  sessions?: ExternalSummary[]; onPath?: (path: string) => void;
 }) {
   const projectId = snapshot.project.id, openKey = 'rho.conversation.open.v1:' + projectId;
   const [openId, setOpenId] = useState<string | null>(() => stored(openKey));
@@ -310,15 +350,29 @@ export function AgentConversation({ snapshot, client, selectedId, onSelected, on
   const list = snapshot.conversations ?? [];
   const summary = list.find(c => c.conversationId === openId);
   const openClient = summary?.client ?? read?.conversation.client;
-  const agentName = openId ? (openClient ? agentLabel[backendOf(openClient)] : 'Agent') : agentLabel[settings.backend];
-  const brand = brandOf(agentName);
+  // An Agent session opened before Rho continues it, or the session a Rho conversation uses.
+  const sessionOpen = !!openId && openId.startsWith('x-');
+  const session = (sessionOpen ? sessions?.find(s => s.id === openId) : openId ? sessions?.find(s => s.conversationId === openId) : null) ?? null;
+  const [outside, setOutside] = useState<{ id: string; turns: SessionTurn[]; earlier: boolean } | null>(null), [copy, setCopy] = useState(false);
+  const agentName = sessionOpen ? (session ? sessionAgent(session) : 'Agent') : openId ? (openClient ? settings.name(backendOf(openClient)) : 'Agent') : settings.name(settings.backend);
+  const brand = sessionOpen ? (session ? sessionBrand(session) : null) : brandOf(agentName);
   const end = useRef<HTMLDivElement>(null), input = useRef<HTMLTextAreaElement>(null);
   useEffect(() => { setDraft(stored(draftKey) ?? ''); }, [draftKey]);
   // 'new' asks for the composer of a new conversation.
   useEffect(() => { if (selectedId) { open(selectedId === 'new' ? null : selectedId); onSelected?.(); if (selectedId === 'new') setTimeout(() => input.current?.focus()); } }, [selectedId]);
+  // The session's own record, read again whenever it grows.
+  useEffect(() => {
+    const target = session?.id;
+    if (!target) { setOutside(null); return; }
+    let current = true;
+    client.call('agent.sessions.read', { projectId, session: target, limit: 50 }).then(value => { if (current) setOutside({ id: target, turns: value.turns, earlier: value.first > 0 || value.session.omittedTurns > 0 }); },
+      () => { if (current) setOutside(kept => kept?.id === target ? kept : null); });
+    return () => { current = false; };
+  }, [session?.id, session?.sourceCursor, session?.lastAt]);
+  useEffect(() => { setCopy(false); }, [openId]);
   // The open conversation is read again whenever its recorded version changes.
   useEffect(() => {
-    if (!openId) { setRead(null); return; }
+    if (!openId || openId.startsWith('x-')) { setRead(null); return; }
     let current = true;
     client.call('conversation.read', { projectId, conversationId: openId, limit: 50 }).then(value => { if (current) { setRead(value); setProblem(''); } }, error => {
       if (!current) return;
@@ -361,12 +415,12 @@ export function AgentConversation({ snapshot, client, selectedId, onSelected, on
     setPending(next); store(pendingKey, JSON.stringify(next));
     try {
       const reply = next.kind === 'start'
-        ? await client.call('conversation.start', { projectId, changeId: next.changeId, text: next.text, ...(next.backend ? { backend: next.backend } : {}) })
+        ? await client.call('conversation.start', { projectId, changeId: next.changeId, text: next.text, ...(next.backend ? { backend: next.backend } : {}), ...(next.continue ? { continue: next.continue } : {}) })
         : await client.call('conversation.send', { projectId, conversationId: next.conversationId!, changeId: next.changeId, text: next.text, ...(next.continuationOf ? { continuationOf: next.continuationOf } : {}) });
       setPending(null); store(pendingKey, null);
       if (!next.continuationOf) { store(draftKey, null); setDraft(''); }
       onStarted?.(reply.conversation.conversationId);
-      if (next.kind === 'start') open(reply.conversation.conversationId);
+      if (next.kind === 'start') { if (next.continue) store('rho.conversation.draft.v1:' + projectId + ':' + next.continue.session, null); open(reply.conversation.conversationId); }
       else setRead(current => current && current.conversation.conversationId === reply.conversation.conversationId ? { ...current, conversation: reply.conversation, turns: [...current.turns.filter(t => t.id !== reply.turn.id), reply.turn] } : current);
     } catch (error) {
       if (error instanceof BrowserApiError) {
@@ -379,7 +433,8 @@ export function AgentConversation({ snapshot, client, selectedId, onSelected, on
     const text = draft.trim() ? draft : '';
     if (!text) return;
     setFollowing(true); setUnseen(false); onSent?.();
-    void deliver(openId ? { kind: 'send', conversationId: openId, changeId: 'm-' + crypto.randomUUID(), text } : { kind: 'start', changeId: 'm-' + crypto.randomUUID(), text });
+    void deliver(sessionOpen ? { kind: 'start', changeId: 'm-' + crypto.randomUUID(), text, continue: { session: openId!, copy } }
+      : openId ? { kind: 'send', conversationId: openId, changeId: 'm-' + crypto.randomUUID(), text } : { kind: 'start', changeId: 'm-' + crypto.randomUUID(), text });
   }
   function continueWork(turn: Turn) {
     if (!openId || busy || pending || answering || !agentTurnLimit(turn)) return;
@@ -402,7 +457,7 @@ export function AgentConversation({ snapshot, client, selectedId, onSelected, on
     try { const reply = await client.call('conversation.stop', { projectId, conversationId: openId, turnId: last.id }); setRead(current => current ? { ...current, turns: current.turns.map(t => t.id === reply.turn.id ? reply.turn : t) } : current); }
     catch (error) { setProblem(error instanceof Error ? error.message : 'The stop request could not be confirmed. Refresh to see whether it stopped.'); }
   }
-  const waiting = pending && (pending.kind === 'start' ? !openId : pending.conversationId === openId) ? pending : null;
+  const waiting = pending && (pending.kind === 'start' ? (pending.continue ? pending.continue.session === openId : !openId) : pending.conversationId === openId) ? pending : null;
   const text = waiting ? waiting.text : draft;
   // The box grows with what is written, up to about ten lines, then scrolls.
   useLayoutEffect(() => {
@@ -411,9 +466,23 @@ export function AgentConversation({ snapshot, client, selectedId, onSelected, on
     box.style.height = 'auto';
     box.style.height = Math.min(box.scrollHeight + 2, 240) + 'px';
   }, [text, openId]);
-  const title = summary?.agentTitle || summary?.title || read?.conversation.title || 'Conversation';
+  const title = sessionOpen ? session?.title ?? 'Agent session' : summary?.agentTitle || summary?.title || read?.conversation.title || 'Conversation';
   const turns = replayAt === null ? read?.turns : read?.turns.flatMap(turn => { const then = turnAt(turn, replayAt); return then ? [then] : []; });
-  const canSend = !busy && !waiting && !!draft.trim();
+  // Messages of the session that Rho did not send: before Rho continued it, or from another window
+  // between and after Rho's own, in the order they were sent.
+  const where = session ? sessionWhere(session) : 'another window';
+  // Each of Rho's messages is the session's turn with the same words, sent after it.
+  const covered = new Set<string>();
+  for (const r of read?.turns ?? []) {
+    const words = r.text.trim(), from = Date.parse(r.sentAt) - 5000;
+    const match = outside?.turns.find(t => !covered.has(t.id) && Date.parse(t.at) >= from && (t.prompt.trim() === words || t.prompt.includes(words)));
+    if (match) covered.add(match.id);
+  }
+  const firstShown = read && read.first > 0 ? Date.parse(read.turns[0]?.sentAt ?? '') : -Infinity;
+  const others = outside && replayAt === null ? outside.turns.filter(t => sessionOpen || (!covered.has(t.id) && Date.parse(t.at) > firstShown)) : [];
+  const items: Array<{ at: number; rho?: Turn; outside?: SessionTurn }> = [...(turns ?? []).map(t => ({ at: Date.parse(t.sentAt), rho: t })), ...others.map(t => ({ at: Date.parse(t.at), outside: t }))].sort((a, b) => a.at - b.at);
+  const blocked = sessionOpen && (!session || !session.continueWith || (!!session.open && !copy));
+  const canSend = !busy && !waiting && !!draft.trim() && !blocked;
   return <section className="conversation" aria-label={openId ? 'Conversation' : 'New conversation'}>
     <header className="conversation-head">
       <ConversationSwitcher list={list} openId={openId} title={openId ? title : 'New conversation'} brand={openId ? brand : null} onOpen={open} onAll={onAll} />
@@ -423,7 +492,9 @@ export function AgentConversation({ snapshot, client, selectedId, onSelected, on
     {openId && replayAt !== null && <p className="conversation-replay" role="status"><Icon name="restore" size={13} />Replaying · <strong>{clockAt(replayAt, true)}</strong>{onNow && <button className="small-button" onClick={onNow}>Back to now</button>}</p>}
     {openId ? <ol className="conversation-turns" aria-label="Messages">
       {(read?.first ?? 0) > 0 && <li className="turn-note">{read!.first} earlier {read!.first === 1 ? 'message is' : 'messages are'} kept but not shown.</li>}
-      {read && turns?.map((turn, i) => <TurnView key={turn.id} turn={turn} at={replayAt} running={turn.state === 'running' && i === turns.length - 1} observation={read.observation} projectRoot={snapshot.project.root} choosing={choosing} askAgain={askAgain} continueWork={replayAt === null && turn.id === last?.id && agentTurnLimit(turn) && !waiting && !busy ? () => continueWork(turn) : undefined} choose={(turnId, permissionId, optionId) => {
+      {sessionOpen && outside?.earlier && <li className="turn-note">Earlier messages of this session are not shown. {agentName} keeps them.</li>}
+      {sessionOpen && !outside && <li className="turn-note">{session ? 'Reading this session…' : 'Looking for this session in the project folder…'}</li>}
+      {items.map(({ rho: turn, outside: other }) => other ? <OutsideTurn key={'o-' + other.id} turn={other} where={where} onPath={onPath} /> : read && turn && <TurnView key={turn.id} turn={turn} at={replayAt} running={turn.state === 'running' && turn.id === turns?.at(-1)?.id} observation={read.observation} projectRoot={snapshot.project.root} choosing={choosing} askAgain={askAgain} continueWork={replayAt === null && turn.id === last?.id && agentTurnLimit(turn) && !waiting && !busy ? () => continueWork(turn) : undefined} choose={(turnId, permissionId, optionId) => {
         setChoosing(permissionId); setProblem('');
         void client.call('conversation.permission', { projectId, conversationId: openId!, turnId, permissionId, optionId }).then(reply => {
           setRead(current => current ? { ...current, conversation: reply.conversation, turns: current.turns.map(t => t.id === reply.turn.id ? reply.turn : t) } : current);
@@ -440,13 +511,21 @@ export function AgentConversation({ snapshot, client, selectedId, onSelected, on
       {!following && <button className={'jump-latest' + (unseen ? ' unseen' : '')} aria-label={(unseen ? 'New activity · ' : '') + 'Jump to latest'} title={unseen ? 'New activity below' : 'Jump to latest'} onClick={() => setFollowing(true)}><Icon name="arrow-down" size={15} /></button>}
       {waiting && unconfirmed && <p role="alert">Your message was not confirmed. Retry sends the same message once.<button className="small-button" disabled={busy} onClick={() => void deliver(waiting)}>Retry</button></p>}
       {problem && <p role="alert">{problem}</p>}
+      {sessionOpen && session && <div className="session-notice" role="status">
+        {!session.continueWith ? <p>Rho cannot continue {agentName} sessions here yet. Continue it in {where}.</p>
+          : session.open && !copy ? session.producer === 'dsh' ? <p><strong>{session.open.where} is answering in this session now.</strong> Continue it here once that turn ends.</p>
+            : <p><strong>Open in {session.open.where} now.</strong> Close it there to continue it here, or <button className="text-button" onClick={() => setCopy(true)}>continue a copy</button>.</p>
+          : copy ? <p>Your message starts a copy of this session; the original stays as it is.{!session.open && <> <button className="text-button" onClick={() => setCopy(false)}>Continue the original</button></>}</p>
+          : <p>Started in {where}. Your message continues this same {agentName} session.</p>}
+        {session.resume && !session.open && <CopyCommand text={session.resume} />}
+      </div>}
       <div className="composer-box" onMouseDown={event => { if (event.target === event.currentTarget) { event.preventDefault(); input.current?.focus(); } }}>
         <label htmlFor="conversation-input" className="visually-hidden">{openId ? 'Message ' + agentName : 'Start a conversation'}</label>
-        <textarea id="conversation-input" ref={input} rows={2} value={text} readOnly={!!waiting}
-          placeholder={answering ? agentName + ' is answering. You can write your next message.' : openId ? 'Reply to ' + agentName + '…' : 'What should ' + agentName + ' look at or change?'} onChange={e => edit(e.target.value)}
+        <textarea id="conversation-input" ref={input} rows={2} value={text} readOnly={!!waiting} disabled={blocked && !waiting}
+          placeholder={blocked ? 'Continue it where it is open, or continue a copy.' : answering ? agentName + ' is answering. You can write your next message.' : sessionOpen ? 'Continue this session with ' + agentName + '…' : openId ? 'Reply to ' + agentName + '…' : 'What should ' + agentName + ' look at or change?'} onChange={e => edit(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !answering && canSend) { e.preventDefault(); send(); } }} />
         <div className="composer-bar">
-          {openId ? (openClient && <OpenSettings options={read?.observation?.config?.options ?? settings.offered(backendOf(openClient))?.options ?? null} values={read?.config ?? {}} agent={agentName}
+          {sessionOpen ? <span /> : openId ? (openClient && <OpenSettings options={read?.observation?.config?.options ?? settings.offered(backendOf(openClient))?.options ?? null} values={read?.config ?? {}} agent={agentName}
             disabled={answering || configuring || !read} checking={settings.checking.has(backendOf(openClient))} checkProblem={settings.checkProblem[backendOf(openClient)]} onCheck={() => void settings.check(backendOf(openClient))}
             onChoose={(id, value) => void configure(id, value)} />)
             : !waiting && <ComposerSettings state={settings} />}

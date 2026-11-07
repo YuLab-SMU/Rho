@@ -4,6 +4,8 @@ import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import type { PluginId } from './plugins.js';
 import * as fs from 'node:fs/promises';
+import { constants as fsConstants } from 'node:fs';
+import os from 'node:os';
 import { spawn } from 'node:child_process';
 // A widened link is optional: the fragment carries a one-time code, which no request or Referer
 // sends and which the page redeems and removes. Opening the plain url needs no code at all.
@@ -55,6 +57,20 @@ narrower, expiring link for one folder.
 PRIVATE_CONNECTION_FILE is the connectionFile the running service printed; it and every
 connection file are credentials.
 `;
+// DeepSeek Harness speaks ACP through its `acp` profile (`dsh acp`). It is used only when both the
+// launcher and that profile are on this computer; nothing is started to find them.
+async function harnessAcp() {
+  const home = process.env.DSH_HOME || path.join(os.homedir(), '.dsh');
+  const profile = await fs.stat(path.join(home, 'profiles', 'acp', 'package.json')).then(s => s.isFile(), () => false);
+  if (!profile) return undefined;
+  const names = process.platform === 'win32' ? ['dsh.cmd', 'dsh.exe', 'dsh'] : ['dsh'];
+  for (const dir of (process.env.PATH ?? '').split(path.delimiter).filter(Boolean))
+    for (const name of names) {
+      const file = path.join(dir, name);
+      if (await fs.access(file, fsConstants.X_OK).then(() => true, () => false)) return { file, args: ['acp'] };
+    }
+  return undefined;
+}
 const options = { example: { type: 'string' }, 'verify-evidence': { type: 'string' }, acp: { type: 'string' }, 'acp-agent': { type: 'string' }, root: { type: 'string' }, 'state-dir': { type: 'string' }, core: { type: 'string' }, rscript: { type: 'string' }, python: { type: 'string' }, ssh: { type: 'string' }, serverctl: { type: 'string' }, claude: { type: 'string' }, codex: { type: 'string' }, 'agent-backend': { type: 'string' }, 'acp-command': { type: 'string' }, port: { type: 'string' }, limits: { type: 'string' }, plugins: { type: 'string' }, pair: { type: 'string' }, open: { type: 'boolean' },
   grant: { type: 'string' }, project: { type: 'string' }, 'project-id': { type: 'string' }, session: { type: 'string' }, agent: { type: 'string' }, mcp: { type: 'string' }, help: { type: 'boolean', short: 'h' } } as const;
 // A command that is refused says why and what to do. A service that is not running is the
@@ -153,7 +169,10 @@ if (values.acp) {
   const { RhoService } = await import('./server.js'), { runtime } = await import('./runtime.js');
   const agentBackend = values['agent-backend'] ?? process.env.RHO_AGENT_BACKEND ?? 'claude-acp';
   if (!['claude-acp', 'codex-acp', 'claude-cli', 'acp'].includes(agentBackend)) throw new Error('Choose --agent-backend claude-acp, codex-acp, claude-cli or acp.');
-  const acpCommand = agentBackend === 'acp' ? parseAcpCommand(values['acp-command'] ?? process.env.RHO_ACP_COMMAND) : undefined;
+  // An ACP command named here, or else DeepSeek Harness's own ACP profile when it is installed, so
+  // sessions started in Harness continue in Rho too. Naming one does not make it the default Agent.
+  const named = values['acp-command'] ?? process.env.RHO_ACP_COMMAND;
+  const acpCommand = agentBackend === 'acp' || named ? parseAcpCommand(named) : await harnessAcp();
   if (values.port !== undefined && !(/^\d+$/.test(values.port) && Number(values.port) <= 65535)) { process.stderr.write('Choose --port 0 to 65535, or leave it out.\n'); process.exit(2); }
   // A Core that cannot be used (none for this platform, a changed digest) is read by a person.
   const native = await runtime(values.core, values.rscript).catch(e => { process.stderr.write((e instanceof Error ? e.message : String(e)) + '\n'); process.exit(1); });
@@ -198,8 +217,9 @@ if (values.acp) {
     const claudePath = values.claude ?? process.env.RHO_CLAUDE, codexPath = values.codex ?? process.env.RHO_CODEX;
     const env = { ...process.env, ...(claudePath ? { CLAUDE_CODE_EXECUTABLE: claudePath } : {}), ...(codexPath ? { CODEX_PATH: codexPath } : {}) };
     // An ACP agent named with --acp-command is the operator's own command; it is named, not checked.
-    if (acpCommand) say('Agent: ' + acpCommand.file + ', named with --acp-command.');
+    if (acpCommand && agentBackend === 'acp') say('Agent: ' + acpCommand.file + ', named with --acp-command.');
     else {
+      if (acpCommand) say('Also: ' + (acpCommand.args[0] === 'acp' && /dsh(\.[a-z]+)?$/i.test(acpCommand.file) ? 'DeepSeek Harness (' + acpCommand.file + ' acp)' : acpCommand.file) + ', so its sessions can continue here.');
       const missing = agentCommand ? agentCommand.missingClient(agentBackend === 'codex-acp' ? 'codex' : 'claude', env) : null;
       say(missing
         ? 'Agent: ' + missing + ' Until then folders can be opened and files read here; the Agent cannot run in them.'

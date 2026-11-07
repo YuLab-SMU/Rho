@@ -733,6 +733,18 @@ ol.md-list { list-style-type: decimal; }
 /* The message box: one rounded surface holding what is written, the model and the send action. */
 .conversation-composer { position: sticky; bottom: 0; z-index: 2; display: flex; flex-direction: column; gap: 6px; margin-top: auto; padding: 6px 14px 10px; background: var(--color-surface); }
 .conversation-composer [role="alert"] { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 0 4px; color: var(--color-failed); font-size: 12px; }
+/* A session opened from another window: where it started, whether it is open there now, and the
+   command that continues it in a terminal. */
+.session-notice { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; padding: 0 4px; color: var(--color-muted); font-size: 12px; line-height: 1.5; }
+.session-notice p { flex: 1 1 260px; margin: 0; }
+.session-notice strong { color: var(--color-amber-text); font-weight: 600; }
+.session-notice .text-button, .session-command { min-height: 0; padding: 0; font-size: 12px; }
+.session-notice p .text-button { color: var(--color-text); text-decoration: underline; text-underline-offset: 2px; }
+.session-command { display: inline-flex; align-items: center; gap: 5px; color: var(--color-muted); }
+.turn-where { color: var(--color-meta); }
+.outside-results { display: flex; flex-direction: column; gap: 4px; margin: 6px 0; padding: 0; list-style: none; font-size: 12.5px; }
+.outside-results li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; min-width: 0; overflow-wrap: anywhere; }
+.outside-results small { color: var(--color-meta); }
 .composer-box { display: flex; flex-direction: column; gap: 4px; padding: 11px 8px 8px 14px; border: 1px solid var(--color-control-border); border-radius: 18px; background: var(--color-surface); box-shadow: 0 6px 20px rgba(20, 30, 25, 0.06); cursor: text; }
 .composer-box:focus-within { border-color: var(--color-hairline-strong); box-shadow: 0 0 0 3px var(--color-accent-soft), 0 6px 20px rgba(20, 30, 25, 0.06); }
 .composer-box textarea { display: block; width: 100%; min-height: 0; max-height: 240px; padding: 0 6px 2px 0; border: 0; border-radius: 0; background: transparent; font-size: 14px; line-height: 1.55; resize: none; }
