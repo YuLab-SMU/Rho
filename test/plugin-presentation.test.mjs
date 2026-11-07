@@ -7,7 +7,7 @@ import { Plugins } from '../dist/plugins.js';
 import { RhoService } from '../dist/server.js';
 import { CheckedClient as RhoClient } from './checked-client.mjs';
 import { BrowserClient } from '../dist/browser.js';
-import { pluginEntries, pluginGroups, pluginPresentation } from '../dist/plugin-presentation.js';
+import { pluginEntries, pluginGroups, pluginMatches, pluginPresentation } from '../dist/plugin-presentation.js';
 
 test('browser catalogs and snapshots preserve owner presentation through project and permission enrichment', async () => {
   const root = await fs.mkdtemp(path.join(tmpdir(), 'rho-presentation-'));
@@ -64,7 +64,14 @@ test('missing presentation shows the plugin ID and empty fields, never inferred 
   assert.deepEqual(pluginPresentation({ ...plugin, presentation: {} }), pluginPresentation(plugin));
   assert.deepEqual(pluginGroups([plugin]), [{ category: '', plugins: [plugin] }]);
   const catalog = { plugins: [plugin], operations: [{ method: 'document.read', owner: plugin.id, effect: 'read' }], components: [{ id: 'rho.editor', pluginId: plugin.id, version: '1', ui: 'unavailable' }], actions: [{ id: 'r.execute', pluginId: plugin.id }] };
-  assert.deepEqual(pluginEntries(catalog, plugin.id), { actions: [], skills: [], views: [{ id: 'rho.editor', version: '1', ui: 'unavailable', displayName: '', description: '', readOnly: undefined, runsCode: undefined }] });
+  const entries = pluginEntries(catalog, plugin.id);
+  assert.equal(entries.actions[0].displayName, 'document.read');
+  assert.deepEqual(entries.actions[0].identities, ['document.read']);
+  assert.equal(entries.actions[0].readOnly, false);
+  assert.equal(entries.views[0].displayName, 'rho.editor');
+  assert.equal(entries.views[0].package, 'fixture');
+  assert.deepEqual(entries.skills, []);
+  assert.equal(entries.operations[0].method, 'document.read');
   const partial = pluginPresentation({ ...plugin, presentation: { displayName: 'Owner name', tagline: 'Owner copy' } });
   assert.equal(partial.displayName, 'Owner name'); assert.equal(partial.category, ''); assert.deepEqual(partial.examplePrompts, []);
 });
@@ -80,11 +87,44 @@ test('unavailable actions retain their own copy; grouped operations do not misla
   assert.equal(plugins.catalog.skills.some(s => s.id === 'documents.workspace'), false);
   const catalog = (await new Plugins({}).load()).catalog;
   const actions = pluginEntries(catalog, 'agent').actions;
-  assert.equal(actions.length, 9);
+  for (const o of catalog.operations.filter(o => o.owner === 'agent')) assert.ok(actions.some(a => a.identities.includes(o.method)), o.method);
   assert.equal(actions.find(a => a.displayName === catalog.operations.find(o => o.method === 'context.create').presentation.displayName).readOnly, false);
   const reads = actions.find(a => a.displayName === catalog.operations.find(o => o.method === 'binding.activity').presentation.displayName);
   // Native observation append is a metadata write in the existing Activity
   // group; grouping must not present the whole group as read-only.
   assert.equal(reads.readOnly, false); assert.equal(reads.runsCode, false);
   assert.equal(pluginEntries(catalog, 'r').actions.length, 2);
+});
+
+test('every selected owner retains its complete entry inventory without activation or Skill content', async () => {
+  const full = await new Plugins({}).load(), reduced = await new Plugins({ plugins: [] }).load();
+  assert.deepEqual(reduced.availableIds(), []);
+  assert.deepEqual(reduced.catalog.operations, []);
+  assert.deepEqual(reduced.catalog.skills, []);
+  for (const p of full.descriptors()) {
+    const retained = reduced.catalog.plugins.find(x => x.id === p.id);
+    assert.ok(retained.presentation?.displayName, p.id);
+    assert.deepEqual(retained.listing.operations.map(o => o.method), p.operations.map(o => o.method));
+    assert.deepEqual(retained.listing.views.map(v => [v.id, v.version]), (p.components ?? []).map(v => [v.id, v.version]));
+    assert.deepEqual(retained.listing.skills.map(s => s.id), p.skills.map(s => s.id));
+    assert.ok(retained.listing.skills.every(s => !Object.hasOwn(s, 'content')));
+    const entries = pluginEntries(reduced.catalog, p.id);
+    assert.equal(entries.operations.length, p.operations.length);
+    assert.equal(entries.skills.length, p.skills.length);
+    assert.equal(entries.views.length, (p.components ?? []).length);
+  }
+  assert.ok(pluginMatches(full.catalog, full.catalog.plugins.find(p => p.id === 'kernel'), 'data flow'));
+  assert.ok(pluginMatches(full.catalog, full.catalog.plugins.find(p => p.id === 'kernel'), 'kernel.session'));
+  assert.ok(pluginMatches(full.catalog, full.catalog.plugins.find(p => p.id === 'documents'), 'PreToolUse'));
+  assert.deepEqual(full.catalog.plugins.find(p => p.id === 'agent').listing.mcp.tools.map(t => t.name), ['rho_index', 'rho_resolve', 'rho_call', 'rho_read']);
+});
+
+test('live views replace their retained descriptions by exact identity and version', () => {
+  const plugin = { id: 'documents', package: 'owner', version: '3', listing: { views: [{ id: 'reader', version: '1', ui: './ui' }, { id: 'reader', version: '2', ui: './ui' }] } };
+  const catalog = { plugins: [plugin], operations: [], components: [{ id: 'reader', version: '1', pluginId: 'documents', ui: './ui', uiPackage: 'reader-package', uiPackageVersion: '4', presentation: { displayName: 'Reader' } }] };
+  const views = pluginEntries(catalog, 'documents').views;
+  assert.equal(views.length, 2);
+  assert.equal(views[0].displayName, 'Reader'); assert.equal(views[0].package, 'reader-package');
+  assert.equal(views[1].displayName, 'reader'); assert.equal(views[1].version, '2');
+  assert.ok(pluginMatches(catalog, plugin, 'reader-package'));
 });

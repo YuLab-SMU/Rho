@@ -70,12 +70,13 @@ try {
     assert.deepEqual(await page.locator('.plugin-prompts li > span').allTextContents(), p.examplePrompts);
     assert.equal(await page.locator('.plugin-description').textContent(), p.description);
     assert.deepEqual(await page.locator('.plugin-actions .plugin-entry-name').allTextContents(), entries.actions.map(a => a.displayName));
-    assert.deepEqual(await page.locator('.plugin-actions .plugin-entry-description').allTextContents(), entries.actions.map(a => a.description));
+    assert.deepEqual(await page.locator('.plugin-actions .plugin-entry-description').allTextContents(), entries.actions.map(a => a.description).filter(Boolean));
     assert.deepEqual(await page.locator('.plugin-views .plugin-entry-name').allTextContents(), entries.views.map(v => v.displayName));
     assert.deepEqual(await page.locator('.plugin-skills .plugin-entry-name').allTextContents(), entries.skills.map(s => s.presentation.displayName));
     assert.equal(await page.locator('.plugin-information').getByText(p.license, { exact: true }).count(), 1);
     assert.deepEqual(await page.locator('.plugin-information a').evaluateAll(links => links.map(a => a.href)), p.links.map(link => link.url));
-    assert.equal(await page.locator('.plugin-view-note').textContent(), p.viewNote ?? '');
+    if (p.viewNote) assert.equal(await page.locator('.plugin-view-note').textContent(), p.viewNote);
+    else assert.equal(await page.locator('.plugin-view-note').count(), 0);
     for (const [index, prompt] of p.examplePrompts.entries()) {
       const copy = page.getByRole('button', { name: 'Copy prompt ' + (index + 1), exact: true });
       await copy.click(); await copy.filter({ hasText: 'Copied' }).waitFor();
@@ -131,7 +132,7 @@ try {
   await page.route('**/api/v2/observation.snapshot', async route => {
     const response = await route.fetch(), body = await response.json(), c = body.value.catalog;
     for (const entry of [...c.plugins, ...c.operations, ...c.components, ...(c.actions ?? []), ...(c.unavailableActions ?? [])]) delete entry.presentation;
-    for (const plugin of c.plugins) for (const entry of Object.values(plugin.listing ?? {}).flat()) delete entry.presentation;
+    for (const plugin of c.plugins) for (const key of ['operations', 'actions', 'views', 'skills']) for (const entry of plugin.listing?.[key] ?? []) delete entry.presentation;
     await route.fulfill({ response, json: body });
   });
   await page.reload();
@@ -143,11 +144,14 @@ try {
   await page.locator('.plugin-card').first().click(); await page.locator('.plugin-detail').waitFor();
   assert.equal(await page.locator('.plugin-detail h1').textContent(), catalog.plugins[0].id);
   assert.equal(await page.locator('.plugin-prompts').count(), 0);
-  assert.equal(await page.locator('.plugin-entry-section li').count(), 0);
+  assert.ok(await page.locator('.plugin-entry-section li').count() > 0);
+  assert.ok(await page.locator('.plugin-entry-identity').count() > 0);
+  assert.ok((await page.locator('.plugin-entry-name').allTextContents()).includes('documents.workspace'));
+  assert.ok((await page.locator('.plugin-entry-name').allTextContents()).includes('rho.editor'));
   assert.equal(await page.locator('.plugin-marker').count(), 0);
-  assert.equal(await page.locator('.plugin-view-note').textContent(), '');
+  assert.equal(await page.locator('.plugin-view-note').count(), 0);
   await page.screenshot({ path: path.join(directory, 'missing-metadata-1280.png'), fullPage: false });
-  report.checks.push('missing-metadata-renders-only-raw-plugin-name-with-empty-copy');
+  report.checks.push('missing-copy-keeps-raw-entry-identities-visible');
   assert.deepEqual(errors, []);
   assert.equal((await operator.call('action.list', { projectId: project.id })).length, 0);
   await assert.rejects(fs.stat(path.join(project.root, '.rho/host.sock')), { code: 'ENOENT' });

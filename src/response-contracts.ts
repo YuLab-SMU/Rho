@@ -174,29 +174,42 @@ export const pluginPresentationSchema = { ...entryPresentationSchema, properties
   examplePrompts: { type: 'array', items: text, maxItems: 16 }, viewNote: text, developer: text, license: text,
   links: { type: 'array', maxItems: 16, items: obj({ label: text, url: text }, ['label', 'url']) },
   dependencies: { type: 'array', maxItems: 16, items: obj({ pluginId: text, purpose: text }, ['pluginId', 'purpose']) }, uses: text } };
+const skillListingSchema = { ...obj({
+  id: text, version: text, digest, presentation: entryPresentationSchema, intent: text,
+  requires: { type: 'array', items: text, maxItems: 64 },
+  example: obj({ method: text, input: { type: 'object' } }),
+  failureRecipes: { type: 'array', maxItems: 32, items: obj({ kind: text, message: text, next: text }) },
+  verify: obj({ command: text, description: text })
+}, ['id', 'version', 'digest']), additionalProperties: true };
 export const capabilityCatalogSchema = { ...obj({
   version: text,
   configuration: obj({ version: integer, enabled: { type: 'array', items: text, maxItems: 32 }, retainedReceipts: integer, retainedFromVersion: positive, maxReceipts: integer }, ['version', 'enabled']),
-  plugins: { type: 'array', maxItems: 16, items: { ...obj({ id: text, package: text, version: text, requires: { type: 'array', items: text }, selected: { type: 'boolean' }, packagePresent: { type: 'boolean' }, projectEnabled: { type: 'boolean' }, dependenciesSatisfied: { type: 'boolean' }, uiRenderable: { type: 'boolean' }, state: { enum: ['available', 'unavailable'] }, reason: text, missing: { type: 'array', items: text },
+  plugins: { type: 'array', maxItems: 16, items: { ...obj({ id: text, package: text, version: text, packageVersion: text, requires: { type: 'array', items: text }, selected: { type: 'boolean' }, packagePresent: { type: 'boolean' }, projectEnabled: { type: 'boolean' }, dependenciesSatisfied: { type: 'boolean' }, uiRenderable: { type: 'boolean' }, state: { enum: ['available', 'unavailable'] }, reason: text, missing: { type: 'array', items: text },
     // The plugin's read whose events (who did what, when) the timeline draws.
     timeline: text,
     // The catalog also carries the owner's own presentation/listing hints and its
     // bounded native availability; those are owner vocabulary, so they stay open.
     // A reduced installation lists fewer entries, so each listing section is optional.
     listing: obj({
-      skills: { type: 'array', maxItems: 64, items: { ...obj({ id: text, version: text, digest: digest, presentation: entryPresentationSchema }, ['id', 'version', 'digest']), additionalProperties: true } },
-      actions: { type: 'array', maxItems: 64, items: { ...obj({ presentation: entryPresentationSchema }), additionalProperties: true } },
-      views: { type: 'array', maxItems: 64, items: { ...obj({ id: text, version: text, ui: text, presentation: entryPresentationSchema }, ['id', 'version', 'ui']), additionalProperties: true } }
+      skills: { type: 'array', maxItems: 64, items: skillListingSchema },
+      operations: { type: 'array', maxItems: 64, items: obj({ method: text, version: text, effect: { enum: ['read', 'metadata', 'document', 'file', 'native'] }, requires: { type: 'array', items: text }, presentation: entryPresentationSchema }, ['method', 'version', 'effect', 'requires']) },
+      actions: { type: 'array', maxItems: 64, items: { ...obj({ id: text, version: text, requires: { type: 'array', items: text }, presentation: entryPresentationSchema }, []), additionalProperties: true } },
+      views: { type: 'array', maxItems: 64, items: { ...obj({ id: text, version: text, ui: text, bindings: { type: 'object', additionalProperties: text }, presentation: entryPresentationSchema }, ['id', 'version', 'ui']), additionalProperties: true } },
+      mcp: obj({ entry: text, transport: text, tools: { type: 'array', maxItems: 32, items: obj({ name: text, description: text }) } }),
+      claudeCode: obj({
+        skills: { type: 'array', maxItems: 64, items: obj({ skill: text, name: text, description: text }) },
+        hooks: { type: 'array', maxItems: 64, items: obj({ id: text, event: text, matcher: text, entry: text, timeoutSeconds: positive }, ['event', 'matcher', 'entry']) }
+      }, [])
     }, []),
     presentation: pluginPresentationSchema,
     nativeAvailability: nativeAvailabilitySchema,
   }, ['id', 'package', 'selected', 'packagePresent', 'state']), additionalProperties: true } },
-  operations: { type: 'array', maxItems: 256, items: { ...obj({ method: text, owner: text, packagePresent: { type: 'boolean' }, projectEnabled: { type: 'boolean' }, dependenciesSatisfied: { type: 'boolean' }, authorized: { type: 'boolean' }, state: { enum: ['available', 'unavailable'] }, presentation: entryPresentationSchema }, ['method', 'authorized', 'state']), additionalProperties: true } },
+  operations: { type: 'array', maxItems: 256, items: { ...obj({ method: text, owner: text, effect: text, inputSchema: { type: 'object' }, outputSchema: { type: 'object' }, packagePresent: { type: 'boolean' }, projectEnabled: { type: 'boolean' }, dependenciesSatisfied: { type: 'boolean' }, authorized: { type: 'boolean' }, state: { enum: ['available', 'unavailable'] }, presentation: entryPresentationSchema }, ['method', 'authorized', 'state']), additionalProperties: true } },
   actions: { type: 'array', maxItems: 64, items: { ...obj({ id: text, version: text, owner: text, pluginId: text, requires: { type: 'array', items: text }, inputSchema: { type: 'object' }, presentation: entryPresentationSchema }, ['id', 'version']), additionalProperties: true } },
   unavailableActions: { type: 'array', maxItems: 64, items: { ...obj({ id: text, version: text, owner: text, pluginId: text, requires: { type: 'array', items: text }, inputSchema: { type: 'object' }, presentation: entryPresentationSchema, state: { const: 'unavailable' }, missing: { type: 'array', items: text } }, ['id', 'version', 'missing']), additionalProperties: true } },
-  components: { type: 'array', maxItems: 64, items: { ...obj({ id: text, version: text, owner: text, pluginId: text, ui: text, bindings: { type: 'object', additionalProperties: text }, propsSchema: { type: 'object' }, presentation: entryPresentationSchema }, ['id', 'version', 'ui', 'bindings']), additionalProperties: true } },
+  components: { type: 'array', maxItems: 64, items: { ...obj({ id: text, version: text, owner: text, pluginId: text, ui: text, uiPackage: text, uiPackageVersion: text, bindings: { type: 'object', additionalProperties: text }, propsSchema: { type: 'object' }, presentation: entryPresentationSchema }, ['id', 'version', 'ui', 'bindings']), additionalProperties: true } },
   capabilities: { type: 'array', items: text },
-  skills: { type: 'array', maxItems: 64, items: { ...obj({ id: text, version: text, digest: digest, content: { type: 'string' }, presentation: entryPresentationSchema }, ['id', 'version', 'digest']), additionalProperties: true } },
+  skills: { type: 'array', maxItems: 64, items: { ...skillListingSchema, properties: { ...skillListingSchema.properties, owner: text, content: { type: 'string' } } } },
   // The Agent owner contributes its own context description only when it is loaded.
   agent: { type: 'object' }
 }, ['version', 'configuration', 'plugins', 'operations', 'actions', 'components']), additionalProperties: true };

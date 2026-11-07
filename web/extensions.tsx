@@ -33,11 +33,17 @@ export function ExtensionView({ client, projectId, plugin, viewId }: { client: B
   return <div className="extension-view">{error ? <p role="alert">{error} <button onClick={() => retry(x => x + 1)}>Retry</button></p> : !html ? <p role="status">Opening plugin…</p> : <iframe key={attempt + ':' + plugin.digest} ref={frame} title={plugin.title} src="/extension-frame.html" sandbox="allow-scripts allow-forms" />}</div>;
 }
 
-export function ThirdPartyPlugins({ client, projectId, canManage }: { client: BrowserClient; projectId: string; canManage: boolean }) {
+export function ThirdPartyPlugins({ client, projectId, canManage, query = '' }: { client: BrowserClient; projectId: string; canManage: boolean; query?: string }) {
   const [directory, setDirectory] = useState<typeof extensionDirectory>([]);
   const [plugins, setPlugins] = useState<InstalledExtension[]>([]), [source, setSource] = useState(''), [busy, setBusy] = useState(''), [message, setMessage] = useState(''), [error, setError] = useState('');
-  const [opened, setOpened] = useState<{ plugin: InstalledExtension; viewId: string } | null>(null), [skill, setSkill] = useState<{ title: string; text: string } | null>(null);
-  const refresh = async () => { const result = await client.call('extension.list', { projectId }); setPlugins(result.plugins as InstalledExtension[]); setDirectory(result.directory as typeof extensionDirectory); };
+  const [opened, setOpened] = useState<{ plugin: InstalledExtension; viewId: string } | null>(null), [skill, setSkill] = useState<{ pluginId: string; title: string; text: string; entryId: string; digest: string } | null>(null);
+  const refresh = async () => {
+    const result = await client.call('extension.list', { projectId });
+    // The small index contains package summaries, not entry manifests. Read each
+    // installed descriptor before rendering its entries; listing executes no code.
+    const described = await Promise.all(result.plugins.map(p => client.call('extension.describe', { projectId, pluginId: p.id })));
+    setPlugins(described as unknown as InstalledExtension[]); setDirectory(result.directory as typeof extensionDirectory);
+  };
   useEffect(() => { void refresh().catch(e => setError(e.message)); }, [client, projectId]);
   const act = async (label: string, run: () => Promise<unknown>) => {
     setBusy(label); setMessage(''); setError('');
@@ -49,26 +55,45 @@ export function ThirdPartyPlugins({ client, projectId, canManage }: { client: Br
     await client.call('extension.manage', { pluginId: p.id, expectedDigest: p.digest, action });
     if (opened?.plugin.id === p.id) setOpened(null);
   });
+  const matches = (value: unknown) => JSON.stringify(value).toLowerCase().includes(query.trim().toLowerCase());
+  const visible = plugins.filter(matches);
+  const read = (plugin: InstalledExtension, entry: InstalledExtension['manifest']['skills'][number]) => act('Read ' + entry.title, async () => {
+    const result = await client.call('extension.content', { projectId, pluginId: plugin.id, expectedDigest: plugin.digest, kind: 'skill', entryId: entry.id });
+    setSkill({ pluginId: plugin.id, title: entry.title, entryId: entry.id, digest: plugin.digest, text: result.text as string });
+  });
   return <section className="third-party-plugins" aria-labelledby="third-party-title">
     <header><h2 id="third-party-title">Third-party plugins</h2><p>Install independent packages to add tools, Skills and views. They can run native code with your permissions. Choose sources you trust.</p></header>
     {canManage && <form className="plugin-install" onSubmit={e => { e.preventDefault(); void act('Install plugin', async () => { await client.call('extension.install', { source: source.trim() }, AbortSignal.timeout(240000)); setSource(''); }); }}>
       <label htmlFor="plugin-source">Package source</label><div><input id="plugin-source" value={source} onChange={e => setSource(e.target.value)} placeholder="npm package, local folder, .tgz or git+https source" required /><button disabled={!!busy || !source.trim()}>{busy === 'Install plugin' ? 'Installing…' : 'Install plugin'}</button></div>
     </form>}
     <p role="status">{busy && busy !== 'Install plugin' ? busy + '…' : message}</p>{error && <p role="alert" className="extension-error">{error} <button disabled={!!busy} onClick={() => void act('Refresh plugins', refresh)}>Refresh</button></p>}
-    {!plugins.length && <p>No third-party plugins installed.</p>}
-    <div className="extension-list">{plugins.map(p => <article key={p.id}>
+    {!plugins.length ? <p>No third-party plugins installed.</p> : !visible.length && <p>No installed third-party plugins match “{query}”.</p>}
+    <div className="extension-list">{visible.map(p => <article key={p.id}>
       <div className="extension-heading"><h3>{p.title}</h3><span>{p.version} · {p.enabled ? 'Enabled' : 'Disabled'}</span></div><p>{p.description}</p>
       <p className="extension-source">{p.source}</p>
+      <p className="plugin-card-entries">{p.manifest.views.length} views · {p.manifest.skills.length} Skills · {p.manifest.operations.length} operations</p>
       <div className="extension-actions">
         <button disabled={!!busy || !p.enabled} onClick={() => void act('Open plugin', async () => { const plugin = await client.call('extension.describe', { projectId, pluginId: p.id }) as unknown as InstalledExtension; if (!plugin.manifest.views.length) { setMessage('This plugin has no view. Use its operations from your Agent.'); return; } setOpened({ plugin, viewId: plugin.manifest.views[0].id }); setSkill(null); })}>Open</button>
-        <button disabled={!!busy} onClick={() => void act('Read plugin guide', async () => { const plugin = await client.call('extension.describe', { projectId, pluginId: p.id }) as unknown as InstalledExtension; const entry = plugin.manifest.skills[0]; if (!entry) { setSkill({ title: p.title, text: 'This plugin has no Skill. Read extension.describe for its operation schemas.' }); return; } const result = await client.call('extension.content', { projectId, pluginId: p.id, expectedDigest: p.digest, kind: 'skill', entryId: entry.id }); setSkill({ title: entry.title, text: result.text as string }); })}>Guide</button>
         {canManage && <><button disabled={!!busy} onClick={() => void act('Update plugin', async () => { await client.call('extension.install', { source: p.source, replace: p.id, expectedDigest: p.digest }, AbortSignal.timeout(240000)); if (opened?.plugin.id === p.id) setOpened(null); })}>Update</button><button disabled={!!busy} onClick={() => void manage(p, p.enabled ? 'disable' : 'enable')}>{p.enabled ? 'Disable' : 'Enable'}</button><button disabled={!!busy} onClick={() => void manage(p, 'remove')}>Remove</button></>}
       </div>
+      <div className="extension-entry-list"><h4>Views</h4>
+        {!p.manifest.views.length && <p>No view is declared.</p>}
+        {p.manifest.views.map(view => <div className="extension-entry" key={view.id}><span><strong>{view.title}</strong><code>{view.id}</code></span><button disabled={!!busy || !p.enabled} onClick={() => { setOpened({ plugin: p, viewId: view.id }); setSkill(null); }}>Open {view.title}</button></div>)}
+        <h4>Skills</h4>
+        {!p.manifest.skills.length && <p>No Skill is declared.</p>}
+        {p.manifest.skills.map(entry => <div className="extension-entry" key={entry.id}><span><strong>{entry.title}</strong><code>{entry.id}</code></span><button disabled={!!busy || !p.enabled} onClick={() => void read(p, entry)}>Read {entry.title}</button></div>)}
+      </div>
+      {skill?.pluginId === p.id && <section className="extension-guide"><h4>{skill.title}</h4><p><code>{skill.entryId}</code> · Package digest <code>{skill.digest}</code></p><button onClick={() => setSkill(null)}>Close guide</button><pre>{skill.text}</pre></section>}
+      {opened?.plugin.id === p.id && <section><div className="extension-heading"><h4>{opened.plugin.manifest.views.find(v => v.id === opened.viewId)?.title}</h4><button onClick={() => setOpened(null)}>Close view</button></div><ExtensionView key={opened.plugin.digest + opened.viewId} {...opened} client={client} projectId={projectId} /></section>}
+      <details className="extension-operations"><summary>MCP operations <span className="plugin-count">{p.manifest.operations.length}</span></summary>
+        <p>Your Agent reads this package with <code>extension.describe</code> and invokes its declared operations with <code>extension.call</code> through the shared Rho MCP connection.</p>
+        {p.manifest.operations.map(operation => <details className="plugin-operation" key={operation.id}><summary>{operation.title} · <code>{operation.id}</code></summary>
+          <p>{operation.description}</p><p>Effect: {operation.effect}</p><p>Uses {operation.methods.map(m => <code key={m}>{m} </code>)}</p><pre>{JSON.stringify(operation.inputSchema, null, 2)}</pre>
+        </details>)}
+      </details>
       <details><summary>Package identity</summary><dl><dt>Package</dt><dd>{p.name}</dd><dt>Digest</dt><dd>{p.digest}</dd>{p.sourceCommit && <><dt>Git commit</dt><dd>{p.sourceCommit}</dd></>}</dl></details>
     </article>)}</div>
-    {skill && <section className="extension-guide"><h3>{skill.title}</h3><button onClick={() => setSkill(null)}>Close guide</button><pre>{skill.text}</pre></section>}
-    {opened && <section><div className="extension-heading"><h3>{opened.plugin.title}</h3><button onClick={() => setOpened(null)}>Close view</button></div>{opened.plugin.manifest.views.length > 1 && <select aria-label="Plugin view" value={opened.viewId} onChange={e => setOpened({ ...opened, viewId: e.target.value })}>{opened.plugin.manifest.views.map(v => <option key={v.id} value={v.id}>{v.title}</option>)}</select>}<ExtensionView key={opened.plugin.digest + opened.viewId} {...opened} client={client} projectId={projectId} /></section>}
-    {canManage && directory.filter(entry => !plugins.some(p => p.id === entry.id)).map(entry => <article className="extension-discovery" key={entry.id}><h3>{entry.title} <small>{entry.version}</small></h3><p>{entry.description}</p><p>{entry.needs}</p><div className="extension-actions"><button disabled={!!busy} onClick={() => void act('Install ' + entry.title, () => client.call('extension.install', { source: entry.source }, AbortSignal.timeout(240000)))}>Install {entry.title}</button><a href={entry.repository} target="_blank" rel="noreferrer">Source and documentation ↗</a></div><details><summary>Installation source</summary><p className="extension-source">{entry.source}</p></details></article>)}
+    {canManage && directory.filter(entry => !plugins.some(p => p.id === entry.id) && matches(entry)).map(entry => <article className="extension-discovery" key={entry.id}><h3>{entry.title} <small>{entry.version}</small></h3><p>{entry.description}</p><p>{entry.needs}</p><div className="extension-actions"><button disabled={!!busy} onClick={() => void act('Install ' + entry.title, () => client.call('extension.install', { source: entry.source }, AbortSignal.timeout(240000)))}>Install {entry.title}</button><a href={entry.repository} target="_blank" rel="noreferrer">Source and documentation ↗</a></div><details><summary>Installation source</summary><p className="extension-source">{entry.source}</p></details></article>)}
     <details className="extension-development"><summary>Develop and contribute a plugin</summary><p>Start with <code>rho plugin create my-plugin</code>, then <code>rho plugin dev ./my-plugin</code>. Rho watches your package and installs valid changes. Reopen its view after an update.</p><p>Build your package, check it with <code>rho plugin check</code>, and share a Git source or npm tarball. You own its repository and releases.</p><a href="https://github.com/YuLab-SMU/Rho/blob/main/docs/THIRD-PARTY-PLUGINS.md" target="_blank" rel="noreferrer">Authoring and contribution guide ↗</a></details>
   </section>;
 }

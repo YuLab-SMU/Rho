@@ -3504,6 +3504,7 @@ export interface CapabilityListOutput {
     id: string;
     package: string;
     version?: string;
+    packageVersion?: string;
     requires?: string[];
     selected: boolean;
     packagePresent: boolean;
@@ -3529,12 +3530,52 @@ export interface CapabilityListOutput {
           readOnly?: boolean;
           runsCode?: boolean;
         };
+        intent?: string;
+        /**
+         * @maxItems 64
+         */
+        requires?: string[];
+        example?: {
+          method: string;
+          input: {};
+        };
+        /**
+         * @maxItems 32
+         */
+        failureRecipes?: {
+          kind: string;
+          message: string;
+          next: string;
+        }[];
+        verify?: {
+          command: string;
+          description: string;
+        };
+      }[];
+      /**
+       * @maxItems 64
+       */
+      operations?: {
+        method: string;
+        version: string;
+        effect: 'read' | 'metadata' | 'document' | 'file' | 'native';
+        requires: string[];
+        presentation?: {
+          displayName?: string;
+          description?: string;
+          order?: number;
+          readOnly?: boolean;
+          runsCode?: boolean;
+        };
       }[];
       /**
        * @maxItems 64
        */
       actions?: {
-        presentation: {
+        id?: string;
+        version?: string;
+        requires?: string[];
+        presentation?: {
           displayName?: string;
           description?: string;
           order?: number;
@@ -3549,6 +3590,9 @@ export interface CapabilityListOutput {
         id: string;
         version: string;
         ui: string;
+        bindings?: {
+          [k: string]: string;
+        };
         presentation?: {
           displayName?: string;
           description?: string;
@@ -3557,6 +3601,37 @@ export interface CapabilityListOutput {
           runsCode?: boolean;
         };
       }[];
+      mcp?: {
+        entry: string;
+        transport: string;
+        /**
+         * @maxItems 32
+         */
+        tools: {
+          name: string;
+          description: string;
+        }[];
+      };
+      claudeCode?: {
+        /**
+         * @maxItems 64
+         */
+        skills?: {
+          skill: string;
+          name: string;
+          description: string;
+        }[];
+        /**
+         * @maxItems 64
+         */
+        hooks?: {
+          id?: string;
+          event: string;
+          matcher: string;
+          entry: string;
+          timeoutSeconds?: number;
+        }[];
+      };
     };
     presentation?: {
       displayName?: string;
@@ -3622,6 +3697,9 @@ export interface CapabilityListOutput {
   operations: {
     method: string;
     owner?: string;
+    effect?: string;
+    inputSchema?: {};
+    outputSchema?: {};
     packagePresent?: boolean;
     projectEnabled?: boolean;
     dependenciesSatisfied?: boolean;
@@ -3682,6 +3760,8 @@ export interface CapabilityListOutput {
     owner?: string;
     pluginId?: string;
     ui: string;
+    uiPackage?: string;
+    uiPackageVersion?: string;
     bindings: {
       [k: string]: string;
     };
@@ -3702,7 +3782,6 @@ export interface CapabilityListOutput {
     id: string;
     version: string;
     digest: string;
-    content?: string;
     presentation?: {
       displayName?: string;
       description?: string;
@@ -3710,6 +3789,29 @@ export interface CapabilityListOutput {
       readOnly?: boolean;
       runsCode?: boolean;
     };
+    intent?: string;
+    /**
+     * @maxItems 64
+     */
+    requires?: string[];
+    example?: {
+      method: string;
+      input: {};
+    };
+    /**
+     * @maxItems 32
+     */
+    failureRecipes?: {
+      kind: string;
+      message: string;
+      next: string;
+    }[];
+    verify?: {
+      command: string;
+      description: string;
+    };
+    owner?: string;
+    content?: string;
   }[];
   agent?: {};
   host: {
@@ -9681,6 +9783,7 @@ export interface ObservationSnapshotOutput {
       id: string;
       package: string;
       version?: string;
+      packageVersion?: string;
       requires?: string[];
       selected: boolean;
       packagePresent: boolean;
@@ -9706,12 +9809,52 @@ export interface ObservationSnapshotOutput {
             readOnly?: boolean;
             runsCode?: boolean;
           };
+          intent?: string;
+          /**
+           * @maxItems 64
+           */
+          requires?: string[];
+          example?: {
+            method: string;
+            input: {};
+          };
+          /**
+           * @maxItems 32
+           */
+          failureRecipes?: {
+            kind: string;
+            message: string;
+            next: string;
+          }[];
+          verify?: {
+            command: string;
+            description: string;
+          };
+        }[];
+        /**
+         * @maxItems 64
+         */
+        operations?: {
+          method: string;
+          version: string;
+          effect: 'read' | 'metadata' | 'document' | 'file' | 'native';
+          requires: string[];
+          presentation?: {
+            displayName?: string;
+            description?: string;
+            order?: number;
+            readOnly?: boolean;
+            runsCode?: boolean;
+          };
         }[];
         /**
          * @maxItems 64
          */
         actions?: {
-          presentation: {
+          id?: string;
+          version?: string;
+          requires?: string[];
+          presentation?: {
             displayName?: string;
             description?: string;
             order?: number;
@@ -9726,6 +9869,9 @@ export interface ObservationSnapshotOutput {
           id: string;
           version: string;
           ui: string;
+          bindings?: {
+            [k: string]: string;
+          };
           presentation?: {
             displayName?: string;
             description?: string;
@@ -9734,6 +9880,37 @@ export interface ObservationSnapshotOutput {
             runsCode?: boolean;
           };
         }[];
+        mcp?: {
+          entry: string;
+          transport: string;
+          /**
+           * @maxItems 32
+           */
+          tools: {
+            name: string;
+            description: string;
+          }[];
+        };
+        claudeCode?: {
+          /**
+           * @maxItems 64
+           */
+          skills?: {
+            skill: string;
+            name: string;
+            description: string;
+          }[];
+          /**
+           * @maxItems 64
+           */
+          hooks?: {
+            id?: string;
+            event: string;
+            matcher: string;
+            entry: string;
+            timeoutSeconds?: number;
+          }[];
+        };
       };
       presentation?: {
         displayName?: string;
@@ -9799,6 +9976,9 @@ export interface ObservationSnapshotOutput {
     operations: {
       method: string;
       owner?: string;
+      effect?: string;
+      inputSchema?: {};
+      outputSchema?: {};
       packagePresent?: boolean;
       projectEnabled?: boolean;
       dependenciesSatisfied?: boolean;
@@ -9859,6 +10039,8 @@ export interface ObservationSnapshotOutput {
       owner?: string;
       pluginId?: string;
       ui: string;
+      uiPackage?: string;
+      uiPackageVersion?: string;
       bindings: {
         [k: string]: string;
       };
@@ -9879,7 +10061,6 @@ export interface ObservationSnapshotOutput {
       id: string;
       version: string;
       digest: string;
-      content?: string;
       presentation?: {
         displayName?: string;
         description?: string;
@@ -9887,6 +10068,29 @@ export interface ObservationSnapshotOutput {
         readOnly?: boolean;
         runsCode?: boolean;
       };
+      intent?: string;
+      /**
+       * @maxItems 64
+       */
+      requires?: string[];
+      example?: {
+        method: string;
+        input: {};
+      };
+      /**
+       * @maxItems 32
+       */
+      failureRecipes?: {
+        kind: string;
+        message: string;
+        next: string;
+      }[];
+      verify?: {
+        command: string;
+        description: string;
+      };
+      owner?: string;
+      content?: string;
     }[];
     agent?: {};
   };

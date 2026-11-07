@@ -8,6 +8,7 @@ import type { Tables, tableLimits } from '@rho-workspace/plugin-tables';
 import type { Charts, chartLimits } from '@rho-workspace/plugin-charts';
 import type { Media } from '@rho-workspace/plugin-media';
 import { ownerContracts } from './contracts/owners.generated.js';
+import { pluginListing } from './plugin-inventory.js';
 import { validateUiExtension, uiExtensionLimits, type InstalledUiEntry } from './ui-extension.js';
 const executionInputSchema = ownerContracts.selected.execution.input as Record<string, unknown>;
 import type { executionLimits, Objects } from '@rho-workspace/plugin-r';
@@ -34,7 +35,7 @@ const entries = {
   skills: () => import('@rho-workspace/plugin-skills')
 };
 export type PluginId = keyof typeof entries;
-export const selectedPluginVersions: Record<keyof typeof entries, string> = { documents: '0.4.7', files: '0.5.0', r: '0.4.1', requirements: '0.4.0', tables: '0.5.0', media: '0.4.0', charts: '0.4.0', annotations: '0.5.2', agent: '0.4.19', console: '0.3.0', kernel: '0.5.1', skills: '0.1.0' };
+export const selectedPluginVersions: Record<keyof typeof entries, string> = { documents: '0.4.7', files: '0.5.0', r: '0.4.1', requirements: '0.4.0', tables: '0.5.0', media: '0.4.0', charts: '0.4.0', annotations: '0.5.2', agent: '0.4.33', console: '0.3.0', kernel: '0.5.1', skills: '0.1.0' };
 export const pluginIds = Object.keys(entries) as PluginId[];
 type Modules = { [K in PluginId]: Awaited<ReturnType<typeof entries[K]>> };
 export interface PluginConfig {
@@ -95,9 +96,7 @@ export class Plugins {
           const timeline = (module.plugin as { timeline?: string }).timeline;
           if (timeline && module.plugin.operations.some(o => o.method === timeline && o.effect === 'read')) status.timeline = timeline;
           status.requires = [...module.plugin.requires];
-          status.listing = {
-            skills: module.plugin.skills.map(({ content, ...skill }) => skill),
-          };
+          status.listing = pluginListing(module.plugin as PluginDescriptor);
           status.packagePresent = true;
           status.state = 'available'; delete status.reason;
         } catch { status.reason = 'Selected plugin package is missing, incompatible or cannot be loaded.'; }
@@ -158,7 +157,10 @@ export class Plugins {
       packagePresent: p.packagePresent === true,
       dependenciesSatisfied: p.packagePresent === true && p.state === 'available' && !(p.missing?.length),
       uiRenderable: p.state === 'available' && this.installedUi.some(entry => entry.plugin === p.id && (entry.extension || entry.packageVersion === p.version))
-    })), operations: this.operationDeclarations(), actions, unavailableActions, components: [...descriptors.flatMap(p => (p.components ?? []).map(component => ({ ...component, pluginId: p.id }))),
+    })), operations: this.operationDeclarations(), actions, unavailableActions, components: [...descriptors.flatMap(p => (p.components ?? []).map(component => {
+      const installed = this.installedUi.find(e => e.component === component.id && e.version === component.version && e.plugin === p.id);
+      return { ...component, pluginId: p.id, ...(installed ? { uiPackage: installed.package, uiPackageVersion: installed.packageVersion } : {}) };
+    })),
       ...this.installedUi.filter(e => e.extension && this.modules[e.plugin as PluginId]).map(e => ({ id: e.component, version: e.version, owner: e.package!, pluginId: e.plugin, ui: e.entrySha256!, bindings: e.extension!.bindings, propsSchema: e.extension!.propsSchema,
         presentation: { displayName: e.extension!.displayName, description: e.extension!.description }, uiPackage: e.package, uiPackageVersion: e.packageVersion }))], capabilities: [...descriptors.flatMap(p => p.capabilities), ...actions.flatMap(a => a.capabilities ?? [])], skills: descriptors.flatMap(p => p.skills ?? []), ...(this.modules.agent ? { agent: this.modules.agent.plugin.agent } : {}) };
   }

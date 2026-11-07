@@ -53,6 +53,35 @@
 .plugin-dependency > span { color: var(--color-meta); font-size: 12px; }
 .plugin-needs button { font-size: 12px; min-height: 30px; }
 .plugin-use { display: flex; align-items: center; gap: 7px; }
+.plugin-card-entries, .plugin-entry-identity { font-size: 11px; color: var(--color-meta); overflow-wrap: anywhere; }
+.plugin-search { display: grid; gap: 8px; max-width: 620px; }
+.plugin-search label { font-size: 13px; font-weight: 500; }
+.plugin-search input { width: 100%; min-width: 0; padding: 11px 12px; border: 1px solid var(--color-hairline); border-radius: 7px; background: var(--color-surface); color: inherit; font: inherit; }
+.plugin-sections { display: flex; flex-wrap: wrap; gap: 10px; }
+.plugin-sections button { gap: 14px; font-size: 13px; }
+.plugin-sections strong { font-weight: 500; color: var(--color-meta); }
+.plugin-section-note, .plugin-empty { margin-top: 12px; color: var(--color-meta); font-size: 13px; line-height: 1.7; }
+.plugin-skills li.plugin-skill { display: flex; flex-direction: column; align-items: stretch; gap: 12px; }
+.plugin-skill-heading { display: flex; align-items: center; gap: 14px; }
+.plugin-skill-heading button { flex: none; font-size: 12px; }
+.plugin-skill-body { min-width: 0; }
+.plugin-skill-text, .plugin-entry-details pre, .plugin-operation pre { padding: 16px; background: var(--color-well); border: 1px solid var(--color-hairline); border-radius: 6px; max-height: 480px; overflow: auto; font-size: 12px; line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; }
+.plugin-entry-details, .plugin-mcp, .extension-operations { margin-top: 16px; font-size: 13px; line-height: 1.7; overflow-wrap: anywhere; }
+.plugin-entry-details > summary, .plugin-mcp > summary, .plugin-operation > summary, .extension-operations > summary { cursor: pointer; padding: 8px 0; }
+.plugin-entry-details p, .plugin-mcp p, .extension-operations p { margin: 10px 0; }
+.plugin-entry-details h3, .plugin-operation h3 { margin: 16px 0 8px; font-size: 13px; }
+.plugin-operation { margin-top: 10px; border-top: 1px solid var(--color-hairline); }
+.plugin-operation > summary { overflow-wrap: anywhere; }
+.plugin-operation > summary > span { display: block; color: var(--color-meta); font-size: 11px; margin-left: 16px; }
+.plugin-native { padding: 12px 16px; border: 1px solid var(--color-hairline); border-radius: 7px; }
+.extension-entry-list { margin: 16px 0; }
+.extension-entry-list h4 { margin: 14px 0 6px; font-size: 13px; }
+.extension-entry { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--color-hairline); }
+.extension-entry > span { min-width: 0; display: flex; flex-direction: column; gap: 4px; overflow-wrap: anywhere; }
+.extension-entry code { font-size: 11px; color: var(--color-meta); }
+.extension-entry button { flex: none; font-size: 12px; }
+.extension-guide { min-width: 0; overflow-wrap: anywhere; }
+.extension-guide code { white-space: normal; word-break: break-all; }
 @media (max-width: 767px) {
   .plugin-grid { grid-template-columns: minmax(0,1fr); }
   .plugin-detail-heading, .plugin-detail-title { align-items: flex-start; flex-direction: column; }
@@ -60,6 +89,10 @@
   .plugin-prompts li { align-items: flex-start; }
   .plugin-entry-section li { flex-wrap: wrap; }
   .plugin-information dl { grid-template-columns: 85px minmax(0,1fr); }
+  .plugin-view-state { width: 100%; padding-left: 30px; }
+  .plugin-skill-heading { flex-wrap: wrap; }
+  .plugin-skill-heading .plugin-entry-copy { flex-basis: calc(100% - 30px); }
+  .extension-entry { align-items: flex-start; flex-direction: column; }
 }
 
 /* Independently installed packages keep their management and source visible. */

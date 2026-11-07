@@ -340,11 +340,11 @@ export class Capabilities {
 
   async skills(principal: Principal) {
     const state = await this.state();
-    const result: SkillDeclaration[] = [rhoWorkspaceSkill, personFilesSkill, taskMapSkill, analysisRunSkill, screenCheckSkill];
+    const result: Array<SkillDeclaration & { owner: string }> = [rhoWorkspaceSkill, personFilesSkill, taskMapSkill, analysisRunSkill, screenCheckSkill].map(skill => ({ ...skill, owner: 'rho' }));
     for (const descriptor of this.plugins.descriptors()) {
       const status = this.pluginStatus(descriptor.id as PluginId, state);
       for (const skill of descriptor.skills ?? []) {
-        if (status.packagePresent && status.projectEnabled && status.dependenciesSatisfied && descriptor.operations.some(operation => this.authorized(principal, operation.method))) result.push(skill);
+        if (status.packagePresent && status.projectEnabled && status.dependenciesSatisfied && descriptor.operations.some(operation => this.authorized(principal, operation.method))) result.push({ ...skill, owner: descriptor.id });
       }
     }
     return result;
