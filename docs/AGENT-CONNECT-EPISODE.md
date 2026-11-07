@@ -104,3 +104,65 @@ credentials or private service addresses are source evidence. Setup with another
 client, remote/HTTP-only MCP clients, Windows and independent usability remain
 unverified by this episode. This work adds no new Agent execution adapter and does
 not move an external conversation's input into Rho.
+
+## One list and ready entries
+
+2026-11-07, after Rho 0.5.6. The person gave the setup prompt to DeepSeek
+Harness, in its Desktop app on the PA14 project. Harness connected itself, and
+`rho_index` answered in the same session, but the whole connection took 8 min
+52 s. The Agent then broke its own run down: Rho's part was about 0.3 s (grant
+0.18 s, MCP start 0.19 s, `rho_index` 0.08 s). It spent 194.5 s looking for
+how Harness adds an MCP server and 87.8 s reading four package READMEs to find
+it. Harness has no `dsh mcp` command; the entry belongs in the profile patch
+`~/.dsh/profiles/desktop/cordis.patch.yml`, which reloads within seconds. Its
+own suggestion was a ready `dsh` entry in Rho's reply.
+
+On the Agents tab, the connected window appeared only in a separate "Agent
+windows connected" list below the setup prompt, with no mark. OpenCode was
+listed as `opencode` with an initial.
+
+What changed:
+
+- **Ready entries.** The grant reply now also gives `codex`, `opencode` (the
+  file and the entry to merge) and `dsh` (the profile patch and the entry to
+  append), beside `mcp` and `claude`. The setup prompt tells an Agent to use
+  the entry for its client, and the Rho skill's connection guide describes the
+  OpenCode and Harness mechanisms.
+- **One list.** The Agents tab lists every Agent of the project in one row
+  design: those Rho starts, and those connected from their own windows. A window
+  sits under the Agent it belongs to, with its state, its grant and its last
+  call. The setup prompt follows the list.
+- **Whose window.** The MCP bridge (Agent 0.4.31) sends its client's own
+  `clientInfo` name and version. Rho keeps it with the grant and uses it to place
+  the window and name it. When a bridge does not send it yet, the session name
+  the Agent chose decides.
+- **Marks.** OpenCode has its own mark, drawn from its brand files in the
+  theme's ink. Names containing `dsh` take the DeepSeek mark and the name
+  DeepSeek Harness. An Agent with no known maker keeps its initial.
+
+Runs after the change:
+
+- **OpenCode setup again.** The setup prompt was given to OpenCode 1.19.5 in a
+  disposable project, with the same model and no auto-approval. It used the
+  `opencode` entry and finished in 90 s instead of 213 s, with 9 tool calls.
+  The new session called `rho_index` in 16 s, and Rho recorded its client as
+  `opencode 1.19.5`.
+- **Agents list.** With an OpenCode window and a Harness-named window, the list
+  showed OpenCode's row with its window beneath it, and a DeepSeek Harness row
+  with its window. There was no overflow or page error at 1440 or 390 px.
+- **The person's own 47101 page.** It serves the rebuilt pages from disk. With
+  its earlier service still running, it showed `dsh-deepseek-agent` as DeepSeek Harness and a
+  WorkBuddy window under its initial.
+
+Checks: the full Rho suite passed (315, none failed, 2 skipped). The
+connection test now also covers the ready entries, the absence of credentials in
+the reply, a stored client name, and an unprintable name being ignored. 33
+Agent plugin tests and the Agent page acceptance in Chrome passed.
+
+Limits:
+
+- Harness was not run again with the `dsh` entry. Only the person's own Desktop
+  run is measured, and the entry assumes the `desktop` profile.
+- What name Harness's MCP client sends was not observed.
+- The person's 47101 service runs the earlier server until it is restarted. It
+  does not yet keep client names or give ready entries.

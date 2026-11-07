@@ -587,8 +587,8 @@
     "observation.snapshot": {
       "summary": "observation.snapshot",
       "path": "operations/observation.snapshot.json",
-      "bytes": 165863,
-      "sha256": "3ac0beddb297dbd7ee9448f30655e5d9b4e8dd8cbe46a64ed815d133dddfa436"
+      "bytes": 166529,
+      "sha256": "6acbc633abbfc59dd14d3ecfac862821cad5d952a38e45a85c8c2d7c7d289e80"
     },
     "project.create": {
       "summary": "project.create",

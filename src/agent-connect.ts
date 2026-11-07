@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Fault } from '@rho-workspace/plugin-contracts';
@@ -22,6 +23,23 @@ export function mcpCommand(connectionFile: string) {
   return [process.execPath, fileURLToPath(new URL('./cli.js', import.meta.url)), '--mcp', connectionFile];
 }
 
+// Ready entries for the clients whose own mechanism has been used with Rho, so an Agent need not
+// search its documentation for it: Claude Code's and Codex's `mcp add`, OpenCode's project
+// configuration and DeepSeek Harness's profile patch (no `dsh mcp` command exists). Each holds
+// the same name, command and arguments as `mcp`; any other client registers those itself.
+export function clientEntries(name: string, command: string[], root: string, env: NodeJS.ProcessEnv = process.env) {
+  const quote = (value: string) => /^[A-Za-z0-9_./:@=-]+$/.test(value) ? value : `'${value.replace(/'/g, `'\\''`)}'`;
+  const yaml = (value: string) => JSON.stringify(value);
+  return {
+    claude: ['claude', 'mcp', 'add', name, '--', ...command].map(quote).join(' '),
+    codex: ['codex', 'mcp', 'add', name, '--', ...command].map(quote).join(' '),
+    opencode: { file: path.join(root, '.opencode', 'opencode.json'), merge: { mcp: { [name]: { type: 'local', command, enabled: true } } } },
+    dsh: { file: path.join(env.DSH_HOME || path.join(os.homedir(), '.dsh'), 'profiles', 'desktop', 'cordis.patch.yml'),
+      append: ['- insert:', `    - id: ${yaml('mcp-' + name)}`, '      name: "@deepseek-ai/dsh-mcp-client"', '      config:', `        serverName: ${yaml(name)}`, '        transport: "stdio"',
+        `        command: ${yaml(command[0])}`, '        args:', ...command.slice(1).map(arg => `          - ${yaml(arg)}`)].join('\n') + '\n' },
+  };
+}
+
 // Paths are data in an argv array, never an interpolated shell command. Reading these
 // instructions starts nothing, grants no access and includes no credential bytes.
 export function connectionInstructions(project: { id: string; root: string }, stateDirectory: string) {
@@ -32,7 +50,7 @@ export function connectionInstructions(project: { id: string; root: string }, st
     'Configure your own client using its supported MCP setup mechanism; inspect your own help or documentation if needed. Keep unrelated configuration, models and credentials intact. Use private local configuration, scoped to this project where supported, and keep connection settings out of version-controlled files. If you cannot run a local stdio MCP server, explain that limitation.',
     'Run this program and argument array, appending --session and a stable name identifying your own Agent (1–128 characters from A–Z, a–z, 0–9, dot, underscore, colon, @ or hyphen). Reuse that name when retrying:',
     JSON.stringify(command),
-    'Parse the JSON reply. Register a stdio MCP server using mcp.name, mcp.command and mcp.args exactly as returned. The connection files contain credentials: do not print their contents or put them in the project. Do not start another Rho service.',
+    'Parse the JSON reply. Register a stdio MCP server using mcp.name, mcp.command and mcp.args exactly as returned. If the reply has a ready entry for your client, use it: claude or codex (a command to run in the project folder), opencode (merge into the named file) or dsh (append to the named DeepSeek Harness profile patch, which reloads by itself). The connection files contain credentials: do not print their contents or put them in the project. Do not start another Rho service.',
     'Reload your MCP tools if supported, or tell me to open a new session in the project folder. Then call rho_index through your configured client tools and verify scopeHint.projectId matches the project ID above. A direct protocol probe is useful diagnostics but does not prove your client loaded its tools. Report configuration and a successful tool call separately; do not claim connected before the call succeeds. If configuration or verification fails, report the actual error and continue from the same connection.',
   ].join('\n');
   return { request, prompt, command };

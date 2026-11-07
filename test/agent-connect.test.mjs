@@ -143,6 +143,21 @@ test('generic setup instructions are read-only, local, credential-free and usabl
     const agent = new CheckedClient(original);
     const snapshot = await agent.call('observation.snapshot', { projectId: s.project.id });
     assert.ok(snapshot.agents.some(a => a.label === 'research-agent'));
+    // Ready entries for the clients whose own mechanism was used with Rho, all the same server.
+    const server = [connected.mcp.command, ...connected.mcp.args];
+    assert.equal(connected.codex, connected.claude.replace(/^claude /, 'codex '));
+    assert.deepEqual(connected.opencode.merge.mcp[connected.mcp.name], { type: 'local', command: server, enabled: true });
+    assert.equal(connected.opencode.file, path.join(s.project.root, '.opencode', 'opencode.json'));
+    assert.match(connected.dsh.file, /profiles\/desktop\/cordis\.patch\.yml$/);
+    for (const part of [connected.mcp.name, '@deepseek-ai/dsh-mcp-client', 'stdio', ...server]) assert.ok(connected.dsh.append.includes(JSON.stringify(part)) || connected.dsh.append.includes(part), part);
+    assert.ok(!JSON.stringify(connected).includes(original.token), 'the reply holds no credential');
+    // The MCP bridge names its client; the person's screen shows it with that grant.
+    const named = await fetch(new URL('/api/v2/observation.snapshot', original.url), { method: 'POST', headers: { authorization: 'Bearer ' + original.token, 'content-type': 'application/json', 'x-rho-client': 'dsh-mcp-client/0.3.1' }, body: JSON.stringify({ projectId: s.project.id }) });
+    assert.equal(named.status, 200);
+    const shown = await s.call('observation.snapshot');
+    assert.deepEqual(shown.agents.find(a => a.label === 'research-agent').client, { name: 'dsh-mcp-client', version: '0.3.1' });
+    await fetch(new URL('/api/v2/observation.snapshot', original.url), { method: 'POST', headers: { authorization: 'Bearer ' + original.token, 'content-type': 'application/json', 'x-rho-client': 'bad%07name' }, body: JSON.stringify({ projectId: s.project.id }) });
+    assert.deepEqual((await s.call('observation.snapshot')).agents.find(a => a.label === 'research-agent').client, { name: 'dsh-mcp-client', version: '0.3.1' }, 'an unprintable name is ignored');
     await grant();
     assert.equal(JSON.parse(await fs.readFile(connected.connectionFile, 'utf8')).token, original.token, 'retry preserves the active grant');
     await agent.call('observation.snapshot', { projectId: s.project.id });

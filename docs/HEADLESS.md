@@ -150,8 +150,8 @@ that can configure and run a local stdio MCP server. `session.instructions` is a
 read-only operation for the local browser or operator: it returns the current
 Node/launcher paths and existing project ID, without credential contents. Reading
 or copying starts no Agent, grants no access and edits no client configuration.
-The Agent uses its own supported configuration mechanism; Rho needs no additional
-brand-specific form. The [connection episode](AGENT-CONNECT-EPISODE.md) records the
+The Agent uses its own supported configuration mechanism and writes its own entry;
+the grant reply's ready entries only spare it the search. The [connection episode](AGENT-CONNECT-EPISODE.md) records the
 actual clients checked and the limits.
 
 The running service's operator connection grants one project to a named Agent:
@@ -170,8 +170,13 @@ legacy default is `claude-code`.
 The JSON reply supplies `mcp.name`, `mcp.command` and `mcp.args` for the Agent to
 register in its own client. `rho --mcp FILE` serves that project grant on stdio with
 `rho_index`, `rho_resolve`, `rho_call` and `rho_read`. Connection files are credentials;
-keep their contents out of prompts and projects. The reply also retains the older
-`claude` command for compatibility.
+keep their contents out of prompts and projects. The reply also holds ready entries
+for the clients whose own mechanism has been used with Rho: `claude` and `codex`
+(their `mcp add` commands), `opencode` (the project's `.opencode/opencode.json` and
+the entry to merge) and `dsh` (the DeepSeek Harness profile patch and the entry to
+append). The bridge sends its MCP client's `clientInfo` name and version as
+`x-rho-client`; Rho keeps it with the grant and shows it as `client` in the
+snapshot's `agents`, ignoring anything that is not short printable text.
 
 Repeating the same grant keeps a valid credential with the same project, methods
 and profile; changing scope, expired access or stale connection data requires a

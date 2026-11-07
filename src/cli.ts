@@ -165,11 +165,10 @@ if (values.acp) {
       }
       const session = values.session ?? 'claude-code';
       const granted = await client.call('session.grant', { projectId: project.id, externalSessionId: session });
-      const { mcpCommand, mcpName } = await import('./agent-connect.js');
+      const { clientEntries, mcpCommand, mcpName } = await import('./agent-connect.js');
       const command = mcpCommand(granted.connectionFile), name = mcpName(project.root);
-      const quote = (value: string) => /^[A-Za-z0-9_./:@=-]+$/.test(value) ? value : `'${value.replace(/'/g, `'\\''`)}'`;
       process.stdout.write(JSON.stringify({ projectId: project.id, session, connectionFile: granted.connectionFile, methods: granted.methods.length,
-        mcp: { name, command: command[0], args: command.slice(1) }, claude: ['claude', 'mcp', 'add', name, '--', ...command].map(quote).join(' ') }) + '\n');
+        mcp: { name, command: command[0], args: command.slice(1) }, ...clientEntries(name, command, project.root) }) + '\n');
       process.exit(0);
     } catch (error) { refuse(error, client.connection.url); }
   }

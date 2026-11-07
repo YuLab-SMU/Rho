@@ -283,6 +283,8 @@ const observationSnapshot = response({
     conversationId: { anyOf: [text, { type: 'null' }] },
     // The Agent outside Rho this grant was added to, when the person added it from Rho.
     added: { anyOf: [addedTo, { type: 'null' }] },
+    // The MCP client that used this grant, as it named itself (its initialize clientInfo).
+    client: { anyOf: [{ type: 'null' }, response({ name: text, version: text }, ['name'])] },
     last: { anyOf: [{ type: 'null' }, response({ at: text, method: text, outcome: { enum: ['returned', 'rejected'] }, operationId: text }, ['at', 'method', 'outcome'])] } }, ['principal', 'label', 'profile', 'methods', 'expiresAt', 'ended', 'last']) },
   // Conversations started in Rho, for the person at this machine; empty for anyone else.
   conversations: { type: 'array', maxItems: 64, items: conversationSummary },

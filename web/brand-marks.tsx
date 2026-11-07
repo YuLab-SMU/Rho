@@ -1,12 +1,21 @@
 import { useId } from 'react';
 
-// The marks of the Agents and model providers Rho names. Claude Code, Codex and DeepSeek draw
-// their own; any other provider shows its initial on one of the theme's hues, chosen from its
-// name so it stays the same everywhere.
-export type Brand = 'claude-code' | 'codex' | 'deepseek';
+// The marks of the Agents and model providers Rho names. Claude Code, Codex, OpenCode and
+// DeepSeek draw their own; any other provider shows its initial on one of the theme's hues,
+// chosen from its name so it stays the same everywhere. A name is whatever the Agent or its
+// client called itself (an ACP agentInfo, an MCP clientInfo, a session label), so matching is
+// loose; DeepSeek Harness's command and clients are named `dsh`.
+export type Brand = 'claude-code' | 'codex' | 'opencode' | 'deepseek';
 export function brandOf(name: string): Brand | null {
   const text = name.toLowerCase();
-  return /claude[ -]?code|claude-acp|claude-cli/.test(text) ? 'claude-code' : /codex/.test(text) ? 'codex' : /deepseek/.test(text) ? 'deepseek' : null;
+  return /claude[ -]?code|claude-acp|claude-cli/.test(text) ? 'claude-code' : /codex/.test(text) ? 'codex' : /open[ -]?code/.test(text) ? 'opencode'
+    : /deepseek|(^|[^a-z])dsh([^a-z]|$)/.test(text) ? 'deepseek' : null;
+}
+// The Agent's product name when Rho knows the maker, else the name as it was given.
+export function agentDisplayName(name: string) {
+  const brand = brandOf(name);
+  return brand === 'claude-code' ? 'Claude Code' : brand === 'codex' ? 'Codex' : brand === 'opencode' ? 'OpenCode'
+    : brand === 'deepseek' && /harness|(^|[^a-z])dsh([^a-z]|$)/.test(name.toLowerCase()) ? 'DeepSeek Harness' : name;
 }
 
 function CodexMark() {
@@ -17,14 +26,22 @@ function CodexMark() {
     <defs><linearGradient gradientUnits="userSpaceOnUse" id={id} x1="12" x2="12" y1="3" y2="21"><stop stopColor="#B1A7FF" /><stop offset=".5" stopColor="#7A9DFF" /><stop offset="1" stopColor="#3941FF" /></linearGradient></defs>
   </>;
 }
-const paths: Record<Exclude<Brand, 'codex'>, { d: string; fill: string; evenOdd?: boolean }> = {
+// OpenCode's square mark (its brand files' light and dark variants differ only in color): the
+// frame in the theme's ink, the lower block at a third of it.
+function OpenCodeMark() {
+  return <>
+    <path d="M7.2 9.6h9.6v9.6H7.2z" fill="currentColor" opacity=".32" />
+    <path d="M2.4 0h19.2v24H2.4zM7.2 4.8v14.4h9.6V4.8z" fill="currentColor" fillRule="evenodd" clipRule="evenodd" />
+  </>;
+}
+const paths: Record<Exclude<Brand, 'codex' | 'opencode'>, { d: string; fill: string; evenOdd?: boolean }> = {
   'claude-code': { fill: '#D97757', evenOdd: true, d: 'M20.998 10.949H24v3.102h-3v3.028h-1.487V20H18v-2.921h-1.487V20H15v-2.921H9V20H7.488v-2.921H6V20H4.487v-2.921H3V14.05H0V10.95h3V5h17.998v5.949zM6 10.949h1.488V8.102H6v2.847zm10.51 0H18V8.102h-1.49v2.847z' },
   deepseek: { fill: '#4D6BFE', d: 'M23.748 4.482c-.254-.124-.364.113-.512.234-.051.039-.094.09-.137.136-.372.397-.806.657-1.373.626-.829-.046-1.537.214-2.163.848-.133-.782-.575-1.248-1.247-1.548-.352-.156-.708-.311-.955-.65-.172-.241-.219-.51-.305-.774-.055-.16-.11-.323-.293-.35-.2-.031-.278.136-.356.276-.313.572-.434 1.202-.422 1.84.027 1.436.633 2.58 1.838 3.393.137.093.172.187.129.323-.082.28-.18.552-.266.833-.055.179-.137.217-.329.14a5.526 5.526 0 01-1.736-1.18c-.857-.828-1.631-1.742-2.597-2.458a11.365 11.365 0 00-.689-.471c-.985-.957.13-1.743.388-1.836.27-.098.093-.432-.779-.428-.872.004-1.67.295-2.687.684a3.055 3.055 0 01-.465.137 9.597 9.597 0 00-2.883-.102c-1.885.21-3.39 1.102-4.497 2.623C.082 8.606-.231 10.684.152 12.85c.403 2.284 1.569 4.175 3.36 5.653 1.858 1.533 3.997 2.284 6.438 2.14 1.482-.085 3.133-.284 4.994-1.86.47.234.962.327 1.78.397.63.059 1.236-.03 1.705-.128.735-.156.684-.837.419-.961-2.155-1.004-1.682-.595-2.113-.926 1.096-1.296 2.746-2.642 3.392-7.003.05-.347.007-.565 0-.845-.004-.17.035-.237.23-.256a4.173 4.173 0 001.545-.475c1.396-.763 1.96-2.015 2.093-3.517.02-.23-.004-.467-.247-.588zM11.581 18c-2.089-1.642-3.102-2.183-3.52-2.16-.392.024-.321.471-.235.763.09.288.207.486.371.739.114.167.192.416-.113.603-.673.416-1.842-.14-1.897-.167-1.361-.802-2.5-1.86-3.301-3.307-.774-1.393-1.224-2.887-1.298-4.482-.02-.386.093-.522.477-.592a4.696 4.696 0 011.529-.039c2.132.312 3.946 1.265 5.468 2.774.868.86 1.525 1.887 2.202 2.891.72 1.066 1.494 2.082 2.48 2.914.348.292.625.514.891.677-.802.09-2.14.11-3.054-.614zm1-6.44a.306.306 0 01.415-.287.302.302 0 01.2.288.306.306 0 01-.31.307.303.303 0 01-.304-.308zm3.11 1.596c-.2.081-.399.151-.59.16a1.245 1.245 0 01-.798-.254c-.274-.23-.47-.358-.552-.758a1.73 1.73 0 01.016-.588c.07-.327-.008-.537-.239-.727-.187-.156-.426-.199-.688-.199a.559.559 0 01-.254-.078c-.11-.054-.2-.19-.114-.358.028-.054.16-.186.192-.21.356-.202.767-.136 1.146.016.352.144.618.408 1.001.782.391.451.462.576.685.914.176.265.336.537.445.848.067.195-.019.354-.25.452z' },
 };
 export function BrandMark({ brand, size = 18 }: { brand: Brand; size?: number }) {
-  const own = brand === 'codex' ? null : paths[brand];
+  const own = brand === 'codex' || brand === 'opencode' ? null : paths[brand];
   return <svg className={'maker-mark maker-' + brand} width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-    {own ? <path d={own.d} fill={own.fill} fillRule={own.evenOdd ? 'evenodd' : undefined} clipRule={own.evenOdd ? 'evenodd' : undefined} /> : <CodexMark />}
+    {own ? <path d={own.d} fill={own.fill} fillRule={own.evenOdd ? 'evenodd' : undefined} clipRule={own.evenOdd ? 'evenodd' : undefined} /> : brand === 'opencode' ? <OpenCodeMark /> : <CodexMark />}
   </svg>;
 }
 

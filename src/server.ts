@@ -181,6 +181,16 @@ function explainFailure(e: any): [string, string, Record<string, unknown>] {
     default: return ['storage', 'The operation could not be confirmed; retain the original identity and inspect its state.', { code }];
   }
 }
+// `x-rho-client: name/version`, each part URI-encoded: the MCP client's own name for itself.
+// Printable text only, bounded; anything else is ignored rather than shown.
+function clientOf(header: string | string[] | undefined) {
+  if (typeof header !== 'string' || header.length > 300) return null;
+  try {
+    const [name, version] = header.split('/').map(decodeURIComponent);
+    const ok = (value: string | undefined, max: number) => value !== undefined && value.length > 0 && value.length <= max && /^[\x20-\x7e]+$/.test(value);
+    return ok(name, 128) ? { name, ...(ok(version, 64) ? { version } : {}) } : null;
+  } catch { return null; }
+}
 export class RhoService {
   extensions: Extensions; plugins: Plugins; state: State; bridge: CoreBridge; url = ''; adminToken = ''; server: http.Server;
   // What the start did about the project Rho ships, if anything.
@@ -614,6 +624,9 @@ export class RhoService {
       const method = url.pathname.startsWith('/api/v2/') ? url.pathname.slice(8) : '';
       requireThat(method === 'events' || !!operations[method], 'not_found', 'Unknown API operation.');
       const principal = this.authenticate(req, method);
+      // An Agent's MCP bridge names the client that started it; the person's screen shows it.
+      const named = principal.projectId && principal.kind !== 'browser' ? clientOf(req.headers['x-rho-client']) : null;
+      if (named) void this.state.markClient(principal.id, named).catch(() => {});
       if (method === 'events') { requireThat(req.method === 'GET', 'invalid', 'Events use GET.'); await this.subscribe(url, principal, res); return; }
       requireThat(req.method === 'POST' && req.headers['content-type']?.split(';')[0] === 'application/json', 'invalid', 'Use POST with application/json.');
       requireThat(method === 'events' || isRhoMethod(method), 'not_found', 'Unknown API operation.');
@@ -721,7 +734,7 @@ export class RhoService {
     const activity = await this.projectActivity(p);
     return this.state.principals.filter(x => x.projectId === p.id && x.kind !== 'browser' && x.id !== 'operator').map(x => {
       const last = activity.entries.filter((e: any) => e.principal === x.id).at(-1);
-      return { principal: x.id, label: x.label ?? null, profile: x.profile ?? null, methods: x.methods, expiresAt: x.expiresAt ?? null, ended: !!x.expiresAt && Date.parse(x.expiresAt) <= Date.now(), conversationId: x.conversationId ?? null, added: x.added ?? null,
+      return { principal: x.id, label: x.label ?? null, profile: x.profile ?? null, methods: x.methods, expiresAt: x.expiresAt ?? null, ended: !!x.expiresAt && Date.parse(x.expiresAt) <= Date.now(), conversationId: x.conversationId ?? null, client: x.client ?? null, added: x.added ?? null,
         last: last ? { at: String(last.at), method: String(last.method), outcome: last.outcome === 'rejected' ? 'rejected' as const : 'returned' as const, ...(last.operationId ? { operationId: String(last.operationId) } : {}) } : null };
     });
   }

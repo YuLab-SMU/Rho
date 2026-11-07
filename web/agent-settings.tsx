@@ -2,7 +2,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalSto
 import { BrowserApiError, type BrowserClient } from '../src/browser.js';
 import type { RhoOutput } from '../src/contract.generated.js';
 import { Icon } from './icons.js';
-import { BrandMark, brandOf, ProviderMark } from './brand-marks.js';
+import { agentDisplayName, BrandMark, brandOf, ProviderMark } from './brand-marks.js';
 
 // The person's Agent and its settings (model, effort, mode…) for new conversations, and the
 // same controls for one open conversation. The values and their names are the Agent's own,
@@ -51,7 +51,7 @@ export function useAgentSettings(client: BrowserClient, projectId: string) {
     settings, backend, problem: store.problem, checking: store.checking, checkProblem: store.checkProblem,
     // Whether this service can start the Agent, and the name an ACP command was recognized as.
     available: (which: Backend) => settings?.agents?.[which] ?? null,
-    name: (which: Backend) => (which === 'acp' && settings?.agents?.acp?.name) || agentLabel[which],
+    name: (which: Backend) => which === 'acp' && settings?.agents?.acp?.name ? agentDisplayName(settings.agents.acp.name) : agentLabel[which],
     offered: (which: Backend) => settings?.offered[which] ?? null,
     choices: (which: Backend) => (settings?.choices[which] ?? {}) as Record<string, SettingValue>,
     chooseAgent: (which: Backend) => update(() => ({ backend: which })),

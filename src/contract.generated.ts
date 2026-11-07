@@ -10396,6 +10396,10 @@ export interface ObservationSnapshotOutput {
       scope: 'folder' | 'user';
       at: string;
     } | null;
+    client?: null | {
+      name: string;
+      version?: string;
+    };
     last: null | {
       at: string;
       method: string;

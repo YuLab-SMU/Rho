@@ -255,14 +255,18 @@ inspect what happened. The application gives those actions direct places:
   conversations. Each row names where the session started (Terminal, VS Code, Codex
   app, Script…) and whether another window has it open now, and offers Continue,
   the terminal resume command, Markdown export and the trash
-  ([session continuity](SESSION-CONTINUITY-EPISODE.md)). Agents lists the Agents
-  this service can start, with the one new conversations use, its model and folded
-  settings; an Agent not found on this computer is greyed out. Below it, one setup
-  prompt is for the person's own local MCP client. The prompt names
-  the running installation and exact existing project; the Agent configures its
-  own client. Reading or copying grants no access. Connections are listed by their
-  actual session labels, with access waiting for a call, a verified last call,
-  refusal or ended access. Copy failure leaves selectable text; request failure
+  ([session continuity](SESSION-CONTINUITY-EPISODE.md)). Agents is one list of
+  the project's Agents in one row design, whatever way each works here: the Agents
+  this service can start (a radio for new conversations, the model and folded
+  settings; one not found on this computer is greyed out), and the Agents connected
+  from their own windows. A window sits under the Agent it belongs to, named by its
+  MCP client's own name (`clientInfo`) or else by the session name the Agent chose;
+  each window shows its name, a waiting, verified, refused or ended state, what its
+  grant allows and its last call. Each Agent has its maker's mark, or an initial
+  when Rho has none. Below the list, one setup prompt is for the person's own local
+  MCP client. The prompt names the running installation and exact existing
+  project; the Agent configures its own client. Reading or copying grants no
+  access. Copy failure leaves selectable text; request failure
   offers retry. ACP observations and Host activity remain under a disclosure
   ([connection episode](AGENT-CONNECT-EPISODE.md)). Conversation rows retain title,
   model, effort, messages, state, usage, cost and their files, commands and answers;

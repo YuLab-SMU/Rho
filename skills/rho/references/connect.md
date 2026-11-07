@@ -12,7 +12,7 @@ A grant covers one project. Each project needs its own grant, which adds an MCP 
 
 ## Use the project’s setup prompt
 
-In versions with **Agent → Connect your agent**, use the supplied prompt. It names
+In versions with **Agent → Agents** (earlier: **Connect your agent**), use the supplied prompt. It names
 this running installation and the exact existing project. Configure yourself with
 your own supported MCP mechanism; use your own help or documentation when needed.
 Preserve unrelated configuration and use private local configuration scoped to this project when available. A client
@@ -36,15 +36,30 @@ The reply is one JSON line:
 ```json
 {"projectId":"…","session":"my-agent","connectionFile":"<state>/agent-….json","methods":82,
  "mcp":{"name":"rho-pa14-quorum-sensing","command":"/…/node","args":["/…/rho/dist/cli.js","--mcp","<state>/agent-….json"]},
- "claude":"claude mcp add rho-pa14-quorum-sensing -- /…/node /…/cli.js --mcp <state>/agent-….json"}
+ "claude":"claude mcp add rho-pa14-quorum-sensing -- /…/node /…/cli.js --mcp <state>/agent-….json",
+ "codex":"codex mcp add rho-pa14-quorum-sensing -- …",
+ "opencode":{"file":"<project>/.opencode/opencode.json","merge":{"mcp":{"rho-pa14-quorum-sensing":{"type":"local","command":[…],"enabled":true}}}},
+ "dsh":{"file":"~/.dsh/profiles/desktop/cordis.patch.yml","append":"- insert:\n    - id: \"mcp-rho-…\"\n      name: \"@deepseek-ai/dsh-mcp-client\"\n…"}}
 ```
+
+Rho 0.5.6 and earlier return only `mcp` and `claude`.
 
 - **Any MCP client:** register the returned `mcp.name`, `mcp.command` and `mcp.args`
   with your own supported configuration mechanism. Keep connection-file contents private.
 - **Claude Code:** run the printed `claude` command from inside the project folder. Its default
   scope is local and is keyed to that folder.
-- **Codex:** `codex mcp add <mcp.name> -- <mcp.command> <mcp.args…>`. Codex keeps one
-  configuration for every folder.
+- **Codex:** run the printed `codex` command (`codex mcp add <mcp.name> -- <mcp.command>
+  <mcp.args…>`). Codex keeps one configuration for every folder.
+- **OpenCode:** merge `opencode.merge` into the project's `.opencode/opencode.json` (mode
+  600; add it to `.gitignore` in a Git repository). OpenCode reads it when a session starts,
+  so verify in a new session (`opencode run` in the project folder). Checked with OpenCode
+  1.19.5 on 2026-11-07.
+- **DeepSeek Harness:** there is no `dsh mcp` command. Append `dsh.append` to the profile patch
+  named in `dsh.file` (the Desktop app's profile is `desktop`; back the file up first and keep
+  every other entry). Harness reloads the patch within seconds, so `rho_index` works in the
+  same session. `dsh --profile desktop --dump-config` is refused while the Desktop app manages
+  that profile; check for the `--mcp` process instead. Checked on 2026-11-07, where finding
+  this mechanism took the Agent most of nine minutes.
 
 Use the same `--session` name when retrying (the legacy default is `claude-code`).
 Current source keeps a valid grant with unchanged scope; older versions may replace its

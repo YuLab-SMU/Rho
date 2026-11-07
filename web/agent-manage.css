@@ -141,6 +141,7 @@
 @media (max-width: 900px) {
   .conv-details { grid-template-columns: minmax(0, 1fr); padding-left: 18px; }
   .agent-details { padding-left: 16px; }
+  .agent-windows { padding-left: 16px; }
   .agent-tiers li { grid-template-columns: 110px minmax(0, 1fr) auto; }
   .agent-tier-runs { display: none; }
 }
@@ -174,6 +175,20 @@
 .agent-radio:not(:disabled):hover > span { border-color: var(--color-accent); }
 .agent-radio:disabled { cursor: default; opacity: .45; }
 .agent-row.missing .agent-row-mark { opacity: .5; filter: grayscale(1); }
+/* Windows an Agent connected from, under its row: aligned with the name, one line each. */
+.agent-radio-slot { flex: none; width: 22px; height: 22px; }
+.agent-windows { display: flex; flex-direction: column; gap: 12px; margin: -2px 0 0; padding: 0 16px 14px 96px; list-style: none; }
+.agent-window { display: flex; flex-direction: column; gap: 3px; min-width: 0; overflow-wrap: anywhere; }
+.agent-window-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; color: var(--color-muted); font-size: 13px; }
+.agent-window-line strong { color: var(--color-ink); font-weight: 600; }
+.agent-window-client { color: var(--color-meta); }
+.agent-window-state { display: inline-flex; align-items: center; gap: 6px; color: var(--color-meta); font-weight: 500; }
+.agent-window-state .status-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.agent-window-state.verified { color: var(--color-verified); }
+.agent-window-state.warn { color: var(--color-amber); }
+.agent-window small { color: var(--color-meta); font-size: 12px; line-height: 1.5; }
+.agent-window small code { font-size: 11.5px; }
+.agent-row.windows-only .agent-row-status { color: var(--color-muted); }
 .agent-row.missing strong { color: var(--color-muted); }
 .agent-row-status.missing { color: var(--color-meta); }
 .agent-row.default .agent-row-status { color: var(--color-accent-strong); }

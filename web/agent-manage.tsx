@@ -3,7 +3,8 @@ import type { BrowserClient, WorkspaceSnapshot } from '../src/browser.js';
 import type { RhoOutput } from '../src/contract.generated.js';
 import { agentLabel, backends, effortSetting, modelSetting, ModelPicker, ordered, refreshAgentSettings, SettingSelect, split, useAgentSettings, valueName, when, type AgentSettingsState, type Backend, type SettingOption, type SettingValue } from './agent-settings.js';
 import { ConversationTurns, day } from './agent-work.js';
-import { BrandMark, ProviderMark } from './brand-marks.js';
+import { abilities } from './agents.js';
+import { agentDisplayName, BrandMark, brandOf, ProviderMark } from './brand-marks.js';
 import { Icon } from './icons.js';
 import { OutsideAgents } from './outside-agents.js';
 import './agent-manage.css';
@@ -272,33 +273,47 @@ async function exportMarkdown(client: BrowserClient, snapshot: WorkspaceSnapshot
 const providerOf = (value: { name: string; group?: string }) => value.group ?? split(value.name).group;
 const markOf = (which: Backend) => which === 'codex-acp' ? 'codex' as const : 'claude-code' as const;
 
-// The Agents Rho can run here, and the setup that lets an Agent the person runs elsewhere use
-// this project. Sessions of either kind appear under Conversations.
+// Every Agent of this project in one list, shown the same way however it works here: the Agents
+// Rho can start for new conversations, and the Agents running in their own windows that connected
+// themselves. A window is listed under the Agent it belongs to, by the name its MCP client gave
+// itself, else by the name the Agent chose for the connection. The setup prompt follows.
 function AgentsTab({ state, client, snapshot, onOpened }: { state: AgentSettingsState; client: BrowserClient; snapshot: WorkspaceSnapshot; onOpened: (compositionId: string, viewId?: string) => void }) {
   return <div className="agents-tab">
     <section className="agents-section" aria-labelledby="agents-here">
       <header className="agents-section-head">
-        <h2 id="agents-here">Agents on this computer</h2>
-        <p>Rho runs your own installed Agents, with their sign-in and settings. Every session of theirs in this folder, from Rho, a terminal or an editor, is under Conversations and continues there.</p>
+        <h2 id="agents-here">Agents for this project</h2>
+        <p>Rho starts the Agents installed on this computer for new conversations, with their own sign-in and settings. An Agent working in its own window, such as a terminal, an editor or its app, is listed here once it connects itself to this project. Their sessions in this folder are under Conversations.</p>
       </header>
-      <AgentsPanel state={state} />
+      <AgentsPanel state={state} snapshot={snapshot} />
     </section>
     <OutsideAgents client={client} snapshot={snapshot} onOpened={onOpened} />
   </div>;
 }
 
-export function AgentsPanel({ state }: { state: AgentSettingsState }) {
+type Window = NonNullable<WorkspaceSnapshot['agents']>[number];
+const windowName = (window: Window) => window.client?.name ?? window.label ?? 'Agent session';
+const keyOfName = (name: string) => brandOf(name) ?? 'name:' + name.toLowerCase();
+
+export function AgentsPanel({ state, snapshot }: { state: AgentSettingsState; snapshot?: WorkspaceSnapshot }) {
   const [open, setOpen] = useState<Backend | null>(null);
   if (!state.settings) return <p className="muted" role={state.problem ? 'alert' : 'status'}>{state.problem || 'Reading…'}</p>;
   // An ACP Agent is listed only when the person named its command.
   const shown = backends.filter(which => which !== 'acp' || state.available('acp')?.found);
+  const keyOf = (which: Backend) => which === 'acp' ? keyOfName(state.name('acp')) : which === 'codex-acp' ? 'codex' : 'claude-code';
+  const windows = (snapshot?.agents ?? []).filter(agent => !agent.conversationId);
+  const startable = new Set(shown.map(keyOf));
+  const others = new Map<string, Window[]>();
+  for (const window of windows) { const key = keyOfName(windowName(window)); if (!startable.has(key)) others.set(key, [...(others.get(key) ?? []), window]); }
   return <>
-    <ul className="agent-rows" role="radiogroup" aria-label="Agent for new conversations">{shown.map(which => <AgentRow key={which} which={which} state={state} open={open === which} onToggle={() => setOpen(current => current === which ? null : which)} />)}</ul>
+    <ul className="agent-rows" role="radiogroup" aria-label="Agent for new conversations">
+      {shown.map(which => <AgentRow key={which} which={which} state={state} snapshot={snapshot} windows={windows.filter(w => keyOfName(windowName(w)) === keyOf(which))} open={open === which} onToggle={() => setOpen(current => current === which ? null : which)} />)}
+      {snapshot && [...others.values()].map(list => <WindowsRow key={list[0].principal} windows={list} snapshot={snapshot} />)}
+    </ul>
     {state.problem && <p className="inline-error" role="alert">{state.problem}</p>}
   </>;
 }
 
-function AgentRow({ which, state, open, onToggle }: { which: Backend; state: AgentSettingsState; open: boolean; onToggle: () => void }) {
+function AgentRow({ which, state, snapshot, windows, open, onToggle }: { which: Backend; state: AgentSettingsState; snapshot?: WorkspaceSnapshot; windows: Window[]; open: boolean; onToggle: () => void }) {
   const offered = state.offered(which), choices = state.choices(which), agent = state.name(which), available = state.available(which);
   const found = available?.found !== false, checking = state.checking.has(which), problem = state.checkProblem[which], isDefault = which === state.backend;
   const { model } = ordered(offered?.options ?? []);
@@ -324,8 +339,41 @@ function AgentRow({ which, state, open, onToggle }: { which: Backend; state: Age
         <button className="icon-button agent-details-toggle" aria-expanded={open} aria-label={(open ? 'Hide ' : 'Show ') + agent + ' settings'} title={open ? 'Hide settings' : 'More settings'} onClick={onToggle}><Icon name="chevron" size={15} /></button>
       </div>}
     </div>
+    {snapshot && windows.length > 0 && <AgentWindows windows={windows} snapshot={snapshot} />}
     {open && found && <AgentDetails which={which} state={state} />}
   </li>;
+}
+
+// An Agent Rho does not start here, listed because it connected from its own window.
+function WindowsRow({ windows, snapshot }: { windows: Window[]; snapshot: WorkspaceSnapshot }) {
+  const name = agentDisplayName(windowName(windows[0]));
+  const live = windows.filter(w => !w.ended).length;
+  return <li className="agent-row windows-only">
+    <div className="agent-row-head">
+      <span className="agent-radio-slot" aria-hidden="true" />
+      <span className="agent-row-mark"><ProviderMark name={name} size={22} /></span>
+      <div className="agent-row-name">
+        <strong>{name}</strong>
+        <span className="agent-row-status">{live === 0 ? 'Its access has ended' : live > 1 ? 'Connected from ' + live + ' windows of its own' : 'Connected from its own window'}</span>
+      </div>
+    </div>
+    <AgentWindows windows={windows} snapshot={snapshot} />
+  </li>;
+}
+
+// Each window's own session name, what its grant allows and its latest call to Rho.
+function AgentWindows({ windows, snapshot }: { windows: Window[]; snapshot: WorkspaceSnapshot }) {
+  return <ul className="agent-windows" aria-label="Connected windows">{windows.map(agent => {
+    const tone = agent.ended || agent.last?.outcome === 'rejected' ? 'warn' : agent.last?.outcome === 'returned' ? 'verified' : 'waiting';
+    const state = agent.ended ? 'Access ended' : agent.last?.outcome === 'rejected' ? 'Last call refused' : agent.last?.outcome === 'returned' ? 'Call verified' : 'Waiting for first successful call';
+    return <li key={agent.principal} className="agent-window" data-rho-agent-session={agent.ended ? 'ended' : 'granted'}>
+      <div className="agent-window-line"><span className={'agent-window-state ' + tone}><span className="status-dot" aria-hidden="true" />{state}</span>
+        <span>Own window <strong>{agent.label ?? 'Agent session'}</strong>{agent.client ? <span className="agent-window-client"> · {agent.client.name}{agent.client.version ? ' ' + agent.client.version : ''}</span> : null}</span></div>
+      <small>{agent.ended ? 'Ask your Agent to connect again using the setup prompt below.' : abilities(agent, snapshot)}{agent.last ? <> · last call {day(agent.last.at).toLowerCase()} · <code>{agent.last.method}</code></> : null}</small>
+      {!agent.ended && !agent.last && <small>Access is ready. Configuration has not been verified. Ask your Agent to call rho_index.</small>}
+      {!agent.ended && agent.last?.outcome === 'rejected' && <small>Ask your Agent to check the error and retry with the same connection.</small>}
+    </li>;
+  })}</ul>;
 }
 
 function AgentDetails({ which, state }: { which: Backend; state: AgentSettingsState }) {

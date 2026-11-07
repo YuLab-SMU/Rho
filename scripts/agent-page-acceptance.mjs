@@ -256,14 +256,16 @@ if (process.env.RHO_CONNECT_FAIL && !process.argv.includes('remove')) { process.
   assert.ok(prompt.includes(opened.id));
   assert.equal((await call('observation.snapshot')).agents.filter(a => !a.conversationId).length, 0);
   const grant = await admin.call('session.grant', { projectId: opened.id, externalSessionId: 'My-research-agent' });
-  await until(() => outside.innerText(), t => /Waiting for first successful call/.test(t), 'access shown without claiming a connection');
+  // A connected window is listed with the other Agents, under its own name, above the prompt.
+  const listed = page.locator('.agents-tab .agent-rows');
+  await until(() => listed.innerText(), t => /Waiting for first successful call/.test(t), 'access shown without claiming a connection');
   const connected = new RhoClient(JSON.parse(await fs.readFile(grant.connectionFile, 'utf8')));
   await connected.call('observation.snapshot', { projectId: opened.id });
-  await until(() => outside.innerText(), t => /Call verified/.test(t), 'successful call shown');
+  await until(() => listed.innerText(), t => /Call verified/.test(t) && /My-research-agent/.test(t), 'successful call shown');
   await assert.rejects(connected.call('document.read', { projectId: opened.id, documentId: '0'.repeat(64) }));
-  await until(() => outside.innerText(), t => /Last call refused/.test(t), 'refused call shown');
+  await until(() => listed.innerText(), t => /Last call refused/.test(t), 'refused call shown');
   await connected.call('observation.snapshot', { projectId: opened.id });
-  await until(() => outside.innerText(), t => /Call verified/.test(t), 'retry with the same connection shown');
+  await until(() => listed.innerText(), t => /Call verified/.test(t), 'retry with the same connection shown');
   await outside.locator('summary').filter({ hasText: 'Full setup prompt' }).click();
   await shot('04b-outside');
   passed('the generic prompt grants nothing; an arbitrary Agent name and its actual call appear');

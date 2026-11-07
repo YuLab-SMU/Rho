@@ -8,7 +8,7 @@ import type { AddedTo } from './agent-connect.js';
 export interface SourceFolder { id: string; root: string; name: string }
 export interface FolderSelection extends SourceFolder { principalId: string; expiresAt: number }
 export interface Project { id: string; root: string; openedAt: string; nativeSelected?: true; name?: string; sources?: SourceFolder[]; workspace?: true; visibilityRoot?: string; creation?: { id: string; digest: string; author: string }; example?: { version: string } }
-export interface Principal { id: string; tokenHash: string; projectId?: string; methods: string[]; kind?: 'browser'; profile?: 'layered-business' | 'layered-presentation'; pluginFilter?: string[]; projectRoot?: string; selectedProjects?: string[]; expiresAt?: string; label?: string; conversationId?: string; added?: AddedTo }
+export interface Principal { id: string; tokenHash: string; projectId?: string; methods: string[]; kind?: 'browser'; profile?: 'layered-business' | 'layered-presentation'; pluginFilter?: string[]; projectRoot?: string; selectedProjects?: string[]; expiresAt?: string; label?: string; conversationId?: string; added?: AddedTo; client?: { name: string; version?: string } }
 export async function lease(directory: string) {
   // Best effort: say who holds it when the platform can tell us. Never a failure.
   const holder = (file: string) => {
@@ -79,6 +79,12 @@ export class State {
   async addPrincipal(principal: Principal) { this.principals.push(principal); await this.persistPrincipals(); }
   async removePrincipal(id: string) { this.principals = this.principals.filter(p => p.id !== id); await this.persistPrincipals(); }
   // Which Agent outside Rho a grant was added to, kept with the grant it serves.
+  // The MCP client that last used a grant, as it named itself; kept with the grant it used.
+  async markClient(id: string, client: { name: string; version?: string }) {
+    const principal = this.principals.find(p => p.id === id);
+    if (!principal || (principal.client?.name === client.name && principal.client?.version === client.version)) return;
+    principal.client = client; await this.persistPrincipals();
+  }
   async markAdded(id: string, added: AddedTo) { const principal = this.principals.find(p => p.id === id); if (principal) { principal.added = added; await this.persistPrincipals(); } }
   async revokeBrowser(id: string) {
     // This machine's own identity is not a session to revoke: the person can simply reopen the
