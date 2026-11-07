@@ -67,6 +67,8 @@ export function pluginEntries(catalog: CapabilityCatalog, pluginId: string) {
       description: c.presentation?.description ?? '',
       readOnly: c.presentation?.readOnly,
       runsCode: c.presentation?.runsCode,
+      // The live component's props contract, when the owner is loaded; retained listings carry none.
+      propsSchema: 'propsSchema' in c ? c.propsSchema as { required?: string[]; properties?: Record<string, unknown> } | undefined : undefined,
     })),
     skills: plugin?.listing?.skills ?? [],
   };
@@ -75,4 +77,35 @@ export function pluginEntries(catalog: CapabilityCatalog, pluginId: string) {
 export function pluginMatches(catalog: CapabilityCatalog, plugin: CapabilityPlugin, query: string) {
   const entries = pluginEntries(catalog, plugin.id);
   return JSON.stringify([plugin.id, plugin.package, plugin.presentation, entries, plugin.listing?.claudeCode, plugin.listing?.mcp]).toLowerCase().includes(query.trim().toLowerCase());
+}
+
+// The ways a plugin is reached, each from a declared or installed entry: views in the
+// browser, tools an Agent calls over the shared MCP connection, Skills, native Claude
+// Code entries, its own MCP server and command-line programs. A plugin with no view of
+// its own says so with the owner's note; nothing here is inferred from its name.
+export type PluginKind = { kind: 'ui' | 'page' | 'mcp' | 'skills' | 'claude-code' | 'mcp-server' | 'cli'; label: string; count?: number; detail: string };
+export function pluginKinds(plugin: CapabilityPlugin, entries: ReturnType<typeof pluginEntries>): PluginKind[] {
+  const listing = plugin.listing, note = pluginPresentation(plugin).viewNote, kinds: PluginKind[] = [];
+  if (entries.views.length) kinds.push({ kind: 'ui', label: 'UI', count: entries.views.length, detail: entries.views.length === 1 ? 'One view in the browser' : entries.views.length + ' views in the browser' });
+  else kinds.push({ kind: 'page', label: note === 'Its own page in each project' ? 'Rho page' : note === 'Inside other views' ? 'In other views' : 'No view', detail: note || 'No view of its own; your Agent uses it' });
+  if (entries.operations.length) kinds.push({ kind: 'mcp', label: 'MCP tools', count: entries.operations.length, detail: 'Operations an Agent calls over the shared Rho MCP connection' });
+  if (entries.skills.length) kinds.push({ kind: 'skills', label: 'Skills', count: entries.skills.length, detail: 'Instructions an Agent reads before using it' });
+  if (listing?.claudeCode) {
+    const parts = [...(listing.claudeCode.skills ?? []).map(s => 'Skill /' + s.name), ...(listing.claudeCode.hooks ?? []).map(h => h.event + ' hook')];
+    kinds.push({ kind: 'claude-code', label: 'Claude Code', detail: parts.join(', ') || 'Native entries for Claude Code sessions Rho starts' });
+  }
+  if (listing?.mcp) kinds.push({ kind: 'mcp-server', label: 'MCP server', count: listing.mcp.tools.length, detail: 'Serves Rho to Agents over ' + listing.mcp.transport });
+  if (listing?.cli?.length) kinds.push({ kind: 'cli', label: 'CLI', count: listing.cli.length, detail: listing.cli.join(', ') });
+  return kinds;
+}
+
+// What a view is bound to, from its declared bindings: the shell can then pick a real
+// project file of that kind to show the view with.
+export type ViewSubject = 'document' | 'markdown' | 'html' | 'table' | 'media' | 'object' | 'draft' | 'none';
+export function viewSubject(view: { id: string; bindings: Record<string, string> }): ViewSubject {
+  const [key, kind] = Object.entries(view.bindings)[0] ?? [];
+  if (!key) return 'none';
+  if (key === 'draft') return 'draft';
+  if (kind === 'document') return view.id === 'markdown.reader' ? 'markdown' : view.id === 'html.reader' ? 'html' : 'document';
+  return kind === 'table' || kind === 'media' || kind === 'object' ? kind : 'none';
 }

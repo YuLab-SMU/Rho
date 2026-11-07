@@ -136,7 +136,8 @@
     "acceptance:review": "node scripts/review-evidence-acceptance.mjs",
     "acceptance:review:agent": "node scripts/review-agent-episode.mjs",
     "acceptance:third-party": "npm run build:service && node scripts/third-party-acceptance.mjs",
-    "acceptance:plugin-disclosure": "node scripts/plugin-disclosure-acceptance.mjs"
+    "acceptance:plugin-disclosure": "node scripts/plugin-disclosure-acceptance.mjs",
+    "capture:plugin-previews": "node scripts/plugin-previews.mjs"
   },
   "dependencies": {
     "@rho-workspace/plugin-agent": "file:../Rho-plugins/plugins/agent",

@@ -7,7 +7,8 @@ import { Plugins } from '../dist/plugins.js';
 import { RhoService } from '../dist/server.js';
 import { CheckedClient as RhoClient } from './checked-client.mjs';
 import { BrowserClient } from '../dist/browser.js';
-import { pluginEntries, pluginGroups, pluginMatches, pluginPresentation } from '../dist/plugin-presentation.js';
+import { pluginEntries, pluginGroups, pluginKinds, pluginMatches, pluginPresentation, viewSubject } from '../dist/plugin-presentation.js';
+import { packageFacts } from '../dist/plugin-inventory.js';
 
 test('browser catalogs and snapshots preserve owner presentation through project and permission enrichment', async () => {
   const root = await fs.mkdtemp(path.join(tmpdir(), 'rho-presentation-'));
@@ -127,4 +128,33 @@ test('live views replace their retained descriptions by exact identity and versi
   assert.equal(views[0].displayName, 'Reader'); assert.equal(views[0].package, 'reader-package');
   assert.equal(views[1].displayName, 'reader'); assert.equal(views[1].version, '2');
   assert.ok(pluginMatches(catalog, plugin, 'reader-package'));
+});
+
+test('plugin kinds name each way a plugin is reached from declared or installed entries, never from its name', async () => {
+  const catalog = (await new Plugins({}).load()).catalog;
+  const kinds = id => pluginKinds(catalog.plugins.find(p => p.id === id), pluginEntries(catalog, id));
+  const names = id => kinds(id).map(k => k.kind);
+  assert.deepEqual(names('documents'), ['ui', 'mcp', 'skills', 'claude-code']);
+  assert.deepEqual(names('files'), ['page', 'mcp', 'skills']);
+  assert.equal(kinds('files')[0].label, 'No view');
+  assert.equal(kinds('console')[0].label, 'Rho page');
+  assert.equal(kinds('annotations')[0].kind, 'ui');
+  assert.equal(pluginKinds({ id: 'x', package: 'fixture', state: 'available', presentation: { viewNote: 'Inside other views' } }, pluginEntries({ plugins: [], operations: [], components: [], actions: [] }, 'x'))[0].label, 'In other views');
+  assert.deepEqual(names('kernel'), ['ui', 'mcp', 'skills']);
+  assert.equal(kinds('kernel')[0].count, 6);
+  // The Agent package links command-line programs in its own manifest; the catalog records them as read.
+  const agent = kinds('agent');
+  assert.deepEqual(agent.map(k => k.kind), ['ui', 'mcp', 'skills', 'mcp-server', 'cli']);
+  const cli = agent.find(k => k.kind === 'cli');
+  assert.ok(cli.count >= 1 && cli.detail.includes('rho-agent-mcp'), cli.detail);
+  assert.equal(agent.find(k => k.kind === 'mcp-server').count, catalog.plugins.find(p => p.id === 'agent').listing.mcp.tools.length);
+  const facts = await packageFacts('@rho-workspace/plugin-agent');
+  assert.equal(facts.version, catalog.plugins.find(p => p.id === 'agent').packageVersion);
+  assert.ok(facts.cli.includes('rho-agent-mcp'));
+  assert.deepEqual(await packageFacts('@rho-workspace/no-such-plugin'), { cli: [] });
+  // Without owner copy or a linked command there is only the honest default.
+  const bare = pluginKinds({ id: 'x', package: 'fixture', state: 'available' }, pluginEntries({ plugins: [], operations: [], components: [], actions: [] }, 'x'));
+  assert.deepEqual(bare, [{ kind: 'page', label: 'No view', detail: 'No view of its own; your Agent uses it' }]);
+  for (const [view, expected] of [[{ id: 'rho.editor', bindings: { document: 'document' } }, 'document'], [{ id: 'markdown.reader', bindings: { document: 'document' } }, 'markdown'], [{ id: 'html.reader', bindings: { document: 'document' } }, 'html'],
+    [{ id: 'rho.scatter', bindings: { data: 'table' } }, 'table'], [{ id: 'rho.media', bindings: { data: 'media' } }, 'media'], [{ id: 'rho.object', bindings: { data: 'object' } }, 'object'], [{ id: 'rho.feedback', bindings: { draft: 'document' } }, 'draft'], [{ id: 'rho.notebook', bindings: {} }, 'none']]) assert.equal(viewSubject(view), expected, view.id);
 });

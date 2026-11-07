@@ -45,9 +45,9 @@ export function servePageFrame(response: ServerResponse, head = false, allowForm
   response.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'content-length': bytes.length, 'content-security-policy': allowForms ? pageFramePolicy.replace('sandbox allow-scripts;', 'sandbox allow-scripts allow-forms;') : pageFramePolicy });
   response.end(head ? undefined : bytes);
 }
-const types: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.woff2': 'font/woff2', '.svg': 'image/svg+xml' };
+const types: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.woff2': 'font/woff2', '.svg': 'image/svg+xml', '.png': 'image/png' };
 export async function serveWeb(pathname: string, response: ServerResponse, root = webRoot, head = false) {
-  requireThat(pathname === '/' || pathname === '/index.html' || /^\/assets\/[A-Za-z0-9_-][A-Za-z0-9._-]*\.(js|css|woff2|svg)$/.test(pathname), 'not_found', 'Static asset is not in the browser build.');
+  requireThat(pathname === '/' || pathname === '/index.html' || /^\/assets\/[A-Za-z0-9_-][A-Za-z0-9._-]*\.(js|css|woff2|svg|png)$/.test(pathname), 'not_found', 'Static asset is not in the browser build.');
   const relative = pathname === '/' ? 'index.html' : pathname.slice(1);
   let file: string;
   try { file = await confined(root, relative); }

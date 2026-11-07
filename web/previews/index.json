@@ -1,0 +1,101 @@
+[
+  {
+    "component": "markdown.reader",
+    "version": "0.1.0",
+    "package": "@rho-workspace/plugin-markdown",
+    "packageVersion": "0.2.0",
+    "shows": "project-notes.md",
+    "capturedAt": "2026-11-07T19:45:59.728Z",
+    "image": "markdown.reader.png"
+  },
+  {
+    "component": "rho.editor",
+    "version": "0.2.0",
+    "package": "@rho-workspace/plugin-documents",
+    "packageVersion": "0.4.11",
+    "shows": "analysis/rnaseq_differential_expression.R",
+    "capturedAt": "2026-11-07T19:45:56.982Z",
+    "image": "rho.editor.png"
+  },
+  {
+    "component": "rho.flow",
+    "version": "1",
+    "package": "@rho-workspace/plugin-kernel",
+    "packageVersion": "0.5.6",
+    "shows": "this project",
+    "capturedAt": "2026-11-07T19:48:54.648Z",
+    "image": "rho.flow.png"
+  },
+  {
+    "component": "rho.media",
+    "version": "0.2.0",
+    "package": "@rho-workspace/plugin-media",
+    "packageVersion": "0.4.0",
+    "shows": "results/rnaseq_differential_expression.png",
+    "capturedAt": "2026-11-07T19:46:29.370Z",
+    "image": "rho.media.png"
+  },
+  {
+    "component": "rho.notebook",
+    "version": "1",
+    "package": "@rho-workspace/plugin-kernel",
+    "packageVersion": "0.5.6",
+    "shows": "this project",
+    "capturedAt": "2026-11-07T19:47:43.210Z",
+    "image": "rho.notebook.png"
+  },
+  {
+    "component": "rho.object",
+    "version": "1",
+    "package": "@rho-workspace/plugin-kernel",
+    "packageVersion": "0.5.6",
+    "shows": "sw in R",
+    "capturedAt": "2026-11-07T19:49:20.019Z",
+    "image": "rho.object.png"
+  },
+  {
+    "component": "rho.plots",
+    "version": "1",
+    "package": "@rho-workspace/plugin-kernel",
+    "packageVersion": "0.5.6",
+    "shows": "this project",
+    "capturedAt": "2026-11-07T19:48:32.000Z",
+    "image": "rho.plots.png"
+  },
+  {
+    "component": "rho.scatter",
+    "version": "0.2.0",
+    "package": "@rho-workspace/plugin-charts",
+    "packageVersion": "0.4.0",
+    "shows": "data/swarming/single_cultures.csv, circularity against area",
+    "capturedAt": "2026-11-07T19:46:34.800Z",
+    "image": "rho.scatter.png"
+  },
+  {
+    "component": "rho.servers",
+    "version": "1",
+    "package": "@rho-workspace/plugin-kernel",
+    "packageVersion": "0.5.6",
+    "shows": "this project",
+    "capturedAt": "2026-11-07T19:49:17.347Z",
+    "image": "rho.servers.png"
+  },
+  {
+    "component": "rho.table",
+    "version": "0.2.0",
+    "package": "@rho-workspace/plugin-tables",
+    "packageVersion": "0.5.0",
+    "shows": "results/rnaseq_de_summary.csv",
+    "capturedAt": "2026-11-07T19:46:26.553Z",
+    "image": "rho.table.png"
+  },
+  {
+    "component": "rho.variables",
+    "version": "1",
+    "package": "@rho-workspace/plugin-kernel",
+    "packageVersion": "0.5.6",
+    "shows": "this project",
+    "capturedAt": "2026-11-07T19:48:09.370Z",
+    "image": "rho.variables.png"
+  }
+]

@@ -167,8 +167,8 @@
     "capability.list": {
       "summary": "Read registered actions and components. Does not start R or a Core Host.",
       "path": "operations/capability.list.json",
-      "bytes": 35651,
-      "sha256": "c9c032475d5886019bf151f0a8efca957d1b569bfe6e0a237e98c18e9d8c80c6"
+      "bytes": 35886,
+      "sha256": "a31c52e26ef96c4bcb730fcaf194043129f9f9f57dcecd0be3f54e2f83ebd051"
     },
     "capability.resolve": {
       "summary": "Fetch selected relevant Skills with complete owner contracts, whole objects only. Pages pin catalog/bundle/caller; knownRefs only reuse currently available immutable bodies.",
@@ -605,8 +605,8 @@
     "observation.snapshot": {
       "summary": "observation.snapshot",
       "path": "operations/observation.snapshot.json",
-      "bytes": 180665,
-      "sha256": "c0f90b3f33f21483d6f4f0f4bc3b4e2f4d4f35a8d9905a5db3ba9a1695512b51"
+      "bytes": 180932,
+      "sha256": "0772088169eaa4421be046b0bc783ceb2e1996e7fe9d9109bd6667c25f7c4bca"
     },
     "project.create": {
       "summary": "project.create",

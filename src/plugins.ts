@@ -8,7 +8,7 @@ import type { Tables, tableLimits } from '@rho-workspace/plugin-tables';
 import type { Charts, chartLimits } from '@rho-workspace/plugin-charts';
 import type { Media } from '@rho-workspace/plugin-media';
 import { ownerContracts } from './contracts/owners.generated.js';
-import { pluginListing } from './plugin-inventory.js';
+import { packageFacts, pluginListing } from './plugin-inventory.js';
 import { validateUiExtension, uiExtensionLimits, type InstalledUiEntry } from './ui-extension.js';
 const executionInputSchema = ownerContracts.selected.execution.input as Record<string, unknown>;
 import type { executionLimits, Objects } from '@rho-workspace/plugin-r';
@@ -96,7 +96,9 @@ export class Plugins {
           const timeline = (module.plugin as { timeline?: string }).timeline;
           if (timeline && module.plugin.operations.some(o => o.method === timeline && o.effect === 'read')) status.timeline = timeline;
           status.requires = [...module.plugin.requires];
-          status.listing = pluginListing(module.plugin as PluginDescriptor);
+          const facts = await packageFacts(status.package);
+          if (facts.version) status.packageVersion = facts.version;
+          status.listing = pluginListing(module.plugin as PluginDescriptor, facts);
           status.packagePresent = true;
           status.state = 'available'; delete status.reason;
         } catch { status.reason = 'Selected plugin package is missing, incompatible or cannot be loaded.'; }

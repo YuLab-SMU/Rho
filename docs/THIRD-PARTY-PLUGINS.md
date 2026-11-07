@@ -141,6 +141,10 @@ output.textContent = receipt.state === 'completed'
   ? receipt.value.greeting : receipt.error;
 ```
 
+The frame follows the page's own height from 200 to 900 px, so let the page flow
+rather than fill the viewport; a taller page scrolls inside the frame. The page
+`create` generates shows a labelled form, a result and a failure state to start from.
+
 Pass a third argument to `rho.call` to retain an explicit original changeId.
 The default generates one per deliberate call. A stale digest is refused; reopen
 the view after an update. Several views may be declared and selected in the plugin

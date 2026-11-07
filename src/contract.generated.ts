@@ -3601,6 +3601,10 @@ export interface CapabilityListOutput {
           runsCode?: boolean;
         };
       }[];
+      /**
+       * @maxItems 16
+       */
+      cli?: string[];
       mcp?: {
         entry: string;
         transport: string;
@@ -9880,6 +9884,10 @@ export interface ObservationSnapshotOutput {
             runsCode?: boolean;
           };
         }[];
+        /**
+         * @maxItems 16
+         */
+        cli?: string[];
         mcp?: {
           entry: string;
           transport: string;

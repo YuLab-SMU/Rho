@@ -195,6 +195,8 @@ export const capabilityCatalogSchema = { ...obj({
       operations: { type: 'array', maxItems: 64, items: obj({ method: text, version: text, effect: { enum: ['read', 'metadata', 'document', 'file', 'native'] }, requires: { type: 'array', items: text }, presentation: entryPresentationSchema }, ['method', 'version', 'effect', 'requires']) },
       actions: { type: 'array', maxItems: 64, items: { ...obj({ id: text, version: text, requires: { type: 'array', items: text }, presentation: entryPresentationSchema }, []), additionalProperties: true } },
       views: { type: 'array', maxItems: 64, items: { ...obj({ id: text, version: text, ui: text, bindings: { type: 'object', additionalProperties: text }, presentation: entryPresentationSchema }, ['id', 'version', 'ui']), additionalProperties: true } },
+      // Command-line entries the installed package links, read from its own manifest.
+      cli: { type: 'array', maxItems: 16, items: text },
       mcp: obj({ entry: text, transport: text, tools: { type: 'array', maxItems: 32, items: obj({ name: text, description: text }) } }),
       claudeCode: obj({
         skills: { type: 'array', maxItems: 64, items: obj({ skill: text, name: text, description: text }) },

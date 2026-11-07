@@ -2,9 +2,11 @@ import { ThirdPartyPlugins } from './extensions.js';
 import type { BrowserClient } from '../src/browser.js';
 import { useLayoutEffect, useRef, useState } from 'react';
 import type { CapabilityCatalog, CapabilityPlugin, EntryPresentation } from '../src/browser.js';
-import { pluginEntries, pluginGroups, pluginMatches, pluginPresentation } from '../src/plugin-presentation.js';
-import { Icon } from './icons.js';
-import { PluginMcp, PluginSkill, PluginViews } from './plugin-entries.js';
+import { pluginEntries, pluginGroups, pluginKinds, pluginMatches, pluginPresentation, type PluginKind } from '../src/plugin-presentation.js';
+import { Icon, type IconName } from './icons.js';
+import { PluginMcp, PluginSkill, PluginViews, type LiveContext } from './plugin-entries.js';
+import { renders } from './rendered.js';
+import { viewPreview } from './view-previews.js';
 
 function Markers({ presentation }: { presentation?: EntryPresentation }) {
   return <span className="plugin-markers">
@@ -13,6 +15,13 @@ function Markers({ presentation }: { presentation?: EntryPresentation }) {
   </span>;
 }
 
+// How a plugin is reached, as chips: the first says whether it has views of its own.
+const kindIcons: Record<PluginKind['kind'], IconName> = { ui: 'layout', page: 'overview', mcp: 'tool', skills: 'book', 'claude-code': 'spark', 'mcp-server': 'server', cli: 'prompt' };
+export function Kinds({ kinds, detailed = false }: { kinds: PluginKind[]; detailed?: boolean }) {
+  return <span className="plugin-kinds">{kinds.map(k => <span key={k.kind} className={'plugin-kind plugin-kind-' + k.kind} title={detailed ? undefined : k.detail}>
+    <Icon name={kindIcons[k.kind]} size={12} stroke={1.8} />{k.label}{k.count !== undefined && <span className="plugin-kind-count">{k.count}</span>}{detailed && <span className="plugin-kind-detail">{k.detail}</span>}
+  </span>)}</span>;
+}
 interface Problem { installed: boolean; title: string; body: string; about?: CapabilityPlugin }
 function PluginSymbol({ plugin, size = '' }: { plugin: CapabilityPlugin; size?: string }) {
   const icon = plugin.presentation?.icon;
@@ -67,9 +76,9 @@ function inProject(plugin: CapabilityPlugin, state: Problem | null) {
   return { on: true, text: 'On. Each Agent uses the operations its connection grants.' };
 }
 
-export function PluginCatalog({ client, projectId, canManage, catalog, project, pluginId, onSelect: setPluginId, back: leave }: {
+export function PluginCatalog({ client, projectId, canManage, catalog, project, pluginId, onSelect: setPluginId, back: leave, live }: {
   client: BrowserClient; projectId: string; canManage: boolean; catalog: CapabilityCatalog; project: string; pluginId: string; onSelect: (id: string) => void;
-  back?: { label: string; run: () => void };
+  back?: { label: string; run: () => void }; live?: LiveContext;
 }) {
   const [copied, setCopied] = useState<number | null>(null), [copyError, setCopyError] = useState('');
   const [query, setQuery] = useState('');
@@ -104,6 +113,7 @@ export function PluginCatalog({ client, projectId, canManage, catalog, project, 
           <Installed problem={state} />
         </div>
       </header>
+      <Kinds kinds={pluginKinds(selected, entries)} />
       {state && <div className="plugin-notice"><strong>{state.title}</strong><p>{state.body}</p>
         {state.about && <button className="plugin-about" onClick={() => setPluginId(state.about!.id)}><PluginSymbol plugin={state.about} size="small" />About {pluginPresentation(state.about).displayName}</button>}
       </div>}
@@ -113,7 +123,7 @@ export function PluginCatalog({ client, projectId, canManage, catalog, project, 
         <button onClick={() => jump('plugin-actions-title')}>Operations <strong>{entries.operations.length}</strong></button>
       </nav>
       {p.description && <p className="plugin-description">{p.description}</p>}
-      <PluginViews entries={entries} note={p.viewNote} />
+      <PluginViews entries={entries} note={p.viewNote} live={live} />
       <section className="plugin-entry-section plugin-skills" aria-labelledby="plugin-skills-title">
         <h2 id="plugin-skills-title" tabIndex={-1}>Skills <span className="plugin-count">{entries.skills.length}</span></h2>
         <p className="plugin-section-note">Guidance shipped by this plugin, separate from the Skills your project keeps.</p>
@@ -147,6 +157,7 @@ export function PluginCatalog({ client, projectId, canManage, catalog, project, 
         <h2 id="plugin-information-title">Information</h2>
         <dl>
           {state?.installed !== false && <><dt>In {project}</dt><dd className="plugin-use"><span className={'status-dot' + (use.on ? ' live' : '')} />{use.text}</dd></>}
+          <dt>Reached by</dt><dd><Kinds kinds={pluginKinds(selected, entries)} detailed /></dd>
           {needs.length > 0 && <><dt>Works with</dt><dd className="plugin-needs">{needs.map(({ pluginId, purpose }) => {
             const other = catalog.plugins.find(plugin => plugin.id === pluginId);
             return other && <span className="plugin-dependency" key={pluginId}><button onClick={() => setPluginId(pluginId)}><PluginSymbol plugin={other} size="small" />{pluginPresentation(other).displayName}</button>{purpose && <span>{purpose}</span>}</span>;
@@ -169,25 +180,29 @@ export function PluginCatalog({ client, projectId, canManage, catalog, project, 
   return <section className="page-section plugin-page">
     <header className="plugin-page-heading"><h1>Plugins</h1><p>Discover the views, Skills and operations your plugins provide.</p></header>
     <div className="plugin-search"><label htmlFor="plugin-search">Find a plugin or capability</label><input id="plugin-search" type="search" value={query} onChange={e => setQuery(e.target.value)} placeholder="Try data flow, Markdown, a Skill or an operation name" maxLength={256} /></div>
-    {catalog.operations.some(o => o.method === 'extension.list' && o.state === 'available' && o.authorized)
-      ? <ThirdPartyPlugins client={client} projectId={projectId} canManage={canManage} query={query} />
-      : <p className="plugin-empty">Third-party plugin information is not granted to this tab.</p>}
     {!visible.length && <p className="plugin-empty" role="status">No built-in plugins match “{query}”. <button onClick={() => setQuery('')}>Clear search</button></p>}
     {/* Plugins that are not part of this installation form their own group, last. */}
     {[...pluginGroups(visible.filter(p => !absent.includes(p))), { category: 'Not installed', plugins: absent }].filter(group => group.plugins.length).map(group => <section className="plugin-group" key={group.category}>
       {group.category && <h2>{group.category}</h2>}
       <div className="plugin-grid">{group.plugins.map(plugin => {
         const p = pluginPresentation(plugin), state = problem(plugin, catalog.plugins, project);
-        const entries = pluginEntries(catalog, plugin.id);
+        const entries = pluginEntries(catalog, plugin.id), kinds = pluginKinds(plugin, entries);
+        // The card leads with the view itself: the first captured picture of one of its views.
+        const pictured = entries.views.map(v => ({ v, preview: viewPreview(v.id, v.version) })).find(x => x.preview);
         return <button className={'plugin-card' + (state?.installed === false ? ' absent' : '')} key={plugin.id} ref={element => { if (element) cards.current.set(plugin.id, element); else cards.current.delete(plugin.id); }} onClick={() => setPluginId(plugin.id)}>
-          <PluginSymbol plugin={plugin} />
-          <span className="plugin-card-copy"><strong>{p.displayName}</strong>{state ? <span className="plugin-card-state">{state.title}</span> : <span className="plugin-tagline">{p.tagline}</span>}
-            <span className="plugin-card-entries">{entries.views.length} views · {entries.skills.length} Skills · {entries.operations.length} operations</span>
+          <span className="plugin-card-figure">{pictured ? <img src={pictured.preview!.url} alt={`${pictured.v.displayName} view showing ${pictured.preview!.shows}`} loading="lazy" />
+            : <span className="plugin-card-nofigure"><PluginSymbol plugin={plugin} size="large" /><span>{kinds[0].kind !== 'ui' ? kinds[0].detail : entries.views.some(v => renders(v.id, v.version)) ? 'No picture of its view yet' : 'Its view is not in this browser build'}</span></span>}</span>
+          <span className="plugin-card-body">
+            <span className="plugin-card-head"><PluginSymbol plugin={plugin} size="small" /><strong>{p.displayName}</strong></span>
+            {state ? <span className="plugin-card-state">{state.title}</span> : <span className="plugin-tagline">{p.tagline}</span>}
+            <Kinds kinds={kinds} />
           </span>
-          <svg className="plugin-chevron" aria-hidden="true" width="16" height="16" viewBox="0 0 16 16"><path d="m6 3.5 4.5 4.5L6 12.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
         </button>;
       })}</div>
     </section>)}
+    {catalog.operations.some(o => o.method === 'extension.list' && o.state === 'available' && o.authorized)
+      ? <ThirdPartyPlugins client={client} projectId={projectId} canManage={canManage} query={query} />
+      : <p className="plugin-empty">Third-party plugin information is not granted to this tab.</p>}
     {workspaceSkills.length > 0 && <section className="plugin-entry-section plugin-skills plugin-workspace-skills" aria-labelledby="workspace-skills-title">
       <h2 id="workspace-skills-title">Rho workspace Skills <span className="plugin-count">{workspaceSkills.length}</span></h2>
       <p className="plugin-section-note">Provided by the application for working across plugins. Project Skills are kept separately in your project’s Skills page.</p>

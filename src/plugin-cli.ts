@@ -40,7 +40,52 @@ export async function pluginCli(args: string[]) {
       'rho-plugin.json': JSON.stringify(manifest, null, 2) + '\n',
       'host.mjs': `export async function run(operation, input, context) {\n  if (operation === 'greet') return { greeting: 'Hello, ' + input.name + '!' };\n  throw new Error('Unknown operation');\n}\n`,
       'SKILL.md': `# ${id}\n\nRead extension.describe for the installed digest and operation schemas. Call greet with a name. This operation reads only. Use a stable changeId for native operations; observe extension.read after a lost reply.\n`,
-      'view.html': `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${id}</title><style>body{font:16px system-ui;margin:24px;color:#24312b}input,button{font:inherit;padding:8px}output{display:block;margin-top:16px}</style><h1>${id}</h1><form><label>Your name <input name="name" value="World" maxlength="120"></label> <button>Greet</button></form><output aria-live="polite"></output><script>document.querySelector('form').onsubmit=async e=>{e.preventDefault();const out=document.querySelector('output');try{const result=await rho.call('greet',{name:e.target.elements.name.value});out.textContent=result.value?.greeting||result.error}catch(error){out.textContent=error.message}};</script></html>\n`,
+      'view.html': `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${id}</title>
+<style>
+  :root { color-scheme: light; --ink: #202927; --muted: #68736f; --line: #e1e6e3; --well: #f3f5f5; --accent: #1e6b52; --accent-soft: #e5f1e9; --failed: #b13f38; --failed-soft: #fbeeed; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 20px 22px 28px; font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: var(--ink); background: #fff; }
+  header { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+  .mark { flex: none; width: 38px; height: 38px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); display: grid; place-content: center; font-weight: 600; font-size: 17px; }
+  h1 { margin: 0; font-size: 17px; line-height: 1.3; font-weight: 650; }
+  header p { margin: 2px 0 0; color: var(--muted); font-size: 12.5px; }
+  form { max-width: 520px; padding: 16px 18px; border: 1px solid var(--line); border-radius: 10px; }
+  label { display: block; margin-bottom: 6px; font-size: 13px; font-weight: 500; }
+  .row { display: flex; gap: 8px; }
+  input, button { min-height: 34px; padding: 6px 12px; border: 1px solid #cbd3ce; border-radius: 7px; font: inherit; color: inherit; background: #fff; }
+  input { flex: 1; min-width: 0; }
+  button { flex: none; font-weight: 500; cursor: pointer; color: #fff; background: var(--accent); border-color: var(--accent); }
+  button:disabled { opacity: .55; cursor: default; }
+  output { display: block; margin-top: 14px; padding: 11px 14px; border-radius: 8px; background: var(--well); white-space: pre-wrap; overflow-wrap: anywhere; }
+  output:empty { display: none; }
+  output.failed { color: var(--failed); background: var(--failed-soft); }
+  .note { margin: 14px 0 0; font-size: 12px; color: var(--muted); }
+  code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; }
+</style></head>
+<body>
+<header><span class="mark" aria-hidden="true">${id.charAt(0).toUpperCase()}</span><div><h1>${id}</h1><p>An independent Rho plugin. This page calls its own <code>greet</code> operation through Rho.</p></div></header>
+<form>
+  <label for="name">Your name</label>
+  <div class="row"><input id="name" name="name" value="World" maxlength="120" required><button>Greet</button></div>
+  <output aria-live="polite"></output>
+  <p class="note">The reply comes from this package's <code>host.mjs</code> on this machine. Replace this page with your own; keep scripts and styles inline.</p>
+</form>
+<script>
+  const form = document.querySelector('form'), out = document.querySelector('output'), button = form.querySelector('button');
+  form.onsubmit = async event => {
+    event.preventDefault();
+    button.disabled = true; out.className = ''; out.textContent = 'Greeting…';
+    try {
+      const receipt = await rho.call('greet', { name: form.elements.name.value });
+      if (receipt.state !== 'completed') throw new Error(receipt.error || receipt.state);
+      out.textContent = receipt.value.greeting;
+    } catch (error) { out.className = 'failed'; out.textContent = error.message; }
+    finally { button.disabled = false; }
+  };
+</script>
+</body></html>
+`,
       'README.md': `# ${id}\n\nDevelop: \`rho plugin dev .\`\nCheck: \`rho plugin check .\`\nDistribute: \`npm pack --ignore-scripts\`, then share the tarball, Git package source or publish to your own npm namespace.\n\nSee Rho's docs/THIRD-PARTY-PLUGINS.md for the host and iframe APIs, permissions and contribution process.\n`,
     };
     for (const [file, text] of Object.entries(files)) await fs.writeFile(path.join(target, file), text, { flag: 'wx' });

@@ -29,8 +29,10 @@ try {
   manifest.views.push({ id: 'second', title: 'Second view', file: 'second-view.html' });
   await fs.writeFile(path.join(source, manifest.skills[0].file), '# First guide\nRead the first instructions.');
   await fs.writeFile(path.join(source, 'second-skill.md'), '# Second guide\nRead the second instructions. 研究指导 🧬');
-  await fs.writeFile(path.join(source, manifest.views[0].file), '<!doctype html><html><body><h1>First plugin view</h1></body></html>');
-  await fs.writeFile(path.join(source, 'second-view.html'), '<!doctype html><html><body><h1>Second plugin view</h1></body></html>');
+  // Each fixture view is a small page of its own, as a real package's would be.
+  const viewPage = (title, lead) => `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${title}</title><style>body{margin:0;padding:22px;font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#202927}h1{margin:0 0 6px;font-size:17px}p{margin:0;color:#68736f}</style></head><body><h1>${title}</h1><p>${lead}</p></body></html>`;
+  await fs.writeFile(path.join(source, manifest.views[0].file), viewPage('First plugin view', 'A page the package ships, shown in a frame of its own. 第一个视图'));
+  await fs.writeFile(path.join(source, 'second-view.html'), viewPage('Second plugin view', 'A second page of the same package.'));
   await fs.writeFile(path.join(source, 'rho-plugin.json'), JSON.stringify(manifest));
   await fs.writeFile(path.join(source, 'host.mjs'), `import fs from 'node:fs'; export function run(_, input, ctx) { fs.writeFileSync(ctx.projectRoot + '/HOST-INVOKED', 'unexpected'); return input; }`);
   service = await new RhoService({ root, stateDir: path.join(root, 'state'), coreBinary: '/missing', rscript: '/missing', example: false }).start();
