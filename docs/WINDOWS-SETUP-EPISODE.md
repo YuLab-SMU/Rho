@@ -166,6 +166,12 @@ Before the locale change, the Plugins suite run from this shell stopped making p
 `kernel.test.mjs` until it was ended; without Python on `PATH` ten kernel tests failed with exit
 9009.
 
+[CI run 42370939615](https://github.com/YuLab-SMU/Rho/actions/runs/42370939615) on `ada6de57`,
+with Plugins `edf7dfa`, passed every job. The suite ran 316 of 319 tests on macOS arm64 and Linux
+x64 (3 skipped) and 302 of 319 on Windows x64 (17 skipped), none failing; `rho --stop` passed on
+all three and the locale test on Windows. The candidate installed offline on macOS arm64, Linux
+arm64, Linux x64 with Node 22, 24 and 26, and Windows x64.
+
 ## Not done
 
 - The `--stop`, timeline, Notebook and locale changes reach people with the next npm release.
