@@ -613,6 +613,7 @@ body[data-resizing=col] { cursor: col-resize; user-select: none; }
 .turn { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .turn-person { align-self: flex-end; max-width: 85%; }
 .turn-person p { padding: 9px 14px; border-radius: 16px 16px 5px 16px; background: var(--color-well); line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+.turn-place { display: block; margin-top: 4px; color: var(--color-meta); font-size: 11px; text-align: right; }
 .turn-note { color: var(--color-meta); font-size: 12px; }
 /* What the Agent did before its last words: one line, open while it works. */
 .turn-work > summary { display: inline-flex; align-items: center; gap: 7px; max-width: 100%; min-width: 0; margin-left: -8px; padding: 3px 8px; border-radius: 7px; color: var(--color-muted); font-size: 13px; list-style: none; cursor: pointer; }

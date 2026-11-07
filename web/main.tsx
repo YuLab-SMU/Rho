@@ -5,6 +5,7 @@ import { BrowserClient, type BrowserConnection, type ProjectSummary, type Worksp
 import { Home, projectHue, projectName as name, trapTab } from './home.js';
 import { AgentRequest } from './agents.js';
 import { AgentConversation } from './conversation.js';
+import type { UiLocation } from '../src/ui-context.js';
 import { ProjectNavigation, sourceLabels, type Section, type SourceRow } from './project.js';
 import { sourceItems, sourceRowOrder, useProjectFiles, type SourceItem } from './sources.js';
 import { FormSwitch, savedForm, saveForm, useLiveValues, type Prepared } from '@rho-workspace/plugin-kernel/ui';
@@ -400,6 +401,26 @@ function App() {
   const composition = overview ? undefined : snapshot?.compositions.find(c => c.compositionId === compositionId) ?? (compositionId === followTarget.current || compositionId === defaultWorkspace || processConversation(compositionId) ? undefined : snapshot?.compositions.find(c => !processConversation(c.compositionId)));
   const studioOpen = screen === 'project' && !overview;
   const shownId = composition?.compositionId ?? compositionId, shownProcess = studioOpen ? processConversation(shownId) : null;
+  // A layout removed by the Agent leaves this tab too; another tab has its own
+  // location and independently observes the same composition change.
+  const seenLayouts = useRef<{ projectId: string; ids: Set<string> } | null>(null);
+  const deletedLayoutNotice = useRef<{ projectId: string; id: string } | null>(null);
+  useEffect(() => {
+    if (!snapshot) return;
+    const ids = new Set(snapshot.compositions.map(c => c.compositionId)), previous = seenLayouts.current;
+    seenLayouts.current = { projectId: snapshot.project.id, ids };
+    const removed = deletedLayoutNotice.current;
+    if (removed?.projectId === snapshot.project.id && ids.has(removed.id)) {
+      setNotice(text => text === compositionName(removed.id) + ' was deleted.' ? '' : text);
+      deletedLayoutNotice.current = null;
+    }
+    if (studioOpen && !processConversation(compositionId) && previous?.projectId === snapshot.project.id && previous.ids.has(compositionId) && !ids.has(compositionId)) {
+      const next = snapshot.compositions.find(c => !processConversation(c.compositionId));
+      if (next) layout(next.compositionId); else showOverview();
+      deletedLayoutNotice.current = { projectId: snapshot.project.id, id: compositionId };
+      setNotice(compositionName(compositionId) + ' was deleted.');
+    }
+  }, [snapshot, compositionId, studioOpen]);
   // Another Studio starts at now.
   useEffect(() => { setReplay(r => ({ ...r, at: null, playing: false })); }, [shownProcess]);
   const files = useProjectFiles(client, project && screen !== 'home' ? project.id : undefined, snapshot?.cursor);
@@ -558,10 +579,13 @@ function App() {
     accessOpen={context && !feedbackContext} accessTrigger={contextTrigger} onAccess={pick(() => { setFeedbackContext(false); setContext(v => feedbackContext || !v); setAgentOpen(false); })} />;
   const closeAgent = () => { setAgentOpen(false); agentReturn(); };
   // A conversation's own header holds its title, the recent conversations and Close.
+  const uiContext: UiLocation = studioOpen
+    ? { page: 'studio', compositionId: shownId, ...(!shownProcess ? { compositionVersion: composition?.version ?? 0 } : composition ? { compositionVersion: composition.version } : {}), replayAt: replay.at }
+    : { page: screen === 'plugins' ? 'plugins' : section === 'sources' ? 'sources:' + category : section, ...(section === 'file' && fileOnScreen ? { path: fileOnScreen.path } : {}) };
   const agentContents = <>
     {(link || !snapshot) && <div className="drawer-heading"><h2>Agent</h2><button className="icon-button" aria-label="Close Agent" onClick={closeAgent}><Icon name="close" size={18} /></button></div>}
     {snapshot && (link ? <AgentRequest key={snapshot.project.id} snapshot={snapshot} principalId={connection.principalId ?? 'local'} />
-      : <AgentConversation key={snapshot.project.id} snapshot={snapshot} client={client} selectedId={selectedConversation} onSelected={() => setSelectedConversation(null)} onOpen={id => address(snapshot.project.id, id)} onSent={() => { if (!studioOpen) follow(undefined, false); }} onStarted={id => { if (shownProcess) follow(id, true); }}
+      : <AgentConversation key={snapshot.project.id} snapshot={snapshot} client={client} uiContext={uiContext} selectedId={selectedConversation} onSelected={() => setSelectedConversation(null)} onOpen={id => address(snapshot.project.id, id)} onSent={() => { if (!studioOpen) follow(undefined, false); }} onStarted={id => { if (shownProcess) follow(id, true); }}
         replayOf={processConversation(shownId)} replayAt={studioOpen ? replay.at : null} onNow={() => setReplay(r => ({ ...r, at: null, playing: false }))}
         onClose={closeAgent} onAll={() => { showSection('agent'); if (narrow) setAgentOpen(false); }} sessions={externalConversations.sessions} onPath={showPath} />)}
     <div ref={setAgentSlot} className="agent-slot" />

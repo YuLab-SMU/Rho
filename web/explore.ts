@@ -158,6 +158,11 @@ export function nextWorkspace(ids: string[]) {
 // A new page holds nothing until the person adds a view to it.
 export async function createWorkspace(client: BrowserClient, projectId: string, ids: string[]) {
   const compositionId = nextWorkspace(ids);
-  await client.call('composition.apply', { projectId, compositionId, expectedVersion: 0, changeId: 'new-' + compositionId + '-' + crypto.randomUUID().slice(0, 8), operations: [{ op: 'replace', rootId: 'root', nodes: [{ id: 'root', kind: 'group', children: [] }] }] } as never);
+  const retained = await client.call('composition.read', { projectId, compositionId }).catch(error => {
+    if (error instanceof BrowserApiError && error.error.kind === 'not_found') return null;
+    throw error;
+  });
+  if (retained && !('deleted' in retained && retained.deleted)) throw new Error('That workspace was created in another window. Refresh and try again.');
+  await client.call('composition.apply', { projectId, compositionId, expectedVersion: retained?.version ?? 0, changeId: 'new-' + compositionId + '-' + crypto.randomUUID().slice(0, 8), operations: [{ op: 'replace', rootId: 'root', nodes: [{ id: 'root', kind: 'group', children: [] }] }] } as never);
   return compositionId;
 }

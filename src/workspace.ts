@@ -35,16 +35,17 @@ export class Workspace {
   constructor(public project: Project, public owners: ProjectPlugins, limits: Partial<typeof workspaceLimits> = {}, public interactions: Partial<typeof interactionLimits> = {}) { this.limits = { ...workspaceLimits, ...limits }; }
   private async directory() { return stateDirectory(this.project.root, '.rho/rho/compositions'); }
   private async file(id: string) { return path.join(await this.directory(), digest(id) + '.json'); }
-  async compositions() {
+  async compositions(includeDeleted = false) {
     const d = await this.directory();
-    return Promise.all((await fs.readdir(d)).filter(f => /^[a-f0-9]{64}\.json$/.test(f)).map(f => readJson<any>(path.join(d, f))));
+    const retained = await Promise.all((await fs.readdir(d)).filter(f => /^[a-f0-9]{64}\.json$/.test(f)).map(f => readJson<any>(path.join(d, f))));
+    return includeDeleted ? retained : retained.filter(c => !c.deleted);
   }
   async read(id: string) { return readJson<any>(await this.file(id)); }
   structured(trustedPresentation?: { authorBindingId: string; basisWitnessId: string }, retainedNotes: any[] = []) { return new Compositions(this.project, (views, retained) => this.validateViews(views, retained, trustedPresentation, retainedNotes), this.limits); }
-  async apply(body: any, author: string, kind: 'apply' | 'undo' | 'protect' = 'apply', trustedPresentation?: { authorBindingId: string; basisWitnessId: string }) {
+  async apply(body: any, author: string, kind: 'apply' | 'undo' | 'protect' | 'delete' = 'apply', trustedPresentation?: { authorBindingId: string; basisWitnessId: string }) {
     // Existing receipt must remain readable even at the composition count limit.
     const current = await readJson<any>(await this.file(body.compositionId), null);
-    requireThat(current || (await this.compositions()).length < this.limits.maxCompositions, 'limit', 'Composition retention limit reached.');
+    requireThat(current || (await this.compositions(true)).length < this.limits.maxCompositions, 'limit', 'Composition retention limit reached. Reuse a retained layout identity to keep its history.');
     const retainedNotes = kind === 'undo' ? (current?.history ?? []).flatMap((h: any) => h.snapshot.nodes.filter((n: any) => n.kind === 'view' && n.component === 'rho.agent-note')) : [];
     return this.structured(trustedPresentation, retainedNotes).transact(body, author, kind);
   }
@@ -98,7 +99,7 @@ export class Workspace {
     const current = await readJson<any>(file, null);
     requireThat((current?.version ?? 0) === body.expectedVersion, 'stale', 'Composition version changed.', { actualVersion: current?.version ?? 0 });
     requireThat(new Set(body.views.map((v: any) => v.id)).size === body.views.length, 'invalid', 'View identities must be unique in a composition.');
-    requireThat(current || (await this.compositions()).length < this.limits.maxCompositions, 'limit', 'Composition retention limit reached.', { limit: 'maxCompositions', maximum: this.limits.maxCompositions });
+    requireThat(current || (await this.compositions(true)).length < this.limits.maxCompositions, 'limit', 'Composition retention limit reached.', { limit: 'maxCompositions', maximum: this.limits.maxCompositions });
     requireThat(current?.format !== 'rho.composition/1', 'condition', 'Structured compositions require composition.apply; legacy put cannot bypass protection.');
     const availability = await this.validateViews(body.views, current?.views ?? []);
     const result = { compositionId: body.compositionId, version: (current?.version ?? 0) + 1, views: body.views, layout: body.layout, availability, acknowledgedAt: now() };
@@ -133,9 +134,9 @@ export class Workspace {
   async save(format = 2) {
     requireThat([1, 2, 3].includes(format), 'invalid', 'Select archive format 1, 2 or 3.');
     const collaboration = await this.collaborationState();
-    const compositions = await this.compositions();
+    const compositions = await this.compositions(true);
     requireThat(format === 3 || !(collaboration.configured || collaboration.interactions.length || collaboration.annotations.length || collaboration.contexts.length || compositions.some(c => c.format)), 'condition', 'Archive format 3 is required to preserve collaboration state; older formats would be lossy.');
-    const workspace = { ...(format === 3 ? { capabilities: collaboration.capabilities, interactions: collaboration.interactions, annotations: collaboration.annotations, contexts: collaboration.contexts } : {}), schemaVersion: format, sourceProjectId: this.project.id, acknowledgedAt: now(), documents: await this.owners.retainedDocuments(), resources: (await this.owners.retainedResources()).map(({ storage, ...r }) => r), compositions: await this.compositions(), selection: await readJson(path.join(await stateDirectory(this.project.root, '.rho/rho'), 'selection.json'), null) };
+    const workspace = { ...(format === 3 ? { capabilities: collaboration.capabilities, interactions: collaboration.interactions, annotations: collaboration.annotations, contexts: collaboration.contexts } : {}), schemaVersion: format, sourceProjectId: this.project.id, acknowledgedAt: now(), documents: await this.owners.retainedDocuments(), resources: (await this.owners.retainedResources()).map(({ storage, ...r }) => r), compositions, selection: await readJson(path.join(await stateDirectory(this.project.root, '.rho/rho'), 'selection.json'), null) };
     requireThat(Buffer.byteLength(JSON.stringify(workspace)) <= this.limits.maxMetadataBytes, 'limit', 'Workspace metadata exceeds the export byte budget; acknowledged owner state is retained.', { limit: 'maxMetadataBytes', maximum: this.limits.maxMetadataBytes });
     await atomicJson(path.join(await stateDirectory(this.project.root, '.rho/rho'), 'workspace.json'), workspace);
     return workspace;
@@ -212,7 +213,7 @@ export class Workspace {
     for (const composition of workspace.compositions) {
       const current = await readJson<any>(await this.file(composition.compositionId), null);
       if (current && canonical(current) !== canonical(composition)) { report.compositions.push({ compositionId: composition.compositionId, state: 'conflict' }); continue; }
-      requireThat(current || (await this.compositions()).length < this.limits.maxCompositions, 'limit', 'Composition retention limit reached during restore.', { limit: 'maxCompositions' });
+      requireThat(current || (await this.compositions(true)).length < this.limits.maxCompositions, 'limit', 'Composition retention limit reached during restore.', { limit: 'maxCompositions' });
       // Restore references even if a UI entry is missing. Reading or restoring
       // this intent never submits scientific work.
       const availability = Object.fromEntries(composition.views.map((v: any) => [v.id, v.component === actionFormComponent.id ? { state: 'entry-installed', visibility: 'unobserved' } : this.owners.assembly.viewAvailability(v.component, v.version)]));

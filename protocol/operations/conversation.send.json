@@ -29,6 +29,44 @@
         },
         "maxItems": 8
       },
+      "uiContext": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "page": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "compositionId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+          },
+          "compositionVersion": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "replayAt": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          }
+        },
+        "required": [
+          "page"
+        ]
+      },
       "continuationOf": {
         "type": "string",
         "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
@@ -630,6 +668,168 @@
               "type": "string",
               "pattern": "^[a-f0-9]{64}$"
             }
+          },
+          "uiContext": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "page": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              "compositionId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+              },
+              "compositionVersion": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "replayAt": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "path": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1024
+              },
+              "capturedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "project": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "name"
+                ]
+              },
+              "workspace": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "compositionId": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "observedVersion": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "currentVersion": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "state": {
+                    "enum": [
+                      "current",
+                      "changed",
+                      "deleted",
+                      "not-created",
+                      "derived",
+                      "unavailable"
+                    ]
+                  },
+                  "empty": {
+                    "type": [
+                      "boolean",
+                      "null"
+                    ]
+                  },
+                  "viewCount": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "omittedViews": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "views": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                        },
+                        "component": {
+                          "type": "string"
+                        },
+                        "title": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "component",
+                        "title"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "compositionId",
+                  "title",
+                  "observedVersion",
+                  "currentVersion",
+                  "state",
+                  "empty",
+                  "viewCount",
+                  "omittedViews",
+                  "views"
+                ]
+              }
+            },
+            "required": [
+              "page",
+              "capturedAt",
+              "project"
+            ]
           },
           "descriptions": {
             "type": "array",

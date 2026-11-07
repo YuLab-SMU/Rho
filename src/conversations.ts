@@ -1,5 +1,6 @@
 import { projectPath, commandFiles, buildWorkGraph } from './work-graph.js';
 import { notesInstructions, projectNotesPath } from './project-notes.js';
+import { uiContextPrompt, type UiContext, type UiLocation } from './ui-context.js';
 import { addSpend, describeLimits, describable, fileFacts, figureContext, raster, type Cost, type FileDescription, type MadeStep, type Spend, type Strategy } from './file-describer.js';
 import { agentTurnLimit, displayCommand, toolActivity } from './conversation-presentation.js';
 import {privateEvidencePath, type CapturePort, type TurnEvidence} from './evidence-capture.js';
@@ -19,6 +20,9 @@ import type { Project } from './state.js';
 // settings stays, and a model without Auto falls back to Accept edits with the adapter's warning.
 const claudePreferred = { mode: { value: 'auto', replaces: ['default'] } };
 export const conversationLimits = {
+  // Per-message interface observations: omit and count extra views; refuse an
+  // observation still larger than the byte budget before sending the message.
+  maxUiContextBytes: 16384, maxUiContextViews: 32,
   // Conversations kept per project, not counting the trash; starting or restoring another is
   // refused. The trash keeps as many again; past that, moving one there is refused.
   maxConversations: 64,
@@ -84,6 +88,7 @@ interface Turn {
   // limit are counted.
   descriptions?: FileDescription[]; descriptionsOmitted?: number; descriptionSpend?: Spend;
   contexts?: string[];
+  uiContext?: UiContext;
   decisions?: Decision[];
   // An Agent session that has gone leaves the messages Rho kept. The next message then runs in a
   // new session told what was said before, and the turn says which session it replaced.
@@ -197,6 +202,7 @@ export interface ConversationPorts {
   claudePlugins?(project: Project): Promise<string[]>;
   capture?: CapturePort;
   context?(project: Project, contextId: string): Promise<unknown>;
+  uiContext?(project: Project, location: UiLocation, limits: typeof conversationLimits): Promise<UiContext>;
   // One sentence on what a file holds, from the model the conversation's Agent uses, and what
   // models.dev lists about that model.
   describe?(project: Project, request: DescribeRequest): Promise<{ text: string; model: string | null; cost: Cost }>;
@@ -438,12 +444,12 @@ export class Conversations {
   // conversation or message and starts nothing; changed words under that identity are refused.
   // Without an Agent or settings named in the request, the person's saved ones are used and
   // recorded with the conversation.
-  async start(project: Project, by: string, input: { changeId: string; text: string; contexts?: string[]; backend?: Backend; config?: Choices; continue?: ContinueSession }) {
+  async start(project: Project, by: string, input: { changeId: string; text: string; contexts?: string[]; uiContext?: UiLocation; backend?: Backend; config?: Choices; continue?: ContinueSession }) {
     requireThat(!input.backend || backends.includes(input.backend), 'invalid', 'Choose Claude Code or Codex.');
     if (input.config) this.choices(input.config);
     const from = input.continue;
     const text = this.message(input.text), requestDigest = digest(canonical({ text, ...(input.contexts?.length ? { contexts: input.contexts } : {}), ...(input.backend ? { backend: input.backend } : {}), ...(input.config ? { config: input.config } : {}),
-      ...(from ? { continue: { producer: from.producer, sessionId: from.sessionId, copy: from.copy } } : {}) }));
+      ...(input.uiContext ? { uiContext: input.uiContext } : {}), ...(from ? { continue: { producer: from.producer, sessionId: from.sessionId, copy: from.copy } } : {}) }));
     return this.serial(project.id, async () => {
       const index = await this.index(project), existing = index.conversations.find(x => x.changeId === input.changeId);
       requireThat(!index.deleted?.some(x => x.changeId === input.changeId), 'conflict', 'That request started a conversation that was later deleted. It is not started again.');
@@ -470,6 +476,7 @@ export class Conversations {
       }
       const turn = this.turn(input.changeId, requestDigest, by, text, 1);
       if (input.contexts?.length) turn.contexts = [...input.contexts];
+      if (input.uiContext) turn.uiContext = await this.ports.uiContext?.(project, input.uiContext, this.limits);
       c.turns.push(turn);
       // Recorded before the process starts, so a crash in between leaves an unknown message, never a resend.
       await this.write(project, c);
@@ -497,8 +504,8 @@ export class Conversations {
     const holder = found?.open && !(conversationId && await this.owns(project, conversationId, found.open.pid)) ? found.open : null;
     requireThat(!holder, 'condition', `This session is open in ${holder?.where ?? 'another window'}. Close it there to continue here${existing ? '' : ', or continue a copy'}. Nothing was sent.`, { heldBy: holder?.where ?? null });
   }
-  async send(project: Project, by: string, input: { conversationId: string; changeId: string; text: string; contexts?: string[]; continuationOf?: string }) {
-    const text = this.message(input.text), requestDigest = digest(canonical({ text, ...(input.contexts?.length ? { contexts: input.contexts } : {}), ...(input.continuationOf ? { continuationOf: input.continuationOf } : {}) }));
+  async send(project: Project, by: string, input: { conversationId: string; changeId: string; text: string; contexts?: string[]; uiContext?: UiLocation; continuationOf?: string }) {
+    const text = this.message(input.text), requestDigest = digest(canonical({ text, ...(input.contexts?.length ? { contexts: input.contexts } : {}), ...(input.uiContext ? { uiContext: input.uiContext } : {}), ...(input.continuationOf ? { continuationOf: input.continuationOf } : {}) }));
     return this.serial(project.id, async () => {
       const c = await this.load(project, input.conversationId), existing = c.turns.find(t => t.changeId === input.changeId);
       if (existing) {
@@ -523,6 +530,7 @@ export class Conversations {
       const turn = this.turn(input.changeId, requestDigest, by, text, c.turns.length + 1);
       if (input.continuationOf) turn.continuationOf = input.continuationOf;
       if (input.contexts?.length) turn.contexts = [...input.contexts];
+      if (input.uiContext) turn.uiContext = await this.ports.uiContext?.(project, input.uiContext, this.limits);
       c.turns.push(turn);
       await this.write(project, c);
       this.launch(project, c, turn);
@@ -906,7 +914,7 @@ export class Conversations {
           try { return await answer; } finally { this.permissions.delete(key); }
         }
       });
-      const utterance = turn.text + (turn.continuationOf ? '\n\nOriginal task:\n' + c.turns[0].text : '') + (turn.contexts?.length ? '\n\nRead these exact frozen review contexts with context.read before responding: ' + turn.contexts.join(', ') + '. Reply with annotation.reply and explicit result resource versions.' : '');
+      const utterance = turn.text + uiContextPrompt(turn.uiContext) + (turn.continuationOf ? '\n\nOriginal task:\n' + c.turns[0].text : '') + (turn.contexts?.length ? '\n\nRead these exact frozen review contexts with context.read before responding: ' + turn.contexts.join(', ') + '. Reply with annotation.reply and explicit result resource versions.' : '');
       // The Agent's session ended with its process: after Rho restarts, and on a machine that
       // never ran the session a project was copied from. The messages Rho kept are the record, so
       // the message runs in a new session told what was said before. Nothing is resent as a new

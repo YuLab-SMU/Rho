@@ -9,6 +9,7 @@ import { objectSchema as obj, text, refSchema as ref } from '@rho-workspace/plug
 import { routeSchemas } from './task-routing-contract.js';
 import { baseProtocol } from './protocol-base.js';
 import { projectWorkSchema } from './work-contract.js';
+import { uiLocationSchema, uiContextSchema } from './ui-context.js';
 const base = structuredClone(baseProtocol);
 
 // ---------------------------------------------------------------------------
@@ -87,9 +88,9 @@ export const operations: Record<string, any> = { ...base.operations, ...extensio
   'data.compare': obj({ ...project, left: ref, right: ref, options: obj({ leftKey: text, rightKey: text, leftNamespace: text, rightNamespace: text, mapping: { const: 'equal-string' }, leftField: text, rightField: text, join: { enum: ['left', 'inner', 'full'] } }) }),
   'media.describe': obj({ ...project, resource: ref }),
   // A conversation the person starts in Rho: their words, under a request identity they hold.
-  'conversation.start': obj({ ...project, changeId, text: { type: 'string', minLength: 1, maxLength: 16384 }, backend: agentBackend, config: choices, contexts: { ...array(digest), maxItems: 8 },
+  'conversation.start': obj({ ...project, changeId, text: { type: 'string', minLength: 1, maxLength: 16384 }, backend: agentBackend, config: choices, contexts: { ...array(digest), maxItems: 8 }, uiContext: uiLocationSchema,
     continue: obj({ session: { type: 'string', pattern: '^x-[a-f0-9]{64}$' }, copy: { type: 'boolean' } }, ['session']) }, ['projectId', 'changeId', 'text']),
-  'conversation.send': obj({ ...project, conversationId: changeId, changeId, text: { type: 'string', minLength: 1, maxLength: 16384 }, contexts: { ...array(digest), maxItems: 8 }, continuationOf: changeId }, ['projectId','conversationId','changeId','text']),
+  'conversation.send': obj({ ...project, conversationId: changeId, changeId, text: { type: 'string', minLength: 1, maxLength: 16384 }, contexts: { ...array(digest), maxItems: 8 }, uiContext: uiLocationSchema, continuationOf: changeId }, ['projectId','conversationId','changeId','text']),
   'conversation.permission': obj({ ...project, conversationId: changeId, turnId: changeId, permissionId: changeId, optionId: { type: 'string', minLength: 1, maxLength: 256 } }),
   'conversation.stop': obj({ ...project, conversationId: changeId, turnId: changeId }),
   'conversation.decide': obj({ ...project, conversationId: changeId, turnId: changeId, changeId, decision: { enum: ['accepted', 'needs-changes'] }, note: { type: 'string', maxLength: 4096 } }, ['projectId', 'conversationId', 'turnId', 'changeId', 'decision']),
@@ -129,6 +130,7 @@ const applyOperation = { oneOf: [
 ] };
 operations['composition.apply'] = obj({ ...condition, operations: { ...array(applyOperation), minItems: 1, maxItems: 256 } });
 operations['composition.undo'] = obj(condition);
+operations['composition.delete'] = obj(condition);
 operations['view.protection.set'] = obj({ ...condition, viewId: changeId, protected: { type: 'boolean' } });
 operations['view.close'] = obj({ ...operations['view.close'].properties, changeId }, operations['view.close'].required);
 const selectionScope = { oneOf: [obj({ kind: { const: 'caller' } }), obj({ kind: { enum: ['view', 'shared'] }, id: changeId })] };
@@ -241,7 +243,7 @@ const conversationStep = response({ kind: { enum: ['text', 'tool', 'error'] }, a
   output: response({ text: { type: 'string' }, lines: integer, bytes: integer, cut: { type: 'boolean' } }, ['text', 'lines', 'bytes', 'cut']) }, ['kind', 'at']);
 const conversationTurn = response({ id: text, by: text, text: { type: 'string' }, sentAt: text, state: { enum: ['running', 'completed', 'failed', 'stopped', 'unknown'] }, startedAt: { anyOf: [text, { type: 'null' }] }, endedAt: { anyOf: [text, { type: 'null' }] }, model: { anyOf: [text, { type: 'null' }] },
   stop: { anyOf: [response({ requestedAt: text, by: text, reason: { enum: ['person', 'closing', 'wall-limit', 'output-limit', 'line-limit', 'identity'] } }), { type: 'null' }] },
-  steps: array(conversationStep), omitted: integer, evidence: evidenceSchema, contexts: array(digest),
+  steps: array(conversationStep), omitted: integer, evidence: evidenceSchema, contexts: array(digest), uiContext: uiContextSchema,
   // What the files it wrote hold: facts read from each file, then a model's sentence naming the
   // version it read, the model, how it was given the file (its first lines, the image, or what
   // made it), and what the call cost and on what basis (Rho's describeLimits). The spend sums
@@ -380,7 +382,7 @@ export const responses: Record<string, any> = { ...base.responses, ...ownerRespo
   'workspace.save': contract.workspaceSaveSchema,
   'workspace.restore': contract.workspaceRestoreSchema,
   'observation.snapshot': observationSnapshot,
-  'composition.apply': structuredComposition, 'composition.undo': structuredComposition, 'view.protection.set': structuredComposition,
+  'composition.apply': structuredComposition, 'composition.undo': structuredComposition, 'composition.delete': structuredComposition, 'view.protection.set': structuredComposition,
   'composition.read': composition, 'view.close': composition,
   'project.openFile': response({ document: ownerResponses['document.open'], viewId: text, composition: structuredComposition }),
   'interaction.selection.read': contract.selectionChannelSchema,
@@ -408,6 +410,7 @@ export const descriptions = {
   'capability.index': 'Read a small role-narrowed index of currently authorized, enabled operations and immutable Skill/contract references.',
   'capability.resolve': 'Fetch selected relevant Skills with complete owner contracts, whole objects only. Pages pin catalog/bundle/caller; knownRefs only reuse currently available immutable bodies.', ...base.descriptions,
   'document.read': 'Read the shared acknowledged buffer, including unsaved text and its version.',
+  'composition.delete': 'Delete an empty Studio workspace layout only, never the project directory, documents, resources, conversations or running sessions. Requires its observed expectedVersion and a stable changeId. The same request returns its original receipt without deleting a recreated workspace. Nonempty, conversation and active-task layouts are refused. The deleted layout and its history remain readable with composition.read and recoverable with composition.undo; it is omitted from active workspace lists. Recreating it uses a conditional composition.apply replacement at its retained version.',
   'document.edit': 'Apply conditional UTF-16 text edits to the shared buffer; keep the returned version.',
   'feedback.submit': 'Teacher browser only: freeze the original draft/anchor, prepare the committed message and retain one original-session delivery. Preserve submissionId across missing acknowledgements; stages are separate durable facts.',
   'feedback.read': 'Original business binding only: fetch one complete frozen feedback object using its original delivery/context and a stable fetchId. relatedDocumentId is a pointer: read its CURRENT version before conditional edit/save and preserve human changes. This owner-served receipt does not prove client return or understanding.',

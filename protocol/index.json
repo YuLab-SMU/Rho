@@ -179,8 +179,14 @@
     "composition.apply": {
       "summary": "composition.apply",
       "path": "operations/composition.apply.json",
-      "bytes": 47304,
-      "sha256": "bb67f1d1ad49ae58809918ee5a4a2da63aa10c82884172a0bf353668753974ce"
+      "bytes": 47492,
+      "sha256": "7f7c106b6569c39551c28573f3a5b381f5efcbe6cf93f27f7d90c1750375cd9c"
+    },
+    "composition.delete": {
+      "summary": "Delete an empty Studio workspace layout only, never the project directory, documents, resources, conversations or running sessions. Requires its observed expectedVersion and a stable changeId. The same request returns its original receipt without deleting a recreated workspace. Nonempty, conversation and active-task layouts are refused. The deleted layout and its history remain readable with composition.read and recoverable with composition.undo; it is omitted from active workspace lists. Recreating it uses a conditional composition.apply replacement at its retained version.",
+      "path": "operations/composition.delete.json",
+      "bytes": 26137,
+      "sha256": "1e1b1a50ccdc2b2069e3157549bdd04809485a1fdc4d3fe76bef819948fa196a"
     },
     "composition.put": {
       "summary": "composition.put",
@@ -191,14 +197,14 @@
     "composition.read": {
       "summary": "composition.read",
       "path": "operations/composition.read.json",
-      "bytes": 32911,
-      "sha256": "ed2193fe748d87dd6c4be08e2cf01e14c4c14e98977f566dce304d41f72f48e6"
+      "bytes": 33131,
+      "sha256": "adce3928d6b297cdce3963650f2601f52f35444a5f54df375a005687c7f6b4b5"
     },
     "composition.undo": {
       "summary": "composition.undo",
       "path": "operations/composition.undo.json",
-      "bytes": 25368,
-      "sha256": "fadd401c6a5a98ea5c66755603bccd36353566875acf8a29fd7d75ec8cc2bc64"
+      "bytes": 25556,
+      "sha256": "7e4f918650943b44784616d154ed1f6a7f355870638a14d8efe7314a8bf30950"
     },
     "console.events": {
       "summary": "Who ran each Console command and when, newest first, for the timeline: the folder, how it ended and its first line. No output.",
@@ -251,8 +257,8 @@
     "conversation.decide": {
       "summary": "Person at this machine only: say to use an answer, or that it needs changes and why. The decision holds for the file versions that message kept when it was given and says nothing of later versions. A new decision supersedes the one before; none is removed. Refused while the Agent is still answering.",
       "path": "operations/conversation.decide.json",
-      "bytes": 34600,
-      "sha256": "518369b3d052cea7f78f9722577d47ff54490ff8ba39769b0d768bf8529b8af4"
+      "bytes": 39467,
+      "sha256": "9d6266dba23e1cad9cc8f065f276b7f0d0005c78392fa54f020ceb807399072d"
     },
     "conversation.delete": {
       "summary": "Person at this machine only: delete Rho's record of a conversation in the trash. The Agent's own session files are not touched. Repeating the request that started it is then refused.",
@@ -269,14 +275,14 @@
     "conversation.permission": {
       "summary": "Person at this machine only: record an offered choice for a pending Agent permission request. The original request identity is retained; repeated identical choices do not respond twice.",
       "path": "operations/conversation.permission.json",
-      "bytes": 34419,
-      "sha256": "3ca68aad6568a7fe3426671d84725656d1ff19815521090dadcac7c543dcce88"
+      "bytes": 39286,
+      "sha256": "75e2d331d6c5263f7fdb523f4f7e2a302b6501c674e4d558587c89de1f8dd37a"
     },
     "conversation.read": {
       "summary": "Read a conversation started in Rho: the person's messages, the Agent's visible text and tool steps, and how each message ended. Reading starts and resumes nothing.",
       "path": "operations/conversation.read.json",
-      "bytes": 49527,
-      "sha256": "cc68d9b16b03f5a39debba41c4b41422f843d18a67b1cb26f7e8eb58d3c5bcb9"
+      "bytes": 54718,
+      "sha256": "5c155fdb11dc8cc435f1b05c82fecd143784b0b717ce1d75099f0992be8b3dae"
     },
     "conversation.restore": {
       "summary": "Person at this machine only: return a conversation from the trash to the project's conversations, within the project's conversation limit.",
@@ -287,8 +293,8 @@
     "conversation.send": {
       "summary": "Person at this machine only: send the next message to a conversation started in Rho. A continuationOf links a new message to the latest confirmed Agent turn-limit stop; the original request is not resent. Refused while the previous message is being answered. A repeated changeId with the same input returns the original message.",
       "path": "operations/conversation.send.json",
-      "bytes": 34706,
-      "sha256": "8dd79b04112b14500817c596a8551921675d3a062babe62aee1837d30305a124"
+      "bytes": 40451,
+      "sha256": "3dbe3c14e878d90c32cbb48b918f783367739e678b863a8a28bed5d7bcd08cb6"
     },
     "conversation.settings.check": {
       "summary": "Person at this machine only: start the chosen Agent in this project to read the settings it offers, then remove that session and end the process. No message is sent; one check per Agent runs at a time.",
@@ -311,14 +317,14 @@
     "conversation.start": {
       "summary": "Person at this machine only: start a conversation with the selected Claude Code or Codex Agent in this project. Rho selects the Agent plugin backend, attaches this project's MCP grant and records the message before sending it. Without backend or config, the person's saved Agent and settings are used and recorded with the conversation. A repeated changeId with the same text returns the original conversation and starts nothing. With continue, the message continues an Agent session listed by agent.sessions.list (one started in a terminal, an editor or the Agent's own app) through that same session, or through a copy of it with copy; a session another live window holds open is refused unless copied.",
       "path": "operations/conversation.start.json",
-      "bytes": 35719,
-      "sha256": "3cf1320d24698b12d2629d167b1ddd3516d7793725f52499b309437bd1d83fac"
+      "bytes": 41464,
+      "sha256": "634b66b389365d0f148b1cc6ede0931ae18399f346f70008cace483847d9c8d2"
     },
     "conversation.stop": {
       "summary": "Person at this machine only: ask the original Agent to stop answering one message. ACP cancellation is confirmed by the original prompt response; a lost connection keeps the outcome unknown. Legacy CLI conversations confirm process exit. Steps already taken stay done.",
       "path": "operations/conversation.stop.json",
-      "bytes": 34246,
-      "sha256": "f4bf1a4b8108837fe29f7d71a549c4ecf51c7edfa13777c033460cadebd048e5"
+      "bytes": 39113,
+      "sha256": "58db8a87339dcf0778b861bfad427b76ac9f322964b046d9041771e337226e99"
     },
     "conversation.trash": {
       "summary": "Person at this machine only: move a conversation that is not being answered to the trash. It is kept whole and not continued until restored; an idle connection to its Agent ends.",
@@ -587,8 +593,8 @@
     "observation.snapshot": {
       "summary": "observation.snapshot",
       "path": "operations/observation.snapshot.json",
-      "bytes": 166529,
-      "sha256": "6acbc633abbfc59dd14d3ecfac862821cad5d952a38e45a85c8c2d7c7d289e80"
+      "bytes": 166797,
+      "sha256": "ad56d1645bd1bb3873a7b9557a031d92a3e5e9b15d26932e2be5ff93895f4152"
     },
     "project.create": {
       "summary": "project.create",
@@ -629,8 +635,8 @@
     "project.openFile": {
       "summary": "Open one text file from the selected project as a document and place it in the person's own layout in one conditional step, so a person can see and edit their own source files without an Agent. Accepts a project-relative path or the @<sourceId>/<path> reference the listing returns; it executes nothing.",
       "path": "operations/project.openFile.json",
-      "bytes": 39369,
-      "sha256": "f995dc4e4355fa368f65933486be1a8b4830aa39e95578be0ec5fa797ebc77ec"
+      "bytes": 39589,
+      "sha256": "045659b998a532f8721415f10559695e50c8e65bcd891bc213fda75f1076c586"
     },
     "project.pick": {
       "summary": "project.pick",
@@ -737,8 +743,8 @@
     "session.grant": {
       "summary": "session.grant",
       "path": "operations/session.grant.json",
-      "bytes": 5059,
-      "sha256": "d5d0e15b50349fbec4affa99ceb1b98c79a6dbdce048e1305f8cd8ad31a3fdd2"
+      "bytes": 5093,
+      "sha256": "d328dc361afdf9cf8172f4272b787c9b10ef6cdb9713ba8785b4d555e0cf1f2a"
     },
     "session.instructions": {
       "summary": "Person at this machine or operator only: read a prompt for the person's own MCP client to connect itself to this existing project. Returns local launcher paths, never credential contents. Reading or copying grants no access, edits no client configuration and starts no runtime.",
@@ -815,8 +821,8 @@
     "view.close": {
       "summary": "view.close",
       "path": "operations/view.close.json",
-      "bytes": 33232,
-      "sha256": "55c3de5d21493a691340739f7786ee4d111f74fa3a814235681a92d65a904082"
+      "bytes": 33452,
+      "sha256": "50be16f1f9f36920447a99c71dbbfc143726aa0edca47fe537954c163dd586ef"
     },
     "view.observations.read": {
       "summary": "view.observations.read",
@@ -833,8 +839,8 @@
     "view.protection.set": {
       "summary": "view.protection.set",
       "path": "operations/view.protection.set.json",
-      "bytes": 25562,
-      "sha256": "d8a8168a41d40c7294f57170986cdb6c138dfdd134f910d6771d7e82b7da0ed9"
+      "bytes": 25750,
+      "sha256": "46b70dca9e4a11f430f8c809aa70f982ba7bc387139c8668d24068b893089c75"
     },
     "workspace.enhance": {
       "summary": "Assigned presenter only: conditional display emphasis/title/plain Agent note using exact current generation, witness and observation. Does not modify business resources, feedback or protection.",

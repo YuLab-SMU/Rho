@@ -52,6 +52,9 @@
         "type": "string",
         "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
       },
+      "deleted": {
+        "type": "boolean"
+      },
       "nodes": {
         "type": "array",
         "items": {
@@ -584,6 +587,9 @@
                     ]
                   },
                   "maxItems": 256
+                },
+                "deleted": {
+                  "type": "boolean"
                 }
               },
               "required": [
@@ -630,7 +636,8 @@
                 "apply",
                 "undo",
                 "protect",
-                "close"
+                "close",
+                "delete"
               ]
             }
           },
@@ -679,7 +686,8 @@
             "enum": [
               "apply",
               "undo",
-              "protect"
+              "protect",
+              "delete"
             ]
           }
         },

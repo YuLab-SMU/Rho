@@ -36,6 +36,7 @@ import { exportRun } from './run-export.js';
 import type { nativeActivityLimits, agentDeliveryLimits, RunContext } from '@rho-workspace/plugin-agent';
 import { ownerContracts } from './contracts/owners.generated.js';
 import { Conversations, conversationLimits, type ConversationConfig } from './conversations.js';
+import { captureUiContext } from './ui-context.js';
 import { describeLimits } from './file-describer.js';
 import { projectWork } from './project-work.js';
 export interface FeedbackTransport { accept(envelope: any): Promise<any>; lookup(envelope: any): Promise<any> }
@@ -379,6 +380,10 @@ export class RhoService {
       },
       directory: project => this.dataDir(project),
       notebook: () => this.plugins.availableIds().includes('kernel'),
+      // start/send already holds the service's project serializer while this
+      // observation is frozen, before the conversation is recorded or launched.
+      uiContext: (project, location, limits) => captureUiContext(project, location,
+        id => new Workspace(project, this.plugins.project(project.root, project.id), this.config.workspace).read(id), limits),
       context: async (project, id) => {
         const context = await this.plugins.project(project.root, project.id).need('agent').peekContext(id);
         requireThat(context.projectId === project.id, 'scope', 'The context belongs to another project.');
@@ -1308,8 +1313,12 @@ export class RhoService {
     if (method === 'data.page') return owners.need('tables').page(b.resource, b.offset, b.limit, b.sort, b.filter);
     if (method === 'data.plot') return owners.need('charts').plot(b.resource, b.x, b.y, b.maxPoints);
     if (method === 'data.compare') return owners.need('tables').compare(b.left, b.right, b.options);
-    if (['composition.apply', 'composition.undo', 'view.protection.set'].includes(method)) {
-      const result = await workspace.apply(b, principal.id, method === 'composition.undo' ? 'undo' : method === 'view.protection.set' ? 'protect' : 'apply');
+    if (['composition.apply', 'composition.undo', 'composition.delete', 'view.protection.set'].includes(method)) {
+      if (method === 'composition.delete' && (await routing.read())?.compositionId === b.compositionId) {
+        const retained = await workspace.read(b.compositionId);
+        requireThat(retained.receipts?.some((r: any) => r.changeId === b.changeId), 'condition', 'An active task uses this layout.');
+      }
+      const result = await workspace.apply(b, principal.id, method === 'composition.undo' ? 'undo' : method === 'composition.delete' ? 'delete' : method === 'view.protection.set' ? 'protect' : 'apply');
       const route = await routing.read();
       if (route) {
         try { result.witness = await new Presentation(p, workspace, this.config.presentationWitness, this.config.visibility).captureLayout(result, route); result.witnessState = result.witness ? 'retained' : 'expired'; }

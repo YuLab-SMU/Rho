@@ -209,8 +209,8 @@ export const nodeSchema = { oneOf: [
   obj({ id: identity, kind: { const: 'group' }, children: { type: 'array', items: identity, maxItems: 256 }, presentation: groupPresentation }, ['id', 'kind', 'children']),
   { ...viewSchema, properties: { ...viewSchema.properties, kind: { const: 'view' } }, required: [...viewSchema.required, 'kind'] }
 ] };
-export const compositionReceiptSchema = obj({ changeId: identity, author: text, version: positive, requestDigest: digest, at: timestamp, kind: { enum: ['apply', 'undo', 'protect'] } });
-const historyEntry = obj({ version: positive, snapshot: obj({ rootId: identity, nodes: { type: 'array', items: nodeSchema, maxItems: 256 } }) }, ['version', 'snapshot']);
+export const compositionReceiptSchema = obj({ changeId: identity, author: text, version: positive, requestDigest: digest, at: timestamp, kind: { enum: ['apply', 'undo', 'protect', 'delete'] } });
+const historyEntry = obj({ version: positive, snapshot: obj({ rootId: identity, nodes: { type: 'array', items: nodeSchema, maxItems: 256 }, deleted: { type: 'boolean' } }, ['rootId', 'nodes']) }, ['version', 'snapshot']);
 export const witnessSchema = { ...obj({
   witnessId: digest, projectId: identity, taskId: identity, compositionId: identity, compositionVersion: positive,
   sourceEvent: { type: 'object', additionalProperties: true }, policyRef: digest,
@@ -219,13 +219,13 @@ export const witnessSchema = { ...obj({
   at: timestamp
 }, ['witnessId', 'projectId', 'taskId', 'compositionId', 'compositionVersion', 'views']) };
 export const structuredCompositionSchema = { ...obj({
-  format: { const: 'rho.composition/1' }, compositionId: identity, rootId: identity,
+  format: { const: 'rho.composition/1' }, compositionId: identity, rootId: identity, deleted: { type: 'boolean' },
   nodes: { type: 'array', items: nodeSchema, maxItems: 256 },
   views: { type: 'array', items: viewSchema, maxItems: 32 },
   availability: { type: 'object', additionalProperties: availabilitySchema },
   version: positive, author: text, acknowledgedAt: timestamp,
   history: { type: 'array', items: historyEntry, maxItems: 256 },
-  receipts: { type: 'array', items: { ...obj({ changeId: identity, requestDigest: digest, version: positive, author: text, at: timestamp, kind: { enum: ['apply', 'undo', 'protect', 'close'] } }, ['changeId', 'author', 'version', 'at']) }, maxItems: 256 },
+  receipts: { type: 'array', items: { ...obj({ changeId: identity, requestDigest: digest, version: positive, author: text, at: timestamp, kind: { enum: ['apply', 'undo', 'protect', 'close', 'delete'] } }, ['changeId', 'author', 'version', 'at']) }, maxItems: 256 },
   retainedFromVersion: positive, undoRetainedFromVersion: positive,
   receipt: compositionReceiptSchema,
   witness: { anyOf: [witnessSchema, { type: 'null' }] }, witnessState: { enum: ['retained', 'expired', 'pending'] },

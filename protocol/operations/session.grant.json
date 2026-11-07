@@ -45,6 +45,7 @@
             "capability.list",
             "capability.resolve",
             "composition.apply",
+            "composition.delete",
             "composition.put",
             "composition.read",
             "composition.undo",

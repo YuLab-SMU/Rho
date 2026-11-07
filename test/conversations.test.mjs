@@ -55,6 +55,44 @@ async function fixture(root) {
   return { service, operator, p, person, starts, settled, running };
 }
 
+test('messages freeze the sending tab location and carry it to an existing Agent session', { skip: process.platform === 'win32' && 'the stand-in client is a script' }, async () => {
+  const root = await fs.mkdtemp(path.join(tmpdir(), 'rho-ui-context-'));
+  const f = await fixture(root);
+  try {
+    const { p, person, operator } = f;
+    const layout = (id, version, changeId) => operator.call('composition.apply', { projectId: p.id, compositionId: id, expectedVersion: version, changeId, operations: [{ op: 'replace', rootId: 'root', nodes: [{ id: 'root', kind: 'group', children: [] }] }] });
+    await fs.writeFile(path.join(p.root, 'README.md'), 'The project contains files even though its Studio is empty.');
+    await layout('workspace-3', 0, 'layout-3');
+    const uiContext = { page: 'studio', compositionId: 'workspace-3', compositionVersion: 1, replayAt: null };
+    const request = { projectId: p.id, changeId: 'delete-empty', text: '删除这个空的workspace', uiContext };
+    const first = await person.call('conversation.start', request), id = first.conversation.conversationId;
+    const read = await f.settled(id, 1), context = read.turns[0].uiContext;
+    assert.equal(read.turns[0].text, request.text, 'the person\'s words remain unchanged');
+    assert.equal(context.workspace.title, 'Workspace 3');
+    assert.equal(context.workspace.empty, true);
+    assert.equal(context.workspace.viewCount, 0);
+    assert.equal(context.workspace.state, 'current');
+    assert.deepEqual(context.project, { id: p.id, name: p.name ?? path.basename(p.root) });
+    assert.match((await f.starts())[0].text, /distinct from the project folder/);
+    assert.match((await f.starts())[0].text, /composition.delete/);
+    await layout('workspace-3', 1, 'changed-after-send');
+    const repeated = await person.call('conversation.start', request);
+    assert.deepEqual(repeated.turn.uiContext, context, 'a retry never recaptures newer UI state');
+    await assert.rejects(person.call('conversation.start', { ...request, uiContext: { ...uiContext, compositionId: 'workspace-2' } }), e => e.error.kind === 'conflict');
+    await layout('workspace-2', 0, 'layout-2');
+    await person.call('conversation.send', { projectId: p.id, conversationId: id, changeId: 'at-workspace-2', text: '现在这个呢', uiContext: { ...uiContext, compositionId: 'workspace-2' } });
+    const next = await f.settled(id, 2), starts = await f.starts();
+    assert.equal(next.turns[1].uiContext.workspace.title, 'Workspace 2');
+    assert.equal(starts[1].resume, true);
+    assert.match(starts[1].text, /"compositionId":"workspace-2"/);
+    await person.call('conversation.send', { projectId: p.id, conversationId: id, changeId: 'old-screen', text: '看看布局', uiContext });
+    assert.equal((await f.settled(id, 3)).turns[2].uiContext.workspace.state, 'changed');
+    assert.equal((await fs.readFile(path.join(p.root, 'README.md'), 'utf8')).startsWith('The project'), true);
+    assert.equal((await f.starts()).length, 3);
+    assert.equal((await person.call('observation.snapshot', { projectId: p.id })).operations.length, 0);
+  } finally { await f.service.close(); await fs.rm(root, { recursive: true, force: true }); }
+});
+
 // Windows starts a script only through a shell, so a stand-in client cannot be started there.
 const stand = { skip: process.platform === 'win32' && 'the stand-in client is a script' };
 test('a conversation started in Rho keeps one identity per message and resumes its own session', stand, async () => {

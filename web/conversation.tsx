@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { BrowserApiError, type BrowserClient, type WorkspaceSnapshot } from '../src/browser.js';
 import type { RhoOutput } from '../src/contract.generated.js';
+import type { UiLocation } from '../src/ui-context.js';
 import { agentTurnLimit, activitySummary, conversationBlocks, currentPlanEntry, durationText, stepDuration, type Activity, type AgentAction, type Block } from '../src/conversation-presentation.js';
 import { projectName } from './home.js';
 import { AgentMarkdown, CopyButton } from './markdown.js';
@@ -24,7 +25,7 @@ import { sessionAgent, sessionWhere, type ExternalSummary, type SessionTurn } fr
 type Read = RhoOutput<'conversation.read'>;
 type Turn = Read['turns'][number];
 type Observation = Read['observation'];
-type Pending = { kind: 'start' | 'send'; changeId: string; text: string; conversationId?: string; continuationOf?: string; backend?: 'claude-acp' | 'codex-acp' | 'acp'; continue?: { session: string; copy: boolean } };
+type Pending = { kind: 'start' | 'send'; changeId: string; text: string; uiContext?: UiLocation; conversationId?: string; continuationOf?: string; backend?: 'claude-acp' | 'codex-acp' | 'acp'; continue?: { session: string; copy: boolean } };
 const stored = (key: string) => { try { return sessionStorage.getItem(key); } catch { return null; } };
 const store = (key: string, value: string | null) => { try { if (value === null) sessionStorage.removeItem(key); else sessionStorage.setItem(key, value); return true; } catch { return false; } };
 const clock = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
@@ -158,7 +159,7 @@ function TurnView({ turn, running, observation, projectRoot, choose, choosing, a
   const answerText = answer.map(block => block.kind === 'text' ? block.step.text ?? '' : '').join('\n\n').trim();
   const model = turn.model ? valueName(modelSetting(observation?.config?.options), turn.model) : '';
   return <li className={'turn ' + turn.state}>
-    <div className="turn-person"><p data-user-text="">{turn.text}</p></div>
+    <div className="turn-person"><p data-user-text="">{turn.text}</p>{turn.uiContext?.workspace && <small className="turn-place">Studio · {turn.uiContext.workspace.title}</small>}</div>
     {(work.length > 0 || choices.length > 0) && <details className="turn-work" open={open} onToggle={event => { const next = event.currentTarget.open; if (next !== open) setShown(next); }}>
       <summary><span className="turn-work-label">{running ? 'Working' : 'Worked'}</span>{said && <span className="turn-work-said">{said}</span>}</summary>
       <div className="turn-work-body">
@@ -331,11 +332,12 @@ function ConversationSwitcher({ list, openId, title, mark, onOpen, onAll }: {
 
 // replayAt shows the open conversation as it stood at that moment, in step with its Studio;
 // onStarted names the conversation a message went to once the service has it.
-export function AgentConversation({ snapshot, client, selectedId, onSelected, onOpen, onSent, onStarted, onClose, onAll, replayOf, replayAt: replaying = null, onNow, sessions, onPath }: {
+export function AgentConversation({ snapshot, client, uiContext, selectedId, onSelected, onOpen, onSent, onStarted, onClose, onAll, replayOf, replayAt: replaying = null, onNow, sessions, onPath }: {
   snapshot: WorkspaceSnapshot; client: BrowserClient; selectedId?: string | null; onSelected?: () => void; onOpen?: (id: string | null) => void; onSent?: () => void; onStarted?: (conversationId: string) => void; onClose?: () => void; onAll?: () => void;
   replayOf?: string | null; replayAt?: number | null; onNow?: () => void;
   // Every Agent session in the project folder (agent.sessions.list), and opening a file it names.
   sessions?: ExternalSummary[]; onPath?: (path: string) => void;
+  uiContext?: UiLocation;
 }) {
   const projectId = snapshot.project.id, openKey = 'rho.conversation.open.v1:' + projectId;
   const [openId, setOpenId] = useState<string | null>(() => stored(openKey));
@@ -415,8 +417,8 @@ export function AgentConversation({ snapshot, client, selectedId, onSelected, on
     setPending(next); store(pendingKey, JSON.stringify(next));
     try {
       const reply = next.kind === 'start'
-        ? await client.call('conversation.start', { projectId, changeId: next.changeId, text: next.text, ...(next.backend ? { backend: next.backend } : {}), ...(next.continue ? { continue: next.continue } : {}) })
-        : await client.call('conversation.send', { projectId, conversationId: next.conversationId!, changeId: next.changeId, text: next.text, ...(next.continuationOf ? { continuationOf: next.continuationOf } : {}) });
+        ? await client.call('conversation.start', { projectId, changeId: next.changeId, text: next.text, ...(next.uiContext ? { uiContext: next.uiContext } : {}), ...(next.backend ? { backend: next.backend } : {}), ...(next.continue ? { continue: next.continue } : {}) })
+        : await client.call('conversation.send', { projectId, conversationId: next.conversationId!, changeId: next.changeId, text: next.text, ...(next.uiContext ? { uiContext: next.uiContext } : {}), ...(next.continuationOf ? { continuationOf: next.continuationOf } : {}) });
       setPending(null); store(pendingKey, null);
       if (!next.continuationOf) { store(draftKey, null); setDraft(''); }
       onStarted?.(reply.conversation.conversationId);
@@ -433,13 +435,13 @@ export function AgentConversation({ snapshot, client, selectedId, onSelected, on
     const text = draft.trim() ? draft : '';
     if (!text) return;
     setFollowing(true); setUnseen(false); onSent?.();
-    void deliver(sessionOpen ? { kind: 'start', changeId: 'm-' + crypto.randomUUID(), text, continue: { session: openId!, copy } }
-      : openId ? { kind: 'send', conversationId: openId, changeId: 'm-' + crypto.randomUUID(), text } : { kind: 'start', changeId: 'm-' + crypto.randomUUID(), text });
+    void deliver(sessionOpen ? { kind: 'start', changeId: 'm-' + crypto.randomUUID(), text, uiContext, continue: { session: openId!, copy } }
+      : openId ? { kind: 'send', conversationId: openId, changeId: 'm-' + crypto.randomUUID(), text, uiContext } : { kind: 'start', changeId: 'm-' + crypto.randomUUID(), text, uiContext });
   }
   function continueWork(turn: Turn) {
     if (!openId || busy || pending || answering || !agentTurnLimit(turn)) return;
     setFollowing(true); setUnseen(false); onSent?.();
-    void deliver({ kind: 'send', conversationId: openId, changeId: 'm-' + crypto.randomUUID(), continuationOf: turn.id,
+    void deliver({ kind: 'send', conversationId: openId, changeId: 'm-' + crypto.randomUUID(), continuationOf: turn.id, uiContext,
       text: 'Continue the unfinished work from the original task. First inspect the retained results and the state of any work that may still be running. Do not repeat completed actions merely to recover context. Finish what remains and report any uncertainty.' });
   }
   // A setting of the open conversation, for its next messages.

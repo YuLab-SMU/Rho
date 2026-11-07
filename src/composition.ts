@@ -59,7 +59,7 @@ export class Compositions {
     }
   }
   async read(id: string) { return readJson<any>(await this.file(id)); }
-  async transact(body: any, author: string, kind: 'apply' | 'undo' | 'protect' = 'apply') {
+  async transact(body: any, author: string, kind: 'apply' | 'undo' | 'protect' | 'delete' = 'apply') {
     requireThat(identity(body.changeId) && Number.isSafeInteger(body.expectedVersion) && body.expectedVersion >= 0, 'invalid', 'Conditional version and stable changeId are required.');
     const file = await this.file(body.compositionId);
     const current = await readJson<any>(file, null);
@@ -72,20 +72,29 @@ export class Compositions {
     requireThat((current?.version ?? 0) === body.expectedVersion, 'stale', 'Composition version changed. Missing receipts do not authorize replay.', { actualVersion: current?.version ?? 0, retainedFromVersion: current?.retainedFromVersion });
     const previous = current?.format === format ? current : { format, rootId: '', nodes: [] };
     let next = structuredClone(previous);
-    const snapshot = (c: any) => ({ rootId: c.rootId, nodes: c.nodes });
+    const snapshot = (c: any) => ({ rootId: c.rootId, nodes: c.nodes, ...(c.deleted ? { deleted: true } : {}) });
     let history = current?.history ?? [];
     if (kind === 'undo') {
       requireThat(history.length, 'condition', 'No retained layout transaction can be undone.');
-      next = { ...next, ...structuredClone(history.at(-1).snapshot) }; history = history.slice(0, -1);
+      next = { ...next, deleted: false, ...structuredClone(history.at(-1).snapshot) }; history = history.slice(0, -1);
       for (const n of next.nodes) {
         const existing = previous.nodes.find((v: any) => v.id === n.id);
         if (n.kind === 'view') n.protected = existing?.protected ?? false;
       }
+    } else if (kind === 'delete') {
+      requireThat(current?.format === format && !current.deleted, 'condition', 'Choose an existing Studio workspace.');
+      requireThat(!body.compositionId.startsWith('conversation-'), 'condition', 'A conversation\'s Studio belongs to its conversation.');
+      requireThat(!current.nodes.some((n: any) => n.kind === 'view'), 'condition', 'Only an empty Studio workspace can be deleted. Close its views first; project files and sessions are separate.');
+      next.deleted = true;
+      history = [...history, { version: current.version, snapshot: snapshot(previous) }].slice(-this.limits.maxUndo);
     } else if (kind === 'protect') {
+      requireThat(!current?.deleted, 'condition', 'This Studio workspace was deleted.');
       requireThat(typeof body.protected === 'boolean', 'invalid', 'Protection must be explicit.');
       const view = next.nodes.find((n: any) => n.id === body.viewId && n.kind === 'view');
       requireThat(view, 'not_found', 'View is not present.'); view.protected = body.protected;
     } else {
+      requireThat(!current?.deleted || body.operations?.length === 1 && body.operations[0].op === 'replace', 'condition', 'Recreate a deleted Studio workspace with one conditional replacement, or undo its deletion.');
+      next.deleted = false;
       requireThat(Array.isArray(body.operations) && body.operations.length > 0 && body.operations.length <= this.limits.maxNodes, 'invalid', 'Supply a bounded atomic operation batch.');
       for (const op of body.operations) {
         const node = next.nodes.find((n: any) => n.id === op.id);
@@ -127,7 +136,7 @@ export class Compositions {
     const availability = await this.validateViews(views, [...(previous.views ?? []), ...(kind === 'undo' ? current.history.flatMap((h: any) => h.snapshot.nodes.filter((n: any) => n.kind === 'view')) : [])]);
     const receipt = { changeId: body.changeId, author, version: (current?.version ?? 0) + 1, requestDigest, at: now(), kind };
     const receipts = [...(current?.receipts ?? []), receipt].slice(-this.limits.maxReceipts);
-    const result = { format, compositionId: body.compositionId, rootId: next.rootId, nodes: next.nodes, views, availability, version: receipt.version, author, acknowledgedAt: receipt.at, history, receipts, retainedFromVersion: receipts[0].version, undoRetainedFromVersion: history[0]?.version ?? receipt.version, receipt };
+    const result = { format, compositionId: body.compositionId, rootId: next.rootId, nodes: next.nodes, views, availability, ...(next.deleted ? { deleted: true } : {}), version: receipt.version, author, acknowledgedAt: receipt.at, history, receipts, retainedFromVersion: receipts[0].version, undoRetainedFromVersion: history[0]?.version ?? receipt.version, receipt };
     requireThat(Buffer.byteLength(JSON.stringify(result) + '\n') <= this.limits.maxBytes, 'limit', 'Composition byte budget reached; existing state is preserved.', { limit: 'maxBytes', maximum: this.limits.maxBytes });
     await atomicJson(file, result); return result;
   }

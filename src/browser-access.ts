@@ -25,7 +25,7 @@ export const browserMethods = ['protocol.describe', 'protocol.validate', 'projec
   'action.submit', 'action.output', 'action.cancel',
   // The person's own layout commands (split, move, close, divider, undo), conditional on the
   // version they saw; protected views stay protected.
-  'composition.apply', 'composition.undo',
+'composition.apply', 'composition.undo', 'composition.delete',
   // A chart's points: the same rows data.page already reads, bounded and read-only.
   'data.plot',
   // A run's script, outputs and provenance written as ordinary files in a new project folder.

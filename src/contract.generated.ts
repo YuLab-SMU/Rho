@@ -5,7 +5,7 @@
 // value an accepted response carries. The service, the Node client and the browser
 // client are all written against these types; runtime validation stays with Ajv.
 //
-// Contract identity: apiVersion 2.0, schemaVersion 2, 143 operations.
+// Contract identity: apiVersion 2.0, schemaVersion 2, 144 operations.
 export interface RhoOperationError {
   kind:
     | 'invalid'
@@ -3927,6 +3927,7 @@ export interface CompositionApplyOutput {
   format: 'rho.composition/1';
   compositionId: string;
   rootId: string;
+  deleted?: boolean;
   /**
    * @maxItems 256
    */
@@ -4078,6 +4079,7 @@ export interface CompositionApplyOutput {
             kind: 'view';
           }
       )[];
+      deleted?: boolean;
     };
   }[];
   /**
@@ -4089,7 +4091,7 @@ export interface CompositionApplyOutput {
     version: number;
     author: string;
     at: string;
-    kind?: 'apply' | 'undo' | 'protect' | 'close';
+    kind?: 'apply' | 'undo' | 'protect' | 'close' | 'delete';
   }[];
   retainedFromVersion: number;
   undoRetainedFromVersion: number;
@@ -4099,7 +4101,228 @@ export interface CompositionApplyOutput {
     version: number;
     requestDigest: string;
     at: string;
-    kind: 'apply' | 'undo' | 'protect';
+    kind: 'apply' | 'undo' | 'protect' | 'delete';
+  };
+  witness?: {
+    witnessId: string;
+    projectId: string;
+    taskId: string;
+    compositionId: string;
+    compositionVersion: number;
+    sourceEvent?: {
+      [k: string]: unknown;
+    };
+    policyRef?: string;
+    /**
+     * @maxItems 32
+     */
+    views: {
+      viewId: string;
+      component?: string;
+      componentVersion?: string;
+      resource: {
+        id: string;
+        version: string;
+      };
+    }[];
+    dataValidation?: {
+      integrity: 'hash-verified';
+      shape: 'typed-table-read';
+      domain: 'not-judged';
+    };
+    at?: string;
+  } | null;
+  witnessState?: 'retained' | 'expired' | 'pending';
+  commitVersion?: number;
+  currentVersion?: number;
+}
+
+export interface CompositionDeleteInput {
+  projectId: string;
+  compositionId: string;
+  expectedVersion: number;
+  changeId: string;
+}
+
+export interface CompositionDeleteOutput {
+  format: 'rho.composition/1';
+  compositionId: string;
+  rootId: string;
+  deleted?: boolean;
+  /**
+   * @maxItems 256
+   */
+  nodes: (
+    | {
+        id: string;
+        kind: 'group';
+        /**
+         * @maxItems 256
+         */
+        children: string[];
+        presentation?: {
+          mode: 'tabs' | 'split';
+          axis?: 'horizontal' | 'vertical';
+          /**
+           * @maxItems 32
+           */
+          weights?: number[];
+        };
+      }
+    | {
+        id: string;
+        component: string;
+        version: string;
+        props: {};
+        bindings: {
+          [k: string]:
+            | {
+                id: string;
+                version: string;
+              }
+            | {
+                documentId: string;
+                version: number;
+              }
+            | {
+                kind: 'live-document';
+                documentId: string;
+              };
+        };
+        /**
+         * @maxItems 1000
+         */
+        selection?: string[];
+        presentation?: {
+          emphasis: 'normal' | 'highlight';
+        };
+        protected?: boolean;
+        kind: 'view';
+      }
+  )[];
+  /**
+   * @maxItems 32
+   */
+  views: {
+    id: string;
+    component: string;
+    version: string;
+    props: {};
+    bindings: {
+      [k: string]:
+        | {
+            id: string;
+            version: string;
+          }
+        | {
+            documentId: string;
+            version: number;
+          }
+        | {
+            kind: 'live-document';
+            documentId: string;
+          };
+    };
+    /**
+     * @maxItems 1000
+     */
+    selection?: string[];
+    presentation?: {
+      emphasis: 'normal' | 'highlight';
+    };
+    protected?: boolean;
+  }[];
+  availability: {
+    [k: string]: {
+      state: 'entry-installed' | 'unavailable';
+      visibility?: 'unobserved';
+      reason?: string;
+    };
+  };
+  version: number;
+  author: string;
+  acknowledgedAt: string;
+  /**
+   * @maxItems 256
+   */
+  history: {
+    version: number;
+    snapshot: {
+      rootId: string;
+      /**
+       * @maxItems 256
+       */
+      nodes: (
+        | {
+            id: string;
+            kind: 'group';
+            /**
+             * @maxItems 256
+             */
+            children: string[];
+            presentation?: {
+              mode: 'tabs' | 'split';
+              axis?: 'horizontal' | 'vertical';
+              /**
+               * @maxItems 32
+               */
+              weights?: number[];
+            };
+          }
+        | {
+            id: string;
+            component: string;
+            version: string;
+            props: {};
+            bindings: {
+              [k: string]:
+                | {
+                    id: string;
+                    version: string;
+                  }
+                | {
+                    documentId: string;
+                    version: number;
+                  }
+                | {
+                    kind: 'live-document';
+                    documentId: string;
+                  };
+            };
+            /**
+             * @maxItems 1000
+             */
+            selection?: string[];
+            presentation?: {
+              emphasis: 'normal' | 'highlight';
+            };
+            protected?: boolean;
+            kind: 'view';
+          }
+      )[];
+      deleted?: boolean;
+    };
+  }[];
+  /**
+   * @maxItems 256
+   */
+  receipts: {
+    changeId: string;
+    requestDigest?: string;
+    version: number;
+    author: string;
+    at: string;
+    kind?: 'apply' | 'undo' | 'protect' | 'close' | 'delete';
+  }[];
+  retainedFromVersion: number;
+  undoRetainedFromVersion: number;
+  receipt: {
+    changeId: string;
+    author: string;
+    version: number;
+    requestDigest: string;
+    at: string;
+    kind: 'apply' | 'undo' | 'protect' | 'delete';
   };
   witness?: {
     witnessId: string;
@@ -4261,6 +4484,7 @@ export type CompositionReadOutput =
       format: 'rho.composition/1';
       compositionId: string;
       rootId: string;
+      deleted?: boolean;
       /**
        * @maxItems 256
        */
@@ -4412,6 +4636,7 @@ export type CompositionReadOutput =
                 kind: 'view';
               }
           )[];
+          deleted?: boolean;
         };
       }[];
       /**
@@ -4423,7 +4648,7 @@ export type CompositionReadOutput =
         version: number;
         author: string;
         at: string;
-        kind?: 'apply' | 'undo' | 'protect' | 'close';
+        kind?: 'apply' | 'undo' | 'protect' | 'close' | 'delete';
       }[];
       retainedFromVersion: number;
       undoRetainedFromVersion: number;
@@ -4433,7 +4658,7 @@ export type CompositionReadOutput =
         version: number;
         requestDigest: string;
         at: string;
-        kind: 'apply' | 'undo' | 'protect';
+        kind: 'apply' | 'undo' | 'protect' | 'delete';
       };
       witness?: {
         witnessId: string;
@@ -4480,6 +4705,7 @@ export interface CompositionUndoOutput {
   format: 'rho.composition/1';
   compositionId: string;
   rootId: string;
+  deleted?: boolean;
   /**
    * @maxItems 256
    */
@@ -4631,6 +4857,7 @@ export interface CompositionUndoOutput {
             kind: 'view';
           }
       )[];
+      deleted?: boolean;
     };
   }[];
   /**
@@ -4642,7 +4869,7 @@ export interface CompositionUndoOutput {
     version: number;
     author: string;
     at: string;
-    kind?: 'apply' | 'undo' | 'protect' | 'close';
+    kind?: 'apply' | 'undo' | 'protect' | 'close' | 'delete';
   }[];
   retainedFromVersion: number;
   undoRetainedFromVersion: number;
@@ -4652,7 +4879,7 @@ export interface CompositionUndoOutput {
     version: number;
     requestDigest: string;
     at: string;
-    kind: 'apply' | 'undo' | 'protect';
+    kind: 'apply' | 'undo' | 'protect' | 'delete';
   };
   witness?: {
     witnessId: string;
@@ -5282,6 +5509,33 @@ export interface ConversationDecideOutput {
       snapshots: number;
     };
     contexts?: string[];
+    uiContext?: {
+      page: string;
+      compositionId?: string;
+      compositionVersion?: number;
+      replayAt?: number | null;
+      path?: string;
+      capturedAt: string;
+      project: {
+        id: string;
+        name: string;
+      };
+      workspace?: {
+        compositionId: string;
+        title: string;
+        observedVersion: number | null;
+        currentVersion: number | null;
+        state: 'current' | 'changed' | 'deleted' | 'not-created' | 'derived' | 'unavailable';
+        empty: boolean | null;
+        viewCount: number | null;
+        omittedViews: number;
+        views: {
+          id: string;
+          component: string;
+          title: string;
+        }[];
+      };
+    };
     descriptions?: {
       path: string;
       version: string;
@@ -5558,6 +5812,33 @@ export interface ConversationPermissionOutput {
       snapshots: number;
     };
     contexts?: string[];
+    uiContext?: {
+      page: string;
+      compositionId?: string;
+      compositionVersion?: number;
+      replayAt?: number | null;
+      path?: string;
+      capturedAt: string;
+      project: {
+        id: string;
+        name: string;
+      };
+      workspace?: {
+        compositionId: string;
+        title: string;
+        observedVersion: number | null;
+        currentVersion: number | null;
+        state: 'current' | 'changed' | 'deleted' | 'not-created' | 'derived' | 'unavailable';
+        empty: boolean | null;
+        viewCount: number | null;
+        omittedViews: number;
+        views: {
+          id: string;
+          component: string;
+          title: string;
+        }[];
+      };
+    };
     descriptions?: {
       path: string;
       version: string;
@@ -5859,6 +6140,33 @@ export interface ConversationReadOutput {
       snapshots: number;
     };
     contexts?: string[];
+    uiContext?: {
+      page: string;
+      compositionId?: string;
+      compositionVersion?: number;
+      replayAt?: number | null;
+      path?: string;
+      capturedAt: string;
+      project: {
+        id: string;
+        name: string;
+      };
+      workspace?: {
+        compositionId: string;
+        title: string;
+        observedVersion: number | null;
+        currentVersion: number | null;
+        state: 'current' | 'changed' | 'deleted' | 'not-created' | 'derived' | 'unavailable';
+        empty: boolean | null;
+        viewCount: number | null;
+        omittedViews: number;
+        views: {
+          id: string;
+          component: string;
+          title: string;
+        }[];
+      };
+    };
     descriptions?: {
       path: string;
       version: string;
@@ -6012,6 +6320,13 @@ export interface ConversationSendInput {
    * @maxItems 8
    */
   contexts?: string[];
+  uiContext?: {
+    page: string;
+    compositionId?: string;
+    compositionVersion?: number;
+    replayAt?: number | null;
+    path?: string;
+  };
   continuationOf?: string;
 }
 
@@ -6126,6 +6441,33 @@ export interface ConversationSendOutput {
       snapshots: number;
     };
     contexts?: string[];
+    uiContext?: {
+      page: string;
+      compositionId?: string;
+      compositionVersion?: number;
+      replayAt?: number | null;
+      path?: string;
+      capturedAt: string;
+      project: {
+        id: string;
+        name: string;
+      };
+      workspace?: {
+        compositionId: string;
+        title: string;
+        observedVersion: number | null;
+        currentVersion: number | null;
+        state: 'current' | 'changed' | 'deleted' | 'not-created' | 'derived' | 'unavailable';
+        empty: boolean | null;
+        viewCount: number | null;
+        omittedViews: number;
+        views: {
+          id: string;
+          component: string;
+          title: string;
+        }[];
+      };
+    };
     descriptions?: {
       path: string;
       version: string;
@@ -6620,6 +6962,13 @@ export interface ConversationStartInput {
    * @maxItems 8
    */
   contexts?: string[];
+  uiContext?: {
+    page: string;
+    compositionId?: string;
+    compositionVersion?: number;
+    replayAt?: number | null;
+    path?: string;
+  };
   continue?: {
     session: string;
     copy?: boolean;
@@ -6737,6 +7086,33 @@ export interface ConversationStartOutput {
       snapshots: number;
     };
     contexts?: string[];
+    uiContext?: {
+      page: string;
+      compositionId?: string;
+      compositionVersion?: number;
+      replayAt?: number | null;
+      path?: string;
+      capturedAt: string;
+      project: {
+        id: string;
+        name: string;
+      };
+      workspace?: {
+        compositionId: string;
+        title: string;
+        observedVersion: number | null;
+        currentVersion: number | null;
+        state: 'current' | 'changed' | 'deleted' | 'not-created' | 'derived' | 'unavailable';
+        empty: boolean | null;
+        viewCount: number | null;
+        omittedViews: number;
+        views: {
+          id: string;
+          component: string;
+          title: string;
+        }[];
+      };
+    };
     descriptions?: {
       path: string;
       version: string;
@@ -6950,6 +7326,33 @@ export interface ConversationStopOutput {
       snapshots: number;
     };
     contexts?: string[];
+    uiContext?: {
+      page: string;
+      compositionId?: string;
+      compositionVersion?: number;
+      replayAt?: number | null;
+      path?: string;
+      capturedAt: string;
+      project: {
+        id: string;
+        name: string;
+      };
+      workspace?: {
+        compositionId: string;
+        title: string;
+        observedVersion: number | null;
+        currentVersion: number | null;
+        state: 'current' | 'changed' | 'deleted' | 'not-created' | 'derived' | 'unavailable';
+        empty: boolean | null;
+        viewCount: number | null;
+        omittedViews: number;
+        views: {
+          id: string;
+          component: string;
+          title: string;
+        }[];
+      };
+    };
     descriptions?: {
       path: string;
       version: string;
@@ -9905,6 +10308,7 @@ export interface ObservationSnapshotOutput {
         format: 'rho.composition/1';
         compositionId: string;
         rootId: string;
+        deleted?: boolean;
         /**
          * @maxItems 256
          */
@@ -10056,6 +10460,7 @@ export interface ObservationSnapshotOutput {
                   kind: 'view';
                 }
             )[];
+            deleted?: boolean;
           };
         }[];
         /**
@@ -10067,7 +10472,7 @@ export interface ObservationSnapshotOutput {
           version: number;
           author: string;
           at: string;
-          kind?: 'apply' | 'undo' | 'protect' | 'close';
+          kind?: 'apply' | 'undo' | 'protect' | 'close' | 'delete';
         }[];
         retainedFromVersion: number;
         undoRetainedFromVersion: number;
@@ -10077,7 +10482,7 @@ export interface ObservationSnapshotOutput {
           version: number;
           requestDigest: string;
           at: string;
-          kind: 'apply' | 'undo' | 'protect';
+          kind: 'apply' | 'undo' | 'protect' | 'delete';
         };
         witness?: {
           witnessId: string;
@@ -10713,6 +11118,7 @@ export interface ProjectOpenFileOutput {
     format: 'rho.composition/1';
     compositionId: string;
     rootId: string;
+    deleted?: boolean;
     /**
      * @maxItems 256
      */
@@ -10864,6 +11270,7 @@ export interface ProjectOpenFileOutput {
               kind: 'view';
             }
         )[];
+        deleted?: boolean;
       };
     }[];
     /**
@@ -10875,7 +11282,7 @@ export interface ProjectOpenFileOutput {
       version: number;
       author: string;
       at: string;
-      kind?: 'apply' | 'undo' | 'protect' | 'close';
+      kind?: 'apply' | 'undo' | 'protect' | 'close' | 'delete';
     }[];
     retainedFromVersion: number;
     undoRetainedFromVersion: number;
@@ -10885,7 +11292,7 @@ export interface ProjectOpenFileOutput {
       version: number;
       requestDigest: string;
       at: string;
-      kind: 'apply' | 'undo' | 'protect';
+      kind: 'apply' | 'undo' | 'protect' | 'delete';
     };
     witness?: {
       witnessId: string;
@@ -11921,6 +12328,7 @@ export interface SessionGrantInput {
     | 'capability.list'
     | 'capability.resolve'
     | 'composition.apply'
+    | 'composition.delete'
     | 'composition.put'
     | 'composition.read'
     | 'composition.undo'
@@ -13060,6 +13468,7 @@ export type ViewCloseOutput =
       format: 'rho.composition/1';
       compositionId: string;
       rootId: string;
+      deleted?: boolean;
       /**
        * @maxItems 256
        */
@@ -13211,6 +13620,7 @@ export type ViewCloseOutput =
                 kind: 'view';
               }
           )[];
+          deleted?: boolean;
         };
       }[];
       /**
@@ -13222,7 +13632,7 @@ export type ViewCloseOutput =
         version: number;
         author: string;
         at: string;
-        kind?: 'apply' | 'undo' | 'protect' | 'close';
+        kind?: 'apply' | 'undo' | 'protect' | 'close' | 'delete';
       }[];
       retainedFromVersion: number;
       undoRetainedFromVersion: number;
@@ -13232,7 +13642,7 @@ export type ViewCloseOutput =
         version: number;
         requestDigest: string;
         at: string;
-        kind: 'apply' | 'undo' | 'protect';
+        kind: 'apply' | 'undo' | 'protect' | 'delete';
       };
       witness?: {
         witnessId: string;
@@ -13444,6 +13854,7 @@ export interface ViewProtectionSetOutput {
   format: 'rho.composition/1';
   compositionId: string;
   rootId: string;
+  deleted?: boolean;
   /**
    * @maxItems 256
    */
@@ -13595,6 +14006,7 @@ export interface ViewProtectionSetOutput {
             kind: 'view';
           }
       )[];
+      deleted?: boolean;
     };
   }[];
   /**
@@ -13606,7 +14018,7 @@ export interface ViewProtectionSetOutput {
     version: number;
     author: string;
     at: string;
-    kind?: 'apply' | 'undo' | 'protect' | 'close';
+    kind?: 'apply' | 'undo' | 'protect' | 'close' | 'delete';
   }[];
   retainedFromVersion: number;
   undoRetainedFromVersion: number;
@@ -13616,7 +14028,7 @@ export interface ViewProtectionSetOutput {
     version: number;
     requestDigest: string;
     at: string;
-    kind: 'apply' | 'undo' | 'protect';
+    kind: 'apply' | 'undo' | 'protect' | 'delete';
   };
   witness?: {
     witnessId: string;
@@ -13989,6 +14401,7 @@ export interface RhoOperations {
   "capability.list": { input: CapabilityListInput; output: CapabilityListOutput };
   "capability.resolve": { input: CapabilityResolveInput; output: CapabilityResolveOutput };
   "composition.apply": { input: CompositionApplyInput; output: CompositionApplyOutput };
+  "composition.delete": { input: CompositionDeleteInput; output: CompositionDeleteOutput };
   "composition.put": { input: CompositionPutInput; output: CompositionPutOutput };
   "composition.read": { input: CompositionReadInput; output: CompositionReadOutput };
   "composition.undo": { input: CompositionUndoInput; output: CompositionUndoOutput };
@@ -14110,5 +14523,5 @@ export type RhoInput<M extends RhoMethod> = RhoOperations[M]['input'];
 export type RhoOutput<M extends RhoMethod> = RhoOperations[M]['output'];
 
 /** The names a caller may pass to protocol.describe / protocol.validate. */
-export const rhoMethods = ["action.cancel","action.export","action.list","action.lookup","action.observe","action.output","action.retry","action.submit","agent.activity.capture","agent.activity.outputs","agent.activity.read","agent.sessions.list","agent.sessions.read","annotation.create","annotation.decide","annotation.list","annotation.read","annotation.reply","artifact.check","binding.activity","binding.activity.append","binding.close","binding.list","binding.open","capability.configure","capability.index","capability.list","capability.resolve","composition.apply","composition.put","composition.read","composition.undo","console.events","console.list","console.output","console.run","console.stop","context.create","context.read","conversation.configure","conversation.decide","conversation.delete","conversation.list","conversation.permission","conversation.read","conversation.restore","conversation.send","conversation.settings.check","conversation.settings.read","conversation.settings.update","conversation.start","conversation.stop","conversation.trash","data.compare","data.page","data.plot","document.abandonSave","document.change.read","document.edit","document.history","document.open","document.read","document.revert","document.save","document.undo","document.undoOwn","evidence.export","evidence.preview","extension.call","extension.content","extension.describe","extension.install","extension.list","extension.manage","extension.read","feedback.read","feedback.status","feedback.submit","interaction.selection.read","interaction.selection.set","kernel.events","kernel.inspect","kernel.interrupt","kernel.place.check","kernel.place.copy","kernel.place.list","kernel.place.set","kernel.places","kernel.plot","kernel.read","kernel.run","kernel.server.skill","kernel.servers","kernel.stop","media.describe","object.read","observation.snapshot","project.create","project.createWorkspace","project.doctor","project.entries","project.list","project.open","project.openFile","project.pick","project.runs","project.source.add","project.source.pick","project.work.read","protocol.describe","protocol.validate","requirements.check","requirements.prepare","resource.capture","resource.list","resource.read","resource.register","selection.set","session.browser.pair","session.browser.revoke","session.connect","session.grant","session.instructions","skill.list","skill.read","skills.change","skills.list","skills.read","skills.undo","task.map.declare","task.map.present","task.map.read","task.map.respond","task.routing.put","view.close","view.observations.read","view.observe","view.protection.set","workspace.enhance","workspace.export","workspace.observe","workspace.restore","workspace.save"] as const satisfies readonly RhoMethod[];
+export const rhoMethods = ["action.cancel","action.export","action.list","action.lookup","action.observe","action.output","action.retry","action.submit","agent.activity.capture","agent.activity.outputs","agent.activity.read","agent.sessions.list","agent.sessions.read","annotation.create","annotation.decide","annotation.list","annotation.read","annotation.reply","artifact.check","binding.activity","binding.activity.append","binding.close","binding.list","binding.open","capability.configure","capability.index","capability.list","capability.resolve","composition.apply","composition.delete","composition.put","composition.read","composition.undo","console.events","console.list","console.output","console.run","console.stop","context.create","context.read","conversation.configure","conversation.decide","conversation.delete","conversation.list","conversation.permission","conversation.read","conversation.restore","conversation.send","conversation.settings.check","conversation.settings.read","conversation.settings.update","conversation.start","conversation.stop","conversation.trash","data.compare","data.page","data.plot","document.abandonSave","document.change.read","document.edit","document.history","document.open","document.read","document.revert","document.save","document.undo","document.undoOwn","evidence.export","evidence.preview","extension.call","extension.content","extension.describe","extension.install","extension.list","extension.manage","extension.read","feedback.read","feedback.status","feedback.submit","interaction.selection.read","interaction.selection.set","kernel.events","kernel.inspect","kernel.interrupt","kernel.place.check","kernel.place.copy","kernel.place.list","kernel.place.set","kernel.places","kernel.plot","kernel.read","kernel.run","kernel.server.skill","kernel.servers","kernel.stop","media.describe","object.read","observation.snapshot","project.create","project.createWorkspace","project.doctor","project.entries","project.list","project.open","project.openFile","project.pick","project.runs","project.source.add","project.source.pick","project.work.read","protocol.describe","protocol.validate","requirements.check","requirements.prepare","resource.capture","resource.list","resource.read","resource.register","selection.set","session.browser.pair","session.browser.revoke","session.connect","session.grant","session.instructions","skill.list","skill.read","skills.change","skills.list","skills.read","skills.undo","task.map.declare","task.map.present","task.map.read","task.map.respond","task.routing.put","view.close","view.observations.read","view.observe","view.protection.set","workspace.enhance","workspace.export","workspace.observe","workspace.restore","workspace.save"] as const satisfies readonly RhoMethod[];
 export type RhoInputFor<M extends RhoMethod> = RhoOperations[M]['input'];

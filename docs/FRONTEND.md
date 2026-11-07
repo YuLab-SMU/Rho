@@ -1,6 +1,6 @@
 # Browser application
 
-Updated 2026-11-01. The frontend was reset at the user's request. Previous frontend
+Updated 2026-11-07. The frontend was reset at the user's request. Previous frontend
 plans, visual specifications, Paper references and appearance rulers have been
 removed from the working repository. Git retains their history; they do not govern
 this implementation. This document describes the current application, not another
@@ -9,6 +9,19 @@ prescriptive design system. How it changes next is decided by reviewing real run
 [base-R review](BASE-R-EPISODE.md#review-of-the-2026-10-25-run) records what the
 screens do not yet show. Avoid unnecessary secondary labels and descriptions: let the
 layout do the explaining.
+
+## The Agent's view of the sending tab
+
+Each message sent from the Agent panel carries that tab's page and, in Studio,
+its workspace ID, observed layout version and replay position. The service freezes
+a bounded view summary with the message; a retry keeps that original context.
+Under a Studio message, the workspace name records where it was sent from.
+An empty workspace has no views, even when the project contains files. An Agent can
+delete that empty layout through `composition.delete` and restore it through
+`composition.undo`. Deletion removes the sidebar entry and moves an observing tab
+to another workspace, or Overview if none remains. Project files and sessions are
+separate. The [Studio context episode](STUDIO-CONTEXT-EPISODE.md) records the original
+misunderstanding, the real OpenCode run and the limits of this summary.
 
 ## Starting from the work
 
