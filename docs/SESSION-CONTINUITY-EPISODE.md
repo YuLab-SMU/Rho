@@ -172,10 +172,42 @@ the Agent connection prompt, session continuation and its fixes, and the retaine
 sclet reports. [CI 42360742470](https://github.com/YuLab-SMU/Rho/actions/runs/42360742470)
 passed every job on `26c8cb2f`, including the three test systems and four-platform
 offline installs with Linux Node 24 and 26. That candidate still names 0.5.5;
-the version change needs its own CI candidate before tagging `v0.5.6`.
+the version change needed its own CI candidate before tagging `v0.5.6`.
 
-The selected route is the existing npm/WebUI release: promote that tested
-candidate through `release.yml`, verify registry bytes and a disposable
-installation, then update the publication record. This does not replace an
-existing service or publish a signed desktop build. The independently delivered
-dsh-rho 0.1.5 and its pinned market entry do not change.
+[CI 42361803786](https://github.com/YuLab-SMU/Rho/actions/runs/42361803786)
+on release commit `cd559cc0f832cd4f68386caa351ddad942f41e21` passed all 15 jobs.
+macOS and Linux each passed 315 of 317 tests, with two skipped; Windows passed
+300, with 17 skipped and no failures. The same candidate passed all six offline
+installation checks: macOS arm64, Linux x64/arm64, Windows x64, and Linux x64 on
+Node 24 and 26. Its 3,166-file tarball is 25,665,590 bytes, with SHA-256
+`022694a50a6a0b437f3d013a25df5de7e3a8c43a6a6b4594d7e0fd1235ad0eaf`.
+The composition matches the selected sources above, with no local overrides.
+
+Tag `v0.5.6` names that release commit. [Release 42362238297](https://github.com/YuLab-SMU/Rho/actions/runs/42362238297)
+found the candidate, verified its hash and installation reports, and published
+it without rebuilding. npm returned the publication receipt at 10:03:07 UTC on
+2026-11-07, with [provenance log entry 3735209363](https://search.sigstore.dev/?logIndex=3735209363).
+The exact-version registry endpoint still returned 404 at 10:03:45 UTC. A local
+read first found 0.5.6 at 10:58:41 UTC, about 56 minutes after the receipt. The
+25,665,590 downloaded bytes matched both the candidate SHA-256 above and npm's
+SHA-512 integrity. The registry now selects 0.5.6 as `latest`.
+
+A fresh `npm install --omit=dev --ignore-scripts @rho-workspace/rho@0.5.6` into a
+disposable prefix succeeded.
+Its lock names the public registry tarball and the same integrity; the installed
+CLI's `--help` exits 0, its composition matches all three selected source trees
+with no overrides, and all four installed Core binaries match their recorded
+hashes and sizes. The macOS arm64 binary retains its executable permission.
+These are installation and integrity checks, not another real-model trial.
+
+During that wait, the maintainer's [Versions page](https://www.npmjs.com/package/@rho-workspace/rho?activeTab=versions)
+showed 0.5.6 as `Validating`, explicitly identifying unfinished automated review.
+For the registry's scan timing, see the [official scanning notice](https://github.blog/changelog/2026-07-28-npm-publish-time-malware-scanning-and-dual-use-metadata/).
+An inventory of this exact tarball found 86,586,989 unpacked bytes: 25,484,472 in
+the four Core binaries and 38,768,199 in bundled dependencies. These measurements
+do not identify which content, if any, caused this version's delay.
+
+This is the existing npm/WebUI release route. No existing service is replaced
+and no signed desktop build is published. The independently delivered dsh-rho
+0.1.5 and its pinned market entry do not change. The real-model coverage and
+native-client limits above remain; this publication does not add a new model run.
