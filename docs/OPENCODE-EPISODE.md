@@ -121,7 +121,8 @@ Harness case was not run again after this change.
 - **"Open elsewhere" is fixed per Agent.** It is coded for Claude Code and Codex.
   It should come from what each Agent does.
 - **One ACP command per service.** A conversation follows whichever ACP command
-  the service has now, not the one that started it.
+  the service has now, not the one that started it. (Fixed later the same day:
+  [Adding Agents that Rho starts](AGENTS-IN-RHO-EPISODE.md).)
 - **Brand code remains in the application.** Continuation routing and the
   Harness checks still branch on Claude Code, Codex and Harness.
 

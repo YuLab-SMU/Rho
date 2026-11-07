@@ -712,10 +712,11 @@ export class RhoService {
     const native = (await import('@rho-workspace/plugin-agent/native-sessions')).listNativeSessions(p.root);
     const conversations = [...await this.conversations.list(p, {}), ...await this.conversations.list(p, { trashed: true })];
     const bySession = new Map(conversations.filter(c => c.sessionId).map(c => [c.sessionId!, c]));
+    const harness = await this.conversations.harness();
     const sessions = [...external.sessions, ...native.sessions].flatMap(s => {
       const conversation = bySession.get(s.sessionId);
       if (conversation?.trashedAt) return [];
-      const continueWith = s.producer === 'claude-code' ? 'claude-acp' as const : s.producer === 'codex' ? 'codex-acp' as const : s.producer === 'dsh' && this.config.acpCommand ? 'acp' as const : null;
+      const continueWith = s.producer === 'claude-code' ? 'claude-acp' as const : s.producer === 'codex' ? 'codex-acp' as const : s.producer === 'dsh' ? harness : null;
       // Harness reports a turn in progress, not whether a window holds the session idle; a turn
       // Rho itself is running is Rho's.
       const open = s.producer === 'dsh' && s.state === 'running' && conversation?.state !== 'running' ? { where: 'DeepSeek Harness' } : s.open;
@@ -1130,7 +1131,7 @@ export class RhoService {
         const listed = (await this.agentSessions(p)).sessions.find(s => s.id === b.continue.session);
         requireThat(listed, 'not_found', 'That Agent session is not in this project. Nothing was sent.');
         requireThat(listed.continueWith, 'condition', listed.producer === 'dsh'
-          ? 'Rho continues DeepSeek Harness sessions through Harness\'s ACP command. Start Rho with --agent-backend acp --acp-command \'["dsh","acp"]\', or continue in Harness. Nothing was sent.'
+          ? 'Rho continues DeepSeek Harness sessions through Harness\'s ACP command. Add DeepSeek Harness under Agents in Rho, or continue in Harness. Nothing was sent.'
           : 'Rho cannot continue this Agent\'s sessions. Nothing was sent.');
         requireThat(!listed.conversationId, 'conflict', 'This session already continues as a conversation here. Open it to send your message.');
         requireThat(!b.continue.copy || listed.producer !== 'dsh', 'condition', 'DeepSeek Harness cannot copy a session. Continue it in place once it is not answering. Nothing was sent.');
@@ -1147,6 +1148,8 @@ export class RhoService {
       if (method === 'conversation.configure') return this.conversations.configure(p, principal.id, b);
       if (method === 'conversation.settings.update') return this.conversations.updateSettings(b);
       if (method === 'conversation.settings.check') return this.conversations.check(p, b);
+      if (method === 'conversation.agents.add') return this.conversations.addAgent(p, b);
+      if (method === 'conversation.agents.remove') return this.conversations.removeAgent(b);
     }
     const capabilities = new Capabilities(this.plugins, p);
     // The person runs and stops Console commands with their own shell; anyone holding the read

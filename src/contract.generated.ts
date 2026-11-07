@@ -5,7 +5,7 @@
 // value an accepted response carries. The service, the Node client and the browser
 // client are all written against these types; runtime validation stays with Ajv.
 //
-// Contract identity: apiVersion 2.0, schemaVersion 2, 144 operations.
+// Contract identity: apiVersion 2.0, schemaVersion 2, 146 operations.
 export interface RhoOperationError {
   kind:
     | 'invalid'
@@ -2077,7 +2077,7 @@ export interface AgentSessionsListOutput {
    */
   sessions: {
     bytes?: number;
-    continueWith?: 'claude-acp' | 'codex-acp' | 'acp' | null;
+    continueWith?: ('claude-acp' | 'codex-acp' | 'acp' | null) | string;
     conversationId?: string;
     id: string;
     inputOwner?: 'external';
@@ -2112,7 +2112,7 @@ export interface AgentSessionsReadOutput {
   first: number;
   session: {
     bytes?: number;
-    continueWith?: 'claude-acp' | 'codex-acp' | 'acp' | null;
+    continueWith?: ('claude-acp' | 'codex-acp' | 'acp' | null) | string;
     conversationId?: string;
     id: string;
     inputOwner?: 'external';
@@ -5253,6 +5253,144 @@ export interface ContextReadOutput {
   };
 }
 
+export interface ConversationAgentsAddInput {
+  projectId: string;
+  /**
+   * @minItems 1
+   * @maxItems 32
+   */
+  command: string[];
+}
+
+export interface ConversationAgentsAddOutput {
+  version: number;
+  updatedAt: string | null;
+  backend: string | null;
+  serviceBackend: 'claude-acp' | 'codex-acp' | 'claude-cli' | 'acp';
+  choices: {
+    [k: string]: {
+      [k: string]: string | boolean;
+    };
+  };
+  offered: {
+    [k: string]: {
+      at: string;
+      source: 'check' | 'conversation';
+      adapter: {
+        name: string;
+        version?: string;
+      } | null;
+      options: {
+        category?: string;
+        current: string | boolean;
+        description?: string;
+        id: string;
+        name: string;
+        type: 'select' | 'boolean';
+        /**
+         * @maxItems 256
+         */
+        values?: {
+          description?: string;
+          group?: string;
+          name: string;
+          value: string;
+        }[];
+      }[];
+      omitted: number;
+    };
+  };
+  checking: string[];
+  describe?: {
+    enabled: boolean;
+  };
+  agents?: {
+    [k: string]: {
+      found: boolean;
+      problem?: string;
+      name?: string | null;
+    };
+  };
+  added?: {
+    backend: string;
+    name: string;
+    command: string[];
+    addedAt: string;
+  }[];
+  installed?: {
+    id: string;
+    name: string;
+    command: string[];
+  }[];
+}
+
+export interface ConversationAgentsRemoveInput {
+  projectId: string;
+  backend: string;
+}
+
+export interface ConversationAgentsRemoveOutput {
+  version: number;
+  updatedAt: string | null;
+  backend: string | null;
+  serviceBackend: 'claude-acp' | 'codex-acp' | 'claude-cli' | 'acp';
+  choices: {
+    [k: string]: {
+      [k: string]: string | boolean;
+    };
+  };
+  offered: {
+    [k: string]: {
+      at: string;
+      source: 'check' | 'conversation';
+      adapter: {
+        name: string;
+        version?: string;
+      } | null;
+      options: {
+        category?: string;
+        current: string | boolean;
+        description?: string;
+        id: string;
+        name: string;
+        type: 'select' | 'boolean';
+        /**
+         * @maxItems 256
+         */
+        values?: {
+          description?: string;
+          group?: string;
+          name: string;
+          value: string;
+        }[];
+      }[];
+      omitted: number;
+    };
+  };
+  checking: string[];
+  describe?: {
+    enabled: boolean;
+  };
+  agents?: {
+    [k: string]: {
+      found: boolean;
+      problem?: string;
+      name?: string | null;
+    };
+  };
+  added?: {
+    backend: string;
+    name: string;
+    command: string[];
+    addedAt: string;
+  }[];
+  installed?: {
+    id: string;
+    name: string;
+    command: string[];
+  }[];
+}
+
 export interface ConversationConfigureInput {
   projectId: string;
   conversationId: string;
@@ -6566,79 +6704,21 @@ export interface ConversationSendOutput {
 
 export interface ConversationSettingsCheckInput {
   projectId: string;
-  backend: 'claude-acp' | 'codex-acp' | 'acp';
+  backend: string;
 }
 
 export interface ConversationSettingsCheckOutput {
   version: number;
   updatedAt: string | null;
-  backend: ('claude-acp' | 'codex-acp' | 'acp') | null;
+  backend: string | null;
   serviceBackend: 'claude-acp' | 'codex-acp' | 'claude-cli' | 'acp';
   choices: {
-    'claude-acp'?: {
-      [k: string]: string | boolean;
-    };
-    'codex-acp'?: {
-      [k: string]: string | boolean;
-    };
-    acp?: {
+    [k: string]: {
       [k: string]: string | boolean;
     };
   };
   offered: {
-    'claude-acp'?: {
-      at: string;
-      source: 'check' | 'conversation';
-      adapter: {
-        name: string;
-        version?: string;
-      } | null;
-      options: {
-        category?: string;
-        current: string | boolean;
-        description?: string;
-        id: string;
-        name: string;
-        type: 'select' | 'boolean';
-        /**
-         * @maxItems 256
-         */
-        values?: {
-          description?: string;
-          group?: string;
-          name: string;
-          value: string;
-        }[];
-      }[];
-      omitted: number;
-    };
-    'codex-acp'?: {
-      at: string;
-      source: 'check' | 'conversation';
-      adapter: {
-        name: string;
-        version?: string;
-      } | null;
-      options: {
-        category?: string;
-        current: string | boolean;
-        description?: string;
-        id: string;
-        name: string;
-        type: 'select' | 'boolean';
-        /**
-         * @maxItems 256
-         */
-        values?: {
-          description?: string;
-          group?: string;
-          name: string;
-          value: string;
-        }[];
-      }[];
-      omitted: number;
-    };
-    acp?: {
+    [k: string]: {
       at: string;
       source: 'check' | 'conversation';
       adapter: {
@@ -6665,27 +6745,28 @@ export interface ConversationSettingsCheckOutput {
       omitted: number;
     };
   };
-  checking: ('claude-acp' | 'codex-acp' | 'acp')[];
+  checking: string[];
   describe?: {
     enabled: boolean;
   };
   agents?: {
-    'claude-acp': {
-      found: boolean;
-      problem?: string;
-      name?: string | null;
-    };
-    'codex-acp': {
-      found: boolean;
-      problem?: string;
-      name?: string | null;
-    };
-    acp: {
+    [k: string]: {
       found: boolean;
       problem?: string;
       name?: string | null;
     };
   };
+  added?: {
+    backend: string;
+    name: string;
+    command: string[];
+    addedAt: string;
+  }[];
+  installed?: {
+    id: string;
+    name: string;
+    command: string[];
+  }[];
 }
 
 export interface ConversationSettingsReadInput {
@@ -6695,73 +6776,15 @@ export interface ConversationSettingsReadInput {
 export interface ConversationSettingsReadOutput {
   version: number;
   updatedAt: string | null;
-  backend: ('claude-acp' | 'codex-acp' | 'acp') | null;
+  backend: string | null;
   serviceBackend: 'claude-acp' | 'codex-acp' | 'claude-cli' | 'acp';
   choices: {
-    'claude-acp'?: {
-      [k: string]: string | boolean;
-    };
-    'codex-acp'?: {
-      [k: string]: string | boolean;
-    };
-    acp?: {
+    [k: string]: {
       [k: string]: string | boolean;
     };
   };
   offered: {
-    'claude-acp'?: {
-      at: string;
-      source: 'check' | 'conversation';
-      adapter: {
-        name: string;
-        version?: string;
-      } | null;
-      options: {
-        category?: string;
-        current: string | boolean;
-        description?: string;
-        id: string;
-        name: string;
-        type: 'select' | 'boolean';
-        /**
-         * @maxItems 256
-         */
-        values?: {
-          description?: string;
-          group?: string;
-          name: string;
-          value: string;
-        }[];
-      }[];
-      omitted: number;
-    };
-    'codex-acp'?: {
-      at: string;
-      source: 'check' | 'conversation';
-      adapter: {
-        name: string;
-        version?: string;
-      } | null;
-      options: {
-        category?: string;
-        current: string | boolean;
-        description?: string;
-        id: string;
-        name: string;
-        type: 'select' | 'boolean';
-        /**
-         * @maxItems 256
-         */
-        values?: {
-          description?: string;
-          group?: string;
-          name: string;
-          value: string;
-        }[];
-      }[];
-      omitted: number;
-    };
-    acp?: {
+    [k: string]: {
       at: string;
       source: 'check' | 'conversation';
       adapter: {
@@ -6788,41 +6811,36 @@ export interface ConversationSettingsReadOutput {
       omitted: number;
     };
   };
-  checking: ('claude-acp' | 'codex-acp' | 'acp')[];
+  checking: string[];
   describe?: {
     enabled: boolean;
   };
   agents?: {
-    'claude-acp': {
-      found: boolean;
-      problem?: string;
-      name?: string | null;
-    };
-    'codex-acp': {
-      found: boolean;
-      problem?: string;
-      name?: string | null;
-    };
-    acp: {
+    [k: string]: {
       found: boolean;
       problem?: string;
       name?: string | null;
     };
   };
+  added?: {
+    backend: string;
+    name: string;
+    command: string[];
+    addedAt: string;
+  }[];
+  installed?: {
+    id: string;
+    name: string;
+    command: string[];
+  }[];
 }
 
 export interface ConversationSettingsUpdateInput {
   projectId: string;
   expectedVersion: number;
-  backend?: ('claude-acp' | 'codex-acp' | 'acp') | null;
+  backend?: string | null;
   choices?: {
-    'claude-acp'?: {
-      [k: string]: string | boolean;
-    };
-    'codex-acp'?: {
-      [k: string]: string | boolean;
-    };
-    acp?: {
+    [k: string]: {
       [k: string]: string | boolean;
     };
   };
@@ -6834,73 +6852,15 @@ export interface ConversationSettingsUpdateInput {
 export interface ConversationSettingsUpdateOutput {
   version: number;
   updatedAt: string | null;
-  backend: ('claude-acp' | 'codex-acp' | 'acp') | null;
+  backend: string | null;
   serviceBackend: 'claude-acp' | 'codex-acp' | 'claude-cli' | 'acp';
   choices: {
-    'claude-acp'?: {
-      [k: string]: string | boolean;
-    };
-    'codex-acp'?: {
-      [k: string]: string | boolean;
-    };
-    acp?: {
+    [k: string]: {
       [k: string]: string | boolean;
     };
   };
   offered: {
-    'claude-acp'?: {
-      at: string;
-      source: 'check' | 'conversation';
-      adapter: {
-        name: string;
-        version?: string;
-      } | null;
-      options: {
-        category?: string;
-        current: string | boolean;
-        description?: string;
-        id: string;
-        name: string;
-        type: 'select' | 'boolean';
-        /**
-         * @maxItems 256
-         */
-        values?: {
-          description?: string;
-          group?: string;
-          name: string;
-          value: string;
-        }[];
-      }[];
-      omitted: number;
-    };
-    'codex-acp'?: {
-      at: string;
-      source: 'check' | 'conversation';
-      adapter: {
-        name: string;
-        version?: string;
-      } | null;
-      options: {
-        category?: string;
-        current: string | boolean;
-        description?: string;
-        id: string;
-        name: string;
-        type: 'select' | 'boolean';
-        /**
-         * @maxItems 256
-         */
-        values?: {
-          description?: string;
-          group?: string;
-          name: string;
-          value: string;
-        }[];
-      }[];
-      omitted: number;
-    };
-    acp?: {
+    [k: string]: {
       at: string;
       source: 'check' | 'conversation';
       adapter: {
@@ -6927,34 +6887,35 @@ export interface ConversationSettingsUpdateOutput {
       omitted: number;
     };
   };
-  checking: ('claude-acp' | 'codex-acp' | 'acp')[];
+  checking: string[];
   describe?: {
     enabled: boolean;
   };
   agents?: {
-    'claude-acp': {
-      found: boolean;
-      problem?: string;
-      name?: string | null;
-    };
-    'codex-acp': {
-      found: boolean;
-      problem?: string;
-      name?: string | null;
-    };
-    acp: {
+    [k: string]: {
       found: boolean;
       problem?: string;
       name?: string | null;
     };
   };
+  added?: {
+    backend: string;
+    name: string;
+    command: string[];
+    addedAt: string;
+  }[];
+  installed?: {
+    id: string;
+    name: string;
+    command: string[];
+  }[];
 }
 
 export interface ConversationStartInput {
   projectId: string;
   changeId: string;
   text: string;
-  backend?: 'claude-acp' | 'codex-acp' | 'acp';
+  backend?: string;
   config?: {
     [k: string]: string | boolean;
   };
@@ -14412,6 +14373,8 @@ export interface RhoOperations {
   "console.stop": { input: ConsoleStopInput; output: ConsoleStopOutput };
   "context.create": { input: ContextCreateInput; output: ContextCreateOutput };
   "context.read": { input: ContextReadInput; output: ContextReadOutput };
+  "conversation.agents.add": { input: ConversationAgentsAddInput; output: ConversationAgentsAddOutput };
+  "conversation.agents.remove": { input: ConversationAgentsRemoveInput; output: ConversationAgentsRemoveOutput };
   "conversation.configure": { input: ConversationConfigureInput; output: ConversationConfigureOutput };
   "conversation.decide": { input: ConversationDecideInput; output: ConversationDecideOutput };
   "conversation.delete": { input: ConversationDeleteInput; output: ConversationDeleteOutput };
@@ -14523,5 +14486,5 @@ export type RhoInput<M extends RhoMethod> = RhoOperations[M]['input'];
 export type RhoOutput<M extends RhoMethod> = RhoOperations[M]['output'];
 
 /** The names a caller may pass to protocol.describe / protocol.validate. */
-export const rhoMethods = ["action.cancel","action.export","action.list","action.lookup","action.observe","action.output","action.retry","action.submit","agent.activity.capture","agent.activity.outputs","agent.activity.read","agent.sessions.list","agent.sessions.read","annotation.create","annotation.decide","annotation.list","annotation.read","annotation.reply","artifact.check","binding.activity","binding.activity.append","binding.close","binding.list","binding.open","capability.configure","capability.index","capability.list","capability.resolve","composition.apply","composition.delete","composition.put","composition.read","composition.undo","console.events","console.list","console.output","console.run","console.stop","context.create","context.read","conversation.configure","conversation.decide","conversation.delete","conversation.list","conversation.permission","conversation.read","conversation.restore","conversation.send","conversation.settings.check","conversation.settings.read","conversation.settings.update","conversation.start","conversation.stop","conversation.trash","data.compare","data.page","data.plot","document.abandonSave","document.change.read","document.edit","document.history","document.open","document.read","document.revert","document.save","document.undo","document.undoOwn","evidence.export","evidence.preview","extension.call","extension.content","extension.describe","extension.install","extension.list","extension.manage","extension.read","feedback.read","feedback.status","feedback.submit","interaction.selection.read","interaction.selection.set","kernel.events","kernel.inspect","kernel.interrupt","kernel.place.check","kernel.place.copy","kernel.place.list","kernel.place.set","kernel.places","kernel.plot","kernel.read","kernel.run","kernel.server.skill","kernel.servers","kernel.stop","media.describe","object.read","observation.snapshot","project.create","project.createWorkspace","project.doctor","project.entries","project.list","project.open","project.openFile","project.pick","project.runs","project.source.add","project.source.pick","project.work.read","protocol.describe","protocol.validate","requirements.check","requirements.prepare","resource.capture","resource.list","resource.read","resource.register","selection.set","session.browser.pair","session.browser.revoke","session.connect","session.grant","session.instructions","skill.list","skill.read","skills.change","skills.list","skills.read","skills.undo","task.map.declare","task.map.present","task.map.read","task.map.respond","task.routing.put","view.close","view.observations.read","view.observe","view.protection.set","workspace.enhance","workspace.export","workspace.observe","workspace.restore","workspace.save"] as const satisfies readonly RhoMethod[];
+export const rhoMethods = ["action.cancel","action.export","action.list","action.lookup","action.observe","action.output","action.retry","action.submit","agent.activity.capture","agent.activity.outputs","agent.activity.read","agent.sessions.list","agent.sessions.read","annotation.create","annotation.decide","annotation.list","annotation.read","annotation.reply","artifact.check","binding.activity","binding.activity.append","binding.close","binding.list","binding.open","capability.configure","capability.index","capability.list","capability.resolve","composition.apply","composition.delete","composition.put","composition.read","composition.undo","console.events","console.list","console.output","console.run","console.stop","context.create","context.read","conversation.agents.add","conversation.agents.remove","conversation.configure","conversation.decide","conversation.delete","conversation.list","conversation.permission","conversation.read","conversation.restore","conversation.send","conversation.settings.check","conversation.settings.read","conversation.settings.update","conversation.start","conversation.stop","conversation.trash","data.compare","data.page","data.plot","document.abandonSave","document.change.read","document.edit","document.history","document.open","document.read","document.revert","document.save","document.undo","document.undoOwn","evidence.export","evidence.preview","extension.call","extension.content","extension.describe","extension.install","extension.list","extension.manage","extension.read","feedback.read","feedback.status","feedback.submit","interaction.selection.read","interaction.selection.set","kernel.events","kernel.inspect","kernel.interrupt","kernel.place.check","kernel.place.copy","kernel.place.list","kernel.place.set","kernel.places","kernel.plot","kernel.read","kernel.run","kernel.server.skill","kernel.servers","kernel.stop","media.describe","object.read","observation.snapshot","project.create","project.createWorkspace","project.doctor","project.entries","project.list","project.open","project.openFile","project.pick","project.runs","project.source.add","project.source.pick","project.work.read","protocol.describe","protocol.validate","requirements.check","requirements.prepare","resource.capture","resource.list","resource.read","resource.register","selection.set","session.browser.pair","session.browser.revoke","session.connect","session.grant","session.instructions","skill.list","skill.read","skills.change","skills.list","skills.read","skills.undo","task.map.declare","task.map.present","task.map.read","task.map.respond","task.routing.put","view.close","view.observations.read","view.observe","view.protection.set","workspace.enhance","workspace.export","workspace.observe","workspace.restore","workspace.save"] as const satisfies readonly RhoMethod[];
 export type RhoInputFor<M extends RhoMethod> = RhoOperations[M]['input'];

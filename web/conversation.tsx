@@ -5,7 +5,7 @@ import type { UiLocation } from '../src/ui-context.js';
 import { agentTurnLimit, activitySummary, conversationBlocks, currentPlanEntry, durationText, stepDuration, type Activity, type AgentAction, type Block } from '../src/conversation-presentation.js';
 import { projectName } from './home.js';
 import { AgentMarkdown, CopyButton } from './markdown.js';
-import { agentLabel, backendOf, modelSetting, split, useAgentSettings, valueName, type SettingValue } from './agent-settings.js';
+import { agentLabel, backendOf, otherAcp, modelSetting, split, useAgentSettings, valueName, type Backend, type SettingValue } from './agent-settings.js';
 import { day } from './agent-work.js';
 import { ComposerSettings, OpenSettings } from './settings-menu.js';
 import { ProviderMark } from './brand-marks.js';
@@ -25,7 +25,7 @@ import { sessionAgent, sessionWhere, type ExternalSummary, type SessionTurn } fr
 type Read = RhoOutput<'conversation.read'>;
 type Turn = Read['turns'][number];
 type Observation = Read['observation'];
-type Pending = { kind: 'start' | 'send'; changeId: string; text: string; uiContext?: UiLocation; conversationId?: string; continuationOf?: string; backend?: 'claude-acp' | 'codex-acp' | 'acp'; continue?: { session: string; copy: boolean } };
+type Pending = { kind: 'start' | 'send'; changeId: string; text: string; uiContext?: UiLocation; conversationId?: string; continuationOf?: string; backend?: Backend; continue?: { session: string; copy: boolean } };
 const stored = (key: string) => { try { return sessionStorage.getItem(key); } catch { return null; } };
 const store = (key: string, value: string | null) => { try { if (value === null) sessionStorage.removeItem(key); else sessionStorage.setItem(key, value); return true; } catch { return false; } };
 const clock = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
@@ -352,11 +352,12 @@ export function AgentConversation({ snapshot, client, uiContext, selectedId, onS
   const list = snapshot.conversations ?? [];
   const summary = list.find(c => c.conversationId === openId);
   const openClient = summary?.client ?? read?.conversation.client;
+  const openBackend = backendOf(openClient, summary?.backend ?? read?.conversation.backend);
   // An Agent session opened before Rho continues it, or the session a Rho conversation uses.
   const sessionOpen = !!openId && openId.startsWith('x-');
   const session = (sessionOpen ? sessions?.find(s => s.id === openId) : openId ? sessions?.find(s => s.conversationId === openId) : null) ?? null;
   const [outside, setOutside] = useState<{ id: string; turns: SessionTurn[]; earlier: boolean } | null>(null), [copy, setCopy] = useState(false);
-  const agentName = sessionOpen ? (session ? sessionAgent(session) : 'Agent') : openId ? (openClient ? (openClient === 'acp' && !settings.available('acp')?.found && (summary?.adapter?.name || read?.conversation.adapter?.name)) || settings.name(backendOf(openClient)) : 'Agent') : settings.name(settings.backend);
+  const agentName = sessionOpen ? (session ? sessionAgent(session) : 'Agent') : openId ? (openClient ? (otherAcp(openBackend) && !settings.available(openBackend)?.found && (summary?.adapter?.name || read?.conversation.adapter?.name)) || settings.name(openBackend) : 'Agent') : settings.name(settings.backend);
   const mark = sessionOpen ? (session ? sessionAgent(session) : null) : agentName === 'Agent' ? null : agentName;
   const end = useRef<HTMLDivElement>(null), input = useRef<HTMLTextAreaElement>(null);
   useEffect(() => { setDraft(stored(draftKey) ?? ''); }, [draftKey]);
@@ -527,8 +528,8 @@ export function AgentConversation({ snapshot, client, uiContext, selectedId, onS
           placeholder={blocked ? 'Continue it where it is open, or continue a copy.' : answering ? agentName + ' is answering. You can write your next message.' : sessionOpen ? 'Continue this session with ' + agentName + '…' : openId ? 'Reply to ' + agentName + '…' : 'What should ' + agentName + ' look at or change?'} onChange={e => edit(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !answering && canSend) { e.preventDefault(); send(); } }} />
         <div className="composer-bar">
-          {sessionOpen ? <span /> : openId ? (openClient && <OpenSettings options={read?.observation?.config?.options ?? settings.offered(backendOf(openClient))?.options ?? null} values={read?.config ?? {}} agent={agentName}
-            disabled={answering || configuring || !read} checking={settings.checking.has(backendOf(openClient))} checkProblem={settings.checkProblem[backendOf(openClient)]} onCheck={() => void settings.check(backendOf(openClient))}
+          {sessionOpen ? <span /> : openId ? (openClient && <OpenSettings options={read?.observation?.config?.options ?? settings.offered(openBackend)?.options ?? null} values={read?.config ?? {}} agent={agentName}
+            disabled={answering || configuring || !read} checking={settings.checking.has(openBackend)} checkProblem={settings.checkProblem[openBackend]} onCheck={() => void settings.check(openBackend)}
             onChoose={(id, value) => void configure(id, value)} />)
             : !waiting && <ComposerSettings state={settings} />}
           {answering ? <button className="composer-send stop" aria-label={last?.stop ? 'Stopping…' : 'Stop'} title={last?.stop ? 'Stopping…' : 'Stop this message'} onClick={() => void stop()} disabled={!!last?.stop}><span className="stop-square" aria-hidden="true" /></button>

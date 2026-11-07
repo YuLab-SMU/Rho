@@ -8,16 +8,40 @@ import { agentDisplayName, BrandMark, brandOf, ProviderMark } from './brand-mark
 // same controls for one open conversation. The values and their names are the Agent's own,
 // as it last offered them; Rho asks only when the person checks, never on its own.
 export type AgentSettings = RhoOutput<'conversation.settings.read'>;
-export type Backend = 'claude-acp' | 'codex-acp' | 'acp';
-type Offered = NonNullable<AgentSettings['offered']['claude-acp']>;
+// Claude Code and Codex through their adapters, the ACP command named when Rho started ('acp'),
+// and the ACP Agents the person added in Rho ('acp:' and a name).
+export type Backend = 'claude-acp' | 'codex-acp' | 'acp' | `acp:${string}`;
+type Offered = NonNullable<AgentSettings['offered'][string]>;
 export type SettingOption = Offered['options'][number];
 export type SettingValue = string | boolean;
-export const backends: Backend[] = ['claude-acp', 'codex-acp', 'acp'];
-export const agentLabel: Record<Backend, string> = { 'claude-acp': 'Claude Code', 'codex-acp': 'Codex', 'acp': 'ACP Agent' };
-export const backendOf = (client?: string | null): Backend => client === 'codex' ? 'codex-acp' : client === 'acp' ? 'acp' : 'claude-acp';
+export type InstalledAgent = AgentSettings['installed'] extends Array<infer T> | undefined ? T : never;
+export const builtIn: Backend[] = ['claude-acp', 'codex-acp', 'acp'];
+const labels: Record<string, string> = { 'claude-acp': 'Claude Code', 'codex-acp': 'Codex' };
+export const agentLabel = (which: string) => labels[which] ?? 'ACP Agent';
+export const isBackend = (value: unknown): value is Backend => typeof value === 'string' && /^(claude-acp|codex-acp|acp|acp:[a-z0-9][a-z0-9-]{0,39})$/.test(value);
+// Any ACP Agent other than Claude Code and Codex.
+export const otherAcp = (which: string) => which === 'acp' || which.startsWith('acp:');
+// The Agent a conversation runs with: the one its record names, else its client's.
+export const backendOf = (client?: string | null, backend?: string | null): Backend => isBackend(backend) ? backend : client === 'codex' ? 'codex-acp' : client === 'acp' ? 'acp' : 'claude-acp';
+// A command line as typed, split into its program and arguments; quotes keep spaces. Null while a quote is open.
+export function commandWords(line: string): string[] | null {
+  const words: string[] = []; let word = '', quote = '', started = false;
+  for (const char of line.trim()) {
+    if (quote) { if (char === quote) quote = ''; else word += char; }
+    else if (char === '"' || char === "'") { quote = char; started = true; }
+    else if (/\s/.test(char)) { if (started || word) { words.push(word); word = ''; started = false; } }
+    else word += char;
+  }
+  if (quote) return null;
+  if (started || word) words.push(word);
+  return words;
+}
+// A command to read: the program's own name and its arguments.
+export const commandText = (command: string[]) => [command[0].split(/[\\/]/).at(-1)!, ...command.slice(1)].map(word => /^[A-Za-z0-9_./:@=+,-]+$/.test(word) ? word : JSON.stringify(word)).join(' ');
 
 // One copy for every place in this tab that shows the settings.
-const store = { value: null as AgentSettings | null, reading: false, problem: '', checking: new Set<Backend>(), checkProblem: {} as Partial<Record<Backend, string>>, version: 0, listeners: new Set<() => void>() };
+const store = { value: null as AgentSettings | null, reading: false, problem: '', checking: new Set<Backend>(), checkProblem: {} as Partial<Record<Backend, string>>,
+  adding: new Set<string>(), addProblem: {} as Record<string, string>, version: 0, listeners: new Set<() => void>() };
 const changed = () => { store.version++; store.listeners.forEach(listener => listener()); };
 const subscribe = (listener: () => void) => { store.listeners.add(listener); return () => { store.listeners.delete(listener); }; };
 const message = (error: unknown, fallback: string) => error instanceof Error ? error.message : fallback;
@@ -32,9 +56,10 @@ export function useAgentSettings(client: BrowserClient, projectId: string) {
   useSyncExternalStore(subscribe, () => store.version);
   useEffect(() => { if (!store.value && !store.reading) void load(client, projectId); }, [client, projectId]);
   const settings = store.value;
-  const backend: Backend = settings?.backend ?? (settings?.serviceBackend === 'codex-acp' ? 'codex-acp' : settings?.serviceBackend === 'acp' ? 'acp' : 'claude-acp');
+  const backend: Backend = isBackend(settings?.backend) ? settings.backend : settings?.serviceBackend === 'codex-acp' ? 'codex-acp' : settings?.serviceBackend === 'acp' ? 'acp' : 'claude-acp';
+  const added = (which: string) => settings?.added?.find(a => a.backend === which) ?? null;
   // A change made in another tab is read first and this one applied on top, once.
-  async function update(patch: (current: AgentSettings) => { backend?: Backend; choices?: Partial<Record<Backend, Record<string, SettingValue>>>; describe?: { enabled: boolean } }) {
+  async function update(patch: (current: AgentSettings) => { backend?: Backend; choices?: Record<string, Record<string, SettingValue>>; describe?: { enabled: boolean } }) {
     for (let attempt = 0; attempt < 2; attempt++) {
       const current = store.value ?? await client.call('conversation.settings.read', { projectId });
       try {
@@ -49,9 +74,34 @@ export function useAgentSettings(client: BrowserClient, projectId: string) {
   }
   return {
     settings, backend, problem: store.problem, checking: store.checking, checkProblem: store.checkProblem,
+    // The Agents Rho starts for new conversations, as the person sees them: Claude Code, Codex, the
+    // ACP command named when Rho started, then the Agents added in Rho.
+    list: [...builtIn.filter(which => which !== 'acp' || settings?.agents?.acp?.found), ...(settings?.added ?? []).map(a => a.backend).filter(isBackend)],
     // Whether this service can start the Agent, and the name an ACP command was recognized as.
     available: (which: Backend) => settings?.agents?.[which] ?? null,
-    name: (which: Backend) => which === 'acp' && settings?.agents?.acp?.name ? agentDisplayName(settings.agents.acp.name) : agentLabel[which],
+    name: (which: Backend) => {
+      const named = which === 'acp' ? settings?.agents?.acp?.name : which.startsWith('acp:') ? added(which)?.name ?? settings?.agents?.[which]?.name : null;
+      return named ? agentDisplayName(named) : agentLabel(which);
+    },
+    // An Agent added in Rho: the command it starts and when it was added.
+    added,
+    // The ACP Agents Rho knows that are installed here and not added yet.
+    installed: settings?.installed ?? [],
+    adding: store.adding, addProblem: store.addProblem,
+    // Starts the Agent once in this project to check it answers; kept only when it does.
+    async add(command: string[]) {
+      const key = JSON.stringify(command);
+      if (store.adding.has(key)) return false;
+      store.adding.add(key); delete store.addProblem[key]; changed();
+      try { store.value = await client.call('conversation.agents.add', { projectId, command }); return true; }
+      catch (error) { store.addProblem[key] = message(error, 'The Agent could not be added.'); return false; }
+      finally { store.adding.delete(key); changed(); }
+    },
+    async remove(which: Backend) {
+      try { store.value = await client.call('conversation.agents.remove', { projectId, backend: which }); store.problem = ''; }
+      catch (error) { store.problem = message(error, 'The Agent could not be removed.'); }
+      finally { changed(); }
+    },
     offered: (which: Backend) => settings?.offered[which] ?? null,
     choices: (which: Backend) => (settings?.choices[which] ?? {}) as Record<string, SettingValue>,
     chooseAgent: (which: Backend) => update(() => ({ backend: which })),
@@ -68,7 +118,7 @@ export function useAgentSettings(client: BrowserClient, projectId: string) {
       if (store.checking.has(which)) return;
       store.checking.add(which); delete store.checkProblem[which]; changed();
       try { store.value = await client.call('conversation.settings.check', { projectId, backend: which }); }
-      catch (error) { store.checkProblem[which] = message(error, agentLabel[which] + ' could not be asked.'); }
+      catch (error) { store.checkProblem[which] = message(error, agentLabel(which) + ' could not be asked.'); }
       finally { store.checking.delete(which); changed(); }
     }
   };

@@ -257,7 +257,7 @@ if (process.env.RHO_CONNECT_FAIL && !process.argv.includes('remove')) { process.
   assert.equal((await call('observation.snapshot')).agents.filter(a => !a.conversationId).length, 0);
   const grant = await admin.call('session.grant', { projectId: opened.id, externalSessionId: 'My-research-agent' });
   // A connected window is listed with the other Agents, under its own name, above the prompt.
-  const listed = page.locator('.agents-tab .agent-rows');
+  const listed = page.getByRole('radiogroup', { name: 'Agent for new conversations' });
   await until(() => listed.innerText(), t => /Waiting for first successful call/.test(t), 'access shown without claiming a connection');
   const connection = JSON.parse(await fs.readFile(grant.connectionFile, 'utf8'));
   const connected = new RhoClient(connection);

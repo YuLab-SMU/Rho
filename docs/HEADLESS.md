@@ -266,6 +266,26 @@ settings name one; a model without Auto runs in Accept edits with the adapter's 
 Codex's adapter already opens in its own auto-review mode. ACP cancellation confirms the
 turn, not every native job.
 
+Any other Agent that speaks ACP v1 runs through the generic driver, with no adapter of its
+own. `conversation.agents.add` adds one for new conversations in every project, given its
+program (on `PATH` or a path) and arguments, such as `["hermes", "acp"]`. Rho starts it
+once in the project, as `conversation.settings.check` does: a session is opened, what the
+Agent offers is read and the session is removed; no message is sent. The Agent is kept as
+`acp:<name>` only when it answered; otherwise the reply is the Agent's error, or the last
+line it printed when it exited first. `conversation.settings.read` lists the added Agents
+(`added`) and, from `PATH`, the Agents with a known ACP command that are installed and not
+added (`installed`; Agent's `knownAcpAgents`). `conversation.agents.remove` takes one out
+of new conversations. Each conversation records the command it started with, so it
+continues with the same Agent. `--acp-command '<argv JSON>'` / `RHO_ACP_COMMAND` still
+names one ACP Agent at start (`acp`); without it, `dsh acp` is used when Harness's `acp`
+profile is installed. A Harness session in the folder continues only through Harness's own
+ACP command, named at start or added. See the [episode](AGENTS-IN-RHO-EPISODE.md).
+
+| Protected resource | Configuration and default | Exhaustion |
+| --- | --- | --- |
+| Added Agents, kept in the service's Agent settings | `conversations.maxAddedAgents` 16 | Adding another is refused until one is removed. |
+| Starting an Agent to add it | `conversations.connectTimeoutMs` 60 s; one start per command at a time | The start ends; nothing is added and the reason is returned. |
+
 For an external ACP client, select this command as that client's Agent executable:
 
 ```sh

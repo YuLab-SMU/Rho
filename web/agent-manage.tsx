@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { BrowserClient, WorkspaceSnapshot } from '../src/browser.js';
 import type { RhoOutput } from '../src/contract.generated.js';
-import { agentLabel, backends, effortSetting, modelSetting, ModelPicker, ordered, refreshAgentSettings, SettingSelect, split, useAgentSettings, valueName, when, type AgentSettingsState, type Backend, type SettingOption, type SettingValue } from './agent-settings.js';
+import { commandText, commandWords, effortSetting, isBackend, modelSetting, ModelPicker, ordered, otherAcp, refreshAgentSettings, SettingSelect, split, useAgentSettings, valueName, when, type AgentSettingsState, type Backend, type InstalledAgent, type SettingOption, type SettingValue } from './agent-settings.js';
 import { ConversationTurns, day } from './agent-work.js';
 import { abilities } from './agents.js';
 import { agentDisplayName, BrandMark, brandOf, ProviderMark } from './brand-marks.js';
@@ -21,7 +21,7 @@ const tabKey = 'rho.agent.tab.v1';
 type AgentKey = 'claude-code' | 'codex' | 'other';
 const agentKeys: AgentKey[] = ['claude-code', 'codex', 'other'];
 const agentNames: Record<AgentKey, string> = { 'claude-code': 'Claude Code', codex: 'Codex', other: 'Other Agents' };
-const backendOf = (summary: Pick<Summary, 'backend' | 'client'>): Backend | null => summary.backend === 'codex-acp' || summary.backend === 'claude-acp' || summary.backend === 'acp' ? summary.backend : summary.client === 'codex' ? 'codex-acp' : summary.client === 'acp' ? 'acp' : summary.backend === 'claude-cli' ? null : 'claude-acp';
+const backendOf = (summary: Pick<Summary, 'backend' | 'client'>): Backend | null => isBackend(summary.backend) ? summary.backend : summary.client === 'codex' ? 'codex-acp' : summary.client === 'acp' ? 'acp' : summary.backend === 'claude-cli' ? null : 'claude-acp';
 // An ACP Agent is named as it named itself; its mark is its maker's when Rho has one, else its initial.
 const agentOf = (s: { client: string; adapter?: { name: string } | null }) => s.client === 'codex' ? 'Codex' : s.client === 'acp' ? s.adapter?.name || 'ACP Agent' : 'Claude Code';
 const AgentMark = ({ summary, size }: { summary: { client: string; adapter?: { name: string } | null }; size: number }) => <ProviderMark name={agentOf(summary)} size={size} />;
@@ -282,10 +282,11 @@ function AgentsTab({ state, client, snapshot, onOpened }: { state: AgentSettings
     <section className="agents-section" aria-labelledby="agents-here">
       <header className="agents-section-head">
         <h2 id="agents-here">Agents for this project</h2>
-        <p>Rho starts the Agents installed on this computer for new conversations, with their own sign-in and settings. An Agent working in its own window, such as a terminal, an editor or its app, is listed here once it connects itself to this project. Their sessions in this folder are under Conversations.</p>
+        <p>Rho starts the Agents you can choose here for new conversations, each with its own sign-in and settings, and you talk to them in Rho's Agent panel. An Agent working in its own window, such as a terminal, an editor or its app, is listed once it connects itself to this project: it uses the project from that window, and you talk to it there. Use in Rho adds it, so Rho can start it too. Their sessions in this folder are under Conversations.</p>
       </header>
       <AgentsPanel state={state} snapshot={snapshot} />
     </section>
+    <AddAgents state={state} snapshot={snapshot} />
     <OutsideAgents client={client} snapshot={snapshot} onOpened={onOpened} />
   </div>;
 }
@@ -299,21 +300,25 @@ const windowName = (window: Window) => {
   return client && brandOf(client) ? client : window.label ?? client ?? 'Agent session';
 };
 const keyOfName = (name: string) => brandOf(name) ?? 'name:' + name.toLowerCase();
+// The windows of each Agent, by Agent: those Rho starts, and the others, which connected from
+// their own windows only.
+function windowsByAgent(state: AgentSettingsState, snapshot?: WorkspaceSnapshot) {
+  const keyOf = (which: Backend) => otherAcp(which) ? keyOfName(state.name(which)) : which === 'codex-acp' ? 'codex' : 'claude-code';
+  const windows = (snapshot?.agents ?? []).filter(agent => !agent.conversationId);
+  const startable = new Set(state.list.map(keyOf));
+  const others = new Map<string, Window[]>();
+  for (const window of windows) { const key = keyOfName(windowName(window)); if (!startable.has(key)) others.set(key, [...(others.get(key) ?? []), window]); }
+  return { keyOf, windows, others };
+}
 
 export function AgentsPanel({ state, snapshot }: { state: AgentSettingsState; snapshot?: WorkspaceSnapshot }) {
   const [open, setOpen] = useState<Backend | null>(null);
   if (!state.settings) return <p className="muted" role={state.problem ? 'alert' : 'status'}>{state.problem || 'Reading…'}</p>;
-  // An ACP Agent is listed only when the person named its command.
-  const shown = backends.filter(which => which !== 'acp' || state.available('acp')?.found);
-  const keyOf = (which: Backend) => which === 'acp' ? keyOfName(state.name('acp')) : which === 'codex-acp' ? 'codex' : 'claude-code';
-  const windows = (snapshot?.agents ?? []).filter(agent => !agent.conversationId);
-  const startable = new Set(shown.map(keyOf));
-  const others = new Map<string, Window[]>();
-  for (const window of windows) { const key = keyOfName(windowName(window)); if (!startable.has(key)) others.set(key, [...(others.get(key) ?? []), window]); }
+  const shown = state.list, { keyOf, windows, others } = windowsByAgent(state, snapshot);
   return <>
     <ul className="agent-rows" role="radiogroup" aria-label="Agent for new conversations">
       {shown.map(which => <AgentRow key={which} which={which} state={state} snapshot={snapshot} windows={windows.filter(w => keyOfName(windowName(w)) === keyOf(which))} open={open === which} onToggle={() => setOpen(current => current === which ? null : which)} />)}
-      {snapshot && [...others.values()].map(list => <WindowsRow key={list[0].principal} windows={list} snapshot={snapshot} />)}
+      {snapshot && [...others].map(([key, list]) => <WindowsRow key={list[0].principal} windows={list} snapshot={snapshot} state={state} installed={state.installed.find(agent => keyOfName(agent.name) === key) ?? null} />)}
     </ul>
     {state.problem && <p className="inline-error" role="alert">{state.problem}</p>}
   </>;
@@ -329,42 +334,95 @@ function AgentRow({ which, state, snapshot, windows, open, onToggle }: { which: 
     : checking ? { tone: 'busy', text: 'Asking ' + agent + ' what it offers…' }
     : problem ? { tone: 'failed', text: problem }
     : { tone: 'ready', text: isDefault ? 'New conversations use ' + agent : 'Ready' };
+  // An Agent that offers no model choice says so rather than showing an empty picker.
+  const noModels = !!offered && !model;
   return <li className={'agent-row' + (open ? ' open' : '') + (isDefault ? ' default' : '') + (found ? '' : ' missing')}>
     <div className="agent-row-head">
       <button role="radio" aria-checked={isDefault} className="agent-radio" disabled={!found} title={found ? 'Use ' + agent + ' for new conversations' : available?.problem} aria-label={'Use ' + agent + ' for new conversations'} onClick={() => void state.chooseAgent(which)}><span aria-hidden="true" /></button>
-      <span className="agent-row-mark">{which === 'acp' ? <ProviderMark name={agent} size={22} /> : <BrandMark brand={markOf(which)} size={22} />}</span>
+      <span className="agent-row-mark">{otherAcp(which) ? <ProviderMark name={agent} size={22} /> : <BrandMark brand={markOf(which)} size={22} />}</span>
       <div className="agent-row-name">
         <strong>{agent}</strong>
         <span className={'agent-row-status ' + status.tone} role={status.tone === 'failed' ? 'alert' : undefined} title={!found ? available?.problem : undefined}>{status.text}</span>
       </div>
-      {found && <div className="agent-row-actions">
-        <ModelPicker option={model} value={chosen} agent={agent} allowDefault checking={checking} checkProblem={problem} className="agent-row-model"
+      {(found || state.added(which)) && <div className="agent-row-actions">
+        {found && (noModels ? <span className="agent-row-note">Chooses its own model</span>
+          : <ModelPicker option={model} value={chosen} agent={agent} allowDefault checking={checking} checkProblem={problem} className="agent-row-model"
           onChoose={next => model && void state.choose(which, model.id, next)} onCheck={() => void state.check(which)}
           summary={<span className="agent-model-value">{current ? <ProviderMark name={providerOf(current) || agent} size={15} /> : null}<span>{current ? split(current.name).name : agent + "'s default model"}</span>{chosen === null && current && <small>default</small>}</span>}
-          summaryText={'Model for new ' + agent + ' conversations: ' + (current?.name ?? 'default')} />
+          summaryText={'Model for new ' + agent + ' conversations: ' + (current?.name ?? 'default')} />)}
         <button className="icon-button agent-details-toggle" aria-expanded={open} aria-label={(open ? 'Hide ' : 'Show ') + agent + ' settings'} title={open ? 'Hide settings' : 'More settings'} onClick={onToggle}><Icon name="chevron" size={15} /></button>
       </div>}
     </div>
     {snapshot && windows.length > 0 && <AgentWindows windows={windows} snapshot={snapshot} />}
-    {open && found && <AgentDetails which={which} state={state} />}
+    {open && <AgentDetails which={which} state={state} />}
   </li>;
 }
 
-// An Agent Rho does not start here, listed because it connected from its own window.
-function WindowsRow({ windows, snapshot }: { windows: Window[]; snapshot: WorkspaceSnapshot }) {
+// An Agent Rho does not start, listed because it connected from its own window. When Rho knows
+// its ACP command and finds it installed, one button adds it, so Rho can start it too.
+function WindowsRow({ windows, snapshot, state, installed }: { windows: Window[]; snapshot: WorkspaceSnapshot; state: AgentSettingsState; installed: InstalledAgent | null }) {
   const name = agentDisplayName(windowName(windows[0]));
   const live = windows.filter(w => !w.ended).length;
+  const key = installed ? JSON.stringify(installed.command) : '', adding = !!installed && state.adding.has(key), problem = installed ? state.addProblem[key] : undefined;
   return <li className="agent-row windows-only">
     <div className="agent-row-head">
       <span className="agent-radio-slot" aria-hidden="true" />
       <span className="agent-row-mark"><ProviderMark name={name} size={22} /></span>
       <div className="agent-row-name">
         <strong>{name}</strong>
-        <span className="agent-row-status">{live === 0 ? 'Its access has ended' : live > 1 ? 'Connected from ' + live + ' windows of its own' : 'Connected from its own window'}</span>
+        <span className={'agent-row-status' + (adding ? ' busy' : '')}>{adding ? 'Starting ' + name + ' in this project to check it…' : (live === 0 ? 'Its access has ended' : live > 1 ? 'Connected from ' + live + ' windows of its own' : 'Connected from its own window') + (installed ? '' : ' · Rho does not start it')}</span>
       </div>
+      {installed && <div className="agent-row-actions">
+        <button className="small-button" disabled={adding} title={'Add ' + name + ' (' + commandText(installed.command) + ') so Rho can start it and you can talk to it here'} onClick={() => void state.add(installed.command)}>{adding ? 'Adding…' : 'Use in Rho'}</button>
+      </div>}
     </div>
+    {problem && <p className="inline-error agent-add-problem" role="alert">{problem}</p>}
     <AgentWindows windows={windows} snapshot={snapshot} />
   </li>;
+}
+
+// Any Agent that speaks ACP can be added: one Rho found installed here, or a command the person
+// types. Adding starts it once in this project to check that it answers; no message is sent.
+function AddAgents({ state, snapshot }: { state: AgentSettingsState; snapshot: WorkspaceSnapshot }) {
+  const [line, setLine] = useState('');
+  if (!state.settings) return null;
+  // An Agent connected from its own window is added from its row above.
+  const above = windowsByAgent(state, snapshot).others;
+  const installed = state.installed.filter(agent => !above.has(keyOfName(agent.name)));
+  const typed = commandWords(line), key = typed?.length ? JSON.stringify(typed) : '';
+  const typedAdding = !!key && state.adding.has(key), typedProblem = key ? state.addProblem[key] : undefined;
+  async function addTyped() { if (typed?.length && await state.add(typed)) setLine(''); }
+  return <section className="agents-section" aria-labelledby="agents-add">
+    <header className="agents-section-head">
+      <h2 id="agents-add">Add an Agent</h2>
+      <p>Rho can start any Agent that speaks ACP, the Agent Client Protocol, so you talk to it in Rho as you do to Claude Code. Adding one starts it once in this project to check that it answers and to read the models it offers; no message is sent. It is then offered for new conversations in every project.</p>
+    </header>
+    {installed.length > 0 && <ul className="agent-rows agent-install-rows" aria-label="Installed on this computer">{installed.map(agent => {
+      const key = JSON.stringify(agent.command), adding = state.adding.has(key), problem = state.addProblem[key];
+      return <li key={agent.id} className="agent-row installable">
+        <div className="agent-row-head">
+          <span className="agent-radio-slot" aria-hidden="true" />
+          <span className="agent-row-mark"><ProviderMark name={agent.name} size={22} /></span>
+          <div className="agent-row-name">
+            <strong>{agentDisplayName(agent.name)}</strong>
+            <span className={'agent-row-status' + (adding ? ' busy' : '')}>{adding ? 'Starting it in this project to check it…' : <>Installed · starts as <code>{commandText(agent.command)}</code></>}</span>
+          </div>
+          <div className="agent-row-actions"><button className="small-button" disabled={adding} onClick={() => void state.add(agent.command)}>{adding ? 'Adding…' : 'Add'}</button></div>
+        </div>
+        {problem && <p className="inline-error agent-add-problem" role="alert">{problem}</p>}
+      </li>;
+    })}</ul>}
+    <form className="agent-add-command" onSubmit={event => { event.preventDefault(); void addTyped(); }}>
+      <label htmlFor="agent-add-command">{installed.length ? 'Another Agent: the command that starts it as an ACP Agent' : 'The command that starts an Agent as an ACP Agent'}</label>
+      <div className="agent-add-line">
+        <input id="agent-add-command" value={line} placeholder="goose acp" spellCheck={false} autoComplete="off" onChange={event => setLine(event.target.value)} disabled={typedAdding} />
+        <button className="small-button" type="submit" disabled={!typed?.length || typedAdding}>{typedAdding ? 'Adding…' : 'Add'}</button>
+      </div>
+      {typed === null && <small>Close the quote first.</small>}
+      {typedProblem && <p className="inline-error" role="alert">{typedProblem}</p>}
+      <small>Its own documentation names the command, such as <code>goose acp</code> or <code>gemini --acp</code>. A program on PATH, or the path to one.</small>
+    </form>
+  </section>;
 }
 
 // Each window's own session name, what its grant allows and its latest call to Rho.
@@ -383,6 +441,19 @@ function AgentWindows({ windows, snapshot }: { windows: Window[]; snapshot: Work
 }
 
 function AgentDetails({ which, state }: { which: Backend; state: AgentSettingsState }) {
+  const added = state.added(which);
+  if (state.available(which)?.found === false) return <div className="agent-details">{added && <AddedCommand which={which} state={state} />}</div>;
+  return <FoundDetails which={which} state={state} />;
+}
+// How Rho starts an Agent the person added, and taking it out again. Its conversations stay.
+function AddedCommand({ which, state }: { which: Backend; state: AgentSettingsState }) {
+  const added = state.added(which), agent = state.name(which);
+  if (!added) return null;
+  return <div className="agent-detail-row"><span className="agent-detail-label">Started as</span>
+    <div className="agent-detail-body"><p className="agent-detail-note"><code title={added.command.join(' ')}>{commandText(added.command)}</code>, added {when(added.addedAt)}.
+      <button className="text-button" onClick={() => void state.remove(which)} title={'Stop offering ' + agent + ' for new conversations. Its conversations stay.'}>Remove from Rho</button></p></div></div>;
+}
+function FoundDetails({ which, state }: { which: Backend; state: AgentSettingsState }) {
   const offered = state.offered(which), choices = state.choices(which), agent = state.name(which);
   const checking = state.checking.has(which);
   const { model, effort, mode, rest } = ordered(offered?.options ?? []);
@@ -398,7 +469,7 @@ function AgentDetails({ which, state }: { which: Backend; state: AgentSettingsSt
   const shown = providers.find(p => p.name === provider) ?? null;
   const settings = [effort, mode, ...rest].filter((o): o is SettingOption => !!o);
   if (!offered) return <div className="agent-details"><p className="agent-details-empty">Rho has not asked {agent} which models and settings it offers. Asking starts {agent} in a project for a few seconds; no message is sent.
-    <button className="small-button" disabled={checking} onClick={() => void state.check(which)}>{checking ? 'Asking…' : 'Ask ' + agent}</button></p></div>;
+    <button className="small-button" disabled={checking} onClick={() => void state.check(which)}>{checking ? 'Asking…' : 'Ask ' + agent}</button></p><AddedCommand which={which} state={state} /></div>;
   const pick = (next: string) => model && void state.choose(which, model.id, next === chosen ? null : next);
   return <div className="agent-details">
     {settings.length > 0 && <div className="agent-detail-row"><span className="agent-detail-label">Settings</span>
@@ -422,5 +493,8 @@ function AgentDetails({ which, state }: { which: Backend; state: AgentSettingsSt
     <div className="agent-detail-row"><span className="agent-detail-label">Offered by</span>
       <div className="agent-detail-body"><p className="agent-detail-note">{offered.adapter ? offered.adapter.name.split('/').at(-1) + (offered.adapter.version ? ' ' + offered.adapter.version : '') : agent}, {offered.source === 'check' ? 'checked ' : 'seen in a conversation '}{when(offered.at)}.{offered.omitted ? ` ${offered.omitted} more ${offered.omitted === 1 ? 'value is' : 'values are'} not listed.` : ''}
         <button className="text-button" disabled={checking} onClick={() => void state.check(which)}>{checking ? 'Asking…' : 'Check again'}</button></p></div></div>
+    {!values.length && !settings.length && <div className="agent-detail-row"><span className="agent-detail-label">Models</span>
+      <div className="agent-detail-body"><p className="agent-detail-note">{agent} offers no model or setting to choose here; it uses its own.</p></div></div>}
+    <AddedCommand which={which} state={state} />
   </div>;
 }

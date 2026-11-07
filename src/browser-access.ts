@@ -39,7 +39,7 @@ export const browserMethods = ['protocol.describe', 'protocol.validate', 'projec
 // Only the person at this machine talks to a conversation Rho starts: it runs their own Claude
 // Code with their model credentials. Only they add Rho to their own Agent's configuration. A
 // narrower, expiring link never receives these.
-export const conversationMethods = ['agent.sessions.list', 'agent.sessions.read', 'session.instructions', 'session.connect', 'conversation.start', 'conversation.send', 'conversation.stop', 'conversation.decide', 'conversation.read', 'conversation.list', 'conversation.trash', 'conversation.restore', 'conversation.delete', 'conversation.permission', 'conversation.configure', 'conversation.settings.read', 'conversation.settings.update', 'conversation.settings.check', 'project.work.read', 'evidence.preview', 'evidence.export'];
+export const conversationMethods = ['agent.sessions.list', 'agent.sessions.read', 'session.instructions', 'session.connect', 'conversation.start', 'conversation.send', 'conversation.stop', 'conversation.decide', 'conversation.read', 'conversation.list', 'conversation.trash', 'conversation.restore', 'conversation.delete', 'conversation.permission', 'conversation.configure', 'conversation.settings.read', 'conversation.settings.update', 'conversation.settings.check', 'conversation.agents.add', 'conversation.agents.remove', 'project.work.read', 'evidence.preview', 'evidence.export'];
 // The person at this machine. A tab this service served is authorized by the request itself:
 // same origin, loopback only, no link, no code and no expiry. `--pair` stays an explicit,
 // narrower grant for a shared or subfolder-scoped tab.

@@ -589,7 +589,11 @@ four messages through `web/agent-work.tsx`, the same step model as the panel.
 `web/agent-settings.tsx` keeps one copy of `conversation.settings.read` per tab for
 the Agents tab and the panel's settings menu (`web/settings-menu.tsx`);
 asking an Agent what it offers (`conversation.settings.check`) is always the
-person's click.
+person's click. The Agents tab adds an ACP Agent (`conversation.agents.add`) when the
+person clicks Add on one found installed, types its command, or clicks Use in Rho on an
+Agent connected from its own window whose command Rho knows; an added Agent's settings
+show its command and Remove from Rho. An Agent that offers no settings says so in the
+message box rather than offering to ask.
 Shared notes opens `project-notes.md` in the existing Documents owner. A failed work read keeps the previous
 view and offers Refresh. The cursor invalidates the read model; individual sources
 and resources retain their own versions. See the [observed loop](ACP-EPISODE.md#shared-workspace-loop).

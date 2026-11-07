@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
-import { agentLabel, backends, effortSetting, modelSetting, ModelList, NotAsked, split, valueName, type AgentSettingsState, type Backend, type SettingOption, type SettingValue } from './agent-settings.js';
+import { agentLabel, effortSetting, modelSetting, ModelList, NotAsked, split, valueName, type AgentSettingsState, type Backend, type SettingOption, type SettingValue } from './agent-settings.js';
 import { ProviderMark } from './brand-marks.js';
 import { Icon } from './icons.js';
 import { stepFocus, useOutside } from './popover.js';
@@ -15,7 +15,7 @@ const switchOf = (option: SettingOption) => option.type === 'boolean'
 
 export function SettingsMenu({ agent, options, values, allowDefault, disabled, disabledNote, agents, checking, checkProblem, onCheck, onChoose, describe }: {
   agent: string; options: SettingOption[] | null; values: Record<string, SettingValue>; allowDefault: boolean;
-  disabled?: boolean; disabledNote?: string; agents?: { current: Backend; choose: (which: Backend) => void; offered?: Backend[]; name?: (which: Backend) => string };
+  disabled?: boolean; disabledNote?: string; agents?: { current: Backend; choose: (which: Backend) => void; offered: Backend[]; name?: (which: Backend) => string };
   checking?: boolean; checkProblem?: string; onCheck?: () => void;
   onChoose: (id: string, value: SettingValue | null) => void; describe: string;
 }) {
@@ -51,8 +51,10 @@ export function SettingsMenu({ agent, options, values, allowDefault, disabled, d
     else if (event.key === 'ArrowLeft' && !typing && view.kind !== 'root') { event.preventDefault(); back(); }
     else if (event.key === 'ArrowRight' && !typing && (event.target as HTMLElement).dataset.opens) { event.preventDefault(); (event.target as HTMLElement).click(); }
   }
-  // Before the Agent reports its models, the chip says the Agent will use its own default.
-  const modelName = model ? split(shown(model)) : { name: 'Default model', group: '' };
+  // Before the Agent reports its models, the chip says the Agent will use its own default; an
+  // Agent that reported none chooses its own.
+  const offersNone = !!options && !options.length;
+  const modelName = model ? split(shown(model)) : { name: offersNone ? 'Its own model' : 'Default model', group: '' };
   const effortName = effort ? shown(effort) : '';
   const option = view.kind === 'option' ? (options ?? []).find(o => o.id === view.id) ?? null : null;
   // A setting that is only on or off, as a boolean or as a list of On and Off, is a switch.
@@ -90,12 +92,13 @@ export function SettingsMenu({ agent, options, values, allowDefault, disabled, d
           {effort && row(effort)}
           {rest.length > 0 && (model || effort) && <div className="menu-divider" role="separator" />}
           {rest.map(row)}
-        </> : <NotAsked agent={agent} checking={checking} checkProblem={checkProblem} onCheck={onCheck} />}
+        </> : offersNone ? <div className="model-unknown"><p>{agent} offers no model or setting to choose here; it uses its own.</p></div>
+          : <NotAsked agent={agent} checking={checking} checkProblem={checkProblem} onCheck={onCheck} />}
       </> : <>
         <div className="menu-head"><button data-item className="menu-back" aria-label="Back" title="Back" onClick={back}><Icon name="back" size={14} /></button><span>{view.kind === 'agent' ? 'Agent' : option ? labelOf(option) : ''}</span></div>
-        {view.kind === 'agent' && agents ? <div className="menu-choices" role="radiogroup" aria-label="Agent">{(agents.offered ?? backends).map(which => <button key={which} data-item role="radio" aria-checked={which === agents.current} className="menu-choice"
+        {view.kind === 'agent' && agents ? <div className="menu-choices" role="radiogroup" aria-label="Agent">{agents.offered.map(which => <button key={which} data-item role="radio" aria-checked={which === agents.current} className="menu-choice"
           onClick={() => { if (which !== agents.current) agents.choose(which); back(); }}>
-          <ProviderMark name={agents.name?.(which) ?? agentLabel[which]} size={14} /><span className="menu-choice-text">{agents.name?.(which) ?? agentLabel[which]}</span>{which === agents.current && <Icon name="check" size={14} />}
+          <ProviderMark name={agents.name?.(which) ?? agentLabel(which)} size={14} /><span className="menu-choice-text">{agents.name?.(which) ?? agentLabel(which)}</span>{which === agents.current && <Icon name="check" size={14} />}
         </button>)}</div>
           : option && option === model && model.values?.length ? <ModelList option={model} value={chosen(model) as string | null ?? (allowDefault ? null : model.current as string)} agent={agent} allowDefault={allowDefault}
             onChoose={value => pick(model, value)} onEscape={back} />
@@ -120,7 +123,8 @@ export function ComposerSettings({ state }: { state: AgentSettingsState }) {
   const { backend } = state, agent = state.name(backend);
   if (!state.settings) return null;
   // Only the Agents this service can start, and the one already chosen.
-  const offered = backends.filter(which => which === backend || state.available(which)?.found !== false);
+  const offered = state.list.filter(which => which === backend || state.available(which)?.found !== false);
+  if (!offered.includes(backend)) offered.unshift(backend);
   return <SettingsMenu agent={agent} options={state.offered(backend)?.options ?? null} values={state.choices(backend)} allowDefault
     agents={{ current: backend, choose: which => void state.chooseAgent(which), offered, name: state.name }} checking={state.checking.has(backend)} checkProblem={state.checkProblem[backend]}
     onCheck={() => void state.check(backend)} onChoose={(id, value) => void state.choose(backend, id, value)} describe="Settings for a new conversation" />;

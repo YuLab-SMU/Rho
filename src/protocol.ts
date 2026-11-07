@@ -35,9 +35,10 @@ const array = (items: any) => ({ type: 'array', items });
 const response = (properties: Record<string, any>, required = Object.keys(properties)) => ({ type: 'object', properties, required, additionalProperties: true });
 const changeId = { type: 'string', pattern: '^[A-Za-z0-9._:@-]{1,128}$' };
 const identity = changeId;
-// 'acp' is a generic ACP agent: the operator names its command (--acp-command), so Rho
-// supports any ACP v1 implementation without a per-agent adapter.
-const agentBackend = { enum: ['claude-acp', 'codex-acp', 'acp'] };
+// Claude Code and Codex through their adapters, and any other ACP v1 Agent without a per-agent
+// adapter: 'acp' is the command named when the service started (--acp-command), 'acp:' and a name
+// an Agent the person added in Rho (conversation.agents.add).
+const agentBackend = { type: 'string', pattern: '^(claude-acp|codex-acp|acp|acp:[a-z0-9][a-z0-9-]{0,39})$' };
 const outsideAgent = { enum: ['claude-code', 'codex'] };
 const addedTo = response({ agent: outsideAgent, name: text, scope: { enum: ['folder', 'user'] }, at: text });
 const choiceText = { type: 'string', minLength: 1, maxLength: 512 }, choiceValue = { anyOf: [choiceText, { type: 'boolean' }] };
@@ -102,8 +103,11 @@ export const operations: Record<string, any> = { ...base.operations, ...extensio
   // The person's Agent and its settings (model, effort, mode…) among those the Agent offers.
   'conversation.configure': obj({ ...project, conversationId: changeId, configId: choiceText, value: choiceValue }),
   'conversation.settings.read': obj(project),
-  'conversation.settings.update': obj({ ...project, expectedVersion: integer, backend: { anyOf: [agentBackend, { type: 'null' }] }, choices: obj({ 'claude-acp': choices, 'codex-acp': choices, 'acp': choices }, []), describe: obj({ enabled: { type: 'boolean' } }, ['enabled']) }, ['projectId', 'expectedVersion']),
+  'conversation.settings.update': obj({ ...project, expectedVersion: integer, backend: { anyOf: [agentBackend, { type: 'null' }] }, choices: { type: 'object', maxProperties: 20, propertyNames: agentBackend, additionalProperties: choices }, describe: obj({ enabled: { type: 'boolean' } }, ['enabled']) }, ['projectId', 'expectedVersion']),
   'conversation.settings.check': obj({ ...project, backend: agentBackend }),
+  // An ACP Agent the person adds or removes for new conversations: the program (on PATH or a path) and its arguments.
+  'conversation.agents.add': obj({ ...project, command: { type: 'array', minItems: 1, maxItems: 32, items: { type: 'string', minLength: 1, maxLength: 4096 } } }),
+  'conversation.agents.remove': obj({ ...project, backend: { type: 'string', pattern: '^acp:[a-z0-9][a-z0-9-]{0,39}$' } }),
   // Claude Code or Codex running outside Rho, given this project and told how to start Rho's MCP server.
   'session.connect': obj({ ...project, agent: outsideAgent }),
   'session.instructions': obj(project)
@@ -227,11 +231,14 @@ const sessionObservation = ownerSchema('agent-session', 'sessionObservationSchem
 // What one Agent offered, from a check or a conversation's first session, and the person's choices.
 const offered = response({ at: text, source: { enum: ['check', 'conversation'] }, adapter: { anyOf: [response({ name: text, version: text }, ['name']), { type: 'null' }] }, options: array(ownerSchema('agent-session', 'configOptionSchema')), omitted: integer });
 const agentSettings = response({ version: integer, updatedAt: { anyOf: [text, { type: 'null' }] }, backend: { anyOf: [agentBackend, { type: 'null' }] }, serviceBackend: { enum: ['claude-acp', 'codex-acp', 'claude-cli', 'acp'] },
-  choices: response({ 'claude-acp': choices, 'codex-acp': choices, 'acp': choices }, []), offered: response({ 'claude-acp': offered, 'codex-acp': offered, 'acp': offered }, []), checking: array(agentBackend),
+  choices: { type: 'object', propertyNames: agentBackend, additionalProperties: choices }, offered: { type: 'object', propertyNames: agentBackend, additionalProperties: offered }, checking: array(agentBackend),
   // Whether a model describes the files a message writes; the facts are read either way.
   describe: response({ enabled: { type: 'boolean' } }),
   // Which Agents this service can start, without starting them.
-  agents: response(Object.fromEntries(['claude-acp', 'codex-acp', 'acp'].map(k => [k, response({ found: { type: 'boolean' }, problem: text, name: { anyOf: [text, { type: 'null' }] } }, ['found'])]))) }, ['version', 'updatedAt', 'backend', 'serviceBackend', 'choices', 'offered', 'checking']);
+  agents: { type: 'object', propertyNames: agentBackend, additionalProperties: response({ found: { type: 'boolean' }, problem: text, name: { anyOf: [text, { type: 'null' }] } }, ['found']) },
+  // The ACP Agents the person added, and those Rho knows that are installed here and not added yet.
+  added: array(response({ backend: agentBackend, name: text, command: array(text), addedAt: text })),
+  installed: array(response({ id: text, name: text, command: array(text) })) }, ['version', 'updatedAt', 'backend', 'serviceBackend', 'choices', 'offered', 'checking']);
 // A tool step keeps its original identity, the Agent's bounded human title, its ACP
 // category and one identifying input (command, path, pattern or query), for a command the
 // Agent's own few words on what it is for (purpose), when it was
@@ -360,6 +367,8 @@ export const responses: Record<string, any> = { ...base.responses, ...ownerRespo
   'conversation.settings.read': agentSettings,
   'conversation.settings.update': agentSettings,
   'conversation.settings.check': agentSettings,
+  'conversation.agents.add': agentSettings,
+  'conversation.agents.remove': agentSettings,
   'session.connect': response({ principal: text, label: text, methods: integer, granted: { type: 'boolean' }, added: addedTo }),
   'session.instructions': response({ request: text, prompt: text, command: array(text) }),
   'protocol.describe': response({ apiVersion: { const: '2.0' }, schemaVersion: { const: 2 }, revision: digest, entries: array(response({ method: text, summary: text })), next: { type: ['string', 'null'] }, complete: { type: 'boolean' }, contract: response({ method: text, inputSchema: { type: 'object' }, outputSchema: { type: 'object' }, definitions: { type: 'object' }, description: text }) }, ['apiVersion', 'schemaVersion', 'revision', 'entries', 'next', 'complete']),
@@ -461,6 +470,8 @@ export const descriptions = {
   'conversation.settings.read': 'Person at this machine only: read the Agent and settings chosen for new conversations and what each Agent last offered. Reading starts nothing.',
   'conversation.settings.update': 'Person at this machine only: choose the Agent and its settings for new conversations, among the values that Agent last offered, and whether a model describes the files a message writes. A stale expectedVersion is refused.',
   'conversation.settings.check': 'Person at this machine only: start the chosen Agent in this project to read the settings it offers, then remove that session and end the process. No message is sent; one check per Agent runs at a time.',
+  'conversation.agents.add': 'Person at this machine only: add an ACP Agent for new conversations in every project, given its program (on PATH or a path) and arguments, such as ["hermes", "acp"]. Rho starts it once in this project to read what it offers, then removes that session and ends the process; no message is sent. It is kept only when it answered. Adding the same command again checks it again.',
+  'conversation.agents.remove': 'Person at this machine only: remove an added ACP Agent from the Agents new conversations can use. Its conversations stay and continue with the command they started with.',
   'session.connect': 'Person at this machine only: give Claude Code or Codex running outside Rho access to this project, then add Rho\'s MCP server with that Agent\'s own `mcp add` (Claude Code: for this project folder; Codex: in its user configuration). A grant whose connection still reaches this service is kept, so a connected session keeps working; a new grant the Agent refuses is removed. No message is sent and no Agent session starts.',
   'session.instructions': 'Person at this machine or operator only: read a prompt for the person\'s own MCP client to connect itself to this existing project. Returns local launcher paths, never credential contents. Reading or copying grants no access, edits no client configuration and starts no runtime.',
   'conversation.read': 'Read a conversation started in Rho: the person\'s messages, the Agent\'s visible text and tool steps, and how each message ended. Reading starts and resumes nothing.',

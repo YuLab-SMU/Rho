@@ -10,7 +10,7 @@ import type { AgentConversation, AgentPermission, ConversationStep, Conversation
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { atomicJson, canonical, digest, Fault, now, readJson, requireThat } from '@rho-workspace/plugin-contracts';
-import { acpEnvironment, missingClient } from '@rho-workspace/plugin-agent/acp-command';
+import { acpEnvironment, installedAcpAgents, knownAcpAgent, locate, missingClient } from '@rho-workspace/plugin-agent/acp-command';
 import type { Project } from './state.js';
 
 // Rho holds user messages and their original identities. The selected Agent plugin
@@ -63,6 +63,9 @@ export const conversationLimits = {
   // Settings chosen for one Agent or one conversation, and the length of one chosen value;
   // more are refused.
   maxChoices: 12, maxChoiceChars: 512,
+  // ACP Agents the person adds in Rho, kept in this service's Agent settings and offered in every
+  // project; adding another is refused until one is removed.
+  maxAddedAgents: 16,
   // Files compared on disk before and after a message, to record which changed during it; past
   // this many the comparison stops and the record says it is partial. Changes kept per message;
   // more are counted.
@@ -150,7 +153,7 @@ function compare(before: Disk, after: Disk, limit: number): NonNullable<Turn['fi
   return { changed: changed.slice(0, limit), omitted: Math.max(0, changed.length - limit), partial };
 }
 interface Conversation {
-  format: 1 | 2; backend?: 'claude-acp' | 'codex-acp' | 'claude-cli' | 'acp'; acpSessionId?: string; adapter?: { name: string; version?: string }; protocolVersion?: number; id: string; changeId: string; requestDigest: string; createdAt: string; createdBy: string; updatedAt: string; version: number;
+  format: 1 | 2; backend?: Backend | 'claude-cli'; acpSessionId?: string; adapter?: { name: string; version?: string }; protocolVersion?: number; id: string; changeId: string; requestDigest: string; createdAt: string; createdBy: string; updatedAt: string; version: number;
   client: 'claude-code' | 'codex' | 'acp'; nativeSessionId: string | null; confirmed: boolean; principal: string | null; title: string; turns: Turn[];
   observation?: SessionObservation;
   // The person's choices among the settings this conversation's Agent offers, applied each
@@ -162,16 +165,30 @@ interface Conversation {
   // The Agent session this conversation continues, started outside Rho, and the session it
   // copies when it continues a copy (ACP session/fork) until its own session exists.
   origin?: { producer: string; sessionId: string; where: string; copy: boolean }; forkFrom?: string;
+  // The command an ACP Agent other than Claude Code or Codex was started with, kept so the same
+  // Agent continues the conversation whatever is added, removed or named at a later start.
+  acpCommand?: Command;
 }
-type Backend = 'claude-acp' | 'codex-acp' | 'acp';
-const backends: Backend[] = ['claude-acp', 'codex-acp', 'acp'];
+// An Agent Rho starts: Claude Code or Codex through their adapters, the ACP command named when
+// this service started ('acp'), or an ACP Agent the person added in Rho ('acp:' and a name).
+type Backend = 'claude-acp' | 'codex-acp' | 'acp' | `acp:${string}`;
+const builtIn: Backend[] = ['claude-acp', 'codex-acp', 'acp'];
+const addedName = /^acp:[a-z0-9][a-z0-9-]{0,39}$/;
+const backendName = (value: unknown): value is Backend => typeof value === 'string' && (builtIn.includes(value as Backend) || addedName.test(value));
+const generic = (backend: string | undefined): backend is 'acp' | `acp:${string}` => backend === 'acp' || !!backend?.startsWith('acp:');
+type Command = { file: string; args: string[] };
+const sameCommand = (a: Command, b: Command) => a.file === b.file && a.args.length === b.args.length && a.args.every((arg, i) => arg === b.args[i]);
+// DeepSeek Harness's own ACP command, which continues the sessions Harness keeps in this folder.
+const harnessCommand = (command?: Command) => !!command && (knownAcpAgent(command)?.id === 'dsh' || [command.file, ...command.args].some(part => /(^|[\\/])dsh(\.[a-z]+)?$/i.test(part)));
+// An ACP Agent the person added: its name, the command Rho starts and when it was added.
+interface AddedAgent { backend: `acp:${string}`; name: string; command: Command; addedAt: string }
 type Choices = Record<string, string | boolean>;
 // What one Agent offered when a session last opened without the person's choices: a check
 // (an explicit action that starts the Agent and sends nothing) or a conversation's first session.
 interface Offered { at: string; source: 'check' | 'conversation'; adapter: { name: string; version?: string } | null; options: ConfigOption[]; omitted: number }
 // The person's Agent and settings for new conversations, kept by this service for every project.
 // `describe`: whether a model describes the files a message writes (on unless switched off).
-interface AgentSettings { format: 1; version: number; updatedAt: string | null; backend: Backend | null; choices: Partial<Record<Backend, Choices>>; offered: Partial<Record<Backend, Offered>>; describe?: { enabled: boolean } }
+interface AgentSettings { format: 1; version: number; updatedAt: string | null; backend: Backend | null; choices: Partial<Record<Backend, Choices>>; offered: Partial<Record<Backend, Offered>>; describe?: { enabled: boolean }; added?: AddedAgent[] }
 const blankSettings = (): AgentSettings => ({ format: 1, version: 0, updatedAt: null, backend: null, choices: {}, offered: {} });
 type AcpDriver = Pick<ClaudeAcpConversation, 'configure' | 'inspect' | 'connected'>;
 const acpDriver = (driver: AgentConversation | undefined): driver is AgentConversation & AcpDriver => !!driver && 'configure' in driver;
@@ -215,7 +232,7 @@ export interface ConversationPorts {
   nativeSession?(project: Project, producer: 'claude-code' | 'codex', sessionId: string): Promise<{ open: { where: string; since?: string; pid?: number } | null; lastAt: string } | null>;
 }
 // A session started elsewhere that this conversation continues: in place, or as a copy.
-export interface ContinueSession { producer: 'claude-code' | 'codex' | 'dsh'; sessionId: string; title: string; where: string; copy: boolean; backend: 'claude-acp' | 'codex-acp' | 'acp' }
+export interface ContinueSession { producer: 'claude-code' | 'codex' | 'dsh'; sessionId: string; title: string; where: string; copy: boolean; backend: Backend }
 export interface DescribeRequest {
   path: string; facts: string; request: string; model: string | null; strategy: Strategy;
   excerpt?: string; context?: string; image?: { mediaType: 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp'; data: Buffer };
@@ -226,6 +243,9 @@ function cut(text: string, maxBytes: number) {
   // Cut on a character boundary; the cut is reported, never silent.
   return { text: Buffer.from(text).subarray(0, maxBytes).toString('utf8').replace(/�+$/, ''), cut: true };
 }
+// Some Agents (Kimi Code) title a session with the start of its first prompt, which carries the
+// interface context Rho appends to the person's words; the title keeps the person's words.
+const agentTitleOf = (title: string | null | undefined) => title ? title.split(/\s*Rho interface context for this message:/)[0].trim() || null : null;
 function titleOf(text: string) { const line = text.trim().split('\n')[0].trim(); return line.length > 80 ? line.slice(0, 79) + '…' : line; }
 // An Agent reports a session it no longer has, in its own words: the ACP load answers "Resource
 // not found", Claude Code says the session does not exist, and a load that cannot run at all says
@@ -266,6 +286,8 @@ export class Conversations {
   private drivers = new Map<string, { driver: AgentConversation; project: Project; conversation: Conversation; timer?: ReturnType<typeof setTimeout> }>();
   private permissions = new Map<string, { permission: Permission; resolve(choice: string | null): void }>();
   private checks = new Map<Backend, Promise<void>>();
+  // Agents being added, by command: a second request for the same command waits for the first.
+  private adding = new Map<string, Promise<ReturnType<Conversations['settingsView']>>>();
   // Descriptions being written by a model now, by project, conversation, message and file.
   private writing = new Set<string>();
   describing = { ...describeLimits };
@@ -303,7 +325,7 @@ export class Conversations {
     const last = c.turns.at(-1), usage = c.observation?.usage;
     const costs = c.turns.map(t => t.result?.costUsd).filter((v): v is number => typeof v === 'number');
     return { conversationId: c.id, changeId: c.changeId, requestDigest: c.requestDigest, title: c.title, client: c.client, principal: c.principal, createdAt: c.createdAt, updatedAt: c.updatedAt, version: c.version, turns: c.turns.length, state: last?.state ?? 'idle', lastAt: last?.endedAt ?? last?.sentAt ?? c.createdAt,
-      listed: 2, turnLimit: !!last && agentTurnLimit(last), waitingPermission: last?.state === 'running' && !!last.permissions?.some(p => p.state === 'pending'), backend: c.backend ?? 'claude-cli', agentTitle: c.observation?.info?.title ?? null, adapter: c.adapter ?? null, model: [...c.turns].reverse().find(t => t.model)?.model ?? null, config: c.config ?? {},
+      listed: 2, turnLimit: !!last && agentTurnLimit(last), waitingPermission: last?.state === 'running' && !!last.permissions?.some(p => p.state === 'pending'), backend: c.backend ?? 'claude-cli', agentTitle: agentTitleOf(c.observation?.info?.title), adapter: c.adapter ?? null, model: [...c.turns].reverse().find(t => t.model)?.model ?? null, config: c.config ?? {},
       usage: usage ? { used: usage.used, size: usage.size, cost: usage.cost ?? null } : null, costUsd: costs.length ? costs.reduce((a, b) => a + b, 0) : null,
       sessionId: c.acpSessionId ?? c.nativeSessionId ?? null, trashedAt: c.trashedAt ?? null,
       origin: c.origin ? { producer: c.origin.producer, where: c.origin.where, ...(c.origin.copy ? { copyOf: c.origin.sessionId } : {}) } : null };
@@ -445,7 +467,7 @@ export class Conversations {
   // Without an Agent or settings named in the request, the person's saved ones are used and
   // recorded with the conversation.
   async start(project: Project, by: string, input: { changeId: string; text: string; contexts?: string[]; uiContext?: UiLocation; backend?: Backend; config?: Choices; continue?: ContinueSession }) {
-    requireThat(!input.backend || backends.includes(input.backend), 'invalid', 'Choose Claude Code or Codex.');
+    requireThat(!input.backend || backendName(input.backend), 'invalid', 'Choose an Agent Rho starts.');
     if (input.config) this.choices(input.config);
     const from = input.continue;
     const text = this.message(input.text), requestDigest = digest(canonical({ text, ...(input.contexts?.length ? { contexts: input.contexts } : {}), ...(input.backend ? { backend: input.backend } : {}), ...(input.config ? { config: input.config } : {}),
@@ -465,9 +487,13 @@ export class Conversations {
       }
       this.capacity();
       const saved = await this.readSettings();
-      const backend = from?.backend ?? input.backend ?? saved.backend ?? this.config.backend ?? 'claude-acp';
+      // A saved Agent the person has since removed is not used; the service's own is.
+      const savedBackend = saved.backend && (!saved.backend.startsWith('acp:') || this.commandOf(saved.backend, saved)) ? saved.backend : null;
+      const backend = from?.backend ?? input.backend ?? savedBackend ?? this.config.backend ?? 'claude-acp';
+      const command = generic(backend) ? this.commandOf(backend, saved) : undefined;
+      requireThat(!generic(backend) || command, 'unavailable', backend === 'acp' ? 'No ACP command was named when Rho started. Add the Agent under Agents in Rho. Nothing was sent.' : 'That Agent is not added in Rho. Add it under Agents first. Nothing was sent.');
       const config = backend === 'claude-cli' ? undefined : input.config ?? saved.choices[backend];
-      const at = now(), c: Conversation = { format: 2, backend, id: 'c-' + randomBytes(8).toString('hex'), changeId: input.changeId, requestDigest, createdAt: at, createdBy: by, updatedAt: at, version: 0, client: backend === 'codex-acp' ? 'codex' : backend === 'acp' ? 'acp' : 'claude-code', nativeSessionId: backend === 'claude-cli' ? randomUUID() : null, confirmed: false, principal: null, title: titleOf(text), turns: [], ...(config && Object.keys(config).length ? { config } : {}) };
+      const at = now(), c: Conversation = { format: 2, backend, id: 'c-' + randomBytes(8).toString('hex'), changeId: input.changeId, requestDigest, createdAt: at, createdBy: by, updatedAt: at, version: 0, client: backend === 'codex-acp' ? 'codex' : generic(backend) ? 'acp' : 'claude-code', nativeSessionId: backend === 'claude-cli' ? randomUUID() : null, confirmed: false, principal: null, title: titleOf(text), turns: [], ...(config && Object.keys(config).length ? { config } : {}), ...(command ? { acpCommand: command } : {}) };
       for (const id of input.contexts ?? []) await this.ports.context?.(project, id);
       if (from) {
         c.origin = { producer: from.producer, sessionId: from.sessionId, where: from.where, copy: from.copy };
@@ -543,7 +569,7 @@ export class Conversations {
     this.choices({ [input.configId]: input.value });
     return this.serial(project.id, async () => {
       const c = await this.load(project, input.conversationId), last = c.turns.at(-1);
-      requireThat(c.backend === 'claude-acp' || c.backend === 'codex-acp' || c.backend === 'acp', 'unavailable', 'This conversation\'s Agent has no settings Rho can change.');
+      requireThat(c.backend === 'claude-acp' || c.backend === 'codex-acp' || generic(c.backend), 'unavailable', 'This conversation\'s Agent has no settings Rho can change.');
       requireThat(!c.trashedAt, 'conflict', 'This conversation is in the trash. Restore it to change its settings.');
       requireThat(!last || last.state !== 'running' || !this.liveTurn(project, c, last), 'conflict', 'The Agent is answering. Change its settings after this message.');
       const driver = this.drivers.get(project.id + '/' + c.id)?.driver;
@@ -577,40 +603,59 @@ export class Conversations {
     return value;
   }
   private settingsView(s: AgentSettings) {
-    const service = this.config.backend ?? 'claude-acp';
-    return { version: s.version, updatedAt: s.updatedAt, backend: s.backend, serviceBackend: service, choices: s.choices, offered: s.offered, checking: [...this.checks.keys()], describe: { enabled: s.describe?.enabled !== false }, agents: this.agents(s.offered.acp?.adapter?.name) };
+    const service = this.config.backend ?? 'claude-acp', added = s.added ?? [];
+    return { version: s.version, updatedAt: s.updatedAt, backend: s.backend, serviceBackend: service, choices: s.choices, offered: s.offered, checking: [...this.checks.keys()], describe: { enabled: s.describe?.enabled !== false }, agents: this.agents(s),
+      added: added.map(a => ({ backend: a.backend, name: a.name, command: [a.command.file, ...a.command.args], addedAt: a.addedAt })),
+      // The ACP Agents Rho knows that are installed here and not yet added. Finding them reads PATH.
+      installed: installedAcpAgents(process.env).filter(i => !(this.config.acpCommand && sameCommand(i.command, this.config.acpCommand)) && !added.some(a => sameCommand(a.command, i.command)))
+        .map(i => ({ id: i.id, name: i.name, command: [i.command.file, ...i.command.args] })) };
+  }
+  // The command that starts an ACP Agent other than Claude Code or Codex: one the person added, or
+  // the one named when this service started.
+  private commandOf(backend: Backend, s: AgentSettings): Command | undefined {
+    return backend === 'acp' ? this.config.acpCommand : s.added?.find(a => a.backend === backend)?.command;
   }
   // Which Agents this service can start: the person's installed clients, found as the adapters
-  // find them, and an ACP command the person named. Looking starts nothing. An ACP Agent is named
-  // as it named itself the last time it answered, or by its command until then.
-  private agents(reported?: string) {
+  // find them, the ACP command named when it started and the ACP Agents the person added. Looking
+  // starts nothing. The named command's Agent is named as Rho knows it, else as it named itself the
+  // last time it answered, else by its program.
+  private agents(s: AgentSettings) {
     const found = (problem: string | null) => problem ? { found: false, problem } : { found: true };
-    const command = this.config.acpCommand;
+    const command = this.config.acpCommand, reported = s.offered.acp?.adapter?.name;
     return {
       // A command the embedding names is its own choice and is not looked for, as the adapters do.
       'claude-acp': found(this.config.claudeAcp?.command ? null : missingClient('claude', acpEnvironment('claude', { ...process.env }, this.binary))),
       'codex-acp': found(this.config.codexAcp?.command ? null : missingClient('codex', acpEnvironment('codex', { ...process.env }, this.config.codex))),
-      acp: command ? { found: true, name: /(^|[\\/])dsh(\.[a-z]+)?$/i.test(command.file) || command.args.some(a => /(^|[\\/])dsh(\.[a-z]+)?$/i.test(a)) ? 'DeepSeek Harness' : reported || path.basename(command.file).replace(/\.(exe|cmd)$/i, '') } : { found: false, problem: 'Start Rho with --agent-backend acp --acp-command to use another ACP Agent.' }
+      acp: command ? { found: true, name: knownAcpAgent(command)?.name ?? (harnessCommand(command) ? 'DeepSeek Harness' : reported || path.basename(command.file).replace(/\.(exe|cmd)$/i, '')) } : { found: false, problem: 'No ACP command was named when Rho started.' },
+      ...Object.fromEntries((s.added ?? []).map(a => [a.backend, locate(a.command.file, process.env) ? { found: true, name: a.name }
+        : { found: false, name: a.name, problem: `${a.name} is no longer at ${a.command.file}. Install it again, or remove it and add it again.` }]))
     };
+  }
+  // The Agent that continues DeepSeek Harness's sessions: Harness's own ACP command, named when
+  // Rho started or added by the person.
+  async harness(): Promise<Backend | null> {
+    if (harnessCommand(this.config.acpCommand)) return 'acp';
+    return (await this.readSettings()).added?.find(a => harnessCommand(a.command))?.backend ?? null;
   }
   async settings() { return this.settingsView(await this.readSettings()); }
   // The person's Agent and settings for new conversations. Each Agent's choices are replaced as a
   // whole and must be among the values it last offered; a stale version is refused.
-  async updateSettings(input: { expectedVersion: number; backend?: Backend | null; choices?: Partial<Record<Backend, Choices>>; describe?: { enabled: boolean } }) {
+  async updateSettings(input: { expectedVersion: number; backend?: string | null; choices?: Partial<Record<string, Choices>>; describe?: { enabled: boolean } }) {
     requireThat(this.config.settingsFile, 'unavailable', 'This service keeps no Agent settings.');
-    requireThat(input.backend == null || backends.includes(input.backend), 'invalid', 'Choose Claude Code or Codex.');
     return this.serial('settings', async () => {
       const s = await this.readSettings();
       requireThat(s.version === input.expectedVersion, 'conflict', 'The Agent settings changed in another tab. Read them again.', { version: s.version });
+      const startable = (backend: unknown) => backendName(backend) && (builtIn.includes(backend) || !!this.commandOf(backend, s));
+      requireThat(input.backend == null || startable(input.backend), 'invalid', 'Choose an Agent Rho starts.');
       for (const [backend, values] of Object.entries(input.choices ?? {}) as Array<[Backend, Choices]>) {
-        requireThat(backends.includes(backend), 'invalid', 'Choose Claude Code or Codex.');
+        requireThat(startable(backend), 'invalid', 'Choose an Agent Rho starts.');
         this.choices(values);
         const offered = s.offered[backend]?.options;
         requireThat(offered || !Object.keys(values).length, 'unavailable', 'Check what this Agent offers first.');
         for (const [id, value] of Object.entries(values)) this.offers(offered!, id, value);
         s.choices[backend] = values;
       }
-      if (input.backend !== undefined) s.backend = input.backend;
+      if (input.backend !== undefined) s.backend = input.backend as Backend | null;
       if (input.describe) { requireThat(typeof input.describe.enabled === 'boolean', 'invalid', 'Say whether files are described.'); s.describe = { enabled: input.describe.enabled }; }
       s.version++; s.updatedAt = now();
       await atomicJson(this.config.settingsFile!, s);
@@ -621,7 +666,7 @@ export class Conversations {
   // ends the process; no message is sent. The protected resource is local Agent processes: one
   // check per Agent at a time (a second request waits for the same one), each bounded by connectTimeoutMs.
   async check(project: Project, input: { backend: Backend }) {
-    requireThat(backends.includes(input.backend), 'invalid', 'Choose Claude Code or Codex.');
+    requireThat(backendName(input.backend), 'invalid', 'Choose an Agent Rho starts.');
     requireThat(this.config.settingsFile, 'unavailable', 'This service keeps no Agent settings.');
     requireThat(!this.closing, 'unavailable', 'Rho is closing. Nothing was started.');
     let pending = this.checks.get(input.backend);
@@ -635,7 +680,9 @@ export class Conversations {
   private async inspect(project: Project, backend: Backend) {
     const { ClaudeAcpConversation, CodexAcpConversation, GenericAcpConversation } = await import('@rho-workspace/plugin-agent/conversation');
     const common = { cwd: project.root, mcpServers: [], limits: this.limits };
-    const driver = backend === 'codex-acp' ? new CodexAcpConversation({ ...this.config.codexAcp, ...common, codex: this.config.codex }) : backend === 'acp' ? new GenericAcpConversation({ ...common, command: this.config.acpCommand! }) : new ClaudeAcpConversation({ preferred: claudePreferred, ...this.config.claudeAcp, ...common, claude: this.binary });
+    const command = generic(backend) ? this.commandOf(backend, await this.readSettings()) : undefined;
+    requireThat(!generic(backend) || command, 'unavailable', backend === 'acp' ? 'No ACP command was named when Rho started.' : 'That Agent is not added in Rho.');
+    const driver = backend === 'codex-acp' ? new CodexAcpConversation({ ...this.config.codexAcp, ...common, codex: this.config.codex }) : command ? new GenericAcpConversation({ ...common, command }) : new ClaudeAcpConversation({ preferred: claudePreferred, ...this.config.claudeAcp, ...common, claude: this.binary });
     let found: Awaited<ReturnType<typeof driver.inspect>>;
     try { found = await driver.inspect(); }
     catch (error) { throw new Fault('unavailable', error instanceof Error ? error.message : 'The Agent could not be started.'); }
@@ -648,6 +695,63 @@ export class Conversations {
       if (offered.source === 'conversation' && (s.offered[backend]?.at ?? '') > offered.at) return;
       s.offered[backend] = offered;
       await atomicJson(this.config.settingsFile!, s);
+    });
+  }
+
+  // An ACP Agent the person adds for new conversations in every project. Rho starts its command once
+  // in this project, as a check does (it opens a session, reads what the Agent offers and removes
+  // the session; no message is sent), and keeps it only when the Agent answered. The command is
+  // the person's own: a program on PATH or a path to one, and its arguments. Adding the same
+  // command again checks it again; one start per command runs at a time.
+  async addAgent(project: Project, input: { command: string[] }) {
+    requireThat(this.config.settingsFile, 'unavailable', 'This service keeps no Agent settings.');
+    requireThat(!this.closing, 'unavailable', 'Rho is closing. Nothing was started.');
+    const [program, ...args] = input.command;
+    const file = locate(program, process.env);
+    requireThat(file, 'unavailable', `${program} was not found ${/[\\/]/.test(program) ? 'there' : 'on PATH'}. Install it, or give the path of its program.`);
+    const command = { file: path.resolve(file), args }, key = JSON.stringify(command);
+    let pending = this.adding.get(key);
+    if (!pending) { pending = this.addOnce(project, command).finally(() => this.adding.delete(key)); this.adding.set(key, pending); }
+    return pending;
+  }
+  private async addOnce(project: Project, command: Command) {
+    const known = knownAcpAgent(command), label = known?.name ?? path.basename(command.file);
+    const room = (s: AgentSettings) => requireThat(s.added?.some(a => sameCommand(a.command, command)) || (s.added?.length ?? 0) < this.limits.maxAddedAgents, 'limit',
+      `Rho keeps at most ${this.limits.maxAddedAgents} added Agents. Remove one first. Nothing was started.`, { limit: 'maxAddedAgents', maximum: this.limits.maxAddedAgents });
+    room(await this.readSettings());
+    const { GenericAcpConversation } = await import('@rho-workspace/plugin-agent/conversation');
+    let found: Awaited<ReturnType<InstanceType<typeof GenericAcpConversation>['inspect']>>;
+    try { found = await new GenericAcpConversation({ cwd: project.root, mcpServers: [], limits: this.limits, command }).inspect(); }
+    catch (error) { throw new Fault('unavailable', `${label} did not start as an ACP Agent (${(error instanceof Error ? error.message : String(error)).replace(/\.$/, '')}). Nothing was added.`); }
+    return this.serial('settings', async () => {
+      const s = await this.readSettings(), added = s.added ?? [], existing = added.find(a => sameCommand(a.command, command));
+      room(s);
+      const name = existing?.name ?? known?.name ?? found.adapter?.name ?? label;
+      const backend = existing?.backend ?? this.newName(known?.id ?? found.adapter?.name ?? label, added);
+      if (!existing) s.added = [...added, { backend, name, command, addedAt: now() }];
+      s.offered[backend] = { at: now(), source: 'check', adapter: found.adapter, options: found.options, omitted: found.omitted };
+      s.version++; s.updatedAt = now();
+      await atomicJson(this.config.settingsFile!, s);
+      return this.settingsView(s);
+    });
+  }
+  private newName(seed: string, added: AddedAgent[]): `acp:${string}` {
+    const base = seed.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 32) || 'agent';
+    for (let n = 1; ; n++) { const name = `acp:${base}${n > 1 ? '-' + n : ''}` as const; if (!added.some(a => a.backend === name)) return name; }
+  }
+  // Removing an added Agent takes it out of every Agent menu. Its conversations stay, each with
+  // the command it started with, so they can still be read and continued.
+  async removeAgent(input: { backend: string }) {
+    requireThat(this.config.settingsFile, 'unavailable', 'This service keeps no Agent settings.');
+    return this.serial('settings', async () => {
+      const s = await this.readSettings(), backend = input.backend as Backend;
+      requireThat(s.added?.some(a => a.backend === backend), 'not_found', 'No Agent added in Rho has that name.');
+      s.added = s.added!.filter(a => a.backend !== backend);
+      delete s.choices[backend]; delete s.offered[backend];
+      if (s.backend === backend) s.backend = null;
+      s.version++; s.updatedAt = now();
+      await atomicJson(this.config.settingsFile!, s);
+      return this.settingsView(s);
     });
   }
 
@@ -782,7 +886,7 @@ export class Conversations {
       const observed = { observation: c.observation, observe: (observation: SessionObservation) => {
         requireThat(observation.sessionId === c.acpSessionId, 'conflict', 'The observed Agent session differs from the retained identity.');
         requireThat(Buffer.byteLength(JSON.stringify(observation)) <= this.limits.maxObservationBytes, 'limit', 'The session projection exceeded maxObservationBytes; prior observations were kept.');
-        const config = observation.config, learned = config && config.at !== c.observation?.config?.at && config.origin === 'initial' && !c.config && (c.backend === 'claude-acp' || c.backend === 'codex-acp' || c.backend === 'acp');
+        const config = observation.config, learned = config && config.at !== c.observation?.config?.at && config.origin === 'initial' && !c.config && (c.backend === 'claude-acp' || c.backend === 'codex-acp' || generic(c.backend));
         c.observation = observation; this.schedule(project, c);
         for (const live of this.live.values()) if (live.project.id === project.id && live.conversation.id === c.id) {
           for (const tool of observation.tools ?? []) if (tool.origin !== 'history' && Date.parse(tool.at) >= Date.parse(live.turn.sentAt)) for (const location of tool.locations ?? []) this.capture(live, location.path, 'tool:' + tool.id + ':' + tool.outcome);
@@ -793,12 +897,15 @@ export class Conversations {
       // Every session started here is told about the project's shared notes and its section.
       const instructions = notesInstructions(c.id, { notebook: !!this.ports.notebook?.() });
       const common = { cwd: project.root, mcpServers, limits: this.limits, sessionId: c.acpSessionId, ...(!c.acpSessionId && c.forkFrom ? { forkFrom: c.forkFrom } : {}), config: c.config, instructions, ...observed };
+      // A conversation started before Rho kept its ACP command uses the one named at this start.
+      const command = generic(c.backend) ? c.acpCommand ?? (c.backend === 'acp' ? this.config.acpCommand : undefined) : undefined;
+      requireThat(!generic(c.backend) || command, 'unavailable', 'This conversation\'s ACP Agent was named when Rho started, and this start names none. Start Rho with the same --acp-command to continue it.');
       const driver = c.backend === 'codex-acp'
         ? new CodexAcpConversation({ ...this.config.codexAcp, ...common, codex: this.config.codex })
         : c.backend === 'claude-acp'
           ? new ClaudeAcpConversation({ preferred: claudePreferred, ...this.config.claudeAcp, ...common, claude: this.binary, plugins: [...this.config.claudeAcp?.plugins ?? [], ...await this.ports.claudePlugins?.(project) ?? []] })
-          : c.backend === 'acp'
-            ? new GenericAcpConversation({ ...common, command: this.config.acpCommand! })
+          : command
+            ? new GenericAcpConversation({ ...common, command })
             : new ClaudeCliConversation({ cwd: project.root, binary: this.binary, sessionId: c.nativeSessionId!, confirmed: c.confirmed, projectName: project.name ?? path.basename(project.root), mcpServers, limits: this.limits, instructions });
       this.drivers.set(key, { driver, project, conversation: c }); return driver;
     });
@@ -988,7 +1095,7 @@ export class Conversations {
     const given = shown.get(file)!;
     const reason = !enabled ? 'Descriptions by a model are switched off; the facts are kept.'
       : c.backend === 'codex-acp' ? 'Descriptions are written with Claude Code; this session\'s Agent is Codex.'
-      : c.backend === 'acp' ? 'Descriptions are written with Claude Code; this session\'s Agent is a configured ACP agent.'
+      : generic(c.backend) ? 'Descriptions are written with Claude Code; this session\'s Agent is another ACP Agent.'
       : !this.ports.describe ? 'No model is set up to describe files.' : null;
     const keep = (why: string) => { if (record!.reason !== why) { record!.state = record!.sentence ? 'described' : 'facts'; record!.reason = why; this.schedule(project, c); } };
     if (reason) { keep(reason); return; }
