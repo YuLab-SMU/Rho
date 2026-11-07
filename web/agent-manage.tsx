@@ -21,8 +21,9 @@ type AgentKey = 'claude-code' | 'codex' | 'other';
 const agentKeys: AgentKey[] = ['claude-code', 'codex', 'other'];
 const agentNames: Record<AgentKey, string> = { 'claude-code': 'Claude Code', codex: 'Codex', other: 'Other Agents' };
 const backendOf = (summary: Pick<Summary, 'backend' | 'client'>): Backend | null => summary.backend === 'codex-acp' || summary.backend === 'claude-acp' || summary.backend === 'acp' ? summary.backend : summary.client === 'codex' ? 'codex-acp' : summary.client === 'acp' ? 'acp' : summary.backend === 'claude-cli' ? null : 'claude-acp';
-const agentOf = (client: string) => client === 'codex' ? 'Codex' : client === 'acp' ? 'ACP Agent' : 'Claude Code';
-const brandOf = (client: string) => client === 'codex' ? 'codex' as const : client === 'acp' ? 'deepseek' as const : 'claude-code' as const;
+// An ACP Agent is named as it named itself; its mark is its maker's when Rho has one, else its initial.
+const agentOf = (s: { client: string; adapter?: { name: string } | null }) => s.client === 'codex' ? 'Codex' : s.client === 'acp' ? s.adapter?.name || 'ACP Agent' : 'Claude Code';
+const AgentMark = ({ summary, size }: { summary: { client: string; adapter?: { name: string } | null }; size: number }) => <ProviderMark name={agentOf(summary)} size={size} />;
 export function tokens(n: number) { return n < 1000 ? String(Math.round(n)) : n < 1e6 ? (n / 1000).toFixed(n < 1e4 ? 1 : 0).replace(/\.0$/, '') + 'K' : (n / 1e6).toFixed(1).replace(/\.0$/, '') + 'M'; }
 export function money(amount: number, currency = 'USD') {
   const sign = currency === 'USD' ? '$' : currency + ' ';
@@ -162,7 +163,7 @@ function ConversationRow({ client, snapshot, summary, settings, expanded, onTogg
   return <li className={'conv-row' + (expanded ? ' open' : '') + (running ? ' running' : '')}>
     <div className="conv-line">
       <button className="conv-toggle" onClick={() => onContinue(summary.conversationId)}>
-        <BrandMark brand={brandOf(summary.client)} size={20} />
+        <AgentMark summary={summary} size={20} />
         <span className="conv-text">
           <span className="conv-title">{title}</span>
           <span className="conv-meta">{meta.map((part, i) => <span key={i} title={i === 1 ? named.modelFull : undefined}>{part}</span>)}
@@ -199,11 +200,11 @@ function Facts({ summary, modelFull, settings }: { summary: Summary | Listed; mo
   return <dl className="conv-facts">
     {summary.agentTitle && summary.agentTitle !== summary.title && <><dt>Asked</dt><dd>{summary.title}</dd></>}
     <dt>Time</dt><dd>{span}</dd>
-    <dt>Agent</dt><dd>{agentOf(summary.client)}{summary.adapter ? ' · ' + summary.adapter.name.split('/').at(-1) + (summary.adapter.version ? ' ' + summary.adapter.version : '') : ''}</dd>
+    <dt>Agent</dt><dd>{agentOf(summary)}{summary.adapter && summary.adapter.name !== agentOf(summary) ? ' · ' + summary.adapter.name.split('/').at(-1) : ''}{summary.adapter?.version ? ' ' + summary.adapter.version : ''}</dd>
     {summary.model && <><dt>Model</dt><dd>{modelFull !== summary.model ? <>{modelFull} <code className="conv-value">{summary.model}</code></> : <code className="conv-value">{summary.model}</code>}</dd></>}
     {chosen.length > 0 && <><dt>Settings</dt><dd>{chosen.join(' · ')}</dd></>}
     {usage && <><dt>Context</dt><dd>{tokens(usage.used)} of {tokens(usage.size)} tokens · {Math.round(usage.used / Math.max(1, usage.size) * 100)}%</dd></>}
-    {spent && <><dt>Cost</dt><dd>{spent}, as {agentOf(summary.client)} reported it</dd></>}
+    {spent && <><dt>Cost</dt><dd>{spent}, as {agentOf(summary)} reported it</dd></>}
     {summary.sessionId && <><dt>Session</dt><dd><Copyable text={summary.sessionId} label="session identity" /></dd></>}
     {summary.sessionId && (summary.client === 'claude-code' || summary.client === 'codex') && <><dt>In a terminal</dt><dd><Copyable text={(summary.client === 'codex' ? 'codex resume ' : 'claude --resume ') + summary.sessionId} label="command that continues this session in a terminal" /></dd></>}
     <dt>Record</dt><dd><Copyable text={'.rho/rho/conversations/' + summary.conversationId + '.json'} label="record path" /></dd>
@@ -220,7 +221,7 @@ function TrashList({ trash, settings, onRestore, onDelete }: { trash: Listed[] |
       const named = names(summary, settings), title = summary.agentTitle || summary.title;
       return <li key={summary.conversationId} className="conv-row trashed">
         <div className="conv-line">
-          <div className="conv-toggle static"><BrandMark brand={brandOf(summary.client)} size={20} /><span className="conv-text"><span className="conv-title">{title}</span>
+          <div className="conv-toggle static"><AgentMark summary={summary} size={20} /><span className="conv-text"><span className="conv-title">{title}</span>
             <span className="conv-meta">{['Moved here ' + (summary.trashedAt ? ago(summary.trashedAt) : ''), named.model, summary.turns + (summary.turns === 1 ? ' message' : ' messages')].filter(Boolean).map((part, i) => <span key={i}>{part}</span>)}</span></span></div>
           <Usage summary={summary} />
           <div className="conv-actions">
@@ -239,7 +240,7 @@ function TrashList({ trash, settings, onRestore, onDelete }: { trash: Listed[] |
 // answered. Paths inside the project are written relative to it.
 async function exportMarkdown(client: BrowserClient, snapshot: WorkspaceSnapshot, summary: Summary, model: string) {
   const read = await client.call('conversation.read', { projectId: snapshot.project.id, conversationId: summary.conversationId, limit: 200 });
-  const agent = agentOf(summary.client), root = snapshot.project.root.replace(/\/+$/, '') + '/';
+  const agent = agentOf(summary), root = snapshot.project.root.replace(/\/+$/, '') + '/';
   const local = (text: string) => text.split(root).join('');
   const stamp = (iso: string) => new Date(iso).toLocaleString([], { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
   const out = ['# ' + (summary.agentTitle || summary.title), '', [agent, model, read.turns.length + (read.turns.length === 1 ? ' message' : ' messages'), stamp(summary.createdAt)].filter(Boolean).join(' · '), ''];
@@ -269,7 +270,7 @@ async function exportMarkdown(client: BrowserClient, snapshot: WorkspaceSnapshot
 // ——— Agents ———
 
 const providerOf = (value: { name: string; group?: string }) => value.group ?? split(value.name).group;
-const markOf = (which: Backend) => which === 'codex-acp' ? 'codex' as const : which === 'acp' ? 'deepseek' as const : 'claude-code' as const;
+const markOf = (which: Backend) => which === 'codex-acp' ? 'codex' as const : 'claude-code' as const;
 
 // The Agents Rho can run here, and the setup that lets an Agent the person runs elsewhere use
 // this project. Sessions of either kind appear under Conversations.
@@ -310,7 +311,7 @@ function AgentRow({ which, state, open, onToggle }: { which: Backend; state: Age
   return <li className={'agent-row' + (open ? ' open' : '') + (isDefault ? ' default' : '') + (found ? '' : ' missing')}>
     <div className="agent-row-head">
       <button role="radio" aria-checked={isDefault} className="agent-radio" disabled={!found} title={found ? 'Use ' + agent + ' for new conversations' : available?.problem} aria-label={'Use ' + agent + ' for new conversations'} onClick={() => void state.chooseAgent(which)}><span aria-hidden="true" /></button>
-      <span className="agent-row-mark">{which === 'acp' && agent !== 'DeepSeek Harness' ? <ProviderMark name={agent} size={22} /> : <BrandMark brand={markOf(which)} size={22} />}</span>
+      <span className="agent-row-mark">{which === 'acp' ? <ProviderMark name={agent} size={22} /> : <BrandMark brand={markOf(which)} size={22} />}</span>
       <div className="agent-row-name">
         <strong>{agent}</strong>
         <span className={'agent-row-status ' + status.tone} role={status.tone === 'failed' ? 'alert' : undefined} title={!found ? available?.problem : undefined}>{status.text}</span>

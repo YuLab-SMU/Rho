@@ -570,18 +570,19 @@ export class Conversations {
   }
   private settingsView(s: AgentSettings) {
     const service = this.config.backend ?? 'claude-acp';
-    return { version: s.version, updatedAt: s.updatedAt, backend: s.backend, serviceBackend: service, choices: s.choices, offered: s.offered, checking: [...this.checks.keys()], describe: { enabled: s.describe?.enabled !== false }, agents: this.agents() };
+    return { version: s.version, updatedAt: s.updatedAt, backend: s.backend, serviceBackend: service, choices: s.choices, offered: s.offered, checking: [...this.checks.keys()], describe: { enabled: s.describe?.enabled !== false }, agents: this.agents(s.offered.acp?.adapter?.name) };
   }
   // Which Agents this service can start: the person's installed clients, found as the adapters
-  // find them, and an ACP command the person named. Looking starts nothing.
-  private agents() {
+  // find them, and an ACP command the person named. Looking starts nothing. An ACP Agent is named
+  // as it named itself the last time it answered, or by its command until then.
+  private agents(reported?: string) {
     const found = (problem: string | null) => problem ? { found: false, problem } : { found: true };
     const command = this.config.acpCommand;
     return {
       // A command the embedding names is its own choice and is not looked for, as the adapters do.
       'claude-acp': found(this.config.claudeAcp?.command ? null : missingClient('claude', acpEnvironment('claude', { ...process.env }, this.binary))),
       'codex-acp': found(this.config.codexAcp?.command ? null : missingClient('codex', acpEnvironment('codex', { ...process.env }, this.config.codex))),
-      acp: command ? { found: true, name: /(^|[\\/])dsh(\.[a-z]+)?$/i.test(command.file) || command.args.some(a => /(^|[\\/])dsh(\.[a-z]+)?$/i.test(a)) ? 'DeepSeek Harness' : null } : { found: false, problem: 'Start Rho with --agent-backend acp --acp-command to use another ACP Agent.' }
+      acp: command ? { found: true, name: /(^|[\\/])dsh(\.[a-z]+)?$/i.test(command.file) || command.args.some(a => /(^|[\\/])dsh(\.[a-z]+)?$/i.test(a)) ? 'DeepSeek Harness' : reported || path.basename(command.file).replace(/\.(exe|cmd)$/i, '') } : { found: false, problem: 'Start Rho with --agent-backend acp --acp-command to use another ACP Agent.' }
     };
   }
   async settings() { return this.settingsView(await this.readSettings()); }

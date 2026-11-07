@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { agentLabel, backends, effortSetting, modelSetting, ModelList, NotAsked, split, valueName, type AgentSettingsState, type Backend, type SettingOption, type SettingValue } from './agent-settings.js';
-import { BrandMark, brandOf } from './brand-marks.js';
+import { ProviderMark } from './brand-marks.js';
 import { Icon } from './icons.js';
 import { stepFocus, useOutside } from './popover.js';
 import './settings-menu.css';
@@ -26,7 +26,7 @@ export function SettingsMenu({ agent, options, values, allowDefault, disabled, d
   // A setting the person has not chosen follows the Agent's own default.
   const chosen = (option: SettingOption) => option.id in values ? values[option.id] : null;
   const shown = (option: SettingOption) => valueName(option, chosen(option) ?? option.current);
-  const brand = agents ? brandOf(agent) : null;
+  const mark = agents ? agent : null;
   useOutside(open, root, () => setOpen(false));
   // Focus goes where the person is: the first row, the row a list was opened from, or the
   // value already chosen in a list. The model list focuses its own search box.
@@ -73,7 +73,7 @@ export function SettingsMenu({ agent, options, values, allowDefault, disabled, d
     <button ref={trigger} className="setting-chip" aria-haspopup="dialog" aria-expanded={open} disabled={disabled} title={disabled ? disabledNote : describe}
       aria-label={[describe, modelName.name, modelName.group, effortName && effortName + ' effort', ...on].filter(Boolean).join(', ')} onClick={() => show(!open)}>
       <span className="setting-summary">
-        {brand && <span className="summary-agent"><BrandMark brand={brand} size={13} /></span>}
+        {mark && <span className="summary-agent"><ProviderMark name={mark} size={13} /></span>}
         <span className="summary-model">{modelName.name}</span>{modelName.group && <span className="summary-group">{modelName.group}</span>}
         {effortName && <span className="summary-effort">{effortName}</span>}
         {on.map(name => <span key={name} className="summary-effort">{name}</span>)}
@@ -83,7 +83,7 @@ export function SettingsMenu({ agent, options, values, allowDefault, disabled, d
     {open && <div ref={menu} className={'menu-pop' + (option === model && model ? ' wide' : '')} role="dialog" aria-label={describe} onKeyDown={key}>
       {view.kind === 'root' ? <>
         {agents && <><button data-item data-row="agent" data-opens="1" className="menu-row" onClick={() => go({ kind: 'agent' }, 'agent')}>
-          <span className="menu-label">Agent</span><span className="menu-value">{brand && <BrandMark brand={brand} size={13} />}<span>{agent}</span></span><Icon name="chevron" size={12} />
+          <span className="menu-label">Agent</span><span className="menu-value">{mark && <ProviderMark name={mark} size={13} />}<span>{agent}</span></span><Icon name="chevron" size={12} />
         </button><div className="menu-divider" role="separator" /></>}
         {options?.length ? <>
           {model && row(model)}
@@ -95,7 +95,7 @@ export function SettingsMenu({ agent, options, values, allowDefault, disabled, d
         <div className="menu-head"><button data-item className="menu-back" aria-label="Back" title="Back" onClick={back}><Icon name="back" size={14} /></button><span>{view.kind === 'agent' ? 'Agent' : option ? labelOf(option) : ''}</span></div>
         {view.kind === 'agent' && agents ? <div className="menu-choices" role="radiogroup" aria-label="Agent">{(agents.offered ?? backends).map(which => <button key={which} data-item role="radio" aria-checked={which === agents.current} className="menu-choice"
           onClick={() => { if (which !== agents.current) agents.choose(which); back(); }}>
-          <BrandMark brand={which === 'codex-acp' ? 'codex' : which === 'acp' ? 'deepseek' : 'claude-code'} size={14} /><span className="menu-choice-text">{agents.name?.(which) ?? agentLabel[which]}</span>{which === agents.current && <Icon name="check" size={14} />}
+          <ProviderMark name={agents.name?.(which) ?? agentLabel[which]} size={14} /><span className="menu-choice-text">{agents.name?.(which) ?? agentLabel[which]}</span>{which === agents.current && <Icon name="check" size={14} />}
         </button>)}</div>
           : option && option === model && model.values?.length ? <ModelList option={model} value={chosen(model) as string | null ?? (allowDefault ? null : model.current as string)} agent={agent} allowDefault={allowDefault}
             onChoose={value => pick(model, value)} onEscape={back} />

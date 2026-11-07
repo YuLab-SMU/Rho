@@ -7,7 +7,7 @@ import { AgentMarkdown, CopyButton } from './markdown.js';
 import { agentLabel, backendOf, modelSetting, split, useAgentSettings, valueName, type SettingValue } from './agent-settings.js';
 import { day } from './agent-work.js';
 import { ComposerSettings, OpenSettings } from './settings-menu.js';
-import { BrandMark, brandOf } from './brand-marks.js';
+import { ProviderMark } from './brand-marks.js';
 import { money, tokens } from './agent-manage.js';
 import { Icon, type IconName } from './icons.js';
 import { spendAmount, spendBasis, spendOf } from './holds.js';
@@ -15,7 +15,7 @@ import type { Spend } from '../src/file-describer.js';
 import { stepFocus, useOutside } from './popover.js';
 import { turnAt } from '../src/replay.js';
 import { clock as clockAt } from './timeline-kinds.js';
-import { sessionAgent, sessionBrand, sessionWhere, type ExternalSummary, type SessionTurn } from './external-conversations.js';
+import { sessionAgent, sessionWhere, type ExternalSummary, type SessionTurn } from './external-conversations.js';
 
 // A conversation with an Agent in this project: the person's messages, the Agent's words as they
 // arrive, the actions it takes and how each message ended. A session started in a terminal, an
@@ -286,8 +286,8 @@ type Summary = NonNullable<WorkspaceSnapshot['conversations']>[number];
 
 // The panel's title opens the recent conversations: the way back to one without leaving the
 // page beside it. The whole list, with its search, usage and trash, is the Agent page's.
-function ConversationSwitcher({ list, openId, title, brand, onOpen, onAll }: {
-  list: Summary[]; openId: string | null; title: string; brand: ReturnType<typeof brandOf>; onOpen: (id: string) => void; onAll?: () => void;
+function ConversationSwitcher({ list, openId, title, mark, onOpen, onAll }: {
+  list: Summary[]; openId: string | null; title: string; mark: string | null; onOpen: (id: string) => void; onAll?: () => void;
 }) {
   const [open, setOpen] = useState(false), [query, setQuery] = useState('');
   const root = useRef<HTMLDivElement>(null), trigger = useRef<HTMLButtonElement>(null), menu = useRef<HTMLDivElement>(null);
@@ -308,15 +308,15 @@ function ConversationSwitcher({ list, openId, title, brand, onOpen, onAll }: {
   return <div ref={root} className="conversation-switch">
     <button ref={trigger} className="conversation-title" aria-haspopup="dialog" aria-expanded={open} disabled={!list.length}
       aria-label={title + (list.length ? ', recent conversations' : '')} title={list.length ? 'Recent conversations' : undefined} onClick={() => show(!open)}>
-      {brand && <BrandMark brand={brand} size={15} />}<strong>{title}</strong>{list.length > 0 && <span className="conversation-title-chevron"><Icon name="chevron" size={11} /></span>}
+      {mark && <ProviderMark name={mark} size={15} />}<strong>{title}</strong>{list.length > 0 && <span className="conversation-title-chevron"><Icon name="chevron" size={11} /></span>}
     </button>
     {open && <div ref={menu} className="menu-pop history-pop" role="dialog" aria-label="Recent conversations" onKeyDown={key}>
       {recent.length > 6 && <div className="model-search"><Icon name="search" size={14} /><input aria-label="Search conversations" placeholder="Search conversations" value={query} spellCheck={false} autoComplete="off" onChange={event => setQuery(event.target.value)} /></div>}
       <div className="history-list">
         {shown.map(c => {
-          const mark = brandOf(clientName(c.client));
+          const mark = c.client === 'acp' ? c.adapter?.name || 'ACP Agent' : clientName(c.client);
           return <button key={c.conversationId} data-item className="history-row" aria-current={c.conversationId === openId ? 'true' : undefined} onClick={() => { show(false); onOpen(c.conversationId); }}>
-            {mark ? <BrandMark brand={mark} size={14} /> : <span className="history-mark" aria-hidden="true" />}
+            {mark ? <ProviderMark name={mark} size={14} /> : <span className="history-mark" aria-hidden="true" />}
             <span className="history-text"><strong>{c.agentTitle || c.title}</strong><span>{meta(c)}</span></span>
             {c.conversationId === openId && <span className="history-check"><Icon name="check" size={14} /></span>}
           </button>;
@@ -354,8 +354,8 @@ export function AgentConversation({ snapshot, client, selectedId, onSelected, on
   const sessionOpen = !!openId && openId.startsWith('x-');
   const session = (sessionOpen ? sessions?.find(s => s.id === openId) : openId ? sessions?.find(s => s.conversationId === openId) : null) ?? null;
   const [outside, setOutside] = useState<{ id: string; turns: SessionTurn[]; earlier: boolean } | null>(null), [copy, setCopy] = useState(false);
-  const agentName = sessionOpen ? (session ? sessionAgent(session) : 'Agent') : openId ? (openClient ? settings.name(backendOf(openClient)) : 'Agent') : settings.name(settings.backend);
-  const brand = sessionOpen ? (session ? sessionBrand(session) : null) : brandOf(agentName);
+  const agentName = sessionOpen ? (session ? sessionAgent(session) : 'Agent') : openId ? (openClient ? (openClient === 'acp' && !settings.available('acp')?.found && (summary?.adapter?.name || read?.conversation.adapter?.name)) || settings.name(backendOf(openClient)) : 'Agent') : settings.name(settings.backend);
+  const mark = sessionOpen ? (session ? sessionAgent(session) : null) : agentName === 'Agent' ? null : agentName;
   const end = useRef<HTMLDivElement>(null), input = useRef<HTMLTextAreaElement>(null);
   useEffect(() => { setDraft(stored(draftKey) ?? ''); }, [draftKey]);
   // 'new' asks for the composer of a new conversation.
@@ -485,7 +485,7 @@ export function AgentConversation({ snapshot, client, selectedId, onSelected, on
   const canSend = !busy && !waiting && !!draft.trim() && !blocked;
   return <section className="conversation" aria-label={openId ? 'Conversation' : 'New conversation'}>
     <header className="conversation-head">
-      <ConversationSwitcher list={list} openId={openId} title={openId ? title : 'New conversation'} brand={openId ? brand : null} onOpen={open} onAll={onAll} />
+      <ConversationSwitcher list={list} openId={openId} title={openId ? title : 'New conversation'} mark={openId ? mark : null} onOpen={open} onAll={onAll} />
       {openId && <button className="icon-button" aria-label="New conversation" title="New conversation" onClick={() => { open(null); setTimeout(() => input.current?.focus()); }}><Icon name="plus" size={16} /></button>}
       {onClose && <button className="icon-button" aria-label="Close Agent" title="Close" onClick={onClose}><Icon name="close" size={16} /></button>}
     </header>
@@ -502,7 +502,7 @@ export function AgentConversation({ snapshot, client, selectedId, onSelected, on
       }} />)}
     </ol> : <div className="conversation-intro">
       <div className="intro-lead">
-        {brand && <BrandMark brand={brand} size={24} />}
+        {mark && <ProviderMark name={mark} size={24} />}
         <p>Ask {agentName} to explore or change {projectName(snapshot.project)}.</p>
         <small>It runs on this machine with access to this project, and its replies appear here.</small>
       </div>
