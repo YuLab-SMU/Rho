@@ -130,6 +130,14 @@ Harness as available, with Claude Code still the default.
   describe, activity). `npm run check:contracts` is current.
 - `node scripts/agent-page-acceptance.mjs` passes in Chrome after its steps
   moved to the Agents tab.
+- CI run 42356741141 for `81471c2c` failed one test on macOS, Linux and
+  Windows: the underlined link read `--color-text`, which no stylesheet
+  declares, so it silently kept the notice's grey. It now reads `--color-ink`.
+  The full local suite then failed once in
+  `acp-conversations.test.mjs`: that test took a finished turn as settled
+  before the folder comparison was attached to it (an older race, seen under
+  load). It now waits for the comparison. The full suite then passed: 315
+  tests, 2 skipped, none failed.
 - The screens were read at each step. The Agents tab and held-session notice
   were shot again after the narrow-width and link-spacing fixes. In the final
   run, "continue a copy" read as plain text beside the notice; it is now

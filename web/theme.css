@@ -739,7 +739,7 @@ ol.md-list { list-style-type: decimal; }
 .session-notice p { flex: 1 1 260px; margin: 0; }
 .session-notice strong { color: var(--color-amber-text); font-weight: 600; }
 .session-notice .text-button, .session-command { min-height: 0; padding: 0; font-size: 12px; }
-.session-notice p .text-button { color: var(--color-text); text-decoration: underline; text-underline-offset: 2px; }
+.session-notice p .text-button { color: var(--color-ink); text-decoration: underline; text-underline-offset: 2px; }
 .session-command { display: inline-flex; align-items: center; gap: 5px; color: var(--color-muted); }
 .turn-where { color: var(--color-meta); }
 .outside-results { display: flex; flex-direction: column; gap: 4px; margin: 6px 0; padding: 0; list-style: none; font-size: 12.5px; }

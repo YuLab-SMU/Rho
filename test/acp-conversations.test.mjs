@@ -192,14 +192,16 @@ test('a message records the project files that changed on disk while it ran, and
   try {
     await fs.writeFile(path.join(f.project.root, 'old.txt'), 'old'); await fs.writeFile(path.join(f.project.root, 'kept.txt'), 'kept');
     const id = (await f.call('conversation.start', { changeId: 'files', text: 'write' })).conversation.conversationId;
-    const files = (await f.wait(id, ended)).turns.at(-1).files;
+    // The turn ends when the Agent answers; the folder comparison is attached just after.
+    const settled = r => ended(r) && !!r.turns.at(-1).files;
+    const files = (await f.wait(id, settled)).turns.at(-1).files;
     assert.deepEqual(files.changed.map(c => [c.path, c.change, c.bytes]), [['results/out.csv', 'added', 4], ['old.txt', 'removed', null]]);
     assert.equal(files.partial, false); assert.equal(files.omitted, 0);
     await f.service.close();
     f = await setup(root, { maxComparedFiles: 1 });
     await fs.writeFile(path.join(f.project.root, 'old.txt'), 'again');
     const next = (await f.call('conversation.start', { changeId: 'partial', text: 'write' })).conversation.conversationId;
-    const partial = (await f.wait(next, ended)).turns.at(-1).files;
+    const partial = (await f.wait(next, settled)).turns.at(-1).files;
     assert.equal(partial.partial, true, 'a comparison stopped at its limit says so');
     assert.ok(partial.changed.every(c => c.change !== 'removed'), 'nothing is called removed from a partial comparison');
   } finally { await f.service.close(); }
