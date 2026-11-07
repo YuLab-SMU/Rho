@@ -79,12 +79,14 @@ command does not return:
 
 ```powershell
 $log = "$HOME\Rho\rho.log"; Remove-Item $log -ErrorAction SilentlyContinue
+Remove-Item Env:LC_ALL, Env:LC_CTYPE -ErrorAction SilentlyContinue
 $rho = (Get-Command rho.cmd).Source
 $line = "`"$rho`" --root `"$HOME\Rho\projects`" --state-dir `"$HOME\Rho\state`" > `"$log`" 2>&1"
 Start-Process cmd.exe -ArgumentList "/d /s /c `"$line`"" -WindowStyle Hidden
 ```
 
-Then wait for the ready line in the log as above. The
+Then wait for the ready line in the log as above. The `Remove-Item Env:` line keeps a shell's
+`LC_CTYPE=C.UTF-8`, which Windows has no locale for, from Rho's R. The
 [setup page](https://yulab-smu.top/Rho/doc/setup.md#on-windows) has every Windows step.
 
 **Useful flags.** `rho --help` lists the full set for the installed version.

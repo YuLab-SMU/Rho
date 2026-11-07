@@ -224,6 +224,7 @@ WSL's. If your shell is Git Bash, write each block to a `.ps1` file and run it w
    ```powershell
    New-Item -ItemType Directory -Force "$HOME\Rho\projects", "$HOME\Rho\state" | Out-Null
    $log = "$HOME\Rho\rho.log"; Remove-Item $log -ErrorAction SilentlyContinue
+   Remove-Item Env:LC_ALL, Env:LC_CTYPE -ErrorAction SilentlyContinue
    $rho = (Get-Command rho.cmd).Source
    $line = "`"$rho`" --root `"$HOME\Rho\projects`" --state-dir `"$HOME\Rho\state`" --open > `"$log`" 2>&1"
    Start-Process cmd.exe -ArgumentList "/d /s /c `"$line`"" -WindowStyle Hidden
@@ -234,7 +235,10 @@ WSL's. If your shell is Git Bash, write each block to a `.ps1` file and run it w
    If you are Codex, put `--agent-backend codex-acp` before `--open`. Let `cmd.exe` write the log,
    as here: started with `Start-Process -RedirectStandardOutput`, Rho holds your shell's output
    open, and your command does not return while Rho runs. Removing the old log first keeps its
-   ready line from being read as this start's.
+   ready line from being read as this start's. A shell such as Git Bash may set `LC_CTYPE` to
+   `C.UTF-8`, which Windows has no locale for. A version whose `rho.cmd --help` does not list
+   `--stop` passes it to R, which then prints `×` as `<U+00D7>` and refuses a cell with such text;
+   the `Remove-Item Env:` line keeps it from Rho.
 
    Then, in a separate command, `(Invoke-WebRequest <url> -UseBasicParsing).StatusCode` should
    print `200`. With no ready line after 30 seconds, show the person the log and stop. If the
@@ -266,6 +270,8 @@ WSL's. If your shell is Git Bash, write each block to a `.ps1` file and run it w
    ```
 
    Install `jsonlite` with `Rscript -e "install.packages('jsonlite', repos = 'https://cloud.r-project.org')"`.
+   A first line `Setting LC_CTYPE=C.UTF-8 failed` is R reading your shell's locale, as in step 4;
+   the checks still hold.
 8. **Tell the person** as in step 8; the log is `~\Rho\rho.log`. Stop Rho with
    `rho.cmd --stop --state-dir "$HOME\Rho\state"`: it stops in order and prints `{"stopped":…}`
    once Rho has ended. A version whose `rho.cmd --help` does not list `--stop` stops in order only
