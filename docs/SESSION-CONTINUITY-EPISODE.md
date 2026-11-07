@@ -156,3 +156,26 @@ identical messages close together can pair wrongly. An idle Claude Code window
 that holds a session counts as open, as Claude Code records it; a Codex lock
 file is taken as open without testing the lock. Other clients, Windows and
 independent users were not observed.
+
+## npm delivery
+
+On 2026-11-07 the user selected publication of the latest combined sources.
+The remote `main` heads matched the clean checkouts: Core
+`8bed8ef5dbb841c61845317b330e2e7f755d8f50` and Plugins
+`434d9a33d82125e7b3f291fae83e7b33a0fc2a24`, already selected in
+`components.json`. Rho includes every commit since `v0.5.5`, through the
+retained-evidence and checkout cleanup at `26c8cb2f`. No component source
+change or local override is needed to assemble them.
+
+The registry's current `latest` was 0.5.5. Version 0.5.6 selects these sources,
+the Agent connection prompt, session continuation and its fixes, and the retained
+sclet reports. [CI 42360742470](https://github.com/YuLab-SMU/Rho/actions/runs/42360742470)
+passed every job on `26c8cb2f`, including the three test systems and four-platform
+offline installs with Linux Node 24 and 26. That candidate still names 0.5.5;
+the version change needs its own CI candidate before tagging `v0.5.6`.
+
+The selected route is the existing npm/WebUI release: promote that tested
+candidate through `release.yml`, verify registry bytes and a disposable
+installation, then update the publication record. This does not replace an
+existing service or publish a signed desktop build. The independently delivered
+dsh-rho 0.1.5 and its pinned market entry do not change.

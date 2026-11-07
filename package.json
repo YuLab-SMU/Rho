@@ -1,6 +1,6 @@
 {
   "name": "@rho-workspace/rho",
-  "version": "0.5.5",
+  "version": "0.5.6",
   "type": "module",
   "description": "Rho local workspace service, scoped browser shell and headless client",
   "license": "AGPL-3.0-only",
