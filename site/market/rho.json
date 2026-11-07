@@ -1,0 +1,16 @@
+{
+  "apiVersion": 1,
+  "title": "YuLab Rho plugins",
+  "plugins": [
+    {
+      "id": "yulab.semantic-figures",
+      "title": "Semantic figures",
+      "version": "0.1.0",
+      "description": "Select ggtree clades across layouts and link clusterProfiler enrichment terms and genes between enrichplot dotplot and cnetplot views.",
+      "source": "git+https://github.com/YuLab-SMU/Rho-plugins.git#50d2427683e9077a5141b011c9696c51a00c90c5:plugins/semantic-figures",
+      "repository": "https://github.com/YuLab-SMU/Rho-plugins/tree/50d2427683e9077a5141b011c9696c51a00c90c5/plugins/semantic-figures",
+      "needs": "Local R with ggplot2, svglite, xml2, jsonlite and digest; ggtree and ape for trees, enrichplot for enrichment.",
+      "keywords": ["ggtree", "clusterProfiler", "enrichplot", "dotplot", "cnetplot", "phylogeny", "enrichment"]
+    }
+  ]
+}
