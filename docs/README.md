@@ -50,6 +50,7 @@ observed.
 | [What Rho-core earns](CORE-VALUE-EPISODE.md) | A real analysis run through plain tools, a 30-line convention and the Core CLI, plus two Agents on the same task: what Core costs, what only it can report, and which parts to keep, simplify or drop |
 | [Third-party plugins](THIRD-PARTY-PLUGINS.md) | Create, install, develop, manage and contribute independent packages; optional sclet adapter |
 | [Third-party episode](THIRD-PARTY-PLUGINS-EPISODE.md) | Real sclet analysis, package lifecycle, development and browser evidence |
+| [Remote plugin markets](PLUGIN-MARKETS-EPISODE.md) | User-added indexes, keyword discovery, cached refresh failures and real public Git installation |
 | [Plugin authoring](PLUGIN-AUTHORING.md) | Create, preview, check and select an independent UI extension |
 | [DeepSeek Harness plugin](DEEPSEEK-HARNESS.md) | Install dsh-rho, open the full Rho from Harness, analyse in the shared Notebook and ask about a selected result |
 | [magpie's frontend, studied](MAGPIE-FRONTEND-STUDY.md) | A reference project read in depth: a no-framework app shell, its click-and-scroll engine, plugin kernel, i18n and verification machinery, and candidate actions for Rho; it sets no design for Rho |

@@ -4,6 +4,8 @@ Updated: 2026-11-07.
 
 ## Current focus
 
+[Remote plugin markets](PLUGIN-MARKETS-EPISODE.md): people add, refresh and remove HTTPS indexes in Plugins or the CLI. Cached keywords find Semantic figures through `ggtree` and `clusterProfiler`; reads make no network requests. Failed refreshes retain the previous index, installs bind its digest and check the package identity/version, and removal keeps installed packages searchable. Nine focused tests, contract checks and the real Chrome/public Git episode passed at four widths. The optional YuLab index is included in source; its public HTTPS observation is pending publication. Source after 0.5.6; no npm delivery or restart of the person's running instance.
+
 [Semantic figures](SEMANTIC-FIGURES-EPISODE.md): an independently installed plugin with separate ggtree and enrichplot adapters runs clade selection across rectangular/circular layouts and term/gene linking between dotplot and cnetplot. The real R/Chrome episode and five owner checks passed, including reopening, stale selection, bad input and changed-source behavior. Stage 1; the Plugins frame and small plot labels still cost scrolling and reading. No Studio integration, automatic Agent interpretation or semantic migration; no npm delivery or change to the user’s running instance.
 
 [Plugin pictures](PLUGIN-PICTURES-EPISODE.md): each plugin on the Plugins page shows how it is reached (UI, Rho page, MCP tools, Skills, Claude Code, MCP server, CLI) from its declarations and the commands its package links. Cards and view rows show pictures of 11 real views captured from the PA14 example by `scripts/plugin-previews.mjs`, and Show it here mounts the actual view on a file of the open project. Third-party packages have a restyled section, a frame that follows its page and a designed `rho plugin create` page. The 27 focused checks, the contract check and three real Chrome checks passed. It follows [plugin disclosure](PLUGIN-DISCLOSURE-EPISODE.md), which made every view, Skill, operation and native entry searchable and readable. Source after 0.5.6 with Agent 0.4.33; no npm delivery or change to the person's running instance.
@@ -244,7 +246,6 @@ The conversation that made a Quarto file began before the Notebook existed and c
 replayed. Agents now read that "in the notebook" means Rho's sessions, untested on old histories.
 
 ## Existing application
-
 - Projects opens selected folders and manages finite source folders. Sources counts
   and browses Data, Code, Results & figures and Notes in one bounded walk; Files
   exposes the project/source folders. Current-file previews remain current-file facts.
@@ -269,7 +270,6 @@ replayed. Agents now read that "in the notebook" means Rho's sessions, untested 
 
 Earlier observations retain their original scope in the [home/project](HOME-PROJECT-EPISODE.md), [sidebar/canvas](AGENT-CANVAS-EPISODE.md), [Graph](GRAPH-EPISODE.md), [Agent page](AGENT-PAGE-EPISODE.md), [Agent activity](AGENT-ACTIVITY.md) and [backend acceptance](BACKEND-ACCEPTANCE.md) records.
 ## Verification
-
 Passes from the baseline (Rho 223/223, Plugins 104/104, an explicit unchanged Core binary) to Sources recorded up to Rho 273/274 and
 Plugins 151. Each first failure was an undeclared CSS variable, a stale count or limit in a check or a shell import, then fixed;
 each later miss was the MCP v2 test at its 30 s limit or a `.rho` cleanup race (`ENOTEMPTY`), passing alone. Their pages, ui:u2,

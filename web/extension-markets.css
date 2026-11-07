@@ -1,0 +1,18 @@
+.extension-markets { margin: 20px 0; min-width: 0; }
+.extension-markets > details { padding: 14px 16px; border: 1px solid var(--line, #dce3df); border-radius: 9px; }
+.extension-markets summary { cursor: pointer; font-weight: 550; }
+.extension-markets p { margin: 8px 0; }
+.extension-markets form { margin-top: 14px; }
+.extension-markets label { display: block; margin-bottom: 6px; }
+.market-input { display: flex; gap: 8px; }
+.market-input input { flex: 1; min-width: 0; }
+.market-source, .market-entry { margin-top: 14px; padding: 14px 0; border-top: 1px solid var(--line, #dce3df); min-width: 0; }
+.market-heading { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+.market-heading h4 { margin: 0; font-size: 15px; }
+.market-heading span, .market-origin { color: var(--muted, #68736f); font-size: 12px; }
+.market-actions { display: flex; gap: 8px 14px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
+.extension-markets a, .extension-markets code, .extension-markets p, .extension-markets strong { overflow-wrap: anywhere; }
+.market-cached { color: #775411; background: #fff5db; padding: 10px; border-radius: 6px; }
+.market-error { color: #9a3530; background: #fff0ee; padding: 10px; border-radius: 6px; }
+.market-entry details { margin-top: 12px; font-size: 12px; }
+@media (max-width: 600px) { .market-input { flex-direction: column; } .market-actions button { max-width: 100%; white-space: normal; text-align: left; } }

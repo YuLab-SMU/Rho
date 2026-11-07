@@ -7,9 +7,10 @@ or becoming a base dependency. The first consumer is the optional
 Its scientific implementation remains in sclet and its objects remain in the
 project's shared R session. See the [observed episode](THIRD-PARTY-PLUGINS-EPISODE.md).
 
-This is source functionality after Rho 0.5.4, not a new npm release. Build the
-current checkout with `npm run build` and use `node dist/cli.js` in place of
-`rho` until a distribution containing it is installed.
+Runtime package installation is included in Rho 0.5.5. User-configured remote
+markets are source functionality after 0.5.6. Build the current checkout with
+`npm run build` and use `node dist/cli.js` in place of `rho` for that new path
+until a distribution containing it is installed.
 
 ## Install and manage
 
@@ -54,6 +55,69 @@ Disable blocks new calls and views. Remove takes the package out of the installe
 selection. Both preserve native tasks, R sessions, project files and receipts.
 Package revisions are retained in the service's `plugins/versions` directory;
 remove is not a disk-purge command. Closing a view only releases its renderer.
+
+## Remote plugin markets
+
+In **Plugins → Third-party plugins → Plugin markets**, add an HTTPS JSON index.
+The plugin search above includes its titles, descriptions, package ids and
+keywords. Rho retains the index locally; opening the page, searching and listing
+do not fetch it again or install its packages. **Refresh** explicitly reads the
+source again. A failed refresh displays its error and keeps the last successful
+index available. **Remove** removes the source, keeping installed plugins and
+their recorded market keywords searchable.
+
+The [YuLab Rho index](https://raw.githubusercontent.com/YuLab-SMU/Rho/main/site/market/rho.json)
+includes Semantic figures, discoverable by `ggtree`, `clusterProfiler`, `dotplot`
+and `cnetplot`. It is an optional source; add it explicitly:
+
+```sh
+rho plugin market add https://raw.githubusercontent.com/YuLab-SMU/Rho/main/site/market/rho.json
+rho plugin market list
+rho plugin market install MARKET_ID yulab.semantic-figures
+rho plugin market refresh MARKET_ID
+rho plugin market remove MARKET_ID
+```
+
+Use the id returned by `add` or `list` for `MARKET_ID`. The ordinary
+`--connection FILE` option selects a running service. The browser and CLI use
+the same saved sources. Agents can read cached indexes with `extension.list`;
+adding, refreshing, removing sources and installing packages remain local-person
+operations through `extension.market.change` and `extension.install`.
+
+Publishers can host a static file matching the [actual index](../site/market/rho.json):
+
+```json
+{
+  "apiVersion": 1,
+  "title": "My lab's Rho plugins",
+  "plugins": [{
+    "id": "lab.my-plugin",
+    "title": "My plugin",
+    "version": "0.1.0",
+    "description": "What this plugin does",
+    "source": "@my-lab/rho-plugin@0.1.0",
+    "repository": "https://github.com/my-lab/rho-plugin",
+    "needs": "Required tools or data",
+    "keywords": ["analysis", "visualization"]
+  }]
+}
+```
+
+Each index selects one version per plugin id. `keywords` is optional; the other
+fields shown are required. Package sources use an exact npm version matching
+`version`, or `git+https://…#FULL_40_CHARACTER_COMMIT:package/path`. The package's
+actual plugin id and version must match before installation selects it. Install
+binds the source to the index digest the person selected; a changed or removed
+index refuses a stale install. The installed package records its market URL,
+title, index digest and keywords alongside its own source and runtime-tree digest.
+
+Index URLs use HTTPS without credentials, queries or fragments. Explicit loopback
+HTTP supports local development. Redirects, authenticated indexes, automatic
+refresh/update and tarball entries in markets are not supported in this pass;
+direct package installation still accepts tarballs. An index is publisher metadata,
+not a signature or proof of package validity. This Rho `apiVersion: 1` index is
+separate from the [Harness index](../site/market/index.json); the formats are not
+interchangeable. See the [observed market episode](PLUGIN-MARKETS-EPISODE.md).
 
 ## Create a package
 
@@ -178,6 +242,8 @@ and obtained receipts, or records an unknown result after an interrupted call.
 
 | Protected resource | Default configuration |
 | --- | --- |
+| Configured market sources / entries in each index | `maxMarkets: 16`, `maxMarketEntries: 128` |
+| Each downloaded index / request duration | `maxMarketBytes: 262144`, `marketTimeoutMs: 10000` |
 | Installed selections / retained revisions | `maxPlugins: 32`, `maxVersions: 128` |
 | Admitted runtime tree | `maxFiles: 20000`, `maxPackageBytes: 134217728` |
 | Skill/view bytes | `maxContentBytes: 524288` |
@@ -185,6 +251,8 @@ and obtained receipts, or records an unknown result after an interrupted call.
 | Concurrent calls / delegated calls per invocation | `maxRunning: 4`, `maxDelegations: 32` |
 | Worker / each install subprocess | `timeoutMs: 30000`, `installTimeoutMs: 180000` |
 
+Market limits refuse an initial add or retain the previous index after a failed
+refresh. The byte limit also checks streamed responses without a Content-Length.
 The tree-size check applies after npm staging; it is not a disk quota on npm/Git.
 A timed-out worker does not prove a delegated native task stopped. Observe its
 original identity. Retention limits refuse rather than silently evict identities;

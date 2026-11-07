@@ -9,7 +9,7 @@ export const applicationEffects: Record<string, string> = Object.fromEntries([
   ...['session.instructions', 'extension.list', 'extension.describe', 'extension.content', 'extension.read', 'protocol.describe', 'protocol.validate', 'project.entries', 'capability.list', 'skill.list', 'skill.read', 'action.lookup', 'action.observe', 'action.output', 'action.list', 'composition.read', 'observation.snapshot', 'interaction.selection.read', 'workspace.observe', 'task.map.read'].map(m => [m, 'read']),
   ...['composition.put', 'view.close', 'capability.configure', 'composition.apply', 'composition.undo', 'composition.delete', 'view.protection.set', 'interaction.selection.set', 'selection.set', 'workspace.enhance', 'task.map.declare', 'task.map.present', 'task.map.respond'].map(m => [m, 'metadata']),
   ...['workspace.save', 'workspace.export', 'workspace.restore', 'action.export'].map(m => [m, 'file']),
-  ...['extension.call', 'extension.install', 'extension.manage', 'action.retry', 'action.cancel'].map(m => [m, 'native']),
+  ...['extension.call', 'extension.install', 'extension.manage', 'extension.market.change', 'action.retry', 'action.cancel'].map(m => [m, 'native']),
 ]);
 const rhoSummary = 'The project in Rho: its folder\'s entries, managed runs, the views on the person\'s screen and what is selected in them, the task map, and which plugins are on.';
 const metadata = new Set(['capability.index', 'capability.resolve', 'binding.activity.append', 'task.routing.put', 'feedback.submit', 'view.observe', 'view.observations.read']);

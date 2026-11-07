@@ -449,26 +449,32 @@
     "extension.describe": {
       "summary": "Read an installed third-party package manifest, operation input schemas, required Rho methods, Skills and views. Read its Skill with extension.content before use. Disabled packages cannot run.",
       "path": "operations/extension.describe.json",
-      "bytes": 4684,
-      "sha256": "441616d6e634daa1ce2d058f6d0b0bd7ccd494de33f01a3dae3d6c344dc6f1a9"
+      "bytes": 5597,
+      "sha256": "570477ac19be996a537ce69da4b5ed534a69960d9a7d161d38f6d45118ca2067"
     },
     "extension.install": {
       "summary": "Local person/operator: install a trusted prebuilt npm package, local folder, tarball, or Git source. Lifecycle scripts are disabled. Replacement stages and checks the new package before switching; use replace and expectedDigest for updates.",
       "path": "operations/extension.install.json",
-      "bytes": 4803,
-      "sha256": "862db9660b7c6d0ddfe53aa2c3e1254c0d4a4a717f23c6b820c3248d916b7ce9"
+      "bytes": 6286,
+      "sha256": "2bb1282e6afcfae985379bbdb8cfdda841ec8d13add57e6084534c07fca7e295"
     },
     "extension.list": {
-      "summary": "List independently installed third-party packages and their enabled state, source and immutable digest. Reads start no plugin or runtime. Use extension.describe to discover operation schemas and Skills.",
+      "summary": "List installed third-party packages, the bundled directory and retained remote market indexes. Listing makes no network request and starts no plugin or runtime. Use extension.describe for installed operation schemas and Skills.",
       "path": "operations/extension.list.json",
-      "bytes": 2933,
-      "sha256": "4af06a8a7c11dbed53a9d9804d215708d7e6b6c0edacdf1bf2817a3daf24f86f"
+      "bytes": 7672,
+      "sha256": "68e5ef4bbdaeebffa00dc6879f438a95b49980cb6bb157dadba02c24398acbeb"
     },
     "extension.manage": {
       "summary": "Local person/operator: enable, disable or remove an installed third-party package at the expected digest. Existing native tasks, R sessions, project files and retained receipts are preserved.",
       "path": "operations/extension.manage.json",
       "bytes": 1207,
       "sha256": "90a83550840d2d33d3d0c7e5db0dcd09de4752b0b829f65a0cac2f39dbdf5a07"
+    },
+    "extension.market.change": {
+      "summary": "Local person/operator: add an HTTPS plugin market index, refresh it explicitly, or remove its source. Failed refresh retains the last valid index; removal preserves installed plugins. Listing never refreshes a source.",
+      "path": "operations/extension.market.change.json",
+      "bytes": 5453,
+      "sha256": "b6f09b901587d5d028370c3f26ce98ba0fae13d91d60fd09ddc9716db799a9f7"
     },
     "extension.read": {
       "summary": "Observe an original plugin invocation, including pending or unknown outcomes. Never reruns code. Only its original caller can read it.",
@@ -755,8 +761,8 @@
     "session.grant": {
       "summary": "session.grant",
       "path": "operations/session.grant.json",
-      "bytes": 5093,
-      "sha256": "d328dc361afdf9cf8172f4272b787c9b10ef6cdb9713ba8785b4d555e0cf1f2a"
+      "bytes": 5132,
+      "sha256": "db4dfca2110f737cd5c72735c62fd1cd7e8f8d370e5b7f3c3cbc877e493f88c1"
     },
     "session.instructions": {
       "summary": "Person at this machine or operator only: read a prompt for the person's own MCP client to connect itself to this existing project. Returns local launcher paths, never credential contents. Reading or copying grants no access, edits no client configuration and starts no runtime.",

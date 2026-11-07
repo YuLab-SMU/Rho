@@ -1,0 +1,40 @@
+{
+  "passed": true,
+  "checks": [
+    "invalid index is refused without configuring a source; correcting it exposes clusterProfiler through market keywords",
+    "listing, searching and reopening read the saved index without network requests or package installation",
+    "a failed refresh names the error and keeps the last successful index and its installable selection",
+    "a cached market entry installs the real fixed Git package, retains its origin and opens its declared view",
+    "refresh recovers and the source controls remain reachable at four viewport widths",
+    "removing the market keeps its installed plugin searchable by retained keywords and starts no scientific runtime"
+  ],
+  "widths": [
+    {
+      "width": 1440,
+      "overflow": false
+    },
+    {
+      "width": 1024,
+      "overflow": false
+    },
+    {
+      "width": 768,
+      "overflow": false
+    },
+    {
+      "width": 390,
+      "overflow": false
+    }
+  ],
+  "errors": [],
+  "source": "git+https://github.com/YuLab-SMU/Rho-plugins.git#50d2427683e9077a5141b011c9696c51a00c90c5:plugins/semantic-figures",
+  "indexKind": "controlled loopback HTTP fixture",
+  "browser": "156.0.8078.81",
+  "marketDigest": "b342e01afff5ec71a6175807a5c0dba6d088f496e130b5ee6b4f6c5a27d30375",
+  "installed": {
+    "id": "yulab.semantic-figures",
+    "version": "0.1.0",
+    "digest": "947fb22423e8c8a40f0c1fcbb1dba90b67321a1f96c10574f5cffe2ef650c685",
+    "sourceCommit": "50d2427683e9077a5141b011c9696c51a00c90c5"
+  }
+}

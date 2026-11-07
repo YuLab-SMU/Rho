@@ -12,6 +12,10 @@ const help = `Independent Rho plugins (API 1)
   rho plugin check DIRECTORY
   rho plugin add SOURCE [--connection FILE]
   rho plugin list
+  rho plugin market list
+  rho plugin market add URL
+  rho plugin market refresh|remove ID
+  rho plugin market install ID PLUGIN_ID
   rho plugin update ID [--source SOURCE]
   rho plugin enable|disable|remove ID
   rho plugin dev DIRECTORY
@@ -27,7 +31,7 @@ Remove preserves project files, live sessions, receipts and retained package rev
 `;
 export async function pluginCli(args: string[]) {
   const { values, positionals } = parseArgs({ args, allowPositionals: true, options: { connection: { type: 'string' }, id: { type: 'string' }, source: { type: 'string' }, project: { type: 'string' }, input: { type: 'string' }, 'change-id': { type: 'string' }, help: { type: 'boolean' } } });
-  const [command, target, operation] = positionals;
+  const [command, target, operation, marketPlugin] = positionals;
   if (values.help || !command) { process.stdout.write(help); return; }
   if (command === 'create') {
     if (!target) throw new Error('Name a new plugin directory.');
@@ -108,7 +112,19 @@ export async function pluginCli(args: string[]) {
     const result: any = await response.json(); if (!result.ok) throw new Error(result.error.message); return result.value;
   };
   let result;
-  if (command === 'list') result = await list();
+  if (command === 'market') {
+    const catalog = await client.call('extension.list', {});
+    if (target === 'list') result = catalog.markets;
+    else if (target === 'add' && operation) result = await client.call('extension.market.change', { action: 'add', url: operation });
+    else if (['refresh', 'remove', 'install'].includes(target) && operation) {
+      const market = catalog.markets.find(m => m.id === operation); if (!market) throw new Error('Market is not configured: ' + operation);
+      if (target === 'install') {
+        const entry = market.plugins.find(p => p.id === marketPlugin); if (!entry) throw new Error('Name a plugin id from this market.');
+        const previous = catalog.plugins.find(p => p.id === entry.id);
+        result = await install({ source: entry.source, market: { id: market.id, expectedDigest: market.digest, pluginId: entry.id }, ...(previous ? { replace: previous.id, expectedDigest: previous.digest } : {}) });
+      } else result = await client.call('extension.market.change', { action: target as 'refresh' | 'remove', id: market.id, expectedRevision: market.revision });
+    } else throw new Error('Use rho plugin market list|add URL|refresh ID|remove ID|install ID PLUGIN_ID.');
+  } else if (command === 'list') result = await list();
   else if (command === 'add') { if (!target) throw new Error('Name a package source.'); result = await install({ source: target }); }
   else if (command === 'update') { const p = await find(); result = await install({ source: values.source ?? p.source, replace: p.id, expectedDigest: p.digest }); }
   else if (['enable', 'disable', 'remove'].includes(command)) { const p = await find(); result = await client.call('extension.manage', { pluginId: p.id, expectedDigest: p.digest, action: command as 'enable' | 'disable' | 'remove' }); }

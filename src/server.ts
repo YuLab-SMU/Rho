@@ -806,7 +806,8 @@ export class RhoService {
     if (method === 'protocol.describe') return describeProtocol(protocol, principal.methods, b);
     if (extensionManagement.includes(method)) {
       requireThat(principal.id === 'operator' || principal.id === localBrowserId, 'scope', 'Plugin installation and management belong to the person at this machine.');
-      return method === 'extension.install' ? this.extensions.install(b.source, b.replace, b.expectedDigest) : this.extensions.manage(b.pluginId, b.expectedDigest, b.action);
+      if (method === 'extension.market.change') return this.extensions.changeMarket(b);
+      return method === 'extension.install' ? this.extensions.install(b.source, b.replace, b.expectedDigest, b.market) : this.extensions.manage(b.pluginId, b.expectedDigest, b.action);
     }
     if (method === 'extension.list' && !b.projectId) {
       requireThat(principal.id === 'operator' || principal.id === localBrowserId, 'scope', 'A project-scoped caller must supply its project.');

@@ -1,0 +1,210 @@
+{
+  "method": "extension.market.change",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "action": {
+        "enum": [
+          "add",
+          "refresh",
+          "remove"
+        ]
+      },
+      "url": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1024
+      },
+      "id": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9._-]{0,95}$"
+      },
+      "expectedRevision": {
+        "type": "integer",
+        "minimum": 1
+      }
+    },
+    "required": [
+      "action"
+    ],
+    "additionalProperties": false,
+    "oneOf": [
+      {
+        "type": "object",
+        "properties": {
+          "action": {
+            "const": "add"
+          },
+          "url": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          }
+        },
+        "required": [
+          "action",
+          "url"
+        ],
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "properties": {
+          "action": {
+            "enum": [
+              "refresh",
+              "remove"
+            ]
+          },
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9._-]{0,95}$"
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "action",
+          "id",
+          "expectedRevision"
+        ],
+        "additionalProperties": false
+      }
+    ]
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "markets": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9._-]{0,95}$"
+            },
+            "url": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024
+            },
+            "title": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024
+            },
+            "revision": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "digest": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "fetchedAt": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024
+            },
+            "checkedAt": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024
+            },
+            "error": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "plugins": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 96,
+                    "pattern": "^[a-z0-9][a-z0-9._-]{0,95}$"
+                  },
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "version": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64,
+                    "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$"
+                  },
+                  "description": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2048
+                  },
+                  "source": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1024
+                  },
+                  "repository": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2048
+                  },
+                  "needs": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2048
+                  },
+                  "keywords": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 64
+                    },
+                    "maxItems": 16,
+                    "uniqueItems": true
+                  }
+                },
+                "required": [
+                  "id",
+                  "title",
+                  "version",
+                  "description",
+                  "source",
+                  "repository",
+                  "needs"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "id",
+            "url",
+            "title",
+            "revision",
+            "digest",
+            "fetchedAt",
+            "checkedAt",
+            "error",
+            "plugins"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    "required": [
+      "markets"
+    ],
+    "additionalProperties": false
+  },
+  "description": "Local person/operator: add an HTTPS plugin market index, refresh it explicitly, or remove its source. Failed refresh retains the last valid index; removal preserves installed plugins. Listing never refreshes a source."
+}

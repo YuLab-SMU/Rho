@@ -1,4 +1,5 @@
 import { extensionDirectory } from './extension-directory.js';
+import { ExtensionMarkets, marketLimits, type MarketSelection, type MarketChange } from './extension-markets.js';
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
@@ -6,14 +7,14 @@ import { fork, spawn } from 'node:child_process';
 import { Ajv } from 'ajv';
 import { atomicJson, canonical, digest, requireThat } from '@rho-workspace/plugin-contracts';
 
-export const extensionLimits = { maxPlugins: 32, maxVersions: 128, maxFiles: 20000, maxPackageBytes: 128 * 1024 * 1024, maxContentBytes: 512 * 1024, maxReceipts: 2000, maxResultBytes: 1024 * 1024, maxRunning: 4, maxDelegations: 32, timeoutMs: 30000, installTimeoutMs: 180000 };
+export const extensionLimits = { ...marketLimits, maxPlugins: 32, maxVersions: 128, maxFiles: 20000, maxPackageBytes: 128 * 1024 * 1024, maxContentBytes: 512 * 1024, maxReceipts: 2000, maxResultBytes: 1024 * 1024, maxRunning: 4, maxDelegations: 32, timeoutMs: 30000, installTimeoutMs: 180000 };
 export interface ExtensionManifest {
   apiVersion: 1; id: string; title: string; description: string; host?: string;
   operations: { id: string; title: string; description: string; effect: 'read' | 'native'; methods: string[]; inputSchema: Record<string, any> }[];
   skills: { id: string; title: string; file: string }[];
   views: { id: string; title: string; file: string }[];
 }
-export interface InstalledExtension { id: string; name: string; version: string; title: string; description: string; digest: string; source: string; sourceCommit?: string; enabled: boolean; installedAt: string; manifest: ExtensionManifest }
+export interface InstalledExtension { id: string; name: string; version: string; title: string; description: string; digest: string; source: string; sourceCommit?: string; market?: { id: string; title: string; url: string; digest: string; keywords?: string[] }; enabled: boolean; installedAt: string; manifest: ExtensionManifest }
 interface Receipt { invocationId: string; caller: string; projectId: string; pluginId: string; packageDigest: string; operation: string; requestDigest: string; state: 'pending' | 'completed' | 'unknown'; startedAt: string; endedAt?: string; value?: unknown; error?: string; delegations?: { method: string; request: unknown; state: 'pending' | 'completed' | 'unknown'; value?: unknown; error?: string }[] }
 const ajv = new Ajv({ strict: false, allErrors: true });
 const identifier = /^[a-z0-9][a-z0-9._-]{0,95}$/;
@@ -33,6 +34,7 @@ async function command(file: string, args: string[], cwd: string, timeout: numbe
 
 export class Extensions {
   readonly limits: typeof extensionLimits;
+  readonly markets: ExtensionMarkets;
   private installed: InstalledExtension[] = [];
   private running = new Map<string, Promise<Receipt>>();
   private workers = new Set<ReturnType<typeof fork>>();
@@ -41,10 +43,12 @@ export class Extensions {
   constructor(readonly directory: string, limits: Partial<typeof extensionLimits> = {}) {
     this.limits = { ...extensionLimits, ...limits };
     for (const [key, value] of Object.entries(this.limits)) requireThat(Number.isSafeInteger(value) && value > 0, 'invalid', `Invalid extensions.${key}.`);
+    this.markets = new ExtensionMarkets(directory, this.limits);
   }
   async init() {
     await fs.mkdir(path.join(this.directory, 'versions'), { recursive: true });
     await fs.mkdir(path.join(this.directory, 'receipts'), { recursive: true });
+    await this.markets.init();
     try { this.installed = JSON.parse(await fs.readFile(path.join(this.directory, 'installed.json'), 'utf8')); } catch (e: any) { if (e.code !== 'ENOENT') throw e; }
     const receipts = await fs.readdir(path.join(this.directory, 'receipts')); this.receiptCount = receipts.length;
     for (const file of receipts) {
@@ -54,7 +58,8 @@ export class Extensions {
   }
   close() { for (const child of this.workers) child.kill(); }
   private serial<T>(fn: () => Promise<T>): Promise<T> { const next = this.mutation.then(fn, fn); this.mutation = next.catch(() => {}); return next; }
-  list() { return { directory: extensionDirectory, plugins: this.installed.map(({ manifest, ...info }) => info), limits: this.limits }; }
+  list() { return { directory: extensionDirectory, markets: this.markets.list(), plugins: this.installed.map(({ manifest, ...info }) => info), limits: this.limits }; }
+  changeMarket(input: MarketChange) { return this.serial(async () => ({ markets: await this.markets.change(input) })); }
   describe(id: string) { const value = this.installed.find(p => p.id === id); requireThat(value, 'not_found', 'Plugin is not installed.'); return structuredClone(value); }
   private selected(id: string, expectedDigest: string) { const value = this.describe(id); requireThat(value.digest === expectedDigest, 'stale', 'The selected plugin changed. Read its descriptor again.'); return value; }
   private root(p: InstalledExtension) { return path.join(this.directory, 'versions', p.digest, 'node_modules', p.name); }
@@ -111,8 +116,9 @@ export class Extensions {
     await this.verify(p); const entry = p.manifest[kind === 'skill' ? 'skills' : 'views'].find(x => x.id === entryId); requireThat(entry, 'not_found', 'Plugin entry not found.');
     return { pluginId: id, packageDigest: p.digest, entryId, kind, title: entry.title, text: await fs.readFile(await this.file(this.root(p), entry.file), 'utf8') };
   }
-  install(source: string, replace?: string, expected?: string) {
+  install(source: string, replace?: string, expected?: string, market?: MarketSelection) {
     return this.serial(async () => {
+      const selection = market ? this.markets.select(market, source) : undefined;
       requireThat(!!replace === !!expected, 'invalid', 'An update needs both replace and expectedDigest.');
       if (replace) this.selected(replace, expected ?? '');
       requireThat(replace || this.installed.length < this.limits.maxPlugins, 'limit', 'Installed plugins reached extensions.maxPlugins. Remove one before adding another.');
@@ -144,11 +150,14 @@ export class Extensions {
         const pkg = JSON.parse(await fs.readFile(path.join(install, 'package.json'), 'utf8')), names = Object.keys(pkg.dependencies ?? {});
         requireThat(names.length === 1, 'invalid', 'Install exactly one plugin package.');
         const checked = await this.check(path.join(install, 'node_modules', names[0]));
+        requireThat(!selection || (checked.manifest.id === selection.entry.id && checked.version === selection.entry.version), 'conflict', 'Package identity or version does not match the selected market entry. The installed selection was kept.');
         requireThat(!replace || checked.manifest.id === replace, 'conflict', 'An update must keep the plugin identity.');
         requireThat(replace || !this.installed.some(p => p.id === checked.manifest.id), 'conflict', 'Plugin is already installed. Use update with its current digest.');
         await fs.rm(path.join(install, 'node_modules', '.package-lock.json'), { force: true });
         const sha = await this.hash(path.join(install, 'node_modules'));
-        const selected: InstalledExtension = { id: checked.manifest.id, name: checked.name, version: checked.version, title: checked.manifest.title, description: checked.manifest.description, digest: sha, source, ...(sourceCommit ? { sourceCommit } : {}), enabled: replace ? this.describe(replace).enabled : true, installedAt: new Date().toISOString(), manifest: checked.manifest };
+        const previous = replace ? this.describe(replace) : undefined;
+        const origin = selection?.origin ?? (previous?.source === source && previous.version === checked.version ? previous.market : undefined);
+        const selected: InstalledExtension = { id: checked.manifest.id, name: checked.name, version: checked.version, title: checked.manifest.title, description: checked.manifest.description, digest: sha, source, ...(sourceCommit ? { sourceCommit } : {}), ...(origin ? { market: origin } : {}), enabled: previous?.enabled ?? true, installedAt: new Date().toISOString(), manifest: checked.manifest };
         const destination = path.join(this.directory, 'versions', sha);
         if (!versions.includes(sha)) await fs.rename(install, destination);
         const next = [...this.installed.filter(p => p.id !== selected.id), selected];

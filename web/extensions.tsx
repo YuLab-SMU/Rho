@@ -3,6 +3,8 @@ import type { BrowserClient } from '../src/browser.js';
 import { Icon } from './icons.js';
 import type { extensionDirectory } from '../src/extension-directory.js';
 import type { InstalledExtension } from '../src/extensions.js';
+import type { ExtensionMarket } from '../src/extension-markets.js';
+import { ExtensionMarkets } from './extension-markets.js';
 
 // The frame shares no origin, storage or credentials with the application. Its
 // only application entry is its own plugin's declared operations at this digest.
@@ -39,6 +41,7 @@ export function ExtensionView({ client, projectId, plugin, viewId }: { client: B
 
 export function ThirdPartyPlugins({ client, projectId, canManage, query = '' }: { client: BrowserClient; projectId: string; canManage: boolean; query?: string }) {
   const [directory, setDirectory] = useState<typeof extensionDirectory>([]);
+  const [markets, setMarkets] = useState<ExtensionMarket[]>([]);
   const [plugins, setPlugins] = useState<InstalledExtension[]>([]), [source, setSource] = useState(''), [busy, setBusy] = useState(''), [message, setMessage] = useState(''), [error, setError] = useState('');
   const [opened, setOpened] = useState<{ plugin: InstalledExtension; viewId: string } | null>(null), [skill, setSkill] = useState<{ pluginId: string; title: string; text: string; entryId: string; digest: string } | null>(null);
   const refresh = async () => {
@@ -46,7 +49,7 @@ export function ThirdPartyPlugins({ client, projectId, canManage, query = '' }: 
     // The small index contains package summaries, not entry manifests. Read each
     // installed descriptor before rendering its entries; listing executes no code.
     const described = await Promise.all(result.plugins.map(p => client.call('extension.describe', { projectId, pluginId: p.id })));
-    setPlugins(described as unknown as InstalledExtension[]); setDirectory(result.directory as typeof extensionDirectory);
+    setPlugins(described as unknown as InstalledExtension[]); setDirectory(result.directory as typeof extensionDirectory); setMarkets(result.markets);
   };
   useEffect(() => { void refresh().catch(e => setError(e.message)); }, [client, projectId]);
   const act = async (label: string, run: () => Promise<unknown>) => {
@@ -60,7 +63,7 @@ export function ThirdPartyPlugins({ client, projectId, canManage, query = '' }: 
     if (opened?.plugin.id === p.id) setOpened(null);
   });
   const matches = (value: unknown) => JSON.stringify(value).toLowerCase().includes(query.trim().toLowerCase());
-  const visible = plugins.filter(matches);
+  const visible = plugins.filter(p => matches(p) || markets.some(m => m.plugins.some(e => e.id === p.id && e.version === p.version && matches(e))));
   const read = (plugin: InstalledExtension, entry: InstalledExtension['manifest']['skills'][number]) => act('Read ' + entry.title, async () => {
     const result = await client.call('extension.content', { projectId, pluginId: plugin.id, expectedDigest: plugin.digest, kind: 'skill', entryId: entry.id });
     setSkill({ pluginId: plugin.id, title: entry.title, entryId: entry.id, digest: plugin.digest, text: result.text as string });
@@ -73,6 +76,7 @@ export function ThirdPartyPlugins({ client, projectId, canManage, query = '' }: 
       <label htmlFor="plugin-source">Package source</label><div><input id="plugin-source" value={source} onChange={e => setSource(e.target.value)} placeholder="npm package, local folder, .tgz or git+https source" required /><button disabled={!!busy || !source.trim()}>{busy === 'Install plugin' ? 'Installing…' : 'Install plugin'}</button></div>
     </form>}
     <p role="status" className="extension-status">{busy && busy !== 'Install plugin' ? busy + '…' : message}</p>{error && <p role="alert" className="extension-error">{error} <button disabled={!!busy} onClick={() => void act('Refresh plugins', refresh)}>Refresh</button></p>}
+    <ExtensionMarkets client={client} markets={markets} installed={plugins} canManage={canManage} query={query} changed={refresh} />
     {!plugins.length ? <p className="plugin-empty">No third-party plugin is installed in this Rho.</p> : !visible.length && <p className="plugin-empty">No installed third-party plugins match “{query}”.</p>}
     <div className="extension-list">{visible.map(p => <article key={p.id}>
       <header className="extension-head">
@@ -82,6 +86,7 @@ export function ThirdPartyPlugins({ client, projectId, canManage, query = '' }: 
       </header>
       <span className="plugin-kinds">{chips(p).map(c => <span key={c.label} className={'plugin-kind' + (c.label === 'UI' ? ' plugin-kind-ui' : c.label === 'No view' ? ' plugin-kind-page' : '')} title={c.detail}><Icon name={c.icon} size={12} stroke={1.8} />{c.label}{c.count !== undefined && <span className="plugin-kind-count">{c.count}</span>}</span>)}</span>
       <p className="extension-source">Installed from <code>{p.source}</code></p>
+      {p.market && <p>Installed from market: {p.market.title}</p>}
       <div className="extension-actions">
         <button disabled={!!busy || !p.enabled} onClick={() => void act('Open plugin', async () => { const plugin = await client.call('extension.describe', { projectId, pluginId: p.id }) as unknown as InstalledExtension; if (!plugin.manifest.views.length) { setMessage('This plugin has no view. Use its operations from your Agent.'); return; } setOpened({ plugin, viewId: plugin.manifest.views[0].id }); setSkill(null); })}>Open</button>
         {canManage && <><button disabled={!!busy} onClick={() => void act('Update plugin', async () => { await client.call('extension.install', { source: p.source, replace: p.id, expectedDigest: p.digest }, AbortSignal.timeout(240000)); if (opened?.plugin.id === p.id) setOpened(null); })}>Update</button><button disabled={!!busy} onClick={() => void manage(p, p.enabled ? 'disable' : 'enable')}>{p.enabled ? 'Disable' : 'Enable'}</button><button className="danger" disabled={!!busy} onClick={() => void manage(p, 'remove')}>Remove</button></>}
