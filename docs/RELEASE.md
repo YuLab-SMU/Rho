@@ -39,8 +39,9 @@ and [accepted scope](BACKEND-ACCEPTANCE.md).
 This delivery is an unsigned local tarball, on macOS arm64 until 0.5.2 and since then also on
 Linux x64 and arm64, with external Node and Python prerequisites; R is needed only for R execution. Browser assets, npm registry namespace/channel rights,
 other platforms and full product installation are not accepted by a headless run.
-No registry publication or signing is performed. npm publication would not itself
-establish a signed desktop distribution or require creating Rho-releases.
+It had no registry publication or signing; npm publication began with 0.5.2
+([below](#ci-and-npm-publication)). npm publication does not itself establish a signed
+desktop distribution or require creating Rho-releases.
 
 ## DeepSeek Harness plugin
 
@@ -146,11 +147,13 @@ are no longer in it. Conversations and the external relay drive the person's ins
 Claude Code or Codex (`--claude`/`--codex`, `RHO_CLAUDE`/`RHO_CODEX`, else `PATH`). A
 missing client is named, not replaced. Rho pins the ACP adapters; the client versions are
 the person's. The tarball fell from 274,921,791 to 12,753,572 bytes. The packer writes
-`SHA256SUMS` beside the tarball and its composition.
+`SHA256SUMS` beside the tarball and its composition. It names the tarball after the package:
+the candidates recorded here were `rho-workspace-local-0.5.2.tgz`, and since the package became
+`@rho-workspace/rho` the packer writes `rho-workspace-rho-VERSION.tgz`, as below.
 
 ```sh
 shasum -a 256 -c SHA256SUMS            # Linux: sha256sum -c SHA256SUMS
-npm install --prefix "$HOME/rho-0.5.2" --omit=dev --ignore-scripts /absolute/rho-workspace-local-0.5.2.tgz
+npm install --prefix "$HOME/rho-0.5.2" --omit=dev --ignore-scripts /absolute/rho-workspace-rho-0.5.2.tgz
 "$HOME/rho-0.5.2/node_modules/.bin/rho" --root "$HOME/rho-projects" --state-dir "$HOME/.rho-0.5.2" --open
 ```
 
@@ -162,8 +165,8 @@ candidate from the same Core commit is packed and installed separately
 ([Windows episode](WINDOWS-0.5.2-EPISODE.md)). On Windows, in PowerShell:
 
 ```powershell
-Get-FileHash rho-workspace-local-0.5.2.tgz -Algorithm SHA256   # compare with SHA256SUMS
-npm install --prefix "$HOME\rho-0.5.2" --omit=dev --ignore-scripts C:\absolute\rho-workspace-local-0.5.2.tgz
+Get-FileHash rho-workspace-rho-0.5.2.tgz -Algorithm SHA256   # compare with SHA256SUMS
+npm.cmd install --prefix "$HOME\rho-0.5.2" --omit=dev --ignore-scripts C:\absolute\rho-workspace-rho-0.5.2.tgz
 & "$HOME\rho-0.5.2\node_modules\.bin\rho.cmd" --root "$HOME\rho-projects" --state-dir "$HOME\.rho-0.5.2" --open
 ```
 

@@ -40,7 +40,7 @@ The selected baseline is macOS arm64, Node 22.22.3 (engine range
 `>=22.22.0 <27`; the suite and the installed check also passed on Node 24.22.2 and
 26.13.0), npm 10.9.8, Python 3 with `fcntl`, and Rscript 4.5.2. Windows x64
 was checked with Node 22.23.4 and Rscript 4.5.1; its writer lock needs no Python, and
-there `rho.cmd` starts Rho and Ctrl+Break on its console stops it in order.
+there `rho.cmd` starts Rho, and Ctrl+Break on its console or `rho --stop` stops it in order.
 The unsigned npm package `@rho-workspace/rho` contains Plugins and one digest-checked Core
 binary for each of macOS arm64, Linux x64 and arm64 and Windows x64; CI installs it on each.
 R and any project-selected packages are external prerequisites, and so are the Agent
@@ -88,6 +88,17 @@ the state that named the old address is rewritten to the new one, keeping its to
 `--port 0` always takes a new port. A selected port that is in use is refused with the
 port named, never replaced. A second start on a state that is already running is
 refused with the running service's address.
+
+`rho --stop [--state-dir DIR]` (`~/Rho/state` without the flag) stops the service that
+holds that state as Ctrl+C does, from any program. On Windows no signal reaches a
+console program from another process, so an Agent that started Rho in the background
+had no orderly way to stop it ([episode](WINDOWS-SETUP-EPISODE.md)). The command leaves
+`service.stop` in the state folder, which the running launcher takes within half a
+second, then waits until the state's writer lock is free and the process that served
+it, named in `connection.json`, has ended. It prints `{"stopped":{"state":…}}`, and the
+service's own output ends with its `{"shutdown":…}` line. It exits 1 when nothing holds
+that state, or when the service there is an earlier version that never takes the
+request (after 10 s, removing it). A start removes a request no service took.
 
 `--port`, `--rscript`, `--core`, `--plugins` and `--limits` are explicit
 operator selections; `RHO_RSCRIPT`, `RHO_CORE_BINARY` and `RHO_PYTHON` select
@@ -435,6 +446,7 @@ RHO_CORE_BINARY=/absolute/rho-core npm run recovery
 RHO_CORE_BINARY=/absolute/rho-core npm run agent
 npm run pack:local -- --core darwin-arm64=/absolute/mac/rho-core \
   --core linux-x64=/absolute/linux-x64/rho-core --core linux-arm64=/absolute/linux-arm64/rho-core \
+  --core win32-x64=/absolute/win32-x64/rho-core.exe \
   --core-source /absolute/Rho-core --plugins /absolute/Rho-plugins
 node scripts/install-acceptance.mjs /absolute/rho-workspace-rho-0.5.2.tgz \
   /absolute/ordinary-project /absolute/paired-project
@@ -469,6 +481,25 @@ only Agent installs the MCP SDK. The sidecar
 records source commits/trees, build-input and lock hashes, binary/package digests
 and platform, plus each selected plugin tarball identity. It does not build Core, sign or publish to a registry. Direct
 packing of the development source-linked root is rejected.
+
+Each Core is built as CI's `core` job in [`ci.yml`](../.github/workflows/ci.yml) builds it.
+Check out the Core commit that `components.json` selects with LF line endings
+(`git config --global core.autocrlf false` before cloning). Core compiles
+`docs/ACTIVITY.md` and `docs/MANAGED-RUN.md` in byte for byte, and under Git for
+Windows' default a fresh clone gave a Core whose contract text ended its lines in CRLF
+where CI's has LF. Core keeps those two files LF itself from `8ef933a`, and the packer
+records them among Core's build inputs. Then run
+`CARGO_PROFILE_DEV_DEBUG=0 cargo build --locked --target TARGET`: on Windows, TARGET is
+`x86_64-pc-windows-msvc` (MSVC Build Tools) and the binary is
+`target/x86_64-pc-windows-msvc/debug/rho-core.exe`. A Core built on another machine is
+not CI's: it names that machine's Cargo registry folder, under the builder's user
+folder, 78 times. To carry the accepted Cores instead, take CI's `core-PLATFORM`
+artifacts or the published package's `vendor/core/PLATFORM/` binaries, and add
+`--core-composition` with the composition that records them (the package's
+`vendor/composition.json`); the packer refuses a binary whose digest it does not record. On Windows, `npm ci` in Rho-plugins also
+unpacks the Agent adapters' optional platform clients (Codex 462 MiB, the Claude Agent
+SDK 284 MiB), which the package leaves out. In one run that took 14.5 of its 15
+minutes ([#112](https://github.com/YuLab-SMU/Rho/issues/112)).
 
 
 ## Native artifact intake (phase 1)

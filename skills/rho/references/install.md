@@ -72,8 +72,20 @@ Poll the log for a few seconds. Do not assume the service is up because the comm
 Tell the person the `url`. `startup.rscript` shows which R it found, and `startup.core` the
 binary for managed runs. Without a Core, managed runs are unavailable and everything else works.
 
-On Windows, ask the person to run the same command with full paths in its own PowerShell
-window (`rho.cmd`). Ctrl+Break in that window stops it.
+On Windows, use PowerShell with `npm.cmd` and `rho.cmd` (plain `npm` and `rho` are PowerShell
+scripts that the default execution policy refuses), and let `cmd.exe` write the log. Started with
+`Start-Process -RedirectStandardOutput` instead, Rho holds your shell's output open and your
+command does not return:
+
+```powershell
+$log = "$HOME\Rho\rho.log"; Remove-Item $log -ErrorAction SilentlyContinue
+$rho = (Get-Command rho.cmd).Source
+$line = "`"$rho`" --root `"$HOME\Rho\projects`" --state-dir `"$HOME\Rho\state`" > `"$log`" 2>&1"
+Start-Process cmd.exe -ArgumentList "/d /s /c `"$line`"" -WindowStyle Hidden
+```
+
+Then wait for the ready line in the log as above. The
+[setup page](https://yulab-smu.top/Rho/doc/setup.md#on-windows) has every Windows step.
 
 **Useful flags.** `rho --help` lists the full set for the installed version.
 
@@ -96,9 +108,17 @@ must be limited to one folder.
 Stop only a service you started, or one the person asks you to stop. Stopping ends the live R
 and Python sessions; their in-memory values are lost.
 
+- From anywhere, when `rho --help` lists `--stop`: `rho --stop --state-dir "$HOME/Rho/state"` (no
+  `--state-dir` means `~/Rho/state`; `rho.cmd` on Windows). It stops the service in order, as
+  Ctrl+C does, and prints `{"stopped":…}` once it has ended. It says so when nothing runs there.
 - In its own terminal: Ctrl+C (Ctrl+Break on Windows).
-- Started in the background: find the one process that serves that state folder, check it,
-  then send it SIGTERM. Write the path as it was given at start, with `~` expanded:
+- Started in the background by a version without `--stop`, on Windows: `Stop-Process -Id <pid>`
+  ends it at once, without the `{"shutdown":…}` line; a managed Host it started keeps running.
+  `Get-CimInstance Win32_Process -Filter "Name='node.exe'" | Where-Object CommandLine -like '*--state-dir*'`
+  lists the candidates.
+- Started in the background by a version without `--stop`, on macOS and Linux: find the one
+  process that serves that state folder, check it, then send it SIGTERM. Write the path as it
+  was given at start, with `~` expanded:
 
   ```sh
   pgrep -fl "[-]-state-dir $HOME/Rho/state"     # should list exactly one process

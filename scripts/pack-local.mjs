@@ -88,7 +88,8 @@ if (values['core-composition']) {
   if (run('git', ['rev-parse', recorded.commit + '^{tree}'], coreRoot).trim() !== recorded.tree) throw new Error('Recorded Core tree is unavailable or mismatched.');
   const { artifacts, artifactSha256, bytes, ...identity } = recorded;
   core = { ...identity, buildAssociation: 'Digest-verified accepted public Core binaries reused; no local Core source changes selected.' };
-} else core = { ...await source(coreRoot, ['src', 'Cargo.toml', 'Cargo.lock', 'LICENSE']), buildAssociation: 'Explicitly selected local builds of this source, one per platform; no reproducible-build or signing claim.' };
+// Core compiles its two contract documents in byte for byte (include_str!), so they are build inputs too.
+} else core = { ...await source(coreRoot, ['src', 'Cargo.toml', 'Cargo.lock', 'LICENSE', 'docs/ACTIVITY.md', 'docs/MANAGED-RUN.md']), buildAssociation: 'Explicitly selected local builds of this source, one per platform; no reproducible-build or signing claim.' };
 const pluginPacks = JSON.parse(run(process.execPath, [path.join(pluginRoot, 'scripts/pack.mjs'), '--destination', path.join(destination, 'plugins'), '--plugins', selected.join(',')], pluginRoot));
 const manifest = JSON.parse(await fs.readFile(path.join(root, 'package.json'), 'utf8'));
 for (const entry of manifest.files.filter(p => p !== 'vendor')) {
