@@ -35,7 +35,7 @@ export function notesInstructions(conversationId: string, options: { notebook?: 
       '- Run exploratory code there instead of Rscript -e, python3 -c or a throwaway script: find kernel.run with rho_index and rho_resolve once, then call it with rho_call, giving language "r" or "python", the code, a short purpose that says what the cell is for, and waitMs (for example 120000) to wait for it to finish.',
       '- What a cell defines stays for your next cells, so load data once and build on it. kernel.read shows the cells, including any the person ran, and the variables.',
       '- To look at a value without adding a cell, call kernel.inspect with its language and name: it gives a page of a table, a model\'s fit and coefficients, or a list\'s parts, with the code that reaches each part.',
-      '- Keep the code your results rest on in script files as well, so they can be run again without the session.',
+      '- Keep the code your results rest on in script files as well, so the results can be rebuilt without the session. Run such a script in the session with kernel.run (source("analysis.R") in R, exec(open("analysis.py").read()) in Python), not with Rscript or python3 from a shell: a saved figure is readable mark by mark only while its file holds the bytes a Notebook cell saved, so a shell run that writes it again leaves a picture.',
       '- Before a multi-step analysis, read the Skill "rho.analysis-run" with skill.list and skill.read: it holds the practice that keeps a long analysis from losing work when a turn stops, written after five real reproductions ran here.',
     ] : []),
   ].join('\n');

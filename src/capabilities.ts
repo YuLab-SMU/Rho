@@ -150,7 +150,9 @@ const analysisRunContent = [
   '   close it, and let the figure land in a file you name.',
   '7. Write each file once, complete, and save it to disk before you rely on it. One script',
   '   written in full and then run costs less than the same script edited piece by piece,',
-  '   and a file on disk is the only version that outlives a stop.',
+  '   and a file on disk is the only version that outlives a stop. Run it in the session',
+  '   with kernel.run (source() in R, exec() in Python), not from a shell: a figure file',
+  '   stays readable mark by mark only while it holds the bytes a Notebook cell saved.',
   '8. Check packages in one call, and do not install into a temporary library. Name what is',
   '   missing, and when you substitute a gene-set source or an annotation build, say so',
   '   beside the result, because that choice changes the numbers.',
@@ -162,7 +164,7 @@ const analysisRunContent = [
   '   that record rather than from a claim that the work is done.',
 ].join('\n');
 const analysisRunSkill = {
-  id: 'rho.analysis-run', version: '1.1', content: analysisRunContent,
+  id: 'rho.analysis-run', version: '1.2', content: analysisRunContent,
   digest: digest(analysisRunContent),
   intent: 'Run a whole analysis through the live sessions so a stop never loses the work.',
   requires: ['kernel.run', 'kernel.read', 'kernel.interrupt', 'resource.list'],

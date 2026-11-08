@@ -56,6 +56,7 @@ observed.
 | [Drawn figures](DRAWN-FIGURES-EPISODE.md) | Base graphics pages (DESeq2's `plotMA`) and ComplexHeatmaps are figures: points bound to the session table they were drawn from, heatmap cells named by row, column and value |
 | [Figure files](FIGURE-FILES-EPISODE.md) | Pages R code writes to files with `png()`, `pdf()` or `svg()` and `dev.off()` are figures of those files; base graphics bound through transforms, with a note when two layers place one column on different scales |
 | [Python figures](PYTHON-FIGURES-EPISODE.md) | matplotlib and seaborn figures and `savefig` files are figures: points, lines and labels bound to session tables through transforms, heatmap cells bound to their matrix, mislabelled rows noted |
+| [Script runs](SCRIPT-RUNS-EPISODE.md) | Agents ran their scripts from a shell because Rho asked for scripts that run without the session; they now run them in the Notebook session, where the figures the scripts save stay figures |
 | [Plugin authoring](PLUGIN-AUTHORING.md) | Create, preview, check and select an independent UI extension |
 | [DeepSeek Harness plugin](DEEPSEEK-HARNESS.md) | Install dsh-rho, open the full Rho from Harness, analyse in the shared Notebook and ask about a selected result |
 | [magpie's frontend, studied](MAGPIE-FRONTEND-STUDY.md) | A reference project read in depth: a no-framework app shell, its click-and-scroll engine, plugin kernel, i18n and verification machinery, and candidate actions for Rho; it sets no design for Rho |
@@ -103,4 +104,5 @@ component APIs belong to [Rho-plugins](https://github.com/YuLab-SMU/Rho-plugins)
 - [Drawn figures episode](DRAWN-FIGURES-EPISODE.md): `plotMA` and a ComplexHeatmap selected, asked about and marked by the Agent.
 - [Python figures episode](PYTHON-FIGURES-EPISODE.md): a PyDESeq2 volcano and a seaborn clustermap selected, asked about and marked by the Agent; the Westlake route refused, and why runs 2 and 3 left points unbound.
 - [Figure files episode](FIGURE-FILES-EPISODE.md): `plotMA` and a heatmap saved with `png()` read, selected, asked about and marked by the Agent in the file view; a misplaced MA overlay noted and explained.
+- [Script runs episode](SCRIPT-RUNS-EPISODE.md): why a figure file an Agent's script wrote ended as a picture, and the same prompts after the guidance asked for scripts to run in the session.
 - [Semantic figures episode](SEMANTIC-FIGURES-EPISODE.md): native ggtree clade selection across layouts and enrichplot term/gene linking through an independently installed plugin.

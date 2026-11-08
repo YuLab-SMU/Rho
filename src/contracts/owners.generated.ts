@@ -26166,7 +26166,7 @@ export const ownerContracts: OwnerContractSnapshot = {
     },
     "kernel": {
       "package": "@rho-workspace/plugin-kernel",
-      "packageVersion": "0.5.12",
+      "packageVersion": "0.5.13",
       "entry": "./operations",
       "entryPath": "@rho-workspace/plugin-kernel/dist/operations.js",
       "entrySha256": "d984240d0953961897503d15419347712e5f80e23a3386074ff461e8655e7a46",
