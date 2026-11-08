@@ -154,8 +154,15 @@ the row tables scrolled inside their frame.
   at first. The plugin count was updated to 13. Two tokens the plugin markets stylesheet read
   without declaring them now use the theme's. The MCP wait test, a load miss, passed alone.
   The suite then ran 332 of 335 (3 skipped) with no failure, with Plugins pinned at `a58be96`.
+- CI: run 42416445709 on `52eed850` passed all 16 jobs: the documentation site, the four
+  Cores, the suite on macOS, Linux and Windows, the packed candidate and its offline installs
+  on each platform, including Linux on Node 24 and 26. The run before it, 42408969295 on
+  `6f73e0b2`, failed one test on all three test platforms, `every token a web stylesheet
+  reads is declared by one of them`, which the two theme tokens above fixed. Plugins has no
+  CI; its checks are the local runs above.
 - Browser: the steps above in Chrome at 1440 and 390 px, read from their screenshots.
 - Documentation: `npm run docs:check` covers 68 pages. On the built site, every image in a
   docs folder had been linked to its GitHub page, which a browser cannot show as an image.
   Images now link to the file itself; the Semantic figures images rendered at 1280 and 390 px.
-  This page's images appear once they are on `main`.
+  The published site is still the one built from `515ec7b` for 0.5.6 and does not carry this
+  page yet; it shows these images when the site is next published to `gh-pages`.
