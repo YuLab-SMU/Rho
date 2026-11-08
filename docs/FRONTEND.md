@@ -131,7 +131,11 @@ inspect what happened. The application gives those actions direct places:
   attached to the next message; the chip's × detaches it. Marks the Agent pointed at appear
   as an amber chip above the plot with its note, shown on the plot when the person has
   nothing selected. A plot nothing described stays a picture; one that failed says why
-  under it ([episode](FIGURES-EPISODE.md)).
+  under it ([episode](FIGURES-EPISODE.md)). A ggplot a cell saved with `ggsave` is drawn the
+  same way wherever its file is shown with the bytes the cell saved: on the answer board, in
+  the Results & figures file view and Studio's media view, and under the cell, which names
+  the file ([episode](SAVED-FIGURES-EPISODE.md)). Layers that draw the same rows count the
+  selection once.
 - **Two forms.** Notebook | Console switches how the same sessions read: as a notebook (above)
   or as a console, one transcript as R or Python print it at a terminal. Each cell is its code
   after the prompt (`>`/`+` in R, `>>>`/`...` in Python, a new statement at the prompt) and what

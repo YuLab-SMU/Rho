@@ -31,6 +31,11 @@
         "maxItems": 5000,
         "type": "array"
       },
+      "path": {
+        "maxLength": 512,
+        "minLength": 1,
+        "type": "string"
+      },
       "plot": {
         "maximum": 64,
         "minimum": 1,
@@ -38,6 +43,10 @@
       },
       "selection": {
         "pattern": "^f-[a-f0-9]{16}$",
+        "type": "string"
+      },
+      "sha256": {
+        "pattern": "^[a-f0-9]{64}$",
         "type": "string"
       },
       "where": {
@@ -119,9 +128,7 @@
       }
     },
     "required": [
-      "projectId",
-      "cellId",
-      "plot"
+      "projectId"
     ],
     "type": "object"
   },
@@ -210,6 +217,11 @@
             "note": {
               "type": "string"
             },
+            "path": {
+              "maxLength": 512,
+              "minLength": 1,
+              "type": "string"
+            },
             "plot": {
               "maximum": 64,
               "minimum": 1,
@@ -218,12 +230,15 @@
             "selectionId": {
               "pattern": "^f-[a-f0-9]{16}$",
               "type": "string"
+            },
+            "sha256": {
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
             }
           },
           "required": [
             "selectionId",
             "cellId",
-            "plot",
             "digest",
             "by",
             "at",

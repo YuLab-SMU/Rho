@@ -385,7 +385,7 @@ export class RhoService {
       // observation is frozen, before the conversation is recorded or launched.
       uiContext: (project, location, limits) => captureUiContext(project, location,
         id => new Workspace(project, this.plugins.project(project.root, project.id), this.config.workspace).read(id), limits,
-        this.plugins.optional('figures') ? (cellId, plot, selectionId, rows) => this.figuresFor(project).brief(cellId, plot, selectionId, rows) : undefined),
+        this.plugins.optional('figures') ? (ref, selectionId, rows) => this.figuresFor(project).brief(ref, selectionId, rows) : undefined),
       context: async (project, id) => {
         const context = await this.plugins.project(project.root, project.id).need('agent').peekContext(id);
         requireThat(context.projectId === project.id, 'scope', 'The context belongs to another project.');
@@ -787,7 +787,7 @@ export class RhoService {
     let host = this.figures.get(p.id);
     if (!host) {
       const { Figures } = this.plugins.need('figures');
-      host = new Figures(p.root, { record: (cellId, plot) => this.kernelFor(p).figureRecord(cellId, plot) });
+      host = new Figures(p.root, { record: (cellId, plot) => this.kernelFor(p).figureRecord(cellId, plot), saved: sha256 => this.kernelFor(p).savedFigure(sha256) });
       this.figures.set(p.id, host);
     }
     return host;
@@ -1209,10 +1209,12 @@ export class RhoService {
     if (method.startsWith('figure.')) {
       await capabilities.assertAvailable(method, principal);
       const figures = this.figuresFor(p);
-      if (method === 'figure.read') return figures.read({ cellId: b.cellId, plot: b.plot, form: b.form, marks: b.marks, selection: b.selection, where: b.where, limit: b.limit });
+      const ref = { cellId: b.cellId, plot: b.plot, path: b.path, sha256: b.sha256 };
+      if (method === 'figure.read') return figures.read({ ...ref, form: b.form, marks: b.marks, selection: b.selection, where: b.where, limit: b.limit });
       if (method === 'figure.select') {
-        const result = await figures.select({ cellId: b.cellId, plot: b.plot, marks: b.marks, note: b.note, changeId: b.changeId }, principal.id);
-        await this.emit(p, 'figure.changed', b.cellId + ':' + b.plot, principal.id);
+        const result = await figures.select({ ...ref, marks: b.marks, note: b.note, changeId: b.changeId }, principal.id);
+        const kept = result.selection;
+        await this.emit(p, 'figure.changed', kept.sha256 ? 'file:' + kept.sha256 : kept.cellId + ':' + kept.plot, principal.id);
         return result;
       }
     }

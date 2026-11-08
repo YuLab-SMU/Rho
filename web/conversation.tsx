@@ -335,7 +335,9 @@ function ConversationSwitcher({ list, openId, title, mark, onOpen, onAll }: {
 // The selected marks a message carried, as its sender sees them under their words.
 function figureNote(brief: any) {
   if (!brief) return null;
-  return <small className="turn-place">{brief.unavailable ? 'A figure selection that could not be read' : `${brief.count} selected mark${brief.count === 1 ? '' : 's'} · plot ${brief.plot}${brief.cell ? ' of cell ' + brief.cell : ''}`}</small>;
+  // A cell's plot is named by its number; a saved figure by its file.
+  const where = brief.plot !== undefined ? `plot ${brief.plot}${brief.cell ? ' of cell ' + brief.cell : ''}` : `${brief.path ?? 'a saved figure'}${brief.cell ? ', saved by cell ' + brief.cell : ''}`;
+  return <small className="turn-place">{brief.unavailable ? 'A figure selection that could not be read' : `${brief.count} selected mark${brief.count === 1 ? '' : 's'} · ${where}`}</small>;
 }
 export function AgentConversation({ snapshot, client, uiContext, attachment, onDetach, selectedId, onSelected, onOpen, onSent, onStarted, onClose, onAll, replayOf, replayAt: replaying = null, onNow, sessions, onPath }: {
   snapshot: WorkspaceSnapshot; client: BrowserClient; selectedId?: string | null; onSelected?: () => void; onOpen?: (id: string | null) => void; onSent?: () => void; onStarted?: (conversationId: string) => void; onClose?: () => void; onAll?: () => void;

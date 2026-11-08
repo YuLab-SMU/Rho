@@ -12,7 +12,9 @@ export interface PreviewFile { path: string; bytes?: number | null; modifiedAt?:
 export const previewLimits = { files: 16, concurrent: 2, figureBytes: 2 * 1024 * 1024, rows: 3, columns: 4 };
 
 // A table's first rows or a figure's pixels for a card, read once per file version.
-export type Preview = { kind: 'table'; columns: string[]; rows: Array<Record<string, unknown>>; total: number; width: number } | { kind: 'image'; url: string } | { kind: 'none'; note: string };
+// An image names the SHA-256 of its bytes (a Files version is that digest), so a page can ask
+// whether a cell saved it as a figure.
+export type Preview = { kind: 'table'; columns: string[]; rows: Array<Record<string, unknown>>; total: number; width: number } | { kind: 'image'; url: string; sha256?: string } | { kind: 'none'; note: string };
 const previews = new Map<string, Promise<Preview>>();
 let started = 0, active = 0;
 const waiting: Array<() => void> = [];
@@ -43,7 +45,7 @@ export function readPreview(client: BrowserClient, snapshot: WorkspaceSnapshot, 
     if ((node.bytes ?? 0) > previewLimits.figureBytes) return { kind: 'none', note: size(node.bytes ?? 0) + ' · select it to see it' };
     const bytes = await readBytes(client, projectId, ref, previewLimits.figureBytes);
     const type = /\.svg$/i.test(node.path) ? 'image/svg+xml' : /\.png$/i.test(node.path) ? 'image/png' : 'image/jpeg';
-    return { kind: 'image', url: URL.createObjectURL(new Blob([bytes], { type })) };
+    return { kind: 'image', url: URL.createObjectURL(new Blob([bytes], { type })), ...(/^[a-f0-9]{64}$/.test(resource.version) ? { sha256: resource.version } : {}) };
   }).catch((): Preview => unreadable());
   previews.set(key, made);
   return made;

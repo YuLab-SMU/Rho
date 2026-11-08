@@ -269,8 +269,8 @@
     "conversation.decide": {
       "summary": "Person at this machine only: say to use an answer, or that it needs changes and why. The decision holds for the file versions that message kept when it was given and says nothing of later versions. A new decision supersedes the one before; none is removed. Refused while the Agent is still answering.",
       "path": "operations/conversation.decide.json",
-      "bytes": 40299,
-      "sha256": "45eb254da27b30a3c63628a03e313bf14f398dec0d47c4a5c00aa6722b388012"
+      "bytes": 40542,
+      "sha256": "e6a6a3e853044170478db9947af86e31a814d4db32ce537e8eb1ceef014b6719"
     },
     "conversation.delete": {
       "summary": "Person at this machine only: delete Rho's record of a conversation in the trash. The Agent's own session files are not touched. Repeating the request that started it is then refused.",
@@ -287,14 +287,14 @@
     "conversation.permission": {
       "summary": "Person at this machine only: record an offered choice for a pending Agent permission request. The original request identity is retained; repeated identical choices do not respond twice.",
       "path": "operations/conversation.permission.json",
-      "bytes": 40118,
-      "sha256": "eaf39842eaac29b7f0ddd3f44c41a793b37fc53929e76d9bd3733eb1f83d10a1"
+      "bytes": 40361,
+      "sha256": "10fc1163eaa07d65e62754b439a340b96558b1751d45920cfdab49d24e280c9d"
     },
     "conversation.read": {
       "summary": "Read a conversation started in Rho: the person's messages, the Agent's visible text and tool steps, and how each message ended. Reading starts and resumes nothing.",
       "path": "operations/conversation.read.json",
-      "bytes": 55604,
-      "sha256": "3cba5584bd0ba0dbc6afbbe19a0f907c566f431655bdac435b8d2a33764c5358"
+      "bytes": 55861,
+      "sha256": "aaefd15ff9f411ef2283f23f3cdcd7d86651fe926f3dfad26ffd57a7dc3aae2e"
     },
     "conversation.restore": {
       "summary": "Person at this machine only: return a conversation from the trash to the project's conversations, within the project's conversation limit.",
@@ -305,8 +305,8 @@
     "conversation.send": {
       "summary": "Person at this machine only: send the next message to a conversation started in Rho. A continuationOf links a new message to the latest confirmed Agent turn-limit stop; the original request is not resent. Refused while the previous message is being answered. A repeated changeId with the same input returns the original message.",
       "path": "operations/conversation.send.json",
-      "bytes": 41934,
-      "sha256": "7c0ac97f08e013a87ef771ee99dbe21e1de14c5f3d71d8ba38890cbf7caa11d4"
+      "bytes": 42392,
+      "sha256": "b9e3b7ee748f5b70d31e72e008cf6c354c181bedf2a9811a0cbcb45e411dcd97"
     },
     "conversation.settings.check": {
       "summary": "Person at this machine only: start the chosen Agent in this project to read the settings it offers, then remove that session and end the process. No message is sent; one check per Agent runs at a time.",
@@ -329,14 +329,14 @@
     "conversation.start": {
       "summary": "Person at this machine only: start a conversation with the selected Claude Code or Codex Agent in this project. Rho selects the Agent plugin backend, attaches this project's MCP grant and records the message before sending it. Without backend or config, the person's saved Agent and settings are used and recorded with the conversation. A repeated changeId with the same text returns the original conversation and starts nothing. With continue, the message continues an Agent session listed by agent.sessions.list (one started in a terminal, an editor or the Agent's own app) through that same session, or through a copy of it with copy; a session another live window holds open is refused unless copied.",
       "path": "operations/conversation.start.json",
-      "bytes": 42960,
-      "sha256": "7fc9a8c82d4e330a65ad04822fc48ca3bc75585b3732910b022a630c5979bbba"
+      "bytes": 43418,
+      "sha256": "51c27c4a2e7890c879b7ed292b275048d81849afe7771ff19d639d4b2d1ae857"
     },
     "conversation.stop": {
       "summary": "Person at this machine only: ask the original Agent to stop answering one message. ACP cancellation is confirmed by the original prompt response; a lost connection keeps the outcome unknown. Legacy CLI conversations confirm process exit. Steps already taken stay done.",
       "path": "operations/conversation.stop.json",
-      "bytes": 39945,
-      "sha256": "f3ca6f1b7230029e5b4585de4da84feee27603cbdf56d9b200468919bbc03108"
+      "bytes": 40188,
+      "sha256": "389d3601657c361ab37144cacfbd772158e439a09c4478bba69a77c1e41d2242"
     },
     "conversation.trash": {
       "summary": "Person at this machine only: move a conversation that is not being answered to the trash. It is kept whole and not continued until restored; an idle connection to its Agent ends.",
@@ -503,14 +503,14 @@
     "figure.read": {
       "summary": "What a plot a cell drew shows: its layers, mappings, panels and data, the rows behind marks, and the marks people and Agents selected.",
       "path": "operations/figure.read.json",
-      "bytes": 5874,
-      "sha256": "f6d8cc0609e97b6cd60b538e1a84664e5767c3a614ffb90ac574e15081328df6"
+      "bytes": 6256,
+      "sha256": "a89bca2a797588561949356f05931726b57dc84a796fbc1f249b84edf405f582"
     },
     "figure.select": {
       "summary": "Keeps a set of a figure's marks with a note, shown highlighted in the plot; the plot and its data do not change.",
       "path": "operations/figure.select.json",
-      "bytes": 3267,
-      "sha256": "1814798e5d02670cab9498485960863146bc7bc9e980f62dae21122b58a025ae"
+      "bytes": 3633,
+      "sha256": "a5f2648ad5beeaa71dd39158405d08229fa3e17e78eac6877c5649d9524525d7"
     },
     "interaction.selection.read": {
       "summary": "interaction.selection.read",
@@ -539,8 +539,8 @@
     "kernel.interrupt": {
       "summary": "Interrupt one cell: a running cell stops and its session and values stay; a waiting cell is not run. A cell that has ended is returned unchanged.",
       "path": "operations/kernel.interrupt.json",
-      "bytes": 7738,
-      "sha256": "0170819945ea13eab568b952f494cf7500a4fd7cdf88f46776e793a4bcd82e2e"
+      "bytes": 9955,
+      "sha256": "3e03293fe6aaaf8e73d653e16cecf6f4f5b57d787631714f5baa93f7c6c6ac35"
     },
     "kernel.place.check": {
       "summary": "Connect to a place on a server and report its system, machine, the folder after its setup lines, and R and Python there. Runs the place's setup lines; starts no session.",
@@ -581,14 +581,14 @@
     "kernel.read": {
       "summary": "The live sessions and their cells, oldest cell first: code, purpose, who ran it, what it printed, its plots and how it ended, and each session's variables. Reading never starts a session.",
       "path": "operations/kernel.read.json",
-      "bytes": 14768,
-      "sha256": "de2992bf30e9bf8bb489239f1bba3fc31cbadc0217f5fe30dd77ce360f2bd459"
+      "bytes": 17135,
+      "sha256": "944cc4dd59cce979338173b1c6f13c8d28dca5889cd28f4d28f5250f1a9fa141"
     },
     "kernel.run": {
       "summary": "Run a cell of R or Python in the project's live session of that language, which the Agent and the person share: what one cell defines stays for the next. Starts the session when none is live, on this machine or at a place on one of the person's servers (place, or where kernel.places says that language runs next). interpreter names the program a session on this machine starts with, in a folder of the project such as .venv/bin/python; the project keeps it for that language's later sessions, and each cell records the program and version that ran it. The same changeId from the same caller returns the same cell and never runs it twice. waitMs waits for the cell to end.",
       "path": "operations/kernel.run.json",
-      "bytes": 14540,
-      "sha256": "f4f115beaa80fa3c1d34a9dbf5089b24e72a22ab14f7f6f1daa75d454f6b9671"
+      "bytes": 16757,
+      "sha256": "728230e62d3b4b2c279f626cb734dec203b4f2043d00e4bae8144080ba7978df"
     },
     "kernel.server.skill": {
       "summary": "One skill bound to a server, as its file reads now: how that server is used. Read it before naming a place there or running work on it.",

@@ -585,7 +585,7 @@ function App() {
     accessOpen={context && !feedbackContext} accessTrigger={contextTrigger} onAccess={pick(() => { setFeedbackContext(false); setContext(v => feedbackContext || !v); setAgentOpen(false); })} />;
   const closeAgent = () => { setAgentOpen(false); agentReturn(); };
   // A conversation's own header holds its title, the recent conversations and Close.
-  const figureContext = figureAsk ? { figure: { cellId: figureAsk.cellId, plot: figureAsk.plot, selectionId: figureAsk.selectionId } } : {};
+  const figureContext = figureAsk ? { figure: { ...(figureAsk.file ? { ...(figureAsk.file.path ? { path: figureAsk.file.path } : {}), sha256: figureAsk.file.sha256 } : { cellId: figureAsk.cellId, plot: figureAsk.plot }), selectionId: figureAsk.selectionId } } : {};
   const uiContext: UiLocation = studioOpen
     ? { page: 'studio', compositionId: shownId, ...(!shownProcess ? { compositionVersion: composition?.version ?? 0 } : composition ? { compositionVersion: composition.version } : {}), replayAt: replay.at, ...figureContext }
     : { page: screen === 'plugins' ? 'plugins' : section === 'sources' ? 'sources:' + category : section, ...(section === 'file' && fileOnScreen ? { path: fileOnScreen.path } : {}), ...figureContext };

@@ -52,6 +52,7 @@ observed.
 | [Third-party episode](THIRD-PARTY-PLUGINS-EPISODE.md) | Real sclet analysis, package lifecycle, development and browser evidence |
 | [Remote plugin markets](PLUGIN-MARKETS-EPISODE.md) | User-added indexes, keyword discovery, cached refresh failures and real public Git installation |
 | [Figures](FIGURES-EPISODE.md) | Every ggplot a cell draws kept with marks bound to their rows: selecting in the Notebook and Plots view, asking the Agent, the Agent reading and pointing back |
+| [Saved figures](SAVED-FIGURES-EPISODE.md) | A ggplot saved with `ggsave` is a figure of its file on the answer board, in Results & figures and in its cell, while the file keeps those bytes |
 | [Plugin authoring](PLUGIN-AUTHORING.md) | Create, preview, check and select an independent UI extension |
 | [DeepSeek Harness plugin](DEEPSEEK-HARNESS.md) | Install dsh-rho, open the full Rho from Harness, analyse in the shared Notebook and ask about a selected result |
 | [magpie's frontend, studied](MAGPIE-FRONTEND-STUDY.md) | A reference project read in depth: a no-framework app shell, its click-and-scroll engine, plugin kernel, i18n and verification machinery, and candidate actions for Rho; it sets no design for Rho |
@@ -93,4 +94,5 @@ component APIs belong to [Rho-plugins](https://github.com/YuLab-SMU/Rho-plugins)
 - [External conversations episode](EXTERNAL-CONVERSATIONS-EPISODE.md): native Harness history, operations and exact result versions.
 
 - [Figures episode](FIGURES-EPISODE.md): the built-in, package-independent figure capability in the Notebook and Agent workflow.
+- [Saved figures episode](SAVED-FIGURES-EPISODE.md): figures saved with `ggsave` stay selectable on the answer board and in Results & figures.
 - [Semantic figures episode](SEMANTIC-FIGURES-EPISODE.md): native ggtree clade selection across layouts and enrichplot term/gene linking through an independently installed plugin.

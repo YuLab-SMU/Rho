@@ -93,4 +93,22 @@ ggplot(res, aes(log2FoldChange, -log10(padj))) + geom_point()` });
   assert.deepEqual(listed.selections.map(s => s.note), ['The three smallest padj', ''], 'the person sees the Agent\'s marks, newest first');
   await assert.rejects(agent.call('figure.select', { projectId: p.id, cellId, plot: 1, marks: top.slice(1), note: 'The three smallest padj', changeId: 'top-3' }), e => e.error?.kind === 'conflict');
   await assert.rejects(call('figure.read', { cellId: 'k-0000000000000000', plot: 1 }), e => e.error?.kind === 'not_found');
+
+  // A plot the cell saves with ggsave is a figure of the file: read by its path, selected by the
+  // SHA-256 of the bytes a page shows, carried by a message and read by the Agent the same way.
+  const saving = await call('kernel.run', { language: 'r', changeId: 'save', waitMs: 180000, code: `dir.create("results"); ggsave("results/volcano.png", ggplot(res, aes(log2FoldChange, -log10(padj))) + geom_point(), width = 6, height = 5, dpi = 120)` });
+  const saved = saving.cell.saved?.[0];
+  assert.ok(saved?.figure, JSON.stringify(saving.cell));
+  assert.deepEqual([saved.path, saved.figure.marks], ['results/volcano.png', 300]);
+  const byPath = await call('figure.read', { path: 'results/volcano.png' });
+  assert.deepEqual([byPath.figure.sha256, byPath.figure.cellId, byPath.summary.layers[0].marks], [saved.sha256, saving.cell.cellId, 300]);
+  const fileKept = await call('figure.select', { path: 'results/volcano.png', sha256: saved.sha256, marks: ['0.0', '0.1', '0.2'], changeId: 'ask-file' });
+  const askedFile = await call('conversation.start', { changeId: 'ask-file', text: 'Which genes are these?', uiContext: { page: 'sources:results', figure: { path: 'results/volcano.png', sha256: saved.sha256, selectionId: fileKept.selection.selectionId } } });
+  assert.deepEqual([askedFile.turn.uiContext.figureSelection.path, askedFile.turn.uiContext.figureSelection.count], ['results/volcano.png', 3]);
+  for (let i = 0; i < 400 && (await fs.readFile(log, 'utf8')).trim().split('\n').length < 3; i++) await new Promise(r => setTimeout(r, 25));
+  const fileGiven = (await fs.readFile(log, 'utf8')).trim().split('\n').map(l => JSON.parse(l)).find(m => m.text.startsWith('Which genes are these?'));
+  assert.match(fileGiven.text, /the figure saved as results\/volcano\.png/);
+  assert.ok(fileGiven.text.includes(`figure.read {sha256: "${saved.sha256}", selection}`));
+  assert.equal((await agent.call('figure.read', { projectId: p.id, sha256: saved.sha256, selection: fileKept.selection.selectionId })).rows.length, 3);
+  await assert.rejects(call('figure.read', { path: 'results/nothing.png' }), e => e.error?.kind === 'not_found');
 });

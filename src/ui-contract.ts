@@ -98,9 +98,11 @@ export interface ShellServices {
   // language, on a page that shows the Notebook; absent where the person cannot run code there.
   runCode?(run: { viewId: string; language: 'r' | 'python'; code: string; purpose: string }): Promise<void>;
   // Draws a plot whose marks are bound to their rows (the figures plugin), with the picture standing
-  // in until it is read; asking about a selection hands it to the Agent panel's next message.
+  // in until it is read; asking about a selection hands it to the Agent panel's next message. The
+  // figure is a Notebook cell's plot, or a project file a cell saved it as, named by the SHA-256 of
+  // the bytes shown; a file no cell saved with those bytes keeps its picture without a note.
   figure?(slot: {
-    client: { call(method: string, input: any, signal?: AbortSignal): Promise<any> }; projectId: string; cellId: string; plot: number; width: number; height: number; label: string;
+    client: { call(method: string, input: any, signal?: AbortSignal): Promise<any> }; projectId: string; cellId?: string; plot?: number; file?: { path?: string; sha256: string }; width?: number; height?: number; label: string;
     name?: string; fit?: boolean; cursor?: number; fallback: ReactNode; author?: (by: string) => { name: string; mine: boolean };
   }): ReactNode;
 }

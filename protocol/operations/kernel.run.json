@@ -276,6 +276,81 @@
             },
             "type": "array"
           },
+          "saved": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "bytes": {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "figure": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "bound": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "describer": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "geoms": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "kind": {
+                      "type": "string"
+                    },
+                    "layers": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "marks": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "title": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "describer",
+                    "layers",
+                    "marks",
+                    "bound",
+                    "geoms"
+                  ],
+                  "type": "object"
+                },
+                "figureProblem": {
+                  "type": "string"
+                },
+                "number": {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "path": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "sha256": {
+                  "pattern": "^[a-f0-9]{64}$",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "number",
+                "path",
+                "bytes",
+                "sha256"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
           "sessionId": {
             "pattern": "^s-[a-f0-9]{16}$",
             "type": "string"

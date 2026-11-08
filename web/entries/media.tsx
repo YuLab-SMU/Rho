@@ -11,6 +11,15 @@ function Media(props: UiViewProps) {
   const resource = props.snapshot.resources.find(r => r.id === ref?.id && r.version === ref?.version);
   const mimeType = typeof resource?.format === 'object' && typeof resource.format.mimeType === 'string' ? resource.format.mimeType : undefined;
   const [fit, setFit] = useState(true), [size, setSize] = useState<{ width: number; height: number } | null>(null);
+  const media = <MediaView view={props.view} projectId={props.projectId} client={props.client} active={props.active} fit={fit} onSize={setSize}
+    maxReadBytes={(props.snapshot.limits.resources as { maxReadBytes?: number } | undefined)?.maxReadBytes} mimeType={mimeType} />;
+  // A version is the SHA-256 of its bytes: a picture a Notebook cell saved as a figure (ggsave) is
+  // drawn from its record, its marks selectable; any other stays the picture it is.
+  // The bytes' digest alone finds the figure; the resource's path is where Files keeps its snapshot,
+  // and the figure names the project file the cell saved.
+  const sha256 = ref?.version, title = String(props.view.props.title ?? 'figure');
+  const figure = props.active && props.shell?.figure && sha256 && /^[a-f0-9]{64}$/.test(sha256) && /\.(png|jpe?g|svg|tiff?|webp)$/i.test(title)
+    ? props.shell.figure({ client: props.client, projectId: props.projectId, file: { sha256 }, label: title, name: title, fit, fallback: media }) : null;
   return <>
     {props.headerTarget && size && createPortal(<span className="media-controls">
       <span className="media-size">{size.width} × {size.height}</span>
@@ -19,8 +28,7 @@ function Media(props: UiViewProps) {
         <button aria-pressed={!fit} aria-label="Actual size" onClick={() => setFit(false)}>100%</button>
       </span>
     </span>, props.headerTarget)}
-    <MediaView view={props.view} projectId={props.projectId} client={props.client} active={props.active} fit={fit} onSize={setSize}
-      maxReadBytes={(props.snapshot.limits.resources as { maxReadBytes?: number } | undefined)?.maxReadBytes} mimeType={mimeType} />
+    {figure ?? media}
   </>;
 }
 

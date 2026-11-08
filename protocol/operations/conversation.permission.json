@@ -670,14 +670,21 @@
                     "minimum": 1,
                     "maximum": 64
                   },
+                  "path": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 512
+                  },
+                  "sha256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
                   "selectionId": {
                     "type": "string",
                     "pattern": "^f-[a-f0-9]{16}$"
                   }
                 },
                 "required": [
-                  "cellId",
-                  "plot",
                   "selectionId"
                 ]
               },

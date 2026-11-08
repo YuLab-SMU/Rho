@@ -20502,6 +20502,81 @@ export const ownerContracts: OwnerContractSnapshot = {
                     },
                     "type": "array"
                   },
+                  "saved": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "bytes": {
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "figure": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "bound": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "describer": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "geoms": {
+                              "items": {
+                                "type": "string"
+                              },
+                              "type": "array"
+                            },
+                            "kind": {
+                              "type": "string"
+                            },
+                            "layers": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "marks": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "title": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "describer",
+                            "layers",
+                            "marks",
+                            "bound",
+                            "geoms"
+                          ],
+                          "type": "object"
+                        },
+                        "figureProblem": {
+                          "type": "string"
+                        },
+                        "number": {
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        "path": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "sha256": {
+                          "pattern": "^[a-f0-9]{64}$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "number",
+                        "path",
+                        "bytes",
+                        "sha256"
+                      ],
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
                   "sessionId": {
                     "pattern": "^s-[a-f0-9]{16}$",
                     "type": "string"
@@ -21808,6 +21883,81 @@ export const ownerContracts: OwnerContractSnapshot = {
                       },
                       "type": "array"
                     },
+                    "saved": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "bytes": {
+                            "minimum": 0,
+                            "type": "integer"
+                          },
+                          "figure": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "bound": {
+                                "minimum": 0,
+                                "type": "integer"
+                              },
+                              "describer": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "geoms": {
+                                "items": {
+                                  "type": "string"
+                                },
+                                "type": "array"
+                              },
+                              "kind": {
+                                "type": "string"
+                              },
+                              "layers": {
+                                "minimum": 0,
+                                "type": "integer"
+                              },
+                              "marks": {
+                                "minimum": 0,
+                                "type": "integer"
+                              },
+                              "title": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "describer",
+                              "layers",
+                              "marks",
+                              "bound",
+                              "geoms"
+                            ],
+                            "type": "object"
+                          },
+                          "figureProblem": {
+                            "type": "string"
+                          },
+                          "number": {
+                            "minimum": 1,
+                            "type": "integer"
+                          },
+                          "path": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "sha256": {
+                            "pattern": "^[a-f0-9]{64}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "number",
+                          "path",
+                          "bytes",
+                          "sha256"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
                     "sessionId": {
                       "pattern": "^s-[a-f0-9]{16}$",
                       "type": "string"
@@ -22401,6 +22551,81 @@ export const ownerContracts: OwnerContractSnapshot = {
                     "items": {
                       "minLength": 1,
                       "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "saved": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "bytes": {
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "figure": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "bound": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "describer": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "geoms": {
+                              "items": {
+                                "type": "string"
+                              },
+                              "type": "array"
+                            },
+                            "kind": {
+                              "type": "string"
+                            },
+                            "layers": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "marks": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "title": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "describer",
+                            "layers",
+                            "marks",
+                            "bound",
+                            "geoms"
+                          ],
+                          "type": "object"
+                        },
+                        "figureProblem": {
+                          "type": "string"
+                        },
+                        "number": {
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        "path": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "sha256": {
+                          "pattern": "^[a-f0-9]{64}$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "number",
+                        "path",
+                        "bytes",
+                        "sha256"
+                      ],
+                      "type": "object"
                     },
                     "type": "array"
                   },
@@ -23207,6 +23432,11 @@ export const ownerContracts: OwnerContractSnapshot = {
                 "maxItems": 5000,
                 "type": "array"
               },
+              "path": {
+                "maxLength": 512,
+                "minLength": 1,
+                "type": "string"
+              },
               "plot": {
                 "maximum": 64,
                 "minimum": 1,
@@ -23214,6 +23444,10 @@ export const ownerContracts: OwnerContractSnapshot = {
               },
               "selection": {
                 "pattern": "^f-[a-f0-9]{16}$",
+                "type": "string"
+              },
+              "sha256": {
+                "pattern": "^[a-f0-9]{64}$",
                 "type": "string"
               },
               "where": {
@@ -23294,10 +23528,7 @@ export const ownerContracts: OwnerContractSnapshot = {
                 "type": "array"
               }
             },
-            "required": [
-              "cellId",
-              "plot"
-            ],
+            "required": [],
             "type": "object"
           },
           "outputSchema": {
@@ -23385,6 +23616,11 @@ export const ownerContracts: OwnerContractSnapshot = {
                     "note": {
                       "type": "string"
                     },
+                    "path": {
+                      "maxLength": 512,
+                      "minLength": 1,
+                      "type": "string"
+                    },
                     "plot": {
                       "maximum": 64,
                       "minimum": 1,
@@ -23393,12 +23629,15 @@ export const ownerContracts: OwnerContractSnapshot = {
                     "selectionId": {
                       "pattern": "^f-[a-f0-9]{16}$",
                       "type": "string"
+                    },
+                    "sha256": {
+                      "pattern": "^[a-f0-9]{64}$",
+                      "type": "string"
                     }
                   },
                   "required": [
                     "selectionId",
                     "cellId",
-                    "plot",
                     "digest",
                     "by",
                     "at",
@@ -23449,15 +23688,22 @@ export const ownerContracts: OwnerContractSnapshot = {
                 "maxLength": 500,
                 "type": "string"
               },
+              "path": {
+                "maxLength": 512,
+                "minLength": 1,
+                "type": "string"
+              },
               "plot": {
                 "maximum": 64,
                 "minimum": 1,
                 "type": "integer"
+              },
+              "sha256": {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
               }
             },
             "required": [
-              "cellId",
-              "plot",
               "marks",
               "changeId"
             ],
@@ -23528,6 +23774,11 @@ export const ownerContracts: OwnerContractSnapshot = {
                   "note": {
                     "type": "string"
                   },
+                  "path": {
+                    "maxLength": 512,
+                    "minLength": 1,
+                    "type": "string"
+                  },
                   "plot": {
                     "maximum": 64,
                     "minimum": 1,
@@ -23536,12 +23787,15 @@ export const ownerContracts: OwnerContractSnapshot = {
                   "selectionId": {
                     "pattern": "^f-[a-f0-9]{16}$",
                     "type": "string"
+                  },
+                  "sha256": {
+                    "pattern": "^[a-f0-9]{64}$",
+                    "type": "string"
                   }
                 },
                 "required": [
                   "selectionId",
                   "cellId",
-                  "plot",
                   "digest",
                   "by",
                   "at",
@@ -25912,22 +26166,22 @@ export const ownerContracts: OwnerContractSnapshot = {
     },
     "kernel": {
       "package": "@rho-workspace/plugin-kernel",
-      "packageVersion": "0.5.7",
+      "packageVersion": "0.5.8",
       "entry": "./operations",
       "entryPath": "@rho-workspace/plugin-kernel/dist/operations.js",
       "entrySha256": "d984240d0953961897503d15419347712e5f80e23a3386074ff461e8655e7a46",
       "exports": {
-        "operationContracts": "9108a8b192d1bfeceea36dd6d240dcc39758d9d852f46b2087b10b64f7e5eaff"
+        "operationContracts": "745ad690e36329aeedfd303f58913833eb12e1326d858a28d2629a4758e836b7"
       }
     },
     "figures": {
       "package": "@rho-workspace/plugin-figures",
-      "packageVersion": "0.1.0",
+      "packageVersion": "0.2.0",
       "entry": "./operations",
       "entryPath": "@rho-workspace/plugin-figures/dist/operations.js",
-      "entrySha256": "9a8473403e0f4fcb512395bcd7124904c826e52fafcea99d06cd5e7bdcab3c05",
+      "entrySha256": "9b591cd7a316b37ddb4abc499396b03c9c594f355eed98e524b023fbe0fa1e9b",
       "exports": {
-        "operationContracts": "b2586f5779f8c09ae2974d40e401b1995be24c852521078099b7e149b37adbf0"
+        "operationContracts": "c2f01acef2b64f883ca1c060e7acdeab4047c6a4acbd247c07481cf07dba97b2"
       }
     },
     "skills": {

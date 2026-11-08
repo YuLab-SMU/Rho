@@ -127,7 +127,8 @@ the row tables scrolled inside their frame.
 
 - Base graphics, grid drawings that are not ggplots and Python plots stay pictures.
 - A figure saved with `ggsave` is not linked to its record. Figures in Results and on the
-  answer board are still pictures.
+  answer board are still pictures. [Saved figures](SAVED-FIGURES-EPISODE.md) links them on
+  2026-11-08.
 - A figure is drawn again at 7 × 5 in. Labels placed at random (ggrepel) can sit slightly
   differently from the PNG.
 - A mark is named only within its figure. Linking the same gene across figures needs the

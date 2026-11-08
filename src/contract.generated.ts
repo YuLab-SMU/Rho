@@ -5760,8 +5760,10 @@ export interface ConversationDecideOutput {
       replayAt?: number | null;
       path?: string;
       figure?: {
-        cellId: string;
-        plot: number;
+        cellId?: string;
+        plot?: number;
+        path?: string;
+        sha256?: string;
         selectionId: string;
       };
       capturedAt: string;
@@ -6069,8 +6071,10 @@ export interface ConversationPermissionOutput {
       replayAt?: number | null;
       path?: string;
       figure?: {
-        cellId: string;
-        plot: number;
+        cellId?: string;
+        plot?: number;
+        path?: string;
+        sha256?: string;
         selectionId: string;
       };
       capturedAt: string;
@@ -6403,8 +6407,10 @@ export interface ConversationReadOutput {
       replayAt?: number | null;
       path?: string;
       figure?: {
-        cellId: string;
-        plot: number;
+        cellId?: string;
+        plot?: number;
+        path?: string;
+        sha256?: string;
         selectionId: string;
       };
       capturedAt: string;
@@ -6589,8 +6595,10 @@ export interface ConversationSendInput {
     replayAt?: number | null;
     path?: string;
     figure?: {
-      cellId: string;
-      plot: number;
+      cellId?: string;
+      plot?: number;
+      path?: string;
+      sha256?: string;
       selectionId: string;
     };
   };
@@ -6715,8 +6723,10 @@ export interface ConversationSendOutput {
       replayAt?: number | null;
       path?: string;
       figure?: {
-        cellId: string;
-        plot: number;
+        cellId?: string;
+        plot?: number;
+        path?: string;
+        sha256?: string;
         selectionId: string;
       };
       capturedAt: string;
@@ -7065,8 +7075,10 @@ export interface ConversationStartInput {
     replayAt?: number | null;
     path?: string;
     figure?: {
-      cellId: string;
-      plot: number;
+      cellId?: string;
+      plot?: number;
+      path?: string;
+      sha256?: string;
       selectionId: string;
     };
   };
@@ -7194,8 +7206,10 @@ export interface ConversationStartOutput {
       replayAt?: number | null;
       path?: string;
       figure?: {
-        cellId: string;
-        plot: number;
+        cellId?: string;
+        plot?: number;
+        path?: string;
+        sha256?: string;
         selectionId: string;
       };
       capturedAt: string;
@@ -7440,8 +7454,10 @@ export interface ConversationStopOutput {
       replayAt?: number | null;
       path?: string;
       figure?: {
-        cellId: string;
-        plot: number;
+        cellId?: string;
+        plot?: number;
+        path?: string;
+        sha256?: string;
         selectionId: string;
       };
       capturedAt: string;
@@ -9075,15 +9091,17 @@ export interface FeedbackSubmitOutput {
 
 export interface FigureReadInput {
   projectId: string;
-  cellId: string;
+  cellId?: string;
   form?: 'summary' | 'view' | 'selections';
   limit?: number;
   /**
    * @maxItems 5000
    */
   marks?: string[];
-  plot: number;
+  path?: string;
+  plot?: number;
   selection?: string;
+  sha256?: string;
   /**
    * @minItems 1
    * @maxItems 8
@@ -9116,15 +9134,17 @@ export interface FigureReadOutput {
     }[];
     marks?: string[];
     note: string;
-    plot: number;
+    path?: string;
+    plot?: number;
     selectionId: string;
+    sha256?: string;
   }[];
   summary?: {};
 }
 
 export interface FigureSelectInput {
   projectId: string;
-  cellId: string;
+  cellId?: string;
   changeId: string;
   /**
    * @minItems 1
@@ -9132,7 +9152,9 @@ export interface FigureSelectInput {
    */
   marks: string[];
   note?: string;
-  plot: number;
+  path?: string;
+  plot?: number;
+  sha256?: string;
 }
 
 export interface FigureSelectOutput {
@@ -9150,8 +9172,10 @@ export interface FigureSelectOutput {
     }[];
     marks?: string[];
     note: string;
-    plot: number;
+    path?: string;
+    plot?: number;
     selectionId: string;
+    sha256?: string;
   };
 }
 
@@ -9459,6 +9483,22 @@ export interface KernelInterruptOutput {
     purpose: string | null;
     queuedAt: string;
     removed?: string[];
+    saved?: {
+      bytes: number;
+      figure?: {
+        bound: number;
+        describer: string;
+        geoms: string[];
+        kind?: string;
+        layers: number;
+        marks: number;
+        title?: string;
+      };
+      figureProblem?: string;
+      number: number;
+      path: string;
+      sha256: string;
+    }[];
     sessionId: string;
     startedAt: string | null;
     state: 'queued' | 'running' | 'done' | 'error' | 'interrupted' | 'not-run' | 'unknown';
@@ -9695,6 +9735,22 @@ export interface KernelReadOutput {
     purpose: string | null;
     queuedAt: string;
     removed?: string[];
+    saved?: {
+      bytes: number;
+      figure?: {
+        bound: number;
+        describer: string;
+        geoms: string[];
+        kind?: string;
+        layers: number;
+        marks: number;
+        title?: string;
+      };
+      figureProblem?: string;
+      number: number;
+      path: string;
+      sha256: string;
+    }[];
     sessionId: string;
     startedAt: string | null;
     state: 'queued' | 'running' | 'done' | 'error' | 'interrupted' | 'not-run' | 'unknown';
@@ -9792,6 +9848,22 @@ export interface KernelRunOutput {
     purpose: string | null;
     queuedAt: string;
     removed?: string[];
+    saved?: {
+      bytes: number;
+      figure?: {
+        bound: number;
+        describer: string;
+        geoms: string[];
+        kind?: string;
+        layers: number;
+        marks: number;
+        title?: string;
+      };
+      figureProblem?: string;
+      number: number;
+      path: string;
+      sha256: string;
+    }[];
     sessionId: string;
     startedAt: string | null;
     state: 'queued' | 'running' | 'done' | 'error' | 'interrupted' | 'not-run' | 'unknown';

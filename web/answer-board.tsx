@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { canExplore, explorableTable, languageNames, type Language } from './explore.js';
 import { ExploreIn } from './explore-in.js';
 import type { BrowserClient, WorkspaceSnapshot } from '../src/browser.js';
@@ -17,6 +17,7 @@ import type { Holds } from '../src/file-describer.js';
 import './board.css';
 import { useMeaning } from './meaning.js';
 import { ChoiceOptions } from './choices.js';
+import { ShellContext } from './shell-services.js';
 
 // The answer to one message, laid out by what each file is to it: the result that answers it
 // largest, the results beside it, then the script and the command that made them and the data
@@ -35,12 +36,17 @@ export function cellText(value: unknown) {
   return String(Number(number.toPrecision(4)));
 }
 
+// A figure a Notebook cell saved (ggsave) is drawn from its record, its marks selectable; any other
+// picture stays as it is.
 function Figure({ client, snapshot, node }: { client: BrowserClient; snapshot: WorkspaceSnapshot; node: GraphNode }) {
+  const shell = useContext(ShellContext);
   const [preview, setPreview] = useState<Preview | null>(null);
   const key = node.path + '@' + (node.resource?.version ?? node.modifiedAt);
   useEffect(() => { let live = true; readPreview(client, snapshot, fileOf(node)).then(p => { if (live) setPreview(p); }); return () => { live = false; }; }, [key]);
   if (!preview) return <span className="board-figure loading" aria-hidden="true" />;
-  return preview.kind === 'image' ? <img className="board-figure" src={preview.url} alt={node.title} /> : <span className="board-figure none">{preview.kind === 'none' ? preview.note : ''}</span>;
+  if (preview.kind !== 'image') return <span className="board-figure none">{preview.kind === 'none' ? preview.note : ''}</span>;
+  const picture = <img className="board-figure" src={preview.url} alt={node.title} />;
+  return preview.sha256 && shell?.figure ? <>{shell.figure({ client, projectId: snapshot.project.id, file: { path: node.path!, sha256: preview.sha256 }, label: node.title, name: node.title, fallback: picture })}</> : picture;
 }
 function Table({ client, snapshot, node, rows }: { client: BrowserClient; snapshot: WorkspaceSnapshot; node: GraphNode; rows: number }) {
   const [page, setPage] = useState<TablePage | null | undefined>(undefined);
