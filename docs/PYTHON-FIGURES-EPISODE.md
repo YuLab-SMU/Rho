@@ -196,6 +196,8 @@ episode's Python, in the line above the results, is masked in the picture.
 - CI for `6a58c009` (run 42502446349): the tests passed on macOS, Linux and Windows, but packing
   the candidate refused the figures package: its packer allowed only `r/figures.R` beside `dist`.
   Plugins `d5bce29` packs `py/figures.py`; a local pack of Rho's selected plugins includes it.
+- All 15 CI jobs passed for `5e899fb2` with Plugins `d5bce29` (run 42503174060): tests on three
+  systems, the packed candidate and six installations.
 - Records in run 4: the 17,921-mark volcano took 0.58 s and 5.4 MB; the clustermap 0.07 s and
   0.13 MB.
 - Browser: the steps above in Chrome at 1440 and 390 px, read from their screenshots.
