@@ -156,6 +156,8 @@ The heatmap is drawn at the column's width, and its row names are too small to r
 - Rho `npm test`: 332 of 335 (3 skipped) with no failure. A first run failed 11 execution tests
   because `RHO_RSCRIPT=Rscript` was given as a bare name, which resolves to a file in the
   checkout; with R found on `PATH` they pass.
+- CI: run 42484462800 on `9d6f5e42`, which selects Plugins `2133ae2`, passed all 15 jobs,
+  including packing the candidate.
 - Records: the 22,370-mark MA plot took 2.25 s and 5.7 MiB; a 240-cell heatmap 0.1–0.15 s and
   0.1 MiB.
 - Browser: the steps above in Chrome at 1440 and 390 px, read from their screenshots.
