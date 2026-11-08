@@ -1,4 +1,4 @@
 {
   "core": { "repository": "https://github.com/YuLab-SMU/Rho-core", "commit": "8bed8ef5dbb841c61845317b330e2e7f755d8f50" },
-  "plugins": { "repository": "https://github.com/YuLab-SMU/Rho-plugins", "commit": "a1819924e47bd813578d8930683b1dc1f0863aae" }
+  "plugins": { "repository": "https://github.com/YuLab-SMU/Rho-plugins", "commit": "d5bce2928ddcce9ab7426a99cc42c421be236b32" }
 }

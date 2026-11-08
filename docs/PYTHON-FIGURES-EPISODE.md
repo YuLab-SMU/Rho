@@ -193,6 +193,9 @@ episode's Python, in the line above the results, is masked in the picture.
 - Rho `npm test` first failed 26 tests, as CI did for `2b801cd3`: Plugins `ca09d9c` raised Tables
   to 0.5.1 and Rho still selected 0.5.0, so Tables did not load. With Tables 0.5.1 selected, Rho
   passed 338 of 341, 3 skipped.
+- CI for `6a58c009` (run 42502446349): the tests passed on macOS, Linux and Windows, but packing
+  the candidate refused the figures package: its packer allowed only `r/figures.R` beside `dist`.
+  Plugins `d5bce29` packs `py/figures.py`; a local pack of Rho's selected plugins includes it.
 - Records in run 4: the 17,921-mark volcano took 0.58 s and 5.4 MB; the clustermap 0.07 s and
   0.13 MB.
 - Browser: the steps above in Chrome at 1440 and 390 px, read from their screenshots.
