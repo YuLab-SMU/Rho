@@ -135,7 +135,9 @@ inspect what happened. The application gives those actions direct places:
   same way wherever its file is shown with the bytes the cell saved: on the answer board, in
   the Results & figures file view and Studio's media view, and under the cell, which names
   the file ([episode](SAVED-FIGURES-EPISODE.md)). Layers that draw the same rows count the
-  selection once.
+  selection once. Pages drawn with base graphics and ComplexHeatmaps are drawn and selected
+  the same way; heatmap cells keep their colour while others are selected, and a selection
+  outlines them ([episode](DRAWN-FIGURES-EPISODE.md)).
 - **Two forms.** Notebook | Console switches how the same sessions read: as a notebook (above)
   or as a console, one transcript as R or Python print it at a terminal. Each cell is its code
   after the prompt (`>`/`+` in R, `>>>`/`...` in Python, a new statement at the prompt) and what

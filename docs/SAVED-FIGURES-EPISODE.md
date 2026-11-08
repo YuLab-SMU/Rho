@@ -133,7 +133,9 @@ At 390 px the page did not scroll sideways.
   Markdown is not changed here.
 - `figure.read` answers 404 for each picture no cell saved, and the browser logs those as
   failed requests.
-- Base graphics, ComplexHeatmap and Python plots are still pictures.
+- Base graphics, ComplexHeatmap and Python plots are still pictures. [Drawn
+  figures](DRAWN-FIGURES-EPISODE.md) describes base graphics and ComplexHeatmap pages on
+  2026-11-08.
 
 ## Verification
 

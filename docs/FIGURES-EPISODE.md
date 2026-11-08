@@ -125,7 +125,9 @@ the row tables scrolled inside their frame.
 
 ## Not established
 
-- Base graphics, grid drawings that are not ggplots and Python plots stay pictures.
+- Base graphics, grid drawings that are not ggplots and Python plots stay pictures. [Drawn
+  figures](DRAWN-FIGURES-EPISODE.md) describes base graphics and ComplexHeatmap pages on
+  2026-11-08.
 - A figure saved with `ggsave` is not linked to its record. Figures in Results and on the
   answer board are still pictures. [Saved figures](SAVED-FIGURES-EPISODE.md) links them on
   2026-11-08.
