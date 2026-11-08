@@ -254,4 +254,5 @@ still cannot write `svg()` files, with or without Rho.
   skipped. All 15 CI jobs passed for `8a2f3b99` (run 42522637879).
 - Describer checks on GitHub's runners, branch `codex/describer-checks`: runs 42522863869 (scipy
   missing everywhere; `svg()` on macOS), 42523544383 and 42523983893 (the devices and plain R on
-  macOS), and 42524416843 (12 of 12 on each system, none skipped).
+  macOS), and 42524416843 (12 of 12 on each system, none skipped). In CI, all 18 jobs passed for
+  `2ddbddc2` (run 42525078013), the three Figure describers jobs among them.
