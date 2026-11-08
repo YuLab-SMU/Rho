@@ -54,6 +54,7 @@ observed.
 | [Figures](FIGURES-EPISODE.md) | Every ggplot a cell draws kept with marks bound to their rows: selecting in the Notebook and Plots view, asking the Agent, the Agent reading and pointing back |
 | [Saved figures](SAVED-FIGURES-EPISODE.md) | A ggplot saved with `ggsave` is a figure of its file on the answer board, in Results & figures and in its cell, while the file keeps those bytes |
 | [Drawn figures](DRAWN-FIGURES-EPISODE.md) | Base graphics pages (DESeq2's `plotMA`) and ComplexHeatmaps are figures: points bound to the session table they were drawn from, heatmap cells named by row, column and value |
+| [Figure files](FIGURE-FILES-EPISODE.md) | Pages R code writes to files with `png()`, `pdf()` or `svg()` and `dev.off()` are figures of those files; base graphics bound through transforms, with a note when two layers place one column on different scales |
 | [Python figures](PYTHON-FIGURES-EPISODE.md) | matplotlib and seaborn figures and `savefig` files are figures: points, lines and labels bound to session tables through transforms, heatmap cells bound to their matrix, mislabelled rows noted |
 | [Plugin authoring](PLUGIN-AUTHORING.md) | Create, preview, check and select an independent UI extension |
 | [DeepSeek Harness plugin](DEEPSEEK-HARNESS.md) | Install dsh-rho, open the full Rho from Harness, analyse in the shared Notebook and ask about a selected result |
@@ -101,4 +102,5 @@ component APIs belong to [Rho-plugins](https://github.com/YuLab-SMU/Rho-plugins)
 - [Saved figures episode](SAVED-FIGURES-EPISODE.md): figures saved with `ggsave` stay selectable on the answer board and in Results & figures.
 - [Drawn figures episode](DRAWN-FIGURES-EPISODE.md): `plotMA` and a ComplexHeatmap selected, asked about and marked by the Agent.
 - [Python figures episode](PYTHON-FIGURES-EPISODE.md): a PyDESeq2 volcano and a seaborn clustermap selected, asked about and marked by the Agent; the Westlake route refused, and why runs 2 and 3 left points unbound.
+- [Figure files episode](FIGURE-FILES-EPISODE.md): `plotMA` and a heatmap saved with `png()` read, selected, asked about and marked by the Agent in the file view; a misplaced MA overlay noted and explained.
 - [Semantic figures episode](SEMANTIC-FIGURES-EPISODE.md): native ggtree clade selection across layouts and enrichplot term/gene linking through an independently installed plugin.

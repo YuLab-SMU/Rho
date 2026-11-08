@@ -19,7 +19,7 @@ function Media(props: UiViewProps) {
   // and the figure names the project file the cell saved.
   const sha256 = ref?.version, title = String(props.view.props.title ?? 'figure');
   const figure = props.active && props.shell?.figure && sha256 && /^[a-f0-9]{64}$/.test(sha256) && /\.(png|jpe?g|svg|tiff?|webp)$/i.test(title)
-    ? props.shell.figure({ client: props.client, projectId: props.projectId, file: { sha256 }, label: title, name: title, fit, fallback: media }) : null;
+    ? props.shell.figure({ client: props.client, projectId: props.projectId, file: { sha256 }, label: title, name: title, fit, cursor: props.snapshot.cursor, fallback: media }) : null;
   return <>
     {props.headerTarget && size && createPortal(<span className="media-controls">
       <span className="media-size">{size.width} × {size.height}</span>

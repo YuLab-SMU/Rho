@@ -46,7 +46,7 @@ function Figure({ client, snapshot, node }: { client: BrowserClient; snapshot: W
   if (!preview) return <span className="board-figure loading" aria-hidden="true" />;
   if (preview.kind !== 'image') return <span className="board-figure none">{preview.kind === 'none' ? preview.note : ''}</span>;
   const picture = <img className="board-figure" src={preview.url} alt={node.title} />;
-  return preview.sha256 && shell?.figure ? <>{shell.figure({ client, projectId: snapshot.project.id, file: { path: node.path!, sha256: preview.sha256 }, label: node.title, name: node.title, fallback: picture })}</> : picture;
+  return preview.sha256 && shell?.figure ? <>{shell.figure({ client, projectId: snapshot.project.id, file: { path: node.path!, sha256: preview.sha256 }, label: node.title, name: node.title, cursor: snapshot.cursor, fallback: picture })}</> : picture;
 }
 function Table({ client, snapshot, node, rows }: { client: BrowserClient; snapshot: WorkspaceSnapshot; node: GraphNode; rows: number }) {
   const [page, setPage] = useState<TablePage | null | undefined>(undefined);
