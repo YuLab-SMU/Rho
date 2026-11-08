@@ -78,7 +78,10 @@ both as figures, and the answer began *Everything ran in the shared R session*.
 
 - In the Python baseline the answer board refused to preview `results/de_results_dex_vs_untrt.csv`:
   *Column names, types and null encodings must be explicit and unique.* pandas' `to_csv()` writes
-  the unnamed index as a column with an empty name.
+  the unnamed index as a column with an empty name, as R's `write.csv()` does for row names.
+  Tables 0.5.2 (Plugins `ce1185f`) names such a column `row` (another unnamed one `column N`). The
+  same project reopened showed the file on the answer board (*First 5 of 33,469 rows*) and in
+  Results & figures, all 33,469 rows read, with no refused request.
 - The instruction to explore in the session rather than with `python3 -c` or `Rscript -e` was not
   followed in the baseline's 30 probes, nor for the R run's two package checks.
 

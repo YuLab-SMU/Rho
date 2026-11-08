@@ -26074,7 +26074,7 @@ export const ownerContracts: OwnerContractSnapshot = {
     },
     "tables": {
       "package": "@rho-workspace/plugin-tables",
-      "packageVersion": "0.5.1",
+      "packageVersion": "0.5.2",
       "entry": "./operations",
       "entryPath": "@rho-workspace/plugin-tables/dist/operations.js",
       "entrySha256": "d81a4871e7a3af64932a01c329e06d46619f1457a4a6f069e7bf0c7e297535f6",
@@ -26206,7 +26206,7 @@ export const ownerContracts: OwnerContractSnapshot = {
     },
     "entry-tables": {
       "package": "@rho-workspace/plugin-tables",
-      "packageVersion": "0.5.1",
+      "packageVersion": "0.5.2",
       "entry": "./contract",
       "entryPath": "@rho-workspace/plugin-tables/dist/contract.js",
       "entrySha256": "fa014c3bf7aa36b550696fb312258b05eb734c1e8f660f3b1774fc2afeb7d55f",
