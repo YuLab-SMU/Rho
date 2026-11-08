@@ -155,7 +155,7 @@ the row tables scrolled inside their frame.
   at first. The plugin count was updated to 13. Two tokens the plugin markets stylesheet read
   without declaring them now use the theme's. The MCP wait test, a load miss, passed alone.
   The suite then ran 332 of 335 (3 skipped) with no failure, with Plugins pinned at `a58be96`.
-- CI: run 42416445709 on `52eed850` passed all 16 jobs: the documentation site, the four
+- CI: run 42416445709 on `52eed850` passed all 15 jobs: the documentation site, the four
   Cores, the suite on macOS, Linux and Windows, the packed candidate and its offline installs
   on each platform, including Linux on Node 24 and 26. The run before it, 42408969295 on
   `6f73e0b2`, failed one test on all three test platforms, `every token a web stylesheet

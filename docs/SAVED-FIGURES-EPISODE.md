@@ -148,4 +148,9 @@ At 390 px the page did not scroll sideways.
   selection by SHA-256, a message whose brief and guidance name the file, and the Agent's
   grant reading the selection by SHA-256.
 - Rho `npm test`: 332 of 335 (3 skipped) with no failure.
+- CI: run 42473394129 on `ea0121a5` passed the suite on macOS, Linux and Windows, but packing
+  the candidate refused Plugins `816a182`. A comment on the mark limit in `r/figures.R` named
+  the dataset it was measured on, and the pack check refuses project words in packaged code.
+  Plugins `a5d2761` drops the name. Run 42474051680 on `e9967213`, which selects it, passed
+  all 15 jobs.
 - Browser: the steps above in Chrome at 1440 and 390 px, read from their screenshots.
