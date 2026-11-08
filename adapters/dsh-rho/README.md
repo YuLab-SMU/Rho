@@ -6,7 +6,7 @@ follow the shared Notebook, inspect files, tables and figures, and ask about a
 selected result. Copy that question back to the original Harness conversation;
 the Agent reads its frozen context and writes its reply into Rho.
 
-Version **0.1.5** ships the **Rho conversation tab** and **Rho sidebar entry** with
+Version **0.1.6** ships the **Rho conversation tab** and **Rho sidebar entry** with
 its prebuilt launcher, display metadata and original Rho icon. Both entries
 show **Open Rho workspace**, which opens the existing application in Harness's
 Browser beside the conversation. **Open in system browser** is also available;
@@ -18,9 +18,15 @@ Credentials and the rest of Rho’s snapshot stay on the Host. No Rho views or r
 bundled, and opening the interface starts no service or analysis.
 
 The [episode](../../docs/DSH-RHO-EPISODE.md) records the observed integration and
-its limits. The [market index](https://yulab-smu.top/Rho/market/index.json) selects
+its limits. Version 0.1.6 declares Harness 0.2.1-rc.5 and 0.2.2-rc.1
+compatibility; the current installation was checked in Desktop 0.2.2-rc.1.
+It reads cold sessions through the public session-query lease. The
+[external work episode](../../docs/EXTERNAL-WORK-EPISODE.md) records the latter
+Desktop installation and the shared Graph, Console and Studio presentation. The
+[market index](https://yulab-smu.top/Rho/market/index.json) selects
 the prebuilt 0.1.5 package from an immutable public Git commit, with its icon and
-checked Harness compatibility. This is Rho's own index; add it to Harness's
+checked Harness compatibility. Use the fixed Git source in the [current source guide](https://github.com/YuLab-SMU/Rho/blob/main/docs/DEEPSEEK-HARNESS.md)
+for 0.1.6 until the index is separately updated. This is Rho's own index; add it to Harness's
 Discover sources to search for Rho. It is not in Harness's official default
 source, and the adapter is not published to npm.
 
@@ -57,7 +63,7 @@ export DSH_HOME="$HOME/.dsh-rho"
 export RHO_DSH_CONNECTION="/absolute/path/to/the/agent-connection.json"
 # Only when rho is outside PATH:
 # export RHO_DSH_COMMAND="/absolute/path/to/node_modules/.bin/rho"
-dsh plugin --profile web add /absolute/path/to/dsh-rho-0.1.5.tgz --ignore-scripts
+dsh plugin --profile web add /absolute/path/to/dsh-rho-0.1.6.tgz --ignore-scripts
 dsh --profile web --no-open
 ```
 
@@ -206,7 +212,7 @@ it does not resume cold Agents. A committed event schedules an observation after
 500 ms; unfinished sessions refresh every 3 seconds. **Open Rho workspace** retries
 observation, including a cold session. A failure leaves earlier records in place.
 
-The adapter bundles Agent 0.4.29's public `dsh-session` entry, its input digests and
+The adapter bundles Agent 0.4.33's public `dsh-session` entry, its input digests and
 licenses. It adds no execution journal or managed guarantees. System/injected
 messages and reasoning are excluded. Tool returns, exit codes and turn outcomes
 are separate; a missing result stays unknown. Native result paths open current
