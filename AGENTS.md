@@ -66,7 +66,9 @@ result, write down what you observe, find the cause in its owner, make the small
 change that addresses it and run the same episode again. Record observations,
 decisions and their evidence in the episode record and Status. Match rigor to the
 stage: explore quickly while a question is open, and harden with tests and written
-guidance only what results have confirmed. Do not write specifications, design
+guidance only what results have confirmed. Ask what Agents do with several parallel
+runs of `scripts/agent-trials.mjs` rather than one hand-driven run. Take up a
+capability's gaps when a real run hits them; until then they are open work in Status. Do not write specifications, design
 values or acceptance criteria for screens or plugins that have not been built and
 observed.
 
@@ -106,7 +108,9 @@ Validate resource containment; links do not expand project scope.
 ## Delivery
 
 Review the diff, commit coherent authorized changes in their owner and check all
-touched repositories before ending. Rho source publication uses checked commits
+touched repositories before ending. Deliver in batches: one push per owner, one Rho
+selection and one CI run per batch. Record a CI result with the next substantive
+change, not in a commit of its own. Rho source publication uses checked commits
 and ordinary fast-forward pushes directly on `main`. Inspect the actual remote,
 branch and authenticated account; `origin` may be a fork. Use a review branch only
 when the user selects that workflow, with the `codex/` prefix.

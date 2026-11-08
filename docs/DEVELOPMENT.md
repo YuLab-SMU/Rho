@@ -61,6 +61,12 @@ finished hides its gaps. Move a part forward when its stage question is answered
 and what remains is polish, not when a checklist is complete. Move it back when a
 result shows that an earlier question was answered wrongly.
 
+A capability's breadth comes from what real runs produce. A gap that no run hit, such
+as one more plot type or file format, goes to the open work in Status and waits until
+a run hits it; covering more cases is not a reason to stay at stage 1. Figures spent
+nine stage-1 iterations on 2026-11-07 and 08 widening coverage before this was written
+down.
+
 ## One iteration
 
 Each iteration answers one question with one real run.
@@ -244,6 +250,13 @@ needs regression tests. Only executed checks count, each for its recorded scope.
   suites supply bounded evidence; read their assertions before claiming coverage.
   Deterministic consumers and real Agent runs are different evidence. Record the
   command, the selected source/composition, the result, failures and limits.
+- **Agent trials**: `node scripts/agent-trials.mjs <case.json> --runs N` gives one
+  case's prompt to a real Agent through the Agent panel's own operation N times in
+  parallel, each run with an owned service and a disposable project, and tallies where
+  scripts ran, the shell commands, which saved images are figures and which CSVs the
+  answer board previews ([Script runs](SCRIPT-RUNS-EPISODE.md#trials)). Ask questions
+  about what Agents do this way: one hand-driven run shows that something can happen,
+  several runs how often. Drive the browser when a screen changed.
 - **People**: usability claims need target users doing the episode without
   coaching. Record completion, wrong beliefs about state, where they stopped, help
   needed and recovery effort, with the participants and task in scope.
@@ -265,6 +278,13 @@ Component checks alone do not prove application integration; the
 [first integrated flow](ROADMAP.md#first-integrated-flow) is accepted on the actual
 composition. Publish required components before application references and verify
 remote heads and trees.
+
+Deliver changes in batches. During a batch Rho runs against the local Plugins
+checkout, which its `node_modules` links to. At the end, commit and push each owner,
+select the Plugins commit in Rho and let CI run once. A CI result is recorded with the
+next substantive change, not in a commit of its own; Status names current capability
+and open work, not the run of each step. On 2026-11-08, 13 of 38 CI runs only recorded
+the result of the run before.
 
 Follow [Release](RELEASE.md) for source publication and distribution. Keep the
 [Status](STATUS.md) summary focused on current implementation, evidence and next
