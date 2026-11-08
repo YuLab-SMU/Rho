@@ -17,6 +17,7 @@ documentation, [`ci.yml`](../.github/workflows/ci.yml):
 | --- | --- | --- |
 | Core | macos-15, ubuntu-24.04, ubuntu-24.04-arm, windows-2022 | Builds the selected Core with Rust 1.97.0, dev profile without debug info: Mach-O arm64, static musl Linux x64 and arm64, MSVC Windows x64; reuses a Core commit already built |
 | Test | macos-15, ubuntu-24.04, windows-2022 | Builds the selected Plugins and Rho, runs Rho's suite with that platform's Core |
+| Figure describers | macos-15, ubuntu-24.04, windows-2022 | Installs ggplot2, svglite, gridGraphics, ComplexHeatmap and their companions in R, matplotlib, pandas, scipy and seaborn in Python (and XQuartz on macOS), and runs the selected Plugins' figure describer checks; a skipped check fails the job ([Figure files](FIGURE-FILES-EPISODE.md#follow-up-the-describer-checks-on-three-systems)) |
 | Pack | ubuntu-24.04 | `pack:local` with all four Cores; checks the platforms, Linux linkage, clean inputs and commit |
 | Install | all four | [`ci-install-check.mjs`](../scripts/ci-install-check.mjs): digest, offline install with an empty npm cache, the launcher, the packaged recovery and ordinary-project acceptances |
 

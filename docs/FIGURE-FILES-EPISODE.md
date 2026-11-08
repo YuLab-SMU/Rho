@@ -192,6 +192,27 @@ Both answers came from the cell's code, which `figure.read` returns with the fig
 transform is written in the cell that draws, the note did not change the answer. One run of each
 does not measure how often either answer comes.
 
+## Follow-up: the describer checks on three systems
+
+The Plugins figure describer checks had run only on this Mac, and CI did not run them. A temporary
+workflow on a `codex/` branch ran them for the selected Plugins on GitHub's macOS, Linux and Windows
+runners, with R 4.6.2, ggplot2 4.0.3, ComplexHeatmap, matplotlib 3.11.2 and seaborn 0.13.2
+installed. A check skipped for a missing package fails the job.
+
+- **First trial.** The seaborn check failed on all three: `clustermap` needs scipy, which the
+  workflow had not installed. On Linux and Windows every R check passed, file devices included.
+- **macOS.** The check that leaves an `svg()` file open across cells failed: the next cell's plot
+  was shown in the cell. A diagnostic cell printed the devices: `svg()` had opened no device at all.
+  Plain R on that runner showed why: R's cairo module links XQuartz's libraries
+  (`/opt/X11/lib/libXrender.1.dylib`), the runner has no XQuartz, and `svg()` warns *failed to load
+  cairo DLL* and returns, while `capabilities("cairo")` still says `TRUE`. In the Notebook, the cell
+  shows R's warning. This Mac has XQuartz.
+- **Last trial**, with scipy and, on macOS, XQuartz: 12 of 12 checks passed on each system, none
+  skipped, in 2.5 to 4 minutes per job.
+
+CI now runs this as the job *Figure describers* on the three systems; a person's Mac without XQuartz
+still cannot write `svg()` files, with or without Rho.
+
 ## Not established
 
 - The Westlake route was not used; it still refused the third request.
@@ -201,8 +222,8 @@ does not measure how often either answer comes.
 - Whether the note helps when the drawing cell's code does not show the transform (computed in an
   earlier cell or a helper function) is not established. The note compares layers bound to the
   same table only.
-- File figures were checked on macOS; CI runs Rho's checks, not the Plugins describer's file
-  checks, on Linux and Windows.
+- On a Mac without XQuartz, `svg()` and `cairo_pdf()` open no device, as R's own warning says; a
+  person there gets no file to describe.
 - At phone width a heatmap's labels are still too small to read.
 
 ## Verification
@@ -230,4 +251,7 @@ does not measure how often either answer comes.
   note in the record and the cell's plot output. Plugins `npm test` 211 of 214, 2 skipped, the same
   U1-06d failure. Rho `npm test` first failed one check, which gives a plugin 2 s, under the full
   suite's load (`extensions.test.mjs`, 3 of 3 alone); the next full run passed 338 of 341, 3
-  skipped.
+  skipped. All 15 CI jobs passed for `8a2f3b99` (run 42522637879).
+- Describer checks on GitHub's runners, branch `codex/describer-checks`: runs 42522863869 (scipy
+  missing everywhere; `svg()` on macOS), 42523544383 and 42523983893 (the devices and plain R on
+  macOS), and 42524416843 (12 of 12 on each system, none skipped).

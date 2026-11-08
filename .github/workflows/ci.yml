@@ -1,5 +1,6 @@
 # Builds the four Cores from the Core commit Rho selects (components.json), tests Rho on macOS,
-# Linux and Windows, packs one candidate for every platform and installs it offline on each.
+# Linux and Windows, checks the selected Plugins' figure describers there with the R and Python
+# packages they describe, packs one candidate for every platform and installs it offline on each.
 # A v* tag publishes that candidate without building it again (release.yml).
 name: CI
 
@@ -197,6 +198,61 @@ jobs:
           }
           probe
           if [ "$RUNNER_OS" = Windows ] && [ -d /c/rtools45/usr/bin ]; then echo '--- with Rtools first on PATH'; PATH="/c/rtools45/usr/bin:$PATH" probe; fi
+
+  # The figure describers of the selected Plugins, in live R and Python sessions with the packages
+  # whose plots they describe. A check skipped for a missing package has not passed.
+  describers:
+    name: Figure describers ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { platform: darwin-arm64, os: macos-15 }
+          - { platform: linux-x64, os: ubuntu-24.04 }
+          - { platform: win32-x64, os: windows-2022 }
+    steps:
+      - run: git config --global core.autocrlf false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { path: Rho, persist-credentials: false }
+      - id: pins
+        run: node -e 'const c=require("./Rho/components.json");console.log("plugins="+c.plugins.commit)' >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { repository: YuLab-SMU/Rho-plugins, ref: '${{ steps.pins.outputs.plugins }}', path: Rho-plugins, persist-credentials: false }
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with: { node-version: '${{ env.NODE_VERSION }}', package-manager-cache: false }
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with: { python-version: '3.13' }
+      # R's cairo devices (svg(), cairo_pdf()) load XQuartz's libraries on macOS; without them svg()
+      # warns "failed to load cairo DLL" and opens no device.
+      - if: runner.os == 'macOS'
+        run: brew install --cask xquartz
+      - uses: r-lib/actions/setup-r@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05 # v2.14.0
+        with: { r-version: release, use-public-rspm: true, windows-path-include-rtools: false }
+      - uses: r-lib/actions/setup-r-dependencies@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05 # v2.14.0
+        with:
+          dependencies: '"hard"'
+          packages: |
+            any::ggplot2
+            any::svglite
+            any::xml2
+            any::jsonlite
+            any::patchwork
+            any::gridGraphics
+            bioc::ComplexHeatmap
+      - run: python -m pip install --disable-pip-version-check matplotlib numpy pandas scipy seaborn
+      - name: Build the Plugins
+        working-directory: Rho-plugins
+        run: npm ci --no-audit --no-fund && npm run build
+      - name: Check the figure describers
+        working-directory: Rho-plugins
+        env: { RHO_PYTHON: python }
+        run: |
+          Rscript -e 'cat(R.version.string, "\n"); for (p in c("ggplot2","svglite","gridGraphics","ComplexHeatmap")) cat(p, format(packageVersion(p)), "\n")'
+          python -c 'import matplotlib, pandas, seaborn; print("matplotlib", matplotlib.__version__, "pandas", pandas.__version__, "seaborn", seaborn.__version__)'
+          node --test --test-reporter=tap --test-timeout=300000 test/figures.test.mjs | tee "$RUNNER_TEMP/figures.tap"
+          grep -q '^# skipped 0$' "$RUNNER_TEMP/figures.tap"
 
   pack:
     name: Pack the candidate
