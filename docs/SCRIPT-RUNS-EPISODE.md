@@ -97,6 +97,7 @@ both as figures, and the answer began *Everything ran in the shared R session*.
 
 - Plugins `node --test test/kernel.test.mjs`: 19 of 20, 1 skipped. Plugins `npm test`: 211 of 214,
   2 skipped, the U1-06d failure that predates this.
-- Rho `npm test`: 338 of 341, 3 skipped.
+- Rho `npm test`: 338 of 341, 3 skipped. All 18 CI jobs passed for `c46f83b0` with Plugins `24f2537`
+  (run 42529798306).
 - The three runs above in Chrome at 1440 px, their transcripts read for every script run and shell
   command, and each saved file's bytes compared with the cells' saved records.
