@@ -774,10 +774,10 @@ export class RhoService {
         if (pending || this.closing) return;
         pending = setTimeout(() => { pending = undefined; void this.serial(p.id, () => this.emit(p, 'kernel.changed', p.id, localBrowserId)).catch(() => {}); }, 250);
       };
-      // With the figures plugin, each local R session describes the ggplots it draws.
+      // With the figures plugin, each local R and Python session describes the plots it draws.
       const figures = this.plugins.optional('figures');
       host = new KernelHost(p.root, { limits: this.config.kernel, rscript: this.bridge.rscript, python: this.config.python, ssh: this.config.ssh, serverctl: this.config.serverctl, onChange: changed,
-        ...(figures ? { extensions: { r: [figures.rExtension] } } : {}) });
+        ...(figures ? { extensions: { r: [figures.rExtension], python: [figures.pythonExtension] } } : {}) });
       this.kernels.set(p.id, host);
     }
     return host;
