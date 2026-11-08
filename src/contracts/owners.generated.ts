@@ -26176,7 +26176,7 @@ export const ownerContracts: OwnerContractSnapshot = {
     },
     "figures": {
       "package": "@rho-workspace/plugin-figures",
-      "packageVersion": "0.5.0",
+      "packageVersion": "0.5.1",
       "entry": "./operations",
       "entryPath": "@rho-workspace/plugin-figures/dist/operations.js",
       "entrySha256": "9b591cd7a316b37ddb4abc499396b03c9c594f355eed98e524b023fbe0fa1e9b",

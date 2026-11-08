@@ -29,7 +29,8 @@ what it drew.
 - **Computed positions in base graphics.** Points, lines and labels drawn through `-log10`,
   `log10`, `log2`, `log2(x + 1)` or `log1p` of a column are bound through it, as in Python. When an
   earlier layer of the same plot draws the same column on the same axis through another transform,
-  the later layer's note says so. A value that is not finite matches only itself.
+  the later layer's note says so; the Python describer does too since Figures 0.5.1. A value that
+  is not finite matches only itself.
 - **File figures on open pages.** The answer board and the file view pass the page's event cursor
   to the figure (Figures 0.5.0). A file whose bytes no cell has named yet is asked again when the
   page's events move on. In a figure narrower than its tooltip, the tooltip spans the figure.
@@ -153,7 +154,8 @@ figure when neither side of the pointer holds it.
 
 - Each run ran shell commands in the panel's default mode, which the run's own settings did not
   allow, as in the earlier stages. In run 3 Claude Code ran its script with `Rscript`, and the
-  corrected MA plot it wrote that way, `figures/ma_plot_colored.png`, is a picture.
+  corrected MA plot it wrote that way, `figures/ma_plot_colored.png`, is a picture. Both runs of
+  the Python follow-up ran two shell commands as well.
 - In run 3 Claude Code overwrote a session variable the heatmap's cells had made (`top30`), said
   so in its answer and put it back.
 - The race check rewrote run 2's `ma_plot.png` with a plain `plotMA` and added `figures/race.png`
@@ -161,14 +163,44 @@ figure when neither side of the pointer holds it.
 - With `R_LIBS_USER` passed to the service, the board previewed CSV results (unlike
   [Python figures](PYTHON-FIGURES-EPISODE.md#also-observed)).
 
+## Follow-up: the note in Python
+
+Figures 0.5.1 gives the Python describer the same note. The overlay check was then run in Python
+twice, once with the note and once without, to see what the note changes. A disposable project,
+`airway-overlay`, held the PyDESeq2 results of [Python figures](PYTHON-FIGURES-EPISODE.md) run 4
+(33,469 genes, `~ cell + dex`). The person drew run 2's mistake in a Python cell: every gene at
+`res.baseMean` in grey, then the 3,893 genes with an adjusted p below 0.05 at
+`np.log2(sig.baseMean)` in red, on a log x axis. They dragged over the upper red lobe (2,262
+points: 1,120 red genes drawn at log2 of their mean and 1,142 grey genes whose mean is that low)
+and asked the question of run 3. Each run had a new service and project, with Claude Code
+2.1.319 in its default mode through `workbuddy-ai/deepseek-v4.1-flash-sg`; Westlake's route again
+refused the third request of a four-request check.
+
+![The overlay drawn in Python, with its note](figures-files/py-overlay-note.png)
+
+- **With the note** (Figures 0.5.1), the red layer was bound to `res` as `x: log2(baseMean)` and
+  the note showed under the figure. Claude Code answered in 73 s: *No, that's not right. It's a
+  plotting bug in the cell, and the DESeq2 results are fine.* It quoted the two `scatter` calls,
+  said the 1,142 grey points in the selection really are low-count genes and drew the corrected
+  plot in a cell: the significant genes' median mean is 553, against 7.3 for all genes.
+- **Without the note**, the session loaded `py/figures.py` of Figures 0.5.0; its `figure.read`
+  carried the same mapping and the cell's code, and no note. Claude Code answered in 82 s: *No, it
+  isn't right. The plot draws the two layers on different scales, so the red points end up in the
+  wrong place.* It quoted the same code and drew the same correction.
+
+Both answers came from the cell's code, which `figure.read` returns with the figure. Where the
+transform is written in the cell that draws, the note did not change the answer. One run of each
+does not measure how often either answer comes.
+
 ## Not established
 
 - The Westlake route was not used; it still refused the third request.
 - A device opened through a copy a package imported before the session started (`importFrom`),
   or through ragg, svglite or Cairo directly, is not seen; its file stays a picture.
 - A PDF of several pages is not described. A device on a remote session is not watched.
-- The scale note exists in R only. Whether it, rather than the cell's code, led Claude Code to the
-  cause is not separated.
+- Whether the note helps when the drawing cell's code does not show the transform (computed in an
+  earlier cell or a helper function) is not established. The note compares layers bound to the
+  same table only.
 - File figures were checked on macOS; CI runs Rho's checks, not the Plugins describer's file
   checks, on Linux and Windows.
 - At phone width a heatmap's labels are still too small to read.
@@ -193,3 +225,9 @@ figure when neither side of the pointer holds it.
   all 15 jobs passed. Why the Host was missing once is not established.
 - Browser: the steps above in Chrome at 1440 and 390 px, read from their screenshots, and the race
   check with the previous and the new figure view.
+- Figures 0.5.1 (Plugins `1303108`): `npm run test:figures` 12 of 12; the matplotlib check binds
+  significant genes drawn at `np.log2` of their mean over an MA plot on a log axis and expects the
+  note in the record and the cell's plot output. Plugins `npm test` 211 of 214, 2 skipped, the same
+  U1-06d failure. Rho `npm test` first failed one check, which gives a plugin 2 s, under the full
+  suite's load (`extensions.test.mjs`, 3 of 3 alone); the next full run passed 338 of 341, 3
+  skipped.
