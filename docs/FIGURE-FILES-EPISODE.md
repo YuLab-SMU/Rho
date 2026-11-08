@@ -183,5 +183,13 @@ figure when neither side of the pointer holds it.
 - Plugins `npm test`: 211 of 214, 2 skipped; the one failure is the U1-06d check that failed before
   this change.
 - Rho `npm test`: 338 of 341, 3 skipped.
+- A local pack of Rho's selected plugins refused Plugins `7fd9c91`: a comment in the R describer
+  named an analysis package, which the packer keeps out of runtime files. Plugins `aabeb66`
+  rewords the comment, and the pack passed.
+- CI for `21ada47f` with Plugins `aabeb66` (run 42515375556): in the first attempt the Windows
+  tests failed one continuity check. After the service was killed at `after-cli`, the restarted
+  service found no Core Host (exit code 3, expected 0). This change does not touch that path, and
+  no earlier failed run on `main` failed it. The rerun of that job on the same commit passed it, and
+  all 15 jobs passed. Why the Host was missing once is not established.
 - Browser: the steps above in Chrome at 1440 and 390 px, read from their screenshots, and the race
   check with the previous and the new figure view.
