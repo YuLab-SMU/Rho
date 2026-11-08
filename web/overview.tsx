@@ -138,7 +138,7 @@ export function ProjectOverview({ project, snapshot, client, section, notesText 
   const touched = !!work.work && (work.work.files.length > 0 || work.work.omitted.fileReferences > 0);
   const side = recent || touched || workAllowed || snapshot.compositions.length > 0 || skillsChanged;
   const shownFigures = figureCount(figures.length);
-  const boarded = !!files && !!snapshot.conversations?.length;
+  const boarded = !!files && (!!snapshot.conversations?.length || !!work.work?.sessions.some(s => s.source === 'external-session'));
   // An empty project leads with the step that has something behind it, and never with a claim
   // that could not be read: a failed listing keeps the Agent first.
   const browseLeads = (rootEntries ?? 0) > 0;
@@ -210,7 +210,7 @@ export function ProjectOverview({ project, snapshot, client, section, notesText 
       {section === 'sources' && files && <button onClick={files.refresh} disabled={files.reading}><Icon name="refresh" size={15} />Refresh</button>}
     </header>
     {section === 'sources' && files && onFile && <SourceList category={category ?? 'data'} files={files} items={sources?.[category ?? 'data'] ?? null} artifacts={artifacts} onFile={onFile} />}
-    {section === 'overview' && workAllowed && <WorkSessions state={work} boarded={!!files && !!snapshot.conversations?.length} openConversation={onAgent} openActivity={() => onSection('agent')} />}
+    {section === 'overview' && workAllowed && <WorkSessions state={work} boarded={boarded} openConversation={onAgent} openActivity={() => onSection('agent')} />}
     {section === 'overview' && fileError && <p role="alert">{fileError}</p>}
     {emptyProject && <div className="empty-project">
       <span className="empty-symbol"><Icon name="grid" size={26} stroke={1.5} /></span>
@@ -219,7 +219,7 @@ export function ProjectOverview({ project, snapshot, client, section, notesText 
     </div>}
     {section === 'overview' && !emptyProject && settled && <>
       {snapshot.taskMap?.question && <div className="project-question"><Icon name="prompt" size={18} /><h2>{snapshot.taskMap.question}</h2></div>}
-      {files && !!snapshot.conversations?.length && <AnswerBoard client={client} snapshot={snapshot} files={files} notesText={notesText} onConversation={id => onAgent(id)} onPath={path => onPath?.(path)} onExplore={onExplore} onConsole={turn => onConsole ? onConsole(turn) : onSection('console')} onGraph={() => onSection('graph')} />}
+      {files && boarded && <AnswerBoard client={client} snapshot={snapshot} files={files} notesText={notesText} onConversation={id => onAgent(id)} onPath={path => onPath?.(path)} onExplore={onExplore} onConsole={turn => onConsole ? onConsole(turn) : onSection('console')} onGraph={() => onSection('graph')} />}
       <div className={'project-columns' + (side ? '' : ' single')}>
         <div className="project-primary">
           {/* What was done over time: the Agents' conversations and the person's cells and commands. */}

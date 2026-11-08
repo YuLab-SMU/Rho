@@ -9,7 +9,8 @@ import type { UiLocation } from '../src/ui-context.js';
 import { ProjectNavigation, sourceLabels, type Section, type SourceRow } from './project.js';
 import { sourceItems, sourceRowOrder, useProjectFiles, type SourceItem } from './sources.js';
 import { FormSwitch, savedForm, saveForm, useLiveValues, type Prepared } from '@rho-workspace/plugin-kernel/ui';
-import { useExternalConversations } from './external-conversations.js';
+import { ExternalConversationsContext, useExternalConversations } from './external-conversations.js';
+import { workSessions } from '../src/external-work.js';
 import { useAgentNow, type AgentNow } from './agent-now.js';
 import { NotesPanel, useProjectNotes } from './project-notes.js';
 import { compositionName, defaultWorkspace, fileKey, openInWorkspace, processComposition, processConversation } from './canvas.js';
@@ -353,7 +354,7 @@ function App() {
   function showProcess(id: string) {
     const conversationId = processConversation(id);
     layout(id);
-    if (conversationId && !narrow) { setSelectedConversation(conversationId); setAgentOpen(true); setContext(false); }
+    if (conversationId && !narrow && !conversationId.startsWith('x-')) { setSelectedConversation(conversationId); setAgentOpen(true); setContext(false); }
   }
   // Following shows the work as it happens: in Studio, in that conversation's own Studio; from
   // the Overview the answer fills in on its board; from the Graph or the Console it stays there.
@@ -369,7 +370,7 @@ function App() {
   }
   // The conversations shown as Studios, newest first; those moved to the trash are left out.
   function shownConversations() {
-    return (snapshot?.conversations ?? []).filter(c => !c.trashedAt).sort((a, b) => Date.parse(b.lastAt) - Date.parse(a.lastAt));
+    return workSessions(snapshot?.conversations ?? [], externalConversations.sessions).map(s => ({ conversationId: s.id, title: s.title, lastAt: s.lastAt, state: s.state }));
   }
   function plugins() { setFollowing(false); setPluginId(''); setPluginReturn(false); setScreen('plugins'); }
   function about(id: string) { setPluginId(id); setPluginReturn(true); setScreen('plugins'); }
@@ -432,14 +433,14 @@ function App() {
   const readsValues = !!snapshot?.catalog.operations.some(o => o.method === 'kernel.read' && o.state === 'available' && o.authorized);
   const values = useLiveValues(client, project && screen !== 'home' ? project.id : undefined, snapshot?.cursor, readsValues);
   const externalConversations = useExternalConversations(client, !link && project && snapshot?.project.id === project.id ? project.id : null);
-  const agentNow = useAgentNow(client, project && snapshot?.project.id === project.id ? snapshot : null);
+  const agentNow = useAgentNow(client, project && snapshot?.project.id === project.id ? snapshot : null, externalConversations.sessions);
   // The notes are opened when they are needed: for the titles of the project's sessions, or to be
   // shown beside Studio. A project with neither reads nothing more as it opens.
-  const notesWanted = !!project && snapshot?.project.id === project.id && !link && ((snapshot?.conversations?.length ?? 0) > 0 || (studioOpen && notesOpen));
+  const notesWanted = !!project && snapshot?.project.id === project.id && !link && ((snapshot?.conversations?.length ?? 0) > 0 || externalConversations.sessions.length > 0 || (studioOpen && notesOpen));
   const notes = useProjectNotes(client, notesWanted ? snapshot : null, files, connection.principalId);
   // A session is titled by its section of the notes, else by its Agent, else by its first message.
   const sessionTitle = (c: { conversationId: string; agentTitle?: string | null; title: string }) => notes.titles.get(c.conversationId) || c.agentTitle || c.title || 'Conversation';
-  const shownSession = shownProcess ? snapshot?.conversations?.find(c => c.conversationId === shownProcess) : undefined;
+  const shownSession = shownProcess ? shownConversations().find(c => c.conversationId === shownProcess) : undefined;
   const shownTitle = shownSession ? sessionTitle(shownSession) : 'Conversation';
   // When the file of an open document changes on disk (an Agent's own editor, another
   // program), opening it again lets its owner take the change into the buffer, merging it with
@@ -605,7 +606,7 @@ function App() {
     : section === 'file' && shownFile ? [{ label: 'Projects', run: goHome }, { label: name(project), run: showOverview }, { label: sourceLabels[shownFile.row], run: () => showSources(shownFile.row) }, { label: fileOnScreen?.name ?? shownFile.key.split('/').at(-1)! }]
     : [{ label: 'Projects', run: goHome }, { label: name(project) }];
   const followingHere = following && shownId === followTarget.current;
-  return <ShellContext.Provider value={shell}><div className="application">
+  return <ExternalConversationsContext.Provider value={snapshot && !link ? { projectId: snapshot.project.id, value: externalConversations } : null}><ShellContext.Provider value={shell}><div className="application">
     <a className="skip-link" href="#main">Skip to workspace</a>
     <div className="app-body">
       {!narrow && rail}
@@ -689,7 +690,7 @@ function App() {
     <dialog ref={confirmDialog} className="confirm" aria-labelledby="disconnect-title" aria-describedby="disconnect-body" onCancel={() => setConfirming(false)} onClose={() => { setConfirming(false); confirmReturn.current?.focus(); }}>
       <h2 id="disconnect-title">Use this machine's access?</h2><p id="disconnect-body">This tab stops using its link and keeps working as this machine. Open projects, unsaved edits and running work are unchanged.</p><div className="dialog-actions"><button onClick={() => setConfirming(false)}>Cancel</button><button className="danger" onClick={() => useLocalAccess('This tab now uses this machine.')}>Use this machine</button></div>
     </dialog>
-  </div></ShellContext.Provider>;
+  </div></ShellContext.Provider></ExternalConversationsContext.Provider>;
 }
 // The newest thing the Agent reported doing, in the words the Agent panel uses.
 // Paths inside the project read as the project names them.

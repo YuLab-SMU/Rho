@@ -5,7 +5,7 @@ import type { GraphEvent } from '../src/work-graph.js';
 export const timelineKinds = [
   { key: 'ask', label: 'Asked', actions: ['ask'] }, { key: 'read', label: 'Read', actions: ['read'] },
   { key: 'edit', label: 'Edited', actions: ['edit', 'write'] }, { key: 'run', label: 'Ran', actions: ['run'] },
-  { key: 'changed', label: 'Changed on disk', actions: ['changed'] }, { key: 'capture', label: 'Versions kept', actions: ['capture'] }, { key: 'answer', label: 'Answered', actions: ['answer'] },
+  { key: 'changed', label: 'Changed on disk', actions: ['changed'] }, { key: 'capture', label: 'Versions kept', actions: ['capture'] }, { key: 'answer', label: 'Answered', actions: ['answer', 'report'] },
 ] as const;
 export type TimelineKind = typeof timelineKinds[number]['key'];
 export const kindOfAction = (action: string): TimelineKind => timelineKinds.find(k => (k.actions as readonly string[]).includes(action))?.key ?? 'read';

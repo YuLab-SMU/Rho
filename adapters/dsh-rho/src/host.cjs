@@ -5,7 +5,7 @@ const { observeDshSession } = require('../lib/observe.cjs');
 const isRhoTool = name => name.startsWith('mcp__rho__');
 
 exports.name = 'dsh-rho';
-exports.inject = ['connection', 'agents', 'tools', 'sessionController', 'sessionQuery'];
+exports.inject = ['connection', 'agents', 'tools', 'sessionQuery'];
 exports.apply = async (ctx, config = {}) => {
   const bindings = new Map();
   let disposed = false;
@@ -120,7 +120,11 @@ exports.apply = async (ctx, config = {}) => {
         const sessionId = new URL(request.url).searchParams.get('sessionId');
         if (!sessionId || sessionId.length > 256) throw new ConnectionError('Open a Harness conversation in the project you want to use.');
         const agent = ctx.agents.get(sessionId);
-        const header = agent?.session.header || (await ctx.sessionController.inspect(sessionId, request.signal)).meta;
+        let header = agent?.session.header;
+        if (!header) {
+          const cut = await ctx.sessionQuery.observeSession(sessionId, { projectionMode: 'none', signal: request.signal });
+          try { header = cut.header; } finally { cut[Symbol.dispose](); }
+        }
         if (request.method === 'POST' && agent && !bindings.get(agent)?.ready) {
           const previous = bindings.get(agent);
           if (previous) await previous.pending;

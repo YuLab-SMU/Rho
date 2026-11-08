@@ -136,7 +136,7 @@ function Conversations({ client, snapshot, settings, exists, onContinue, onPath,
         <ul className="conv-rows">{group.rows.map(summary => 'producer' in summary ? <SessionRow key={summary.id} summary={summary} onOpen={() => onContinue(summary.id)} /> : <ConversationRow key={summary.conversationId} client={client} snapshot={snapshot} summary={summary} settings={settings} expanded={open === summary.conversationId}
           onToggle={() => setOpen(id => id === summary.conversationId ? null : summary.conversationId)} exists={exists} onContinue={onContinue} onPath={onPath} onTrash={() => void act('conversation.trash', summary)} onProblem={setProblem} />)}</ul>
       </div>)
-      : <div className="empty-state compact"><p>{all.length ? 'No conversation matches “' + query.trim() + '”.' : 'Every conversation is in the trash.'}</p>{query && <button onClick={() => setQuery('')}>Clear search</button>}</div>}
+      : problem || external.problem ? null : <div className="empty-state compact"><p>{all.length ? 'No conversation matches “' + query.trim() + '”.' : 'Every conversation is in the trash.'}</p>{query && <button onClick={() => setQuery('')}>Clear search</button>}</div>}
   </section>;
 }
 

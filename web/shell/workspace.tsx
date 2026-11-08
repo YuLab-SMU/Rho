@@ -212,7 +212,7 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
   // Agent and the person ran since it began, up to the moment shown.
   const principal = process ? snapshot.conversations?.find(c => c.conversationId === process.conversationId)?.principal ?? null : null;
   const starts = process ? process.whole.turns.filter(t => t.conversationId === process.conversationId).map(t => t.start) : [];
-  const scope: SessionScope | undefined = process ? { principal, since: starts.length ? Math.min(...starts) : null, at: process.at } : undefined;
+  const scope: SessionScope | undefined = process ? { principal, since: starts.length ? Math.min(...starts) : null, at: process.at, cellIds: process.kernelCells } : undefined;
   const views: WorkspaceViews = {
     openValue: openObject, openRemote, toNotebook: (language, code, from) => useInNotebook(language, code, from),
     prepared, taken: () => setPrepared(null), setProps: saveProps, has: component => layout.views.some(v => v.component === component),

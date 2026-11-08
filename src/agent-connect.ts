@@ -37,6 +37,9 @@ export function clientEntries(name: string, command: string[], root: string, env
     codex: ['codex', 'mcp', 'add', name, '--', ...command].map(quote).join(' '),
     opencode: { file: path.join(root, '.opencode', 'opencode.json'), merge: { mcp: { [name]: { type: 'local', command, enabled: true } } } },
     dsh: { file: path.join(env.DSH_HOME || path.join(os.homedir(), '.dsh'), 'profiles', 'desktop', 'cordis.patch.yml'),
+      workspace: { plugin: 'dsh-rho', minimumVersion: '0.1.6', guide: 'https://yulab-smu.top/Rho/docs/reference/deepseek-harness.html',
+        mergeConfig: { command: command[0], args: command.slice(1, -2), connectionFiles: [command.at(-1)] },
+        instructions: 'For conversations and process views, use the dsh-rho plugin. Merge this config into its existing entry, appending the connection file without removing other projects. The append entry below supplies MCP tools only; it does not observe Harness conversations.' },
       append: ['- insert:', `    - id: ${yaml('mcp-' + name)}`, '      name: "@deepseek-ai/dsh-mcp-client"', '      config:', `        serverName: ${yaml(name)}`, '        transport: "stdio"',
         `        command: ${yaml(command[0])}`, '        args:', ...command.slice(1).map(arg => `          - ${yaml(arg)}`)].join('\n') + '\n' },
   };

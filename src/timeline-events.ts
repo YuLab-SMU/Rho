@@ -6,7 +6,7 @@ import type { TimelineEvent } from '@rho-workspace/plugin-contracts';
 // other caller shares one lane. The plugin's record says what was done; nothing is inferred.
 export const personPrincipal = 'browser:local';
 export interface SourcedEvent extends TimelineEvent { source: string }
-export interface LaneOwner { conversationId: string; principal: string | null; title: string; agent: string }
+export interface LaneOwner { conversationId: string; principal: string | null; title: string; agent: string; eventKeys?: string[] }
 export type Who = 'person' | 'conversation' | 'other';
 export interface EventMark {
   key: string; at: number; end: number; lane: string; laneTitle: string; who: Who; agent?: string;
@@ -16,12 +16,18 @@ export const personLane = 'person', otherLane = 'other';
 
 export function eventMarks(events: readonly SourcedEvent[], owners: readonly LaneOwner[], now: number): EventMark[] {
   const byPrincipal = new Map(owners.flatMap(o => o.principal ? [[o.principal, o] as const] : []));
+  const byEvent = new Map<string, LaneOwner | null>();
+  for (const owner of owners) for (const key of owner.eventKeys ?? []) {
+    const previous = byEvent.get(key);
+    byEvent.set(key, previous === undefined || previous?.conversationId === owner.conversationId ? owner : null);
+  }
   return events.flatMap(e => {
     const at = Date.parse(e.startedAt);
     if (!Number.isFinite(at)) return [];
     const ended = e.endedAt ? Date.parse(e.endedAt) : NaN;
     const end = Math.max(at, Number.isFinite(ended) ? ended : e.outcome === 'running' ? now : at);
-    const owner = e.by === personPrincipal ? null : byPrincipal.get(e.by);
+    const key = e.source + ':' + e.id;
+    const owner = e.by === personPrincipal ? null : byEvent.has(key) ? byEvent.get(key) : byPrincipal.get(e.by);
     const who: Who = e.by === personPrincipal ? 'person' : owner ? 'conversation' : 'other';
     return [{ key: e.source + ':' + e.id, at, end, lane: who === 'person' ? personLane : owner ? owner.conversationId : otherLane,
       laneTitle: who === 'person' ? 'You' : owner ? owner.title : 'Outside Rho', who, ...(owner ? { agent: owner.agent } : {}),

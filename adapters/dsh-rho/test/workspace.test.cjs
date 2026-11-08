@@ -150,3 +150,12 @@ test('native backfill and retry retain one conversation without replaying tools'
   assert.match(failed.observationError, /Earlier records remain/);
   assert.deepEqual(JSON.parse(await fs.readFile(path.join(dir, files[0]), 'utf8')), record);
 });
+
+test('a cold conversation is read through a disposed session-query lease without starting an Agent', async t => {
+  const f = await fixture(t), h = await hostFixture(t, f), before = h.cutsClosed(), mounts = h.mounts.length;
+  h.ctx.agents.get = () => undefined;
+  const value = await (await h.request(0, 'POST')).json();
+  assert.equal(value.id, 'p0'); assert.equal(value.toolsReady, false); assert.equal(value.observationReady, true);
+  assert.equal(h.cutsClosed(), before + 2, 'both the header lease and capture lease are disposed');
+  assert.equal(h.mounts.length, mounts, 'reading never resumes a cold Agent');
+});

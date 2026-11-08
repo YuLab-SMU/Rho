@@ -1,7 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentProps, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import { createPortal } from 'react-dom';
 import type { BrowserClient, CompositionSummary, WorkspaceSnapshot } from '../src/browser.js';
-import type { RhoOutput } from '../src/contract.generated.js';
 import { buildWorkGraph, type GraphEvent, type GraphTurn } from '../src/work-graph.js';
 import { turnsAt } from '../src/replay.js';
 import { chapters, type Chapter } from '../src/studio-chapters.js';
@@ -9,11 +8,12 @@ import { studioAt, studioFiles, studioIds, studioMerge, studioTree, type StudioF
 import { addInto, type LayoutNode, type LayoutTree } from '../src/shell-layout.js';
 import { askedAbout } from '../src/asking.js';
 import { capturable, kindOf, type ProjectFiles } from './sources.js';
-import { agentName, type AgentNow } from './agent-now.js';
+import type { AgentNow } from './agent-now.js';
 import { ProcessContext, studioViewId as viewId, type Process } from './process-context.js';
 import { clock, failed, kindOfAction, span, stretchSizes } from './timeline-kinds.js';
 import { conversationMarks, markCaption, type EventMark } from '../src/timeline-events.js';
 import { useEventMarks } from './timeline-events.js';
+import { useTurns } from './work-turns.js';
 import { processComposition } from './canvas.js';
 import { Icon } from './icons.js';
 import { Workspace } from './shell/workspace.js';
@@ -21,7 +21,6 @@ import './studio.css';
 import { fileDescriptions, notesMeaning } from '../src/notes-meaning.js';
 import { describedFiles, holdsOf } from '../src/file-describer.js';
 
-type Read = RhoOutput<'conversation.read'>;
 // The protected resources are the service and this tab: one conversation's newest messages, read
 // again at most this often while it changes, and replayed at most this fast.
 export const processLimits = { turns: 8, readMs: 700, stepMs: 600, minStepMs: 120 };
@@ -30,23 +29,8 @@ const textual = (path: string) => /\.(R|r|Rmd|qmd|py|md|markdown|txt|json|sh|sql
 // One conversation's messages, read again when its recorded version moves, no more often than
 // readMs, so a fast stream still lands on screen.
 function useConversation(client: BrowserClient, snapshot: WorkspaceSnapshot, conversationId: string) {
-  const summary = snapshot.conversations?.find(c => c.conversationId === conversationId);
-  const [read, setRead] = useState<{ version: number; read: Read } | null>(null), [problem, setProblem] = useState('');
-  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined), last = useRef(0), wanted = useRef(summary?.version);
-  wanted.current = summary?.version;
-  useEffect(() => () => clearTimeout(timer.current), []);
-  useEffect(() => {
-    if (!summary || read?.version === summary.version || timer.current) return;
-    timer.current = setTimeout(() => {
-      const version = wanted.current ?? 0;
-      last.current = Date.now();
-      client.call('conversation.read', { projectId: snapshot.project.id, conversationId, limit: processLimits.turns })
-        .then(value => { setRead({ version, read: value }); setProblem(''); }, error => setProblem(error instanceof Error ? error.message : 'The conversation could not be read.'))
-        .finally(() => { timer.current = undefined; });
-    }, Math.max(0, last.current + processLimits.readMs - Date.now()));
-  }, [client, snapshot.project.id, conversationId, summary?.version, read]);
-  const turns: GraphTurn[] = useMemo(() => read && summary ? read.read.turns.map(turn => ({ conversationId, conversationTitle: summary.agentTitle || summary.title, agent: agentName(summary.client), turn, observation: read.read.observation })) : [], [read, summary?.title, summary?.agentTitle]);
-  return { turns, problem, loading: !read && !problem, summary };
+  const read = useTurns(client, snapshot, conversationId);
+  return { ...read, summary: read.sessions[0] };
 }
 
 // The parts of the conversation's messages, and which one the work is in at the moment shown.
@@ -179,7 +163,7 @@ export function ProcessStudio({ client, snapshot, files, conversationId, notesTe
   const events = useMemo(() => whole.events.filter(e => Number.isFinite(e.at)).sort((a, b) => a.at - b.at), [whole]);
   const running = !!summary && summary.state === 'running';
   // What the plugins say this conversation's Agent did, and the person since it began.
-  const { marks: everyMark } = useEventMarks(client, snapshot);
+  const { marks: everyMark } = useEventMarks(client, snapshot, turns);
   const since = whole.turns.length ? Math.min(...whole.turns.map(t => t.start)) : null;
   const marks = useMemo(() => since === null ? [] : conversationMarks(everyMark, conversationId, since), [everyMark, conversationId, since]);
   const moments = useMemo(() => [...events.map(e => e.at), ...marks.map(m => m.at)].sort((a, b) => a - b), [events, marks]);
@@ -300,7 +284,8 @@ export function ProcessStudio({ client, snapshot, files, conversationId, notesTe
     {closedViews.map(n => <button key={n.id} onClick={() => reopen(n, into)}><Icon name={n.component === 'rho.console' ? 'prompt' : n.component === 'rho.notebook' ? 'code' : n.component === 'rho.media' ? 'image' : n.component === 'rho.table' ? 'table' : 'file'} size={15} stroke={1.7} /><span>{String((n.props as { title?: string } | undefined)?.title ?? n.id)}</span></button>)}
   </section></div> : undefined;
   const said = useMemo(() => fileDescriptions(notesMeaning(notesText)), [notesText]), described = useMemo(() => describedFiles(turns), [turns]);
-  const process: Process = useMemo(() => ({ conversationId, graph, whole, at, files: shown, every, setAt: onAt, showPath: path => setChosen(viewId(path)), holds: path => holdsOf(path, said, described, at) }), [described, conversationId, graph, whole, at, shown, every, said]);
+  const kernelCells = useMemo(() => turns.some(t => t.external) ? [...new Set(turns.flatMap(t => t.kernelCells ?? []))] : undefined, [turns]);
+  const process: Process = useMemo(() => ({ conversationId, kernelCells, graph, whole, at, files: shown, every, setAt: onAt, showPath: path => setChosen(viewId(path)), holds: path => holdsOf(path, said, described, at) }), [described, conversationId, kernelCells, graph, whole, at, shown, every, said]);
   return <ProcessContext.Provider value={process}>
     <div className="process-studio">
       <div className="process-stage">
@@ -308,8 +293,8 @@ export function ProcessStudio({ client, snapshot, files, conversationId, notesTe
         {restoreProblem && <p className="inline-error" role="alert">{restoreProblem}</p>}
         {composition ? <Workspace key={projectId + compositionId} {...workspace} bar={false} composition={composition} snapshot={snapshot} client={client} openView={openView} presence={presence} arrange={at === null} following={following || at !== null} empty={emptied} addView={reopenMenu} />
           : <div className="studio-empty"><span className="empty-symbol">{running ? <span className="pulse-dot large" aria-hidden="true" /> : <Icon name="layout" size={26} stroke={1.5} />}</span>
-            <h2>{loading ? 'Reading the conversation…' : running ? (summary ? agentName(summary.client) : 'The Agent') + ' is starting' : 'Nothing to show yet'}</h2>
-            <p>{running ? 'The data it reads, the code it writes, the commands it runs and the results they make appear here as it works.' : 'This conversation has not read or made any project files.'}</p></div>}
+            <h2>{problem ? 'Work could not be read' : loading ? 'Reading the conversation…' : running ? (summary?.agent ?? 'The Agent') + ' is starting' : 'Nothing to show yet'}</h2>
+            <p>{problem ? 'Earlier records are kept. This page will retry.' : running ? 'The data it reads, the code it writes, the commands it runs and the results they make appear here as it works.' : 'This conversation has not read or made any project files.'}</p></div>}
       </div>
       {moments.length > 0 && <SideTimeline steps={events} marks={marks} spans={[...whole.turns, ...marks.map(m => ({ start: m.at, end: m.end }))]} at={at} playing={playing} speed={speed} running={running}
         onAt={next => { onPlaying(false); onAt(next); }} onPlay={() => onPlaying(!playing)} onSpeed={() => onSpeed(speed === 4 ? 1 : speed * 2)} />}

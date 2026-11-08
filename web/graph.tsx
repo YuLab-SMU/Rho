@@ -50,7 +50,7 @@ const layerNames: Record<GraphLayer, string> = { both: 'Meaning + process', mean
 type Layout = ReturnType<typeof laneLayout>;
 // The Agent's answer in a sentence or two, as plain text, for the question's card.
 const gist = (markdown?: string) => markdown ? markdown.replace(/```[\s\S]*?```/g, ' ').replace(/[#>*_`|]+/g, ' ').replace(/\[([^\]]+)\]\([^)]*\)/g, '$1').replace(/\s+/g, ' ').trim().slice(0, 220) : '';
-const verbs: Record<string, string> = { read: 'Read', edit: 'Edited', write: 'Wrote', changed: 'Changed', capture: 'Kept', run: 'Ran', ask: 'Asked', answer: 'Answered' };
+const verbs: Record<string, string> = { read: 'Read', edit: 'Edited', write: 'Wrote', report: 'Reported', changed: 'Changed', capture: 'Kept', run: 'Ran', ask: 'Asked', answer: 'Answered' };
 // A card's one line about what happened to it, newest last: "Read · Edited 2×".
 function happened(node: GraphNode) {
   const counts = new Map<string, number>();
@@ -98,7 +98,7 @@ export function WorkGraph({ initialResource, client, snapshot, files, agentNow, 
   onAbout: (pluginId: string) => void; onAgent: (conversationId?: string) => void;
 }) {
   const { turns, problem, loading, omitted } = useTurns(client, snapshot);
-  const { marks } = useEventMarks(client, snapshot);
+  const { marks } = useEventMarks(client, snapshot, turns);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => { if (!agentNow?.running) return; const timer = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer); }, [agentNow?.running]);
   const graphFiles = useMemo(() => files.files.map(f => ({ path: f.path, bytes: f.bytes, modifiedAt: f.modifiedAt, category: f.category })), [files.files]);
@@ -132,16 +132,16 @@ export function WorkGraph({ initialResource, client, snapshot, files, agentNow, 
 
   // Replay: the graph as it stood at a moment of the work. Null is now.
   const [cursor, setCursor] = useState<number | null>(null), [playing, setPlaying] = useState(false), [speed, setSpeed] = useState(1);
-  const times = graph.events.map(e => e.at);
+  const times = process.events.map(e => e.at);
   useEffect(() => {
     if (!playing) return;
-    const events = graph.events, index = cursor === null ? 0 : events.findIndex(e => e.at > cursor);
+    const events = process.events, index = cursor === null ? 0 : events.findIndex(e => e.at > cursor);
     if (index < 0 || index >= events.length) { setPlaying(false); setCursor(null); return; }
     const pace = Math.min(600, Math.max(140, 9000 / Math.max(1, events.length))) / speed;
     const timer = setTimeout(() => setCursor(events[index].at), cursor === null ? 0 : pace);
     return () => clearTimeout(timer);
-  }, [playing, cursor, graph.events, speed]);
-  const current = cursor === null ? null : [...graph.events].reverse().find(e => e.at <= cursor) ?? null;
+  }, [playing, cursor, process.events, speed]);
+  const current = cursor === null ? null : [...process.events].reverse().find(e => e.at <= cursor) ?? null;
 
   // Nodes that appear while the person watches arrive with a short mark.
   const known = useRef<Set<string> | null>(null), [arrived, setArrived] = useState<Set<string>>(new Set());
@@ -185,12 +185,15 @@ export function WorkGraph({ initialResource, client, snapshot, files, agentNow, 
     if (!box) return;
     fitted.current = true;
     const whole = Math.min(1, (box.width - 96) / layout.width, (box.height - 120) / layout.height);
-    const meaningRow = layout.rows.filter(r => r.turn.startsWith('m:')).at(-1), row = meaningRow ?? layout.rows.at(-1);
+    // Notes without a session marker have no known place in the native history. Keep
+    // them available, but open on the recorded work instead of their undated row.
+    const meaningRow = layout.rows.filter(r => r.turn.startsWith('m:') && graph.nodes.some(n => n.id === 'q:' + r.turn && n.meaning?.conversationId)).at(-1);
+    const row = meaningRow ?? layout.rows.filter(r => !r.turn.startsWith('m:')).at(-1) ?? layout.rows.at(-1);
     if (whole >= readable || !row) { fit(false); return; }
     // Too large to read whole: the newest meaning row from its top, else the newest message's
     // row from its start; the map shows the rest.
     const k = readable, fitsTall = layout.height * k <= box.height - 120;
-    const asked = meaningRow && layout.placed.get('q:' + meaningRow.turn);
+    const asked = row && layout.placed.get('q:' + row.turn);
     if (asked) {
       // The question at the left, a third of the way down, clear of the map; what it led to follows.
       setView({ k, x: 32 - asked.x * k, y: box.height * 0.35 - (asked.y + asked.height / 2) * k });
@@ -290,8 +293,9 @@ export function WorkGraph({ initialResource, client, snapshot, files, agentNow, 
   const counts = { questions: process.nodes.filter(n => n.kind === 'question').length, files: process.nodes.filter(n => n.kind === 'file').length, runs: process.nodes.filter(n => n.kind === 'run').reduce((sum, n) => sum + (n.commands?.length ?? 1), 0),
     findings: meaning.layer.nodes.filter(n => n.kind === 'finding').length, choices: meaning.layer.nodes.filter(n => n.kind === 'choice').length };
 
-  if (!snapshot.conversations?.length) return <section className="graph-page"><GraphHead counts={null} /><div className="studio-empty"><span className="empty-symbol"><Icon name="graph" size={26} stroke={1.5} /></span><h2>Nothing to draw yet</h2>
-    <p>When you ask the Agent something here, the files it reads, the scripts it changes and runs, and what they produce are drawn as one graph.</p>
+  if (!loading && !graph.nodes.length && !marks.length) return <section className="graph-page"><GraphHead counts={null} /><div className="studio-empty"><span className="empty-symbol"><Icon name="graph" size={26} stroke={1.5} /></span><h2>{problem ? 'Work could not be read' : 'Nothing to draw yet'}</h2>
+    <p>{problem ? 'Earlier records are kept. This page will retry.' : 'Work recorded in this project appears here, including sessions observed from your Agent’s own window.'}</p>
+    {problem && <p className="inline-error" role="alert">{problem}</p>}
     <div className="empty-actions"><button className="primary" onClick={() => onAgent()}><Icon name="prompt" size={17} stroke={1.6} /><span>Ask Agent</span></button></div></div></section>;
   return <section className="graph-page" aria-labelledby="graph-title">
     <GraphHead counts={counts} omitted={omitted + graph.omittedTurns}>
@@ -342,7 +346,7 @@ export function WorkGraph({ initialResource, client, snapshot, files, agentNow, 
       {selectedNode && <Inspector key={selectedNode.id} node={cursor !== null && (selectedNode.capturedAt ?? 0) > cursor ? { ...selectedNode, resource: undefined, gap: 'This snapshot was captured after the selected replay time.' } : selectedNode} graph={graph} byId={byId} client={client} snapshot={snapshot} principalId={principalId} workspace={workspace}
         onStudio={onStudio} onAbout={onAbout} onAgent={onAgent} onSelect={id => choose(id, true)} onTrace={trace} agentOf={agentOf} process={process} traces={meaning.layer.traces} onClose={() => setSelected(null)} />}
     </div>
-    {(graph.events.length > 0 || marks.length > 0) && <Timeline graph={graph} marks={marks} cursor={cursor} playing={playing} running={!!agentNow?.running} speed={speed} onSpeed={setSpeed}
+    {(process.events.length > 0 || marks.length > 0) && <Timeline graph={process} marks={marks} cursor={cursor} playing={playing} running={!!agentNow?.running} speed={speed} onSpeed={setSpeed}
       onCursor={at => { setPlaying(false); setCursor(at); }} onPlay={() => { if (playing) setPlaying(false); else { if (cursor !== null && cursor >= times.at(-1)!) setCursor(null); setPlaying(true); } }} />}
   </section>;
 }
@@ -751,14 +755,14 @@ function Timeline({ graph, marks = [], cursor, playing, running, speed, onSpeed,
 // the Graph. It reads the conversations as the Graph does, and shows nothing until they are read.
 export function WorkStrip({ client, snapshot, files, onOpen, onConversations }: { initialResource?: {id:string;version:string}|null; client: BrowserClient; snapshot: WorkspaceSnapshot; files: ProjectFiles; onOpen: () => void; onConversations: () => void }) {
   const { turns, loading } = useTurns(client, snapshot);
-  const { marks } = useEventMarks(client, snapshot);
+  const { marks } = useEventMarks(client, snapshot, turns);
   const graph = useMemo(() => buildWorkGraph({ turns, files: files.files.map(f => ({ path: f.path, bytes: f.bytes, modifiedAt: f.modifiedAt, category: f.category })), project: snapshot.project, kindOf, now: Date.now() }),
     [turns, files.files, snapshot.project]);
   if (loading || (!graph.events.length && !marks.length)) return null;
   const files_ = graph.nodes.filter(n => n.kind === 'file' && n.events.some(e => e.action === 'edit' || e.action === 'write' || e.action === 'changed')).length;
   const last = Math.max(graph.events.at(-1)?.at ?? 0, marks.at(-1)?.at ?? 0), days = Math.round((new Date().setHours(0, 0, 0, 0) - new Date(last).setHours(0, 0, 0, 0)) / 864e5);
   const lastWords = (days === 0 ? 'today' : days === 1 ? 'yesterday' : new Date(last).toLocaleDateString()) + ' at ' + clock(last);
-  const conversations = snapshot.conversations?.length ?? 0, yours = marks.some(m => m.who === 'person');
+  const conversations = new Set(turns.map(t => t.conversationId)).size, yours = marks.some(m => m.who === 'person');
   const title = !graph.events.length ? 'What you did' : yours ? 'What you and the Agent did' : 'What the Agent did';
   return <section className="project-section work-strip" aria-labelledby="work-strip-title">
     {/* Questions and commands are counted by the kinds under the heading; the line keeps the rest. */}

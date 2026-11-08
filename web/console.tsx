@@ -141,7 +141,7 @@ export function ConsolePage({ client, snapshot, files, focusTurn, onPath, onConv
     else { const last = blocks.at(-1); if (last?.kind === 'mine') last.records.push(item.record); else blocks.push({ kind: 'mine', at: item.at, records: [item.record] }); }
   }
   const managed = [...(runs ?? [])].sort((a, b) => b.acceptedAt.localeCompare(a.acceptedAt));
-  const nothing = !loading && !blocks.length && !managed.length;
+  const nothing = !loading && !problem && !runsProblem && !mineProblem && !blocks.length && !managed.length;
   return <div className="console-page">
     {children}
     {!off && <CommandLine folder={projectName(snapshot.project)} line={line} />}
@@ -149,7 +149,7 @@ export function ConsolePage({ client, snapshot, files, focusTurn, onPath, onConv
     {mineProblem && !off && <p className="inline-error" role="alert">{mineProblem}</p>}
     {problem && <p className="inline-error" role="alert">{problem}</p>}
     {loading && <p className="muted" role="status">Reading the conversations…</p>}
-    {nothing && <div className="empty-state compact"><p>No commands yet. The commands the Agent runs here, and the ones you run, appear in this list.</p></div>}
+    {nothing && <div className="empty-state compact"><p>No shell commands recorded. R and Python cells run through the shared sessions are kept in Notebook.</p></div>}
     {blocks.map(block => block.kind === 'message'
       ? <Message key={block.turn.id} graph={graph} turn={block.turn} root={snapshot.project.root} onPath={onPath} onConversation={onConversation} focused={focusTurn === block.turn.id} onRunAgain={off ? undefined : line.prepare} />
       : <section key={block.records[0]!.commandId} className="console-message mine" aria-label="Your commands">

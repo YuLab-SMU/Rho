@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useState } from 'react';
 import type { BrowserClient, WorkspaceSnapshot } from '../src/browser.js';
 import type { RhoOutput } from '../src/contract.generated.js';
 import { ProviderMark } from './brand-marks.js';
@@ -9,23 +9,26 @@ import './external-conversations.css';
 
 export type ExternalSummary = RhoOutput<'agent.sessions.list'>['sessions'][number];
 export type SessionTurn = RhoOutput<'agent.sessions.read'>['turns'][number];
+type Sessions = { sessions: ExternalSummary[]; omitted: number; problem: string };
+export const ExternalConversationsContext = createContext<{ projectId: string; value: Sessions } | null>(null);
 // Every Agent session in the project folder, wherever it was started, read again every few seconds
 // while the page is visible. Reading starts nothing.
 export function useExternalConversations(client: BrowserClient, projectId: string | null) {
-  const [value, setValue] = useState<{ sessions: ExternalSummary[]; omitted: number }>({ sessions: [], omitted: 0 }), [problem, setProblem] = useState('');
+  const shared = useContext(ExternalConversationsContext), supplied = shared?.projectId === projectId ? shared.value : null;
+  const [value, setValue] = useState<{ projectId: string | null; sessions: ExternalSummary[]; omitted: number }>({ projectId, sessions: [], omitted: 0 }), [problem, setProblem] = useState('');
   useEffect(() => {
     let live = true, busy = false;
-    setValue({ sessions: [], omitted: 0 }); setProblem('');
-    if (!projectId) return;
+    setValue({ projectId, sessions: [], omitted: 0 }); setProblem('');
+    if (!projectId || supplied) return;
     const read = async () => { if (busy || !live) return; busy = true;
-      try { const next = await client.call('agent.sessions.list', { projectId }); if (live) { setValue(next); setProblem(''); } }
+      try { const next = await client.call('agent.sessions.list', { projectId }); if (live) { setValue({ projectId, ...next }); setProblem(''); } }
       catch (error) { if (live) setProblem(error instanceof Error ? error.message : 'Agent sessions could not be read.'); }
       finally { busy = false; }
     };
     void read(); const timer = setInterval(() => { if (!document.hidden) void read(); }, 3000);
     return () => { live = false; clearInterval(timer); };
-  }, [client, projectId]);
-  return { ...value, problem };
+  }, [client, projectId, !!supplied]);
+  return supplied ?? (value.projectId === projectId ? { sessions: value.sessions, omitted: value.omitted, problem } : { sessions: [], omitted: 0, problem: '' });
 }
 // The Agent a session belongs to, in a person's words and marks.
 export const sessionAgent = (summary: Pick<ExternalSummary, 'producer'>) => summary.producer === 'dsh' ? 'DeepSeek Harness' : summary.producer === 'codex' ? 'Codex' : summary.producer === 'claude-code' ? 'Claude Code' : summary.producer;

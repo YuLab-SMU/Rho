@@ -301,8 +301,14 @@ inspect what happened. The application gives those actions direct places:
   the trash restores or deletes. Runs follow when present
   ([Agents and conversations](AGENT-PAGE-EPISODE.md)).
 - **Project settings** manages source folders and explicitly checks available tools.
+- **Work from other windows** feeds the same Graph, Console, answer board
+  and session Studio through `agent.sessions.read`. File links in a native answer are
+  reported results; current bytes are not labelled historical. A continued native session
+  is listed once. Notebook cells join its timeline by exact cell IDs in their receipts,
+  not by assuming every call on one connection belongs to that conversation. The
+  [external work episode](EXTERNAL-WORK-EPISODE.md) records the actual Harness check.
 - **Studio** shows how a conversation's work was done. The sidebar lists under Studio
-  each session started in Rho, newest first (eight, then All sessions), and then the
+  each recorded Agent session, newest first (eight, then All sessions), and then the
   person's own workspaces; the Studio bar names the one shown. A session is titled by its
   section of the project notes, else by the Agent's title, else by its first message.
   The **project notes** (`project-notes.md` at the project root) are one Markdown file

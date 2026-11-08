@@ -70,12 +70,14 @@ Whichever command you used, configure your client like this:
   600; add it to `.gitignore` in a Git repository). OpenCode reads it when a session starts,
   so verify in a new session (`opencode run` in the project folder). Checked with OpenCode
   1.19.5 on 2026-11-07.
-- **DeepSeek Harness:** there is no `dsh mcp` command. Append `dsh.append` to the profile patch
-  named in `dsh.file` (the Desktop app's profile is `desktop`; back the file up first and keep
-  every other entry). Harness reloads the patch within seconds, so `rho_index` works in the
-  same session. `dsh --profile desktop --dump-config` is refused while the Desktop app manages
-  that profile; check for the `--mcp` process instead. Checked on 2026-11-07, where finding
-  this mechanism took the Agent most of nine minutes.
+- **DeepSeek Harness:** use `dsh.workspace` and the [dsh-rho guide](https://yulab-smu.top/Rho/docs/reference/deepseek-harness.html)
+  when conversations and process views should appear in Rho. Install a compatible
+  `dsh-rho` version, merge `workspace.mergeConfig` into its existing configuration and
+  append this grant to `connectionFiles`, preserving other projects. The plugin selects
+  a matching project per conversation and supplies both tools and native observation.
+  Harness 0.2.2-rc.1 was checked with dsh-rho 0.1.6. `dsh.append` is the legacy
+  tools-only entry; it does not observe conversations. There is no `dsh mcp` command.
+  Desktop owns its profile; `dsh --profile desktop --dump-config` is refused there.
 
 Use the same `--session` (or `--as`) name when retrying (the legacy default is `claude-code`).
 Current source keeps a valid grant with unchanged scope; older versions may replace its

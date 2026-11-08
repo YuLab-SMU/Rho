@@ -61,7 +61,7 @@ export function studioFiles(graph: WorkGraph): StudioFile[] {
       if (role) take(item.node, role, item.role === 'primary');
     }
   }
-  return [...found.values()].sort((a, b) => rank[a.role] - rank[b.role] || Number(b.lead) - Number(a.lead) || a.first - b.first || a.path.localeCompare(b.path));
+  return [...found.values()].sort((a, b) => rank[a.role] - rank[b.role] || (a.role === 'input' && b.role === 'input' ? Number(b.category === 'data') - Number(a.category === 'data') : 0) || Number(b.lead) - Number(a.lead) || a.first - b.first || a.path.localeCompare(b.path));
 }
 
 // The files as they stood at a moment: those the work had by then, each with the versions kept
@@ -88,10 +88,10 @@ export function studioTree(views: Array<{ role: StudioRole; node: LayoutNode; fi
     nodes.push(split(id, 'vertical', present)); return id;
   };
   const input = region(studioIds.input, of('input').map(v => v.node)), code = region(studioIds.code, of('code').map(v => v.node));
-  const run = region(studioIds.commands, [commands, session].filter((n): n is LayoutNode => !!n));
+  const run = region(studioIds.commands, [session, commands].filter((n): n is LayoutNode => !!n));
   const made = [...of('result'), ...of('report')];
   const figures = region(studioIds.figures, made.filter(v => v.figure).map(v => v.node)), result = region(studioIds.result, made.filter(v => !v.figure).map(v => v.node));
-  const leftId = column(studioIds.left, [input ? { id: input, weight: 1 } : null, code ? { id: code, weight: 1.8 } : null, run ? { id: run, weight: 1.2 } : null]);
+  const leftId = column(studioIds.left, [input ? { id: input, weight: 1.4 } : null, code ? { id: code, weight: 1.2 } : null, run ? { id: run, weight: 1.4 } : null]);
   const rightId = column(studioIds.right, [figures ? { id: figures, weight: 1.25 } : null, result ? { id: result, weight: 1 } : null]);
   if (leftId && rightId) { nodes.push(split(studioIds.root, 'horizontal', [{ id: leftId, weight: 1 }, { id: rightId, weight: 1.3 }])); return { rootId: studioIds.root, nodes }; }
   const only = leftId ?? rightId;

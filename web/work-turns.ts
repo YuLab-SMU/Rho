@@ -1,35 +1,54 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { BrowserClient, WorkspaceSnapshot } from '../src/browser.js';
-import type { RhoOutput } from '../src/contract.generated.js';
+import { externalWork, workSessions, type WorkSession } from '../src/external-work.js';
 import type { GraphTurn } from '../src/work-graph.js';
-import { agentName } from './agent-now.js';
+import { useExternalConversations } from './external-conversations.js';
 
-type Read = RhoOutput<'conversation.read'>;
-type Summary = NonNullable<WorkspaceSnapshot['conversations']>[number];
-// The protected resource is the service and the tab: the newest conversations and their newest
-// messages, as many as the Graph draws.
+// One bounded read model for the Graph, Console, answer board and a session's Studio.
+// Reading a native session observes its record; it does not continue it or send a message.
 export const turnLimits = { conversations: 6, turns: 8 };
-
-// The conversations the graph draws, read again when their recorded version changes.
-export function useTurns(client: BrowserClient, snapshot: WorkspaceSnapshot) {
-  const list = useMemo(() => [...(snapshot.conversations ?? [])].sort((a, b) => b.lastAt.localeCompare(a.lastAt)).slice(0, turnLimits.conversations), [snapshot.conversations]);
-  const [reads, setReads] = useState<Record<string, { version: number; read: Read }>>({});
+export function useTurns(client: BrowserClient, snapshot: WorkspaceSnapshot, onlyId?: string) {
+  const outside = useExternalConversations(client, snapshot.catalog.operations.some(o => o.method === 'agent.sessions.list' && o.authorized) ? snapshot.project.id : null);
+  const all = useMemo(() => workSessions(snapshot.conversations ?? [], outside.sessions), [snapshot.conversations, outside.sessions]);
+  const list = useMemo(() => onlyId ? all.filter(s => s.id === onlyId) : all.slice(0, turnLimits.conversations), [all, onlyId]);
+  const [reads, setReads] = useState<Record<string, { project: string; version: string; turns: GraphTurn[]; omitted: number }>>({});
   const [problem, setProblem] = useState('');
-  const key = list.map(c => c.conversationId + '@' + c.version).join(',');
+  const project = snapshot.project;
+  const readsRef = useRef(reads), wanted = useRef({ list, project });
+  wanted.current = { list, project };
+  const cached = (s: WorkSession) => reads[s.id]?.project === project.id ? reads[s.id] : undefined;
   useEffect(() => {
-    let live = true;
-    const due = list.filter(c => reads[c.conversationId]?.version !== c.version);
-    if (!due.length) return;
-    const running = due.some(c => c.state === 'running');
-    const timer = setTimeout(() => {
-      Promise.all(due.map(c => client.call('conversation.read', { projectId: snapshot.project.id, conversationId: c.conversationId, limit: turnLimits.turns }).then(read => [c, read] as const)))
-        .then(pairs => { if (!live) return; setProblem(''); setReads(old => { const next = { ...old }; for (const [c, read] of pairs) next[c.conversationId] = { version: c.version, read }; return next; }); },
-          error => { if (live) setProblem(error instanceof Error ? error.message : 'A conversation could not be read.'); });
-    }, running && Object.keys(reads).length ? 700 : 0);
-    return () => { live = false; clearTimeout(timer); };
-  }, [client, snapshot.project.id, key]);
-  const turns: GraphTurn[] = useMemo(() => list.flatMap((c: Summary) => (reads[c.conversationId]?.read.turns ?? []).map(turn => ({ conversationId: c.conversationId, conversationTitle: c.agentTitle || c.title, agent: agentName(c.client), turn, observation: reads[c.conversationId]?.read.observation }))), [list, reads]);
-  const omitted = list.reduce((n, c) => n + (reads[c.conversationId]?.read.first ?? 0), 0) + Math.max(0, (snapshot.conversations?.length ?? 0) - list.length);
-  return { turns, problem, loading: list.length > 0 && !list.some(c => reads[c.conversationId]), omitted };
+    let live = true, busy = false;
+    setProblem('');
+    const readDue = async () => {
+      if (!live || busy) return;
+      const { list, project } = wanted.current;
+      const due = list.filter(s => readsRef.current[s.id]?.project !== project.id || readsRef.current[s.id]?.version !== s.version);
+      if (!due.length) return;
+      busy = true;
+      const results = await Promise.allSettled(due.map(async s => {
+        if (s.external) {
+          const read = await client.call('agent.sessions.read', { projectId: project.id, session: s.id, limit: turnLimits.turns });
+          return { s, turns: externalWork(read, project), omitted: read.first + read.session.omittedTurns };
+        }
+        const read = await client.call('conversation.read', { projectId: project.id, conversationId: s.id, limit: turnLimits.turns });
+        return { s, turns: read.turns.map(turn => ({ conversationId: s.id, conversationTitle: s.title, agent: s.agent, turn, observation: read.observation })), omitted: read.first };
+      }));
+      busy = false;
+      if (!live) return;
+      setProblem(results.some(r => r.status === 'rejected') ? 'Some session records could not be read. Earlier observations are kept; retrying.' : '');
+      const next = { ...readsRef.current };
+      for (const r of results) if (r.status === 'fulfilled') {
+        const { s, turns, omitted } = r.value; next[s.id] = { project: project.id, version: s.version, turns, omitted };
+      }
+      readsRef.current = next; setReads(next);
+    };
+    // A newer cut does not cancel a read already in flight. Rapid stream updates must
+    // still land on screen; one failed source cannot hide the other sessions.
+    void readDue(); const timer = setInterval(() => { if (!document.hidden) void readDue(); }, 700);
+    return () => { live = false; clearInterval(timer); };
+  }, [client, project.id, onlyId]);
+  const turns = useMemo(() => list.flatMap(s => cached(s)?.turns ?? []), [list, reads, project.id]);
+  const omitted = list.reduce((n, s) => n + (cached(s)?.omitted ?? 0), 0) + (onlyId ? 0 : Math.max(0, all.length - list.length) + outside.omitted);
+  return { turns, sessions: list, problem: problem || outside.problem, loading: list.length > 0 && !list.some(cached), omitted };
 }
-

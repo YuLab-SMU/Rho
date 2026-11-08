@@ -12,6 +12,10 @@ export function turnAt(turn: ConversationTurn, at: number): ConversationTurn | n
   const steps = turn.steps.flatMap(step => {
     const began = time(step.startedAt ?? step.at), last = time(step.at);
     if (!(began <= at)) return [];
+    if (step.kind === 'tool' && step.outcomeAt && time(step.outcomeAt) > at && step.outcome !== 'requested') {
+      const { exitCode: _, output: __, failed: ___, ...rest } = step;
+      return [{ ...rest, outcome: 'unknown' as const }];
+    }
     if (last <= at) return [step];
     // A tool reported before the moment and finished after it was still going.
     if (step.kind === 'tool') { const { exitCode: _, output: __, ...rest } = step; return [{ ...rest, at: step.startedAt ?? step.at, outcome: 'requested' as const }]; }

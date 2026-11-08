@@ -50,7 +50,8 @@ export function commandFiles(command: string, project: PathScope) {
 
 export type FileKind = 'data' | 'code' | 'figures' | 'notes' | 'results' | null;
 export interface GraphFile { path: string; bytes: number; modifiedAt?: string; category: FileKind }
-export interface GraphTurn { conversationId: string; conversationTitle: string; agent: string; turn: ConversationTurn; observation?: SessionObservation | null }
+export interface GraphTurn { conversationId: string; conversationTitle: string; agent: string; turn: ConversationTurn; observation?: SessionObservation | null;
+  external?: boolean; kernelCells?: string[]; reportedResults?: Array<{ path: string; at: string; resource?: { id: string; version: string } }> }
 export interface GraphInput {
   turns: GraphTurn[]; files: GraphFile[]; project: PathScope;
   // The kind of a file the last walk did not see, from its name.
@@ -59,7 +60,7 @@ export interface GraphInput {
 }
 // The meaning layer adds what the notes say: findings and choices (see meaning-graph.ts).
 export type NodeKind = 'question' | 'file' | 'run' | 'finding' | 'choice';
-export type EventAction = 'ask' | 'read' | 'edit' | 'write' | 'run' | 'changed' | 'capture' | 'answer';
+export type EventAction = 'ask' | 'read' | 'edit' | 'write' | 'run' | 'changed' | 'capture' | 'answer' | 'report';
 // Declared: written in the project notes, by the Agent or the person; not checked.
 export type Basis = 'reported' | 'named' | 'observed' | 'declared';
 export interface GraphEvent { key: string; at: number; node: string; turn: string; action: EventAction; label: string; outcome?: ActivityOutcome }
@@ -115,14 +116,14 @@ export function buildWorkGraph(input: GraphInput): WorkGraph {
   const files = new Map(input.files.map(f => [f.path, f]));
   let live = null as WorkGraph['live'], inTurn = '';
   let evidence: ConversationTurn['evidence'] | undefined;
-  const fileNode = (path: string, at: number, exact?: NonNullable<ConversationTurn['evidence']>['records'][number]['snapshots'][number]) => {
+  const fileNode = (path: string, at: number, exact?: NonNullable<ConversationTurn['evidence']>['records'][number]['snapshots'][number], reported?: { id: string; version: string }) => {
     const observed = evidence?.records.filter(r => r.path === path).flatMap(r => r.snapshots).filter(s => s.source.kind !== 'buffer').sort((a,b) => a.observedAt.localeCompare(b.observedAt)) ?? [];
     const selected = exact ?? [...observed].reverse().find(s => (time(s.observedAt) ?? Infinity) <= at);
-    const id = 'f:' + path + (selected ? '@' + selected.resource.id : evidence ? '@' + inTurn + ':unrecorded' : '');
+    const id = 'f:' + path + (selected ? '@' + selected.resource.id : reported ? '@' + reported.id + ':' + reported.version : evidence ? '@' + inTurn + ':unrecorded' : '');
     let node = nodes.get(id);
     if (!node) {
       const seen = files.get(path);
-      node = { id, kind: 'file', title: path.split('/').at(-1) ?? path, at, path, category: seen?.category ?? input.kindOf(path), exists: !!seen, bytes: selected?.bytes ?? seen?.bytes, modifiedAt: seen?.modifiedAt, events: [], ...(selected ? { resource: selected.resource, capturedAt: time(selected.observedAt) ?? at, captureSource: String(selected.source.kind) } : { gap: evidence ? evidence.records.find(r => r.path === path)?.reason ?? 'No historical snapshot was captured.' : 'This older record has no captured version.' }) };
+      node = { id, kind: 'file', title: path.split('/').at(-1) ?? path, at, path, category: seen?.category ?? input.kindOf(path), exists: !!seen, bytes: selected?.bytes ?? seen?.bytes, modifiedAt: seen?.modifiedAt, events: [], ...(selected ? { resource: selected.resource, capturedAt: time(selected.observedAt) ?? at, captureSource: String(selected.source.kind) } : reported ? { resource: reported, captureSource: 'tool reply' } : { gap: evidence ? evidence.records.find(r => r.path === path)?.reason ?? 'No historical snapshot was captured.' : 'No historical version was kept in this record.' }) };
       nodes.set(id, node);
     }
     return node;
@@ -133,7 +134,7 @@ export function buildWorkGraph(input: GraphInput): WorkGraph {
   };
   const note = (node: GraphNode, event: Omit<GraphEvent, 'node'>) => { const full = { ...event, node: node.id }; node.events.push(full); events.push(full); node.at = Math.min(node.at, event.at); };
 
-  ordered.forEach(({ conversationId, conversationTitle, agent, turn: message, observation }, position) => {
+  ordered.forEach(({ conversationId, conversationTitle, agent, turn: message, observation, external, reportedResults }, position) => {
     // Message identities are per conversation; the graph names each by both.
     const turn = { ...message, id: conversationId + '/' + message.id };
     inTurn = turn.id; evidence = turn.evidence;
@@ -156,7 +157,7 @@ export function buildWorkGraph(input: GraphInput): WorkGraph {
       // once it has. A finished step ran from the step before it until then.
       const at = time(activity.step.at) ?? start;
       const before = index ? time(activities[index - 1].step.at) ?? start : start;
-      const window = activity.outcome === 'requested' ? { from: at, to: end } : { from: Math.min(before, at), to: at };
+      const window = external ? { from: at, to: at } : activity.outcome === 'requested' ? { from: at, to: end } : { from: Math.min(before, at), to: at };
       // A refused step did nothing; a command that ran and failed did, and stays.
       if (activity.outcome === 'rejected') return;
       const isLive = running && index === activities.length - 1 && activity.outcome === 'requested';
@@ -227,6 +228,13 @@ export function buildWorkGraph(input: GraphInput): WorkGraph {
     }
     const answer = [...blocks].reverse().find(block => block.kind === 'text');
     if (answer?.kind === 'text' && answer.step.text) q.answer = answer.step.text;
+    for (const result of reportedResults ?? []) {
+      const path = projectPath(result.path, input.project); if (!path) continue;
+      const at = time(result.at); if (at === null || at > input.now) continue;
+      const node = fileNode(path, at, undefined, result.resource);
+      note(node, { key: turn.id + ':result:' + path, at, turn: turn.id, action: 'report', label: 'Reported result' });
+      edge(q.id, node.id, 'reported result', 'reported', at);
+    }
     if (!running && time(turn.endedAt) !== null) note(q, { key: turn.id + ':answer', at: end, turn: turn.id, action: 'answer', label: turn.state === 'completed' ? 'Answered' : turn.state === 'failed' ? 'Failed' : turn.state === 'stopped' ? 'Stopped' : 'Ended' });
     if (running && !live) live = { node: q.id, label: 'Working' };
     // A step that waits for the person's choice says so where it is drawn.

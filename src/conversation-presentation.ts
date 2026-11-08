@@ -11,8 +11,9 @@ export function agentTurnLimit(turn: { state: string; problem?: string | null; r
 // took, and the few results that need a choice. Technical identity stays behind
 // the row's disclosure; nothing here starts or reads an owner.
 export type ConversationRead = RhoOutput<'conversation.read'>;
-export type ConversationTurn = ConversationRead['turns'][number];
-export type ConversationStep = ConversationTurn['steps'][number];
+type WireTurn = ConversationRead['turns'][number];
+export type ConversationStep = WireTurn['steps'][number] & { failed?: boolean; outcomeAt?: string };
+export type ConversationTurn = Omit<WireTurn, 'steps'> & { steps: ConversationStep[] };
 export type SessionObservation = NonNullable<ConversationRead['observation']>;
 // A command that ran and exited with a failing code failed; the Agent may report it as refused.
 export type ActivityOutcome = NonNullable<ConversationStep['outcome']> | 'failed';
@@ -145,6 +146,7 @@ export function commandEnd(step: ConversationStep): string | null {
   const outcome = step.outcome ?? 'requested';
   if (outcome === 'requested') return null;
   if (step.exitCode !== undefined) return step.exitCode === 0 ? 'Exit 0' : 'Exit ' + step.exitCode;
+  if (step.failed) return 'Failed';
   return outcome === 'returned' ? 'Finished' : outcome === 'rejected' ? (step.output && !refusedBeforeRunning(step) ? 'Failed' : 'Refused') : 'Outcome unknown';
 }
 function rhoTool(tool: string, step: ConversationStep): Pick<Activity, 'action' | 'verb' | 'target' | 'targetKind'> | null {
@@ -161,7 +163,7 @@ export function toolActivity(step: ConversationStep, location: string | null, ro
   // Some Agents repeat the command as the title; do not show it twice.
   const title = rawTitle && rawTitle !== detail ? rawTitle : null;
   const ran = step.exitCode !== undefined || step.output !== undefined && !refusedBeforeRunning(step);
-  const outcome: ActivityOutcome = step.exitCode !== undefined && step.exitCode !== 0 || step.outcome === 'rejected' && ran ? 'failed' : step.outcome ?? 'requested';
+  const outcome: ActivityOutcome = step.failed || step.exitCode !== undefined && step.exitCode !== 0 || step.outcome === 'rejected' && ran ? 'failed' : step.outcome ?? 'requested';
   const special = rhoTool(tool, step);
   if (special) return { key: key ?? step.id ?? tool, step, title, location, outcome, ...special };
   const action = byTool[tool.toLowerCase()] ?? byKind[step.toolKind ?? ''] ?? 'other';

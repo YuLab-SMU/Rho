@@ -92,6 +92,8 @@ Repository policies cover [contributions](../CONTRIBUTING.md), [privacy](../PRIV
 Execution belongs to [Rho-core](https://github.com/YuLab-SMU/Rho-core); functional
 component APIs belong to [Rho-plugins](https://github.com/YuLab-SMU/Rho-plugins).
 
+- [External work views](EXTERNAL-WORK-EPISODE.md): one native session across Conversations, Graph, Console, the answer board and Studio; the real Harness mean-comparison episode and compatibility/recovery fixes.
+
 - [External conversations episode](EXTERNAL-CONVERSATIONS-EPISODE.md): native Harness history, operations and exact result versions.
 
 - [Figures episode](FIGURES-EPISODE.md): the built-in, package-independent figure capability in the Notebook and Agent workflow.

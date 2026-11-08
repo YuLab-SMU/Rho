@@ -15,6 +15,7 @@ import { spendAmount, spendBasis, spendOf } from './holds.js';
 import type { Spend } from '../src/file-describer.js';
 import { stepFocus, useOutside } from './popover.js';
 import { turnAt } from '../src/replay.js';
+import { externalTurnAt } from '../src/external-work.js';
 import { clock as clockAt } from './timeline-kinds.js';
 import { sessionAgent, sessionWhere, type ExternalSummary, type SessionTurn } from './external-conversations.js';
 
@@ -492,7 +493,7 @@ export function AgentConversation({ snapshot, client, uiContext, attachment, onD
     if (match) covered.add(match.id);
   }
   const firstShown = read && read.first > 0 ? Date.parse(read.turns[0]?.sentAt ?? '') : -Infinity;
-  const others = outside && replayAt === null ? outside.turns.filter(t => sessionOpen || (!covered.has(t.id) && Date.parse(t.at) > firstShown)) : [];
+  const others = outside ? outside.turns.filter(t => sessionOpen || (!covered.has(t.id) && Date.parse(t.at) > firstShown)).flatMap(t => { const shown = externalTurnAt(t, replayAt); return shown ? [shown] : []; }) : [];
   const items: Array<{ at: number; rho?: Turn; outside?: SessionTurn }> = [...(turns ?? []).map(t => ({ at: Date.parse(t.sentAt), rho: t })), ...others.map(t => ({ at: Date.parse(t.at), outside: t }))].sort((a, b) => a.at - b.at);
   const blocked = sessionOpen && (!session || !session.continueWith || (!!session.open && !copy));
   const canSend = !busy && !waiting && !!draft.trim() && !blocked;

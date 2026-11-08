@@ -238,6 +238,7 @@ export function AnswerBoard({ client, snapshot, files, notesText = '', onConvers
   useEffect(() => { setAsking(null); setSelected(null); }, [shown?.id]);
   if (loading || !board || !shown) return null;
   const conversationId = shown.conversationId;
+  const external = !!turns.find(t => t.conversationId + '/' + t.turn.id === shown.id)?.external;
   const busy = snapshot.conversations?.find(c => c.conversationId === conversationId)?.state === 'running';
   async function send(about: Asking, question: string) {
     const text = askText(about, question);
@@ -306,7 +307,7 @@ export function AnswerBoard({ client, snapshot, files, notesText = '', onConvers
     </header>
     {question.answer ? <div className="board-answer" ref={answerRef} onMouseUp={select} onKeyUp={select}>
         <Answer text={question.answer} streaming={!!shown.running} />
-        {selected && !shown.running && <button className="board-select-ask" style={{ top: selected.top, left: selected.left }} onMouseDown={event => event.preventDefault()}
+        {selected && !shown.running && !external && <button className="board-select-ask" style={{ top: selected.top, left: selected.left }} onMouseDown={event => event.preventDefault()}
           onClick={() => { setAsking({ key: 'passage', about: { kind: 'passage', text: selected.text } }); setSelected(null); getSelection()?.removeAllRanges(); }}>Ask about this</button>}
       </div> : shown.running ? <p className="board-note" role="status">The Agent is working on this message.</p> : null}
     {asking?.key === 'passage' && box('passage', asking.about)}
@@ -315,13 +316,13 @@ export function AnswerBoard({ client, snapshot, files, notesText = '', onConvers
       {/* How the results came about, said once when it is the same for all of them. */}
       <p className="board-results-why"><strong>Results</strong>{said && <> · <Said text={said} /></>}</p>
       <div className={'board-results beside-' + Math.min(supporting.length, 2)}>
-        {primary && <Item client={client} snapshot={snapshot} item={primary} onPath={onPath} onExplore={onExplore} said={said} holds={holds(primary)} ask={shown.running ? undefined : askFor(primary)} />}
-        {supporting.map((item, i) => <Item key={item.node.id} client={client} snapshot={snapshot} item={item} onPath={onPath} onExplore={onExplore} said={said} holds={holds(item)} span={i >= supporting.length - tail ? 6 / tail : undefined} ask={shown.running ? undefined : askFor(item)} />)}
+        {primary && <Item client={client} snapshot={snapshot} item={primary} onPath={onPath} onExplore={onExplore} said={said} holds={holds(primary)} ask={shown.running || external ? undefined : askFor(primary)} />}
+        {supporting.map((item, i) => <Item key={item.node.id} client={client} snapshot={snapshot} item={item} onPath={onPath} onExplore={onExplore} said={said} holds={holds(item)} span={i >= supporting.length - tail ? 6 / tail : undefined} ask={shown.running || external ? undefined : askFor(item)} />)}
       </div>
       {more('supporting')}
     </div>}
     {(method.length > 0 || runs.length > 0 || inputs.length > 0 || reports.length > 0 || board.otherCommands > 0) && <div className="board-how">
-      {method.length > 0 && <div className="board-row"><span className="board-label">Method</span><div className="board-cells">{method.map(item => <Item key={item.node.id} client={client} snapshot={snapshot} item={item} onPath={onPath} holds={holds(item)} ask={shown.running ? undefined : askFor(item)} />)}</div></div>}
+      {method.length > 0 && <div className="board-row"><span className="board-label">Method</span><div className="board-cells">{method.map(item => <Item key={item.node.id} client={client} snapshot={snapshot} item={item} onPath={onPath} holds={holds(item)} ask={shown.running || external ? undefined : askFor(item)} />)}</div></div>}
       {(runs.length > 0 || board.otherCommands > 0) && <div className="board-row"><span className="board-label">Ran</span><div className="board-cells">
         {runs.map(item => <Item key={item.node.id} client={client} snapshot={snapshot} item={item} onPath={onPath} />)}
         {board.otherCommands > 0 && <button className="text-button board-console" onClick={() => onConsole(shown.id)}>{runs.length ? board.otherCommands + ' other ' + (board.otherCommands === 1 ? 'command' : 'commands') : board.otherCommands + (board.otherCommands === 1 ? ' command' : ' commands')} in the Console <Icon name="chevron" size={12} /></button>}
@@ -339,7 +340,8 @@ export function AnswerBoard({ client, snapshot, files, notesText = '', onConvers
       <p className="board-results-why"><strong>Asked since</strong></p>
       <ol>{followUps.map(t => <FollowUp key={t.id} id={t.id} node={graph.nodes.find(n => n.id === 'q:' + t.id)} running={!!t.running} at={t.start} onOpen={() => onConversation(t.conversationId)} />)}</ol>
     </div>}
-    {record && <Verdict record={record} graph={graph} shown={[primary, ...supporting, ...reports].filter((i): i is BoardItem => !!i).map(i => i.node.path!)} onDecide={() => decide('accepted')} onNeedsChanges={needsChanges} />}
+    {record && !external && <Verdict record={record} graph={graph} shown={[primary, ...supporting, ...reports].filter((i): i is BoardItem => !!i).map(i => i.node.path!)} onDecide={() => decide('accepted')} onNeedsChanges={needsChanges} />}
+    {external && <p className="board-note">From {shown.agent}’s own record. <button className="text-button" onClick={() => onConversation(conversationId)}>Continue this conversation</button></p>}
     <footer className="board-foot"><button className="text-button" onClick={onGraph}>How each file connects, in the Graph <Icon name="chevron" size={12} /></button></footer>
   </section>;
 }

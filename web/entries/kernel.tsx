@@ -9,7 +9,7 @@ import { WorkspaceViewsContext } from '../shell/workspace-views.js';
 // conversation's Studio the share of the sessions that conversation shows.
 const props = { type: 'object', properties: { title: { type: 'string' } } };
 const contribution = (component: keyof typeof kernelEntries, View: UiContribution['View'], propsSchema: Record<string, unknown> = props): UiContribution =>
-  ({ ...kernelEntries[component], entryVersion: '0.1-draft', packageVersion: '0.4.0', propsSchema, commands: [], View });
+  ({ ...kernelEntries[component], entryVersion: '0.1-draft', packageVersion: '0.5.10', propsSchema, commands: [], View });
 
 // The Notebook's form is the person's choice, saved with the page; this tab shows it at once.
 function Notebook({ viewId, view, client, snapshot, headerTarget, shell }: UiViewProps) {

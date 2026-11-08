@@ -43,7 +43,7 @@ export function answerBoard(graph: WorkGraph, turn: string, limits: typeof board
   for (const e of own) {
     const from = byId.get(e.from), to = byId.get(e.to);
     if (!from || !to || to.kind !== 'file') continue;
-    const made = (from.kind === 'question' && (e.label === 'wrote' || e.label === 'edited' || e.label === 'changed meanwhile')) || (from.kind === 'run' && e.label === 'changed while it ran');
+    const made = (from.kind === 'question' && (e.label === 'wrote' || e.label === 'edited' || e.label === 'changed meanwhile' || e.label === 'reported result')) || (from.kind === 'run' && e.label === 'changed while it ran');
     // A file of no kind the project shows — an Agent's own settings, a cache — is no output of the work.
     if (!made || !to.category) continue;
     // A command's observed change says more about where a file came from than "the Agent wrote it".
@@ -59,7 +59,7 @@ export function answerBoard(graph: WorkGraph, turn: string, limits: typeof board
   };
   const madeBy = (o: { node: GraphNode; edge: GraphEdge }) => {
     const from = byId.get(o.edge.from)!;
-    return from.kind === 'run' ? 'Changed while ' + quote(from.command ?? from.title) + ' ran' : o.edge.label === 'changed meanwhile' ? 'Changed on disk during this message' : o.edge.label === 'edited' ? 'Edited by the Agent' : 'Written by the Agent';
+    return from.kind === 'run' ? 'Changed while ' + quote(from.command ?? from.title) + ' ran' : o.edge.label === 'reported result' ? 'Reported in the Agent’s answer' : o.edge.label === 'changed meanwhile' ? 'Changed on disk during this message' : o.edge.label === 'edited' ? 'Edited by the Agent' : 'Written by the Agent';
   };
   // Results the answer names lead, then the newest; a figure answers before a table does.
   const results = [...outputs.values()].filter(o => isResult(o.node))
@@ -88,7 +88,7 @@ export function answerBoard(graph: WorkGraph, turn: string, limits: typeof board
     const from = byId.get(e.from);
     if (!from || from.kind !== 'file' || outputs.has(from.id) || from.category === 'code') continue;
     if (e.to === question.id && e.label === 'read') inputs.set(from.id, { node: from, why: 'Read by the Agent' });
-    else if (e.label === 'named' && runs.has(e.to) && !inputs.has(from.id)) inputs.set(from.id, { node: from, why: 'Named by ' + quote(byId.get(e.to)!.command ?? '') });
+    else if (e.label === 'named' && (runs.has(e.to) || own.some(link => link.label === 'reported result') && byId.get(e.to)?.kind === 'run') && !inputs.has(from.id)) inputs.set(from.id, { node: from, why: 'Named by ' + quote(byId.get(e.to)!.command ?? '') });
   }
   add('input', [...inputs.values()].sort((a, b) => Number(b.node.category === 'data') - Number(a.node.category === 'data') || a.node.at - b.node.at));
   const commands = graph.nodes.filter(n => n.kind === 'run' && n.turn === turn && !runs.has(n.id));

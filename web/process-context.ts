@@ -9,6 +9,8 @@ import { fileKey } from './canvas.js';
 // conversation's Studio see no process and behave as they always do.
 export interface Process {
   conversationId: string;
+  // Only native session receipts select cells; a shared Agent grant is not a conversation.
+  kernelCells?: readonly string[];
   // The work at the moment shown, and the whole record for what comes after it.
   graph: WorkGraph; whole: WorkGraph;
   // The files by role as they stood then, and as the whole record has them.

@@ -1,4 +1,4 @@
-@rho-workspace/plugin-agent@0.4.29 (AGPL-3.0-only)
+@rho-workspace/plugin-agent@0.4.33 (AGPL-3.0-only)
                     GNU AFFERO GENERAL PUBLIC LICENSE
                        Version 3, 19 November 2007
 
