@@ -57,6 +57,11 @@ uses Harness’s native installer for profile updates. The selected application
 version is installed separately. It is separate from the future
 signed application distribution below.
 
+The **0.1.6 source candidate** is separately checked in Harness Desktop 0.2.2-rc.1.
+Its [guide](DEEPSEEK-HARNESS.md#public-package-and-index) gives a fixed Git target;
+the public index still selects 0.1.5. The [external work episode](EXTERNAL-WORK-EPISODE.md)
+records the local WebUI update, without a new npm application delivery.
+
 ## Official distribution
 
 This is selected design, not an implemented pipeline. Create Rho-releases only

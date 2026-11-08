@@ -92,7 +92,11 @@ The live R session stayed idle with the same two cell IDs and four values. The
 native session still had two turns and source cursor 191; the CSV, script and PNG
 were read, not regenerated. The WebUI was built in an isolated checkout with its
 selected owners and exercised through a loopback preview forwarding API requests
-to the existing service. Neither the existing service nor its R session was restarted.
+to the existing service. The checked static WebUI assets were then installed into
+the source-linked application's existing browser directory, retaining older assets
+and a rollback copy and replacing the index last. The original service address now
+serves those same checked bytes. Neither the service nor its R session was restarted;
+this is an explicit local browser-build override, not an npm application upgrade.
 
 ## Harness compatibility and recovery
 
@@ -131,5 +135,5 @@ Screenshots and bounded API observations are retained locally. This is functiona
 and visual evidence for the Harness episode, not an independent usability study.
 Claude Code and Codex use the same public native-session presentation, but a new
 real ChatGPT or Codex-client run was not part of this episode. Source delivery,
-the local preview, an npm release and replacement of an installed application
-remain separate outcomes.
+the local browser-build update, an npm release and replacement of the resident
+backend remain separate outcomes.

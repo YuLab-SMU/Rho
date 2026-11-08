@@ -6,36 +6,39 @@ Rho interface in Harness Desktop's Browser pane beside your conversation. Harnes
 keeps its model and permissions; Rho keeps the shared Notebook, files, tables,
 figures and selected-result questions.
 
-The 0.1.5 adapter, with Rho 0.5.5, also shows existing and new Harness
-conversations under **Agent → Conversations**. It retains visible replies, tool
-operations and result references in the matching project. Input stays in Harness.
+The 0.1.6 adapter observes existing and new Harness conversations in the matching
+project. Rho source after 0.5.6 reads that native record in **Agent → Conversations**,
+**Graph**, **Console**, the answer board and the session's **Studio**, including its
+original Notebook cells. The [external work episode](EXTERNAL-WORK-EPISODE.md)
+records the current Desktop check. The npm 0.5.6 WebUI predates these process-view
+changes; installing the adapter alone does not replace that application build.
 **Connections** is for project access setup; it does not count conversations.
 Only exact matching project folders are observed. Missing or ambiguous matches
 show **Connect this project**, with the open button disabled and no Rho tool access.
 
-The checked native format is **Harness 0.2.1-rc.5** (version-4 session log) on
-macOS. The [external conversation episode](EXTERNAL-CONVERSATIONS-EPISODE.md)
-records the actual history and browser check, including failures. The earlier
+The current Desktop check uses **Harness 0.2.2-rc.1** and its version-4 session log
+on macOS. The earlier [external conversation episode](EXTERNAL-CONVERSATIONS-EPISODE.md)
+checked 0.1.5 with **Harness 0.2.1-rc.5**, retaining its own failures and scope. The earlier
 [project matching check](DSH-RHO-EPISODE.md#conversation-project-matching) and
 [real model loop](DSH-RHO-EPISODE.md#reuse-the-whole-rho-application) retain their
 own scope. TUI and other systems remain unverified for this adapter.
 
 ## Public package and index
 
-The [Rho market index](https://yulab-smu.top/Rho/market/index.json) selects
-source commit
-[`50ccd85b`](https://github.com/YuLab-SMU/Rho/commit/50ccd85b907c08621fd90efde9a76b375af0ee3e),
+The checked **0.1.6 source candidate** is available directly from source commit
+[`425c5f77`](https://github.com/YuLab-SMU/Rho/commit/425c5f77ed89c1103737cf48acb9b392ce3b3731),
 package directory `adapters/dsh-rho`. Its twelve distribution files include the
 prebuilt launcher and observation bundle, Host, connection resolver, licenses,
 original icon and display locale.
 Installation needs no build allowance or local source checkout. The exact target is:
 
 ```text
-git+https://github.com/YuLab-SMU/Rho.git#50ccd85b907c08621fd90efde9a76b375af0ee3e&path:/adapters/dsh-rho
+git+https://github.com/YuLab-SMU/Rho.git#425c5f77ed89c1103737cf48acb9b392ce3b3731&path:/adapters/dsh-rho
 ```
 
-The index records the checked **Harness 0.2.1-rc.5** compatibility, version,
-icon and source identity. Enable **Plugins → More → Custom plugin markets** if
+The [public index](https://yulab-smu.top/Rho/market/index.json) still selects
+**0.1.5**, compatible with **Harness 0.2.1-rc.5**. Use the exact Git target above
+for the current 0.1.6 candidate; index publication is a separate step. Enable **Plugins → More → Custom plugin markets** if
 Discover is absent. In **Discover**, add this address to the index sources, then
 search for `Rho`:
 
@@ -79,7 +82,7 @@ A Desktop app opened from Finder may not inherit terminal environment variables.
 Set explicit paths in its profile's `cordis.patch.yml` (by default,
 `~/.dsh/profiles/desktop/cordis.patch.yml`). Preserve the profile's other entries.
 **When upgrading from 0.1.3 or earlier, remove the old `rho-mcp` override.**
-Version 0.1.5 has one `dsh-rho` configuration for both tools and workspace:
+Version 0.1.6 has one `dsh-rho` configuration for both tools and workspace:
 
 ```yaml
 - id: dsh-rho
@@ -119,7 +122,7 @@ export RHO_DSH_CONNECTION="/absolute/path/to/agent-connection.json"
 # Only if rho is outside PATH:
 # export RHO_DSH_COMMAND="/absolute/path/to/node_modules/.bin/rho"
 dsh plugin --profile web add \
-  'git+https://github.com/YuLab-SMU/Rho.git#50ccd85b907c08621fd90efde9a76b375af0ee3e&path:/adapters/dsh-rho' \
+  'git+https://github.com/YuLab-SMU/Rho.git#425c5f77ed89c1103737cf48acb9b392ce3b3731&path:/adapters/dsh-rho' \
   --ignore-scripts
 dsh --profile web --no-open
 ```
@@ -143,7 +146,7 @@ fresh directory; these builds do not replace your running Rho service:
 ```sh
 git clone https://github.com/YuLab-SMU/Rho.git rho-harness
 cd rho-harness
-git checkout 50ccd85b907c08621fd90efde9a76b375af0ee3e
+git checkout 425c5f77ed89c1103737cf48acb9b392ce3b3731
 git clone https://github.com/YuLab-SMU/Rho-plugins.git ../Rho-plugins
 git -C ../Rho-plugins checkout "$(node -p 'JSON.parse(require("node:fs").readFileSync("components.json")).plugins.commit')"
 npm --prefix ../Rho-plugins ci
@@ -157,7 +160,7 @@ npm pack ./adapters/dsh-rho --ignore-scripts \
   --pack-destination "$PWD/work/dsh-rho/package"
 ```
 
-The resulting file is `work/dsh-rho/package/dsh-rho-0.1.5.tgz`. Use it in
+The resulting file is `work/dsh-rho/package/dsh-rho-0.1.6.tgz`. Use it in
 **Plugins → Add plugin** in place of the Git target.
 
 ## Analyse, inspect and ask about a selection
@@ -176,14 +179,15 @@ The resulting file is `work/dsh-rho/package/dsh-rho-0.1.5.tgz`. Use it in
    with `annotation.reply`. Rho shows the reply against that retained table version.
 
 Copying prepares the request; you choose the Harness conversation and send it.
-Version 0.1.5 does not insert a draft automatically. Opening or closing a Rho view
+Version 0.1.6 does not insert a draft automatically. Opening or closing a Rho view
 does not start, rerun or cancel analysis.
 
 ## Connection problems
 
 | What you see | What to check |
 | --- | --- |
-| No Rho tab or sidebar entry | Install and enable **dsh-rho 0.1.5**. Check that its single Rho component is Running. |
+| No Rho tab or sidebar entry | Install and enable **dsh-rho 0.1.6**. Check that its single Rho component is Running. |
+| Tools work but Conversations or process views stay empty | A tools-only MCP entry does not observe native conversations. Configure the exact project grant under `dsh-rho`, reload it, and use the WebUI build containing the external-work changes. |
 | **Connect this project**, with a disabled open button | Compare the displayed conversation folder with the configured projects. Add its existing grant, or remove duplicate matches, then reload the bundle. |
 | **Try again** after a connection failure | Check the agent file and that its Rho service is running. Retry an initially unavailable connection for a live conversation. A dormant conversation connects when Harness resumes it. |
 | An old `rho-mcp` entry or changed connection is reported | Remove the old override, keep one `dsh-rho` configuration and reload the bundle. An existing bridge keeps its original connection until unloaded. |
@@ -196,7 +200,7 @@ the profile. It does not limit a Notebook cell's lifetime. Use shorter Notebook
 waits and observe the original cell while it runs. Long jobs were not exercised.
 Reconnect Harness without restarting another person's Rho or Notebook.
 
-See the [package README](https://github.com/YuLab-SMU/Rho/blob/50ccd85b907c08621fd90efde9a76b375af0ee3e/adapters/dsh-rho/README.md)
+See the [package README](https://github.com/YuLab-SMU/Rho/blob/425c5f77ed89c1103737cf48acb9b392ce3b3731/adapters/dsh-rho/README.md)
 for the connection and resource bounds, and the
 [public distribution record](EXTERNAL-CONVERSATIONS-EPISODE.md#verification-and-delivery) for the
 fixed source and installation evidence.
