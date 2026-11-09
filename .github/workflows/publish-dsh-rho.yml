@@ -3,10 +3,12 @@
 # files (lib/ is built and checked in), the same ones a Git install of that commit receives.
 # Run by hand on main, it rehearses everything but the publication.
 #
-# npm authenticates through Trusted Publishing (OIDC) once the package's npmjs.com settings trust
-# owner YuLab-SMU, repository Rho, workflow publish-dsh-rho.yml and environment npm. npm cannot
-# trust a workflow for a package that does not exist yet, so until then the CLI falls back to the
-# repository secret NPM_TOKEN; only the first publication needs it.
+# npm authenticates through Trusted Publishing (OIDC): the package's npmjs.com settings trust owner
+# YuLab-SMU, repository Rho, workflow publish-dsh-rho.yml and environment npm, with direct
+# `npm publish` allowed. No npm token is used. Renaming this file or the environment needs a new
+# trusted publisher, which must publish successfully within two days. The first version, 0.1.7,
+# was published with the repository secret NPM_TOKEN: npm cannot trust a workflow for a package
+# that does not exist yet.
 name: Publish dsh-rho
 
 on:
@@ -66,8 +68,6 @@ jobs:
         with: { name: dsh-rho, path: package }
       - name: Publish
         working-directory: package
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           sha256sum -c SHA256SUMS
           npm publish ./dsh-rho-*.tgz --access public --provenance

@@ -6,7 +6,7 @@ follow the shared Notebook, inspect files, tables and figures, and ask about a
 selected result. Copy that question back to the original Harness conversation;
 the Agent reads its frozen context and writes its reply into Rho.
 
-Version **0.1.7** ships the **Rho conversation tab** and **Rho sidebar entry** with
+Version **0.1.8** ships the **Rho conversation tab** and **Rho sidebar entry** with
 its prebuilt launcher, display metadata and original Rho icon. Both entries
 show **Open Rho workspace**, which opens the existing application in Harness's
 Browser beside the conversation. **Open in system browser** is also available;
@@ -18,7 +18,7 @@ Credentials and the rest of Rho’s snapshot stay on the Host. No Rho views or r
 bundled, and opening the interface starts no service or analysis.
 
 The [episode](../../docs/DSH-RHO-EPISODE.md) records the observed integration and
-its limits. Version 0.1.7 declares Harness 0.2.1-rc.5 and 0.2.2-rc.1
+its limits. Version 0.1.8 declares Harness 0.2.1-rc.5 and 0.2.2-rc.1
 compatibility; the previous installation was checked in Desktop 0.2.2-rc.1.
 It reads cold sessions through the public session-query lease. The
 [external work episode](../../docs/EXTERNAL-WORK-EPISODE.md) records the latter
@@ -30,13 +30,12 @@ Discover sources to search for Rho. It is not in Harness's official default
 source.
 
 Harness renders a plugin settings entry when a bundle declares a `Config` schema
-and registers a `plugins.bundle.config` card. Version 0.1.7 does both, so
+and registers a `plugins.bundle.config` card. Versions 0.1.7 and later do both, so
 **Plugins → Rho** has its own configuration section. Harness renders a new-version
-control only for a third-party bundle installed from a registry spec such as
-`dsh-rho@0.1.7`; a bundle installed from a Git source, tarball, link or local path
-has no version section by design. The Git market index remains the delivery route
-for this release, so installing from Discover does not produce that control.
-See [Distribution route](#distribution-route).
+control only for a third-party bundle installed from a registry spec under its own
+name, such as `dsh-rho` from npm; a bundle installed from a Git source, tarball,
+link or local path, including the Git market index in Discover, has no version
+section by design. See [Distribution route](#distribution-route).
 
 ## Install into Harness
 
@@ -44,8 +43,11 @@ Use an already running Rho service and the project you intend to share. If Rho i
 not set up yet, follow its [setup guide](https://yulab-smu.top/Rho/doc/setup.md).
 Do not start another service on an existing state folder.
 
-From a prepared Rho source checkout, with the selected sibling Rho-plugins built
-and Rho's dependencies installed, build the launcher and observation bundle:
+The package is on npm as `dsh-rho`: in Harness Desktop, enter that name in
+**Plugins → Add plugin**; for a Web profile, use
+`dsh plugin --profile web add dsh-rho --ignore-scripts`. To build the same files
+from a prepared Rho source checkout instead, with the selected sibling Rho-plugins
+built and Rho's dependencies installed, build the launcher and observation bundle:
 
 ```sh
 npm --prefix adapters/dsh-rho ci --ignore-scripts
@@ -71,7 +73,7 @@ export DSH_HOME="$HOME/.dsh-rho"
 export RHO_DSH_CONNECTION="/absolute/path/to/the/agent-connection.json"
 # Only when rho is outside PATH:
 # export RHO_DSH_COMMAND="/absolute/path/to/node_modules/.bin/rho"
-dsh plugin --profile web add /absolute/path/to/dsh-rho-0.1.7.tgz --ignore-scripts
+dsh plugin --profile web add dsh-rho --ignore-scripts
 dsh --profile web --no-open
 ```
 
@@ -116,11 +118,12 @@ no grant creation and no fallback to another project.
 
 ## Harness Desktop
 
-Use **Plugins → Add plugin** to install the tarball, then **Enable now**. Desktop
-owns its profile; the separate `dsh plugin --profile desktop` CLI is refused.
-To upgrade an installed local version, turn it off, uninstall it and install the
-new tarball through the same page. This releases the MCP bridge and UI, leaving
-the existing Rho service and Notebook running.
+Use **Plugins → Add plugin** to install `dsh-rho` by name (or a tarball), then
+**Enable now**. Desktop owns its profile; the separate `dsh plugin --profile desktop`
+CLI is refused. A version installed by name is upgraded from its **Versions**
+section. To upgrade a tarball or Git install, turn it off, uninstall it and install
+the new version through the same page. This releases the MCP bridge and UI,
+leaving the existing Rho service and Notebook running.
 
 A Desktop app opened from Finder may not inherit shell exports. Its profile
 `cordis.patch.yml` can hold one explicit configuration. The 0.1.5 release removed the
@@ -230,12 +233,16 @@ of its `marketInstallTarget` before publishing `site/market/index.json` to
 selected commit, rather than following a branch at install time.
 
 Harness's own version section and update control require the installed profile
-dependency to be a registry spec under its own name (`dsh-rho@0.1.7`), with a
-semver version in the manifest. A Git commit, tarball, link or path spec is
+dependency to be a registry spec under its own name (`"dsh-rho": "^0.1.7"`), with
+a semver version in the manifest. A Git commit, tarball, link or path spec is
 deliberately excluded, so the Git index above never produces that control.
-Publishing the package to a registry and installing it by name is a separate
-delivery decision with its own evidence; it is not part of this release. TUI and
-other operating systems remain outside the observed integration.
+
+The npm package is published from Rho's source by tagging the commit
+`dsh-rho-vX.Y.Z`, matching the version in `package.json`. The tag runs
+[`publish-dsh-rho.yml`](../../.github/workflows/publish-dsh-rho.yml), which tests
+and packs the committed files and publishes them with provenance through npm
+Trusted Publishing; no npm login or token is involved. TUI and other operating
+systems remain outside the observed integration.
 
 
 ## Read-only conversation observation

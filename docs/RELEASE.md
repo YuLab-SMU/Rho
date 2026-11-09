@@ -199,9 +199,9 @@ documentation-only commit, or past GitHub's artifact retention) does it run CI f
 [`release-check.mjs`](../scripts/release-check.mjs) verifies the digest, that run and commit, the four
 installation reports, the name and the tag's version. Then `npm publish --provenance` runs with the
 repository secret `NPM_TOKEN`,
-which GitHub does not give to pull requests from forks. Only this job and the first publication of
-the [Harness adapter](DEEPSEEK-HARNESS.md#plugin-settings-and-updates) name it; that adapter's later
-versions publish through npm Trusted Publishing. A prerelease version
+which no other job names and GitHub does not give to pull requests from forks. The
+[Harness adapter](DEEPSEEK-HARNESS.md#plugin-settings-and-updates) used it once, for its first
+version; its later versions publish through npm Trusted Publishing without a token. A prerelease version
 goes to the `next` dist-tag, any other to `latest`; npm makes a package's first version `latest`
 whatever the tag. The job runs in the GitHub environment `npm`, which records each publication as a
 deployment; it has no required reviewer, so a tag whose run passes publishes without waiting for a

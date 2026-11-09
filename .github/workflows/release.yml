@@ -82,9 +82,8 @@ jobs:
     if: ${{ !cancelled() && needs.verify.result == 'success' && github.event_name == 'push' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
-    # NPM_TOKEN is a repository secret that only this job and publish-dsh-rho.yml's first publication
-    # name. The environment records each publication as a deployment; at the user's choice it has no
-    # required reviewer.
+    # NPM_TOKEN is a repository secret that only this job names. The environment records each
+    # publication as a deployment; at the user's choice it has no required reviewer.
     environment: npm
     permissions:
       actions: read

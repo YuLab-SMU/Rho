@@ -27,12 +27,23 @@ own scope. TUI and other systems remain unverified for this adapter.
 
 ## Public package and index
 
-The checked **0.1.7 source candidate** is available directly from source commit
-[`a2ceabc0`](https://github.com/YuLab-SMU/Rho/commit/a2ceabc0f4c481178cd843936357a9b6b413c6ef),
-package directory `adapters/dsh-rho`. Its twelve distribution files include the
+**dsh-rho** is published on npm. In Harness Desktop, open **Plugins → Add plugin**
+and enter the package name:
+
+```text
+dsh-rho
+```
+
+Harness records a bundle installed this way as a registry spec under its own name
+(`"dsh-rho": "^0.1.7"` in a fresh profile's `package.json`), the condition for its
+**Versions** section and update control. Its twelve distribution files include the
 prebuilt launcher and observation bundle, Host, connection resolver, licenses,
-original icon and display locale.
-Installation needs no build allowance or local source checkout. The exact target is:
+original icon and display locale. Installation needs no build allowance or local
+source checkout.
+
+The same 0.1.7 files are available from source commit
+[`a2ceabc0`](https://github.com/YuLab-SMU/Rho/commit/a2ceabc0f4c481178cd843936357a9b6b413c6ef),
+package directory `adapters/dsh-rho`. The exact Git target is:
 
 ```text
 git+https://github.com/YuLab-SMU/Rho.git#a2ceabc0f4c481178cd843936357a9b6b413c6ef&path:/adapters/dsh-rho
@@ -51,10 +62,10 @@ https://yulab-smu.top/Rho/market/index.json
 ```
 
 This is **Rho's own index**, not an official default Harness source. It must be
-added explicitly. There is no npm release. A bundle installed from a Git target,
-a tarball or this index has no **Versions** section in Harness: the update control
-is limited to packages installed from a registry spec under their own name.
-Upgrading this plugin is therefore the off/uninstall/install sequence below. The
+added explicitly. A bundle installed from a Git target, a tarball or this index has
+no **Versions** section in Harness: the update control is limited to packages
+installed from a registry spec under their own name. Upgrading such an install is
+the off/uninstall/install sequence below. The
 [public verification record](EXTERNAL-CONVERSATIONS-EPISODE.md#verification-and-delivery) records
 fresh installation and index validation separately from the workspace check.
 
@@ -143,13 +154,22 @@ A `dsh-rho-vX.Y.Z` tag naming the adapter's version runs
 [`publish-dsh-rho.yml`](../.github/workflows/publish-dsh-rho.yml): it tests and
 packs the committed adapter files, the same ones a Git install of that commit
 receives, and publishes them to npm with provenance in the `npm` environment. No
-one logs in to npm for a release. npm authenticates the workflow through Trusted
-Publishing once the package's npmjs.com settings trust owner `YuLab-SMU`,
-repository `Rho`, workflow `publish-dsh-rho.yml` and environment `npm`. npm can
-add that only to a package that already exists, so the first publication falls
-back to the repository secret `NPM_TOKEN`; a new trusted publisher must then
-publish successfully within two days. Until a registry version is published and
-installed by name, the new-version control remains unobserved.
+one logs in to npm and the workflow names no token: npm authenticates it through
+Trusted Publishing, because the package's npmjs.com settings trust owner
+`YuLab-SMU`, repository `Rho`, workflow `publish-dsh-rho.yml` and environment
+`npm`. A new trusted publisher allows only `npm stage publish`, whose versions wait
+for a maintainer's two-factor approval, unless direct `npm publish` is also
+selected; it expires unless it publishes successfully within two days.
+
+npm can add a trusted publisher only to a package that already exists, so 0.1.7
+was published on 2026-11-09 with the repository secret `NPM_TOKEN` by
+[run 42616729699](https://github.com/YuLab-SMU/Rho/actions/runs/42616729699), with
+provenance ([sigstore 3764946031](https://search.sigstore.dev/?logIndex=3764946031)).
+The registry served it as `latest` about 90 seconds later; its SHA-1 `1e3be047…`
+matches the tested tarball, and a fresh registry installation loads its `Config`
+schema. 0.1.8 has the same files under a new version, to validate the trusted
+publisher and give an installed 0.1.7 a newer version. The new-version control has
+not yet been observed in Desktop.
 
 ## Use Web Harness
 
@@ -225,7 +245,7 @@ does not start, rerun or cancel analysis.
 
 | What you see | What to check |
 | --- | --- |
-| No Rho tab or sidebar entry | Install and enable **dsh-rho 0.1.7**. Check that its single Rho component is Running. |
+| No Rho tab or sidebar entry | Install and enable **dsh-rho** 0.1.7 or later. Check that its single Rho component is Running. |
 | Tools work but Conversations or process views stay empty | A tools-only MCP entry does not observe native conversations. Configure the exact project grant under `dsh-rho`, reload it, and use the WebUI build containing the external-work changes. |
 | **Connect this project**, with a disabled open button | Compare the displayed conversation folder with the configured projects. Add its existing grant, or remove duplicate matches, then reload the bundle. |
 | **Try again** after a connection failure | Check the agent file and that its Rho service is running. Retry an initially unavailable connection for a live conversation. A dormant conversation connects when Harness resumes it. |
