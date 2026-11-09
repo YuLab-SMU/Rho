@@ -12,7 +12,7 @@ A grant covers one project. Each project needs its own grant, which adds an MCP 
 
 ## Connect with one command
 
-In versions after 0.5.6, the project's setup prompt (**Agent → Agents**) gives one command:
+From Rho 0.5.7, the project's setup prompt (**Agent → Agents**) gives one command:
 
 ```sh
 rho connect "/Users/me/Rho/projects/PA14 quorum sensing" --as my-agent

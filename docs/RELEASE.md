@@ -216,3 +216,10 @@ candidate with provenance on 2026-11-06. The registry served it about 17 minutes
 later; the downloaded bytes matched the tested candidate and were installed
 through npm. Its record retains the source identities, checks and dependency
 audit findings.
+
+Version 0.5.7 selects the same Core, `8bed8ef`, as 0.5.6: Core's `main` is two commits ahead, with
+checkout attributes for Windows source builds and their record, and CI's Core does not change. It
+selects Plugins `ce1185f` and Rho's 49 commits since `v0.5.6`: figures in the Notebook and the
+Agent's messages in R and Python, plugin pictures and remote plugin markets, externally started
+Agent work in the project views, any ACP Agent, `rho connect` and `rho --stop`, the Windows setup
+fixes, the guidance to run scripts in the session and CSVs with an unnamed row-name column.
