@@ -119,6 +119,17 @@ the row tables scrolled inside their frame.
 - **Tooltip noise.** Internal columns (`.ggtangle_id`) and a missing label (`NA`) were shown.
   Dot-columns and missing values are now left out. A row without a key or label has no
   title, and a numeric key reads `node 34`.
+- **No picture in WorkBuddy (2026-11-09).** In WorkBuddy's browser (Electron 37, Chromium
+  138) a person's 17,180-mark volcano read "The figure's picture could not be read", and the
+  same figure saved with `ggsave` showed an empty grey box. xml2 writes an XML declaration
+  before the svg tag, so the view looked for the namespace in the declaration, missed it and
+  added a second `xmlns`. libxml2, which parses XML in Safari and in Chromium before its Rust
+  parser, refuses a repeated attribute; the Chromium 156 of the browser checks accepts it. The
+  view now looks in the svg tag, and a saved figure shows its file's picture while its record
+  is read and when it cannot be drawn. In Chromium 156 with the Rust parser turned off
+  (`--disable-features=XMLParsingRust,XMLRustForNonXslt,XMLParsingRustNonXslt`), the old view
+  failed with the same message and the new one drew all 17,180 marks in the Notebook; a hover
+  read SPARCL1's row. Safari itself was not opened.
 - **Agent client.** The first Agent run ended with an internal error. The test HOME's wrapper
   was CommonJS under Rho's `"type": "module"`, and the throwaway HOME hid the R user
   library. Both belong to the harness, not to the product.
