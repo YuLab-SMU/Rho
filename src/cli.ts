@@ -14,9 +14,16 @@ const link = (url: string, code: string) => url + '/#pair=' + code;
 // there, so `rho --stop` leaves this file in the state folder and the running launcher looks for it,
 // as Rho asks its Host to stop on Windows.
 const stopRequest = (stateDirectory: string) => path.join(stateDirectory, 'service.stop');
+// --open says when it could not open a browser, so a start on a machine without a screen (a server,
+// a container, an Agent's sandbox) does not look like one that opened a tab nobody sees.
 function openBrowser(target: string) {
+  if (process.platform === 'linux' && !process.env.DISPLAY && !process.env.WAYLAND_DISPLAY && !process.env.WSL_DISTRO_NAME) {
+    process.stderr.write(`No browser was opened: this machine has no display (DISPLAY and WAYLAND_DISPLAY are unset). Open ${target} in a browser on this machine, or forward its port to one that has a browser.\n`);
+    return;
+  }
   const [command, args] = process.platform === 'darwin' ? ['open', [target]] : process.platform === 'win32' ? ['cmd', ['/c', 'start', '""', target]] : ['xdg-open', [target]];
-  spawn(command, args, { stdio: 'ignore', detached: true }).on('error', () => process.stderr.write('Could not open a browser. Open openUrl from the output instead.\n')).unref();
+  const failed = (why: string) => process.stderr.write(`Could not open a browser (${why}). Open ${target} yourself.\n`);
+  spawn(command, args, { stdio: 'ignore', detached: true }).on('error', error => failed(error.message)).on('exit', code => { if (code) failed(`${command} exited with ${code}`); }).unref();
 }
 // A generic ACP agent is any program that speaks ACP v1 over stdio. Its command is either a
 // JSON argv array (safest for paths with spaces) or a simple command line.
@@ -35,14 +42,23 @@ function parseAcpCommand(spec: string | undefined): { file: string; args: string
 }
 const usage = `Develop, install and manage independent plugins:
   rho plugin --help
+Print this version:
+  rho --version
 Verify a read-only evidence package:
   rho --verify-evidence PATH
 Start Rho on ~/Rho/projects and ~/Rho/state, and say where it is and what is missing:
   rho
 Start Rho:
   rho --root PROJECTS_DIRECTORY --state-dir SERVICE_STATE [--core ABSOLUTE_CORE_BINARY] [--rscript ABSOLUTE_RSCRIPT] [--python PYTHON] [--ssh SSH] [--serverctl SERVERCTL] [--claude CLAUDE_CODE_BINARY] [--codex CODEX_BINARY] [--agent-backend claude-acp|codex-acp|claude-cli|acp] [--acp-command JSON_ARGV] [--port PORT] [--limits JSON_FILE] [--plugins documents,files,...] [--example on|off] [--open]
+Start it in the background instead, add --background to either start: it returns once Rho is
+ready, with Rho's output in SERVICE_STATE/rho.log and the last start's in rho.previous.log:
+  rho [--root PROJECTS_DIRECTORY --state-dir SERVICE_STATE ...] --background
+Say whether Rho runs for a state folder, at which address, how the last one ended, and which others run:
+  rho --status [--state-dir SERVICE_STATE]
 Stop the Rho running for a state folder (~/Rho/state without --state-dir), as Ctrl+C in its window does:
   rho --stop [--state-dir SERVICE_STATE]
+Install the Rho Agent Skill that ships with this version into a folder an Agent loads skills from:
+  rho --install-skill SKILL_DIRECTORY
 A narrower browser link (optional):
   rho --pair PRIVATE_CONNECTION_FILE [--root PROJECTS_RELATIVE_DIRECTORY] [--open]
 Connect yourself, an Agent, to a project of the running Rho (what a setup prompt asks):
@@ -79,7 +95,7 @@ async function harnessAcp() {
     }
   return undefined;
 }
-const options = { example: { type: 'string' }, 'verify-evidence': { type: 'string' }, acp: { type: 'string' }, 'acp-agent': { type: 'string' }, root: { type: 'string' }, 'state-dir': { type: 'string' }, core: { type: 'string' }, rscript: { type: 'string' }, python: { type: 'string' }, ssh: { type: 'string' }, serverctl: { type: 'string' }, claude: { type: 'string' }, codex: { type: 'string' }, 'agent-backend': { type: 'string' }, 'acp-command': { type: 'string' }, port: { type: 'string' }, limits: { type: 'string' }, plugins: { type: 'string' }, pair: { type: 'string' }, open: { type: 'boolean' },
+const options = { example: { type: 'string' }, 'verify-evidence': { type: 'string' }, acp: { type: 'string' }, 'acp-agent': { type: 'string' }, root: { type: 'string' }, 'state-dir': { type: 'string' }, core: { type: 'string' }, rscript: { type: 'string' }, python: { type: 'string' }, ssh: { type: 'string' }, serverctl: { type: 'string' }, claude: { type: 'string' }, codex: { type: 'string' }, 'agent-backend': { type: 'string' }, 'acp-command': { type: 'string' }, port: { type: 'string' }, limits: { type: 'string' }, plugins: { type: 'string' }, pair: { type: 'string' }, open: { type: 'boolean' }, background: { type: 'boolean' }, status: { type: 'boolean' }, 'install-skill': { type: 'string' }, version: { type: 'boolean' },
   grant: { type: 'string' }, project: { type: 'string' }, 'project-id': { type: 'string' }, session: { type: 'string' }, agent: { type: 'string' }, mcp: { type: 'string' }, stop: { type: 'boolean' }, help: { type: 'boolean', short: 'h' } } as const;
 // A command that is refused says why and what to do. A service that is not running is the
 // common case for --grant and --pair; anything without a known reason keeps its stack.
@@ -105,6 +121,19 @@ if (values['verify-evidence']) {
   process.exit(process.exitCode ?? 0);
 }
 if (values.help) { process.stdout.write(usage); process.exit(0); }
+const version = () => fs.readFile(new URL('../package.json', import.meta.url), 'utf8').then(text => String(JSON.parse(text).version));
+if (values.version) { process.stdout.write(await version() + '\n'); process.exit(0); }
+if (values.status) {
+  const { serviceStatus } = await import('./background.js');
+  process.stdout.write(JSON.stringify(await serviceStatus(values['state-dir'] ?? path.join(os.homedir(), 'Rho', 'state'))) + '\n');
+  process.exit(0);
+}
+if (values['install-skill'] !== undefined) {
+  const { installSkill } = await import('./background.js');
+  if (!values['install-skill']) { process.stderr.write('Give --install-skill the skills folder to install into, such as ~/.claude/skills/rho.\n'); process.exit(2); }
+  try { process.stdout.write(JSON.stringify(await installSkill(values['install-skill'], await version())) + '\n'); process.exit(0); }
+  catch (error) { process.stderr.write((error instanceof Error ? error.message : String(error)) + '\n'); process.exit(1); }
+}
 if (values.stop) {
   const { lease } = await import('./state.js');
   const directory = path.resolve(values['state-dir'] ?? path.join(os.homedir(), 'Rho', 'state'));
@@ -200,6 +229,10 @@ if (values.acp) {
     await fs.mkdir(quickState, { recursive: true });
   }
   const projectsRoot = values.root ?? quickRoot, stateDirectory = values['state-dir'] ?? quickState;
+  if (values.background) {
+    const { startInBackground } = await import('./background.js');
+    process.exit(await startInBackground(process.argv.slice(2).filter(arg => arg !== '--background'), stateDirectory));
+  }
   const limits = values.limits ? JSON.parse(await fs.readFile(values.limits, 'utf8')) : {};
   const allowed = new Set(['maxRequestBytes', 'maxEventBytes', 'eventRetention', 'maxSubscriptions', 'maxQueue', 'maxContexts', 'maxBindings', 'maxActivities', 'maxContextBytes', 'maxRetainedMetadataBytes', 'maxConcurrentActions', 'maxOperations', 'maxLogPageBytes', 'maxCodeBytes', 'maxReconciled', 'documents', 'resources', 'workspace', 'r', 'annotations', 'interactions', 'capabilityLimits', 'browser', 'nativeFolders', 'conversations', 'evidence', 'console']);
   if (Object.keys(limits).some(k => !allowed.has(k))) throw new Error('Unknown service budget in --limits file.');
@@ -277,13 +310,15 @@ if (values.acp) {
   }
   if (values.open) openBrowser(service.url);
   let closing = false, asked: NodeJS.Timeout | undefined;
-  const stop = async () => { if (closing) return; closing = true; clearInterval(asked); await withdraw(service.state.directory).catch(() => {}); const reports = await service.close(); process.stdout.write(JSON.stringify({ shutdown: reports }) + '\n'); };
+  // The last line says what stopped Rho and when, so a log read later tells a stop in order from
+  // one ended from outside, which writes nothing.
+  const stop = async (by: string) => { if (closing) return; closing = true; clearInterval(asked); await withdraw(service.state.directory).catch(() => {}); const reports = await service.close(); process.stdout.write(JSON.stringify({ shutdown: reports, by, at: new Date().toISOString() }) + '\n'); };
   // Windows has no SIGTERM another process can send, and a console may pass on Ctrl+C turned off;
   // there Ctrl+Break on Rho's console (SIGBREAK) stops it in order too.
-  for (const signal of ['SIGTERM', 'SIGINT', ...(process.platform === 'win32' ? ['SIGBREAK'] as const : [])] as const) process.on(signal, stop);
+  for (const signal of ['SIGTERM', 'SIGINT', ...(process.platform === 'win32' ? ['SIGBREAK'] as const : [])] as const) process.on(signal, () => stop(signal));
   // A program with no console to share, such as an Agent that started Rho in the background on
   // Windows, asks with rho --stop. Removing the request is what takes it.
-  asked = setInterval(() => { fs.rm(stopRequest(service.state.directory)).then(stop, () => {}); }, 500);
+  asked = setInterval(() => { fs.rm(stopRequest(service.state.directory)).then(() => stop('rho --stop'), () => {}); }, 500);
   asked.unref();
 }
 

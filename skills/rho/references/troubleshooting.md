@@ -8,10 +8,16 @@ printed: refusals name their rule and usually what to do next.
 | Symptom | Cause | Do |
 | --- | --- | --- |
 | `npm install -g` fails with `EACCES` | The global prefix belongs to root | Offer the options in [install](install.md#install); do not `sudo` yourself |
-| `EBADENGINE` warning | Node outside `>=22.22.0 <27` | Install a supported Node, then reinstall |
+| `EBADENGINE` warning | Node outside the tested `>=22.22.0 <27` | A Node 22 below 22.22 is untested: say so and go on. Below 22 or from 27, the person installs Node 22, 24 or 26, then reinstall |
+| `npm` is not found, though `node -v` answers | This Node came with another program, such as an editor or an Agent app's own runtime | The person installs Node with npm. Do not fetch npm into that program's folder; ask before installing into your own app's runtime, which an update of the app can replace |
+| The install succeeded, but `rho` is not found | npm's command folder (`$(npm prefix -g)/bin`; on Windows the `npm prefix -g` folder) is not on this shell's `PATH`, or the shell started before `PATH` changed | Use the full path to `rho` and tell the person to open a new terminal or restart their Agent app. Do not install again |
+| A security program flags a PowerShell file that starts Rho or downloads the skill | An earlier setup page had Agents write one that bypassed the execution policy | Delete the file. Start Rho with `rho.cmd … --background` and install the skill with `rho.cmd --install-skill`, as plain commands |
 | `rho` with no flags prints usage and exits 2 | Version 0.5.3 or earlier | Use `--root` and `--state-dir` |
 | "Rho is already running for <state> at <url>"; on 0.5.3 and earlier, exit 1 with a stack trace ending "Another Rho service holds <state>" | A service already holds that state folder | Use its address: the url printed, or `url` in `<state>/connection.json`. Do not start another; stop the first only with the person's agreement |
-| The `nohup` start left no `{"ready":…}` line in the log | Still starting, or it failed | Wait a few seconds and read the whole log. Its last lines say why |
+| `--background` says Rho stopped before it was ready | The start failed | It prints Rho's output; its last lines say why |
+| `--background` printed no ready line within a minute, or a `nohup` start left none in the log | Still starting, or it failed | `rho --status --state-dir <state>`, then read the whole log. Its last lines say why |
+| `--background` returned with the ready line, but `rho --status` later says it is not running | Your client ended the processes a command started, or the session, container or sandbox that held Rho ended | The `note` says whether it stopped in order. The person runs the start without `--background` in a terminal they keep open |
+| `--open` opened nothing | No display (a server, container or sandbox), or no default browser | The log says which. Give the person the address; on another machine it needs a forwarded port |
 | A start is refused with a port named | `--port N` is in use by another program | Choose another port, or leave `--port` out |
 | A start fails naming the platforms the package carries | The package has no Core for this machine | Run on a platform it names, or name a Core binary with `--core` (outside the package's digest check) |
 | Socket path error for a long project path (macOS) | The managed Host socket path is limited to 103 bytes | Only managed runs need it. Use a shorter projects path if they are needed |

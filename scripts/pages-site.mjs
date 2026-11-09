@@ -5,7 +5,7 @@
 //   demo/       the application's WebUI replaying site/demo/recording.json (no backend)
 //   docs/       the documentation site, built from docs/ with base /Rho/docs/
 //   doc/setup.md  SETUP.md as it is: the steps an Agent follows to install and configure Rho
-//   skills/     the Agent Skill in skills/, as it is, which those steps install
+//   skills/     the Agent Skill in skills/, as it is, which earlier setup pages downloaded
 //   market/     the static Harness plugin index, pinned to published source commits
 // The branch's updates/*.json feeds and .nojekyll are not produced here; a deployment keeps them.
 //
@@ -19,11 +19,9 @@ import path from 'node:path';
 const out = path.resolve('site/.pages');
 const run = (command, args, env = {}) => execFileSync(command, args, { stdio: 'inherit', env: { ...process.env, ...env } });
 
-// The setup page downloads the Skill file by file, so a file added to or removed from the Skill
-// has to be named there too.
-const skillFiles = fs.readdirSync('skills/rho', { recursive: true }).map(f => f.split(path.sep).join('/')).filter(f => f.endsWith('.md')).sort();
-const downloads = [...new Set(fs.readFileSync('SETUP.md', 'utf8').match(/\b(?:SKILL|references\/[a-z-]+)\.md\b/g))].sort();
-if (skillFiles.join() !== downloads.join()) throw new Error(`SETUP.md downloads ${downloads.join(', ')}, but skills/rho holds ${skillFiles.join(', ')}.`);
+// The setup page installs the Skill from the package (`rho --install-skill`), so it names no file.
+// skills/ stays on the site for the setup pages of earlier versions, which downloaded it.
+if (!fs.readFileSync('SETUP.md', 'utf8').includes('--install-skill')) throw new Error('SETUP.md no longer installs the Skill with rho --install-skill.');
 const home = process.argv.includes('--home'), docs = !home && !process.argv.includes('--no-docs');
 fs.rmSync(out, { recursive: true, force: true });
 fs.mkdirSync(out, { recursive: true });

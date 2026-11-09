@@ -71,6 +71,7 @@ observed.
 | [0.5.2 on macOS and Linux](PLATFORMS-0.5.2-EPISODE.md) | One tarball with a Core per platform: Core's Unix repair, the Rosetta stall, the Linux Notebook and Open folder, installation on four systems, and what is unverified |
 | [0.5.2 on Windows](WINDOWS-0.5.2-EPISODE.md) | Core with MSVC, a Host that outlives Rho and stops with its report, the Plugins on Windows, the Windows candidate installed and checked |
 | [Windows setup from an Agent's shell](WINDOWS-SETUP-EPISODE.md) | Issues #112 and #113 checked on current main; the setup page's Windows steps run from Git Bash; a background start that returns, `rho --stop`, R without a `C.UTF-8` locale, the Overview's timeline and Core's line endings |
+| [Setup reports: Windows with Codex Desktop, a Linux sandbox and a security warning](INSTALL-FEEDBACK-EPISODE.md) | Issues #114 and #115 and Huorong's downloader flag traced to the page's PowerShell script; `--background`, `--status`, `--install-skill` and `--version`; npm, `PATH` and Node checks; the page followed again on macOS |
 | [CI on three systems and npm](CI-EPISODE.md) | Cores built per platform, the suite on macOS, Linux and Windows, one candidate for four platforms installed on each, what the runners exposed, and publishing a tag to npm |
 | [Packing 0.5.2](PACKAGE-0.5.2-EPISODE.md) | The 12 MB candidate without bundled Agent clients: what 0.5.1 carried, owner changes, a missing client named, offline installation, real Claude/Codex runs and open items |
 | [Release](RELEASE.md) | Source publication and distribution |

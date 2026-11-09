@@ -73,7 +73,11 @@ export async function connectCli(args: string[]): Promise<number> {
   // The Rho to ask: the state folder given, else each Rho that noted it is running and the
   // default state, of which the one holding the folder as a project is the one meant.
   const given = values['state-dir'] ? path.resolve(values['state-dir']) : null;
-  const states = given ? [given] : [...new Set([...(await running()).map(note => note.stateDirectory), defaultStateDirectory()])];
+  // One Rho is one state folder, however its path is written: a home reached through a link
+  // (/tmp is /private/tmp on macOS) names it twice.
+  const real = async (folder: string) => fs.realpath(folder).catch(() => path.resolve(folder));
+  const listed = given ? [given] : [...(await running()).map(note => note.stateDirectory), defaultStateDirectory()];
+  const states = [...new Map(await Promise.all(listed.map(async state => [await real(state), state] as const))).values()];
   const held: { client: RhoClient; state: string; project: { id: string; root: string }; depth: number }[] = [];
   const stopped: string[] = [], other: string[] = [];
   for (const state of states) {

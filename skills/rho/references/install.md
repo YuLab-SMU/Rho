@@ -4,7 +4,7 @@
 
 | Needed | Detail |
 | --- | --- |
-| Node | `>=22.22.0 <27` (the 22, 24 and 26 lines). A Node outside the range prints one `EBADENGINE` warning at install time. Checked baseline: Node 22.22.3, npm 10.9.8. |
+| Node | `>=22.22.0 <27` (the 22, 24 and 26 lines) is the tested range. A Node outside it prints one `EBADENGINE` warning at install time; a Node 22 below 22.22 is untested rather than known to fail. Checked baseline: Node 22.22.3, npm 10.9.8. Rho needs npm as well: a Node without npm usually came with another program (an editor, or an Agent app's own runtime). Do not fetch npm into it, and ask before installing into your own app's runtime, which an update of the app can replace. |
 | Agent client | Claude Code or Codex, installed and signed in by the person. Rho drives it under the person's own settings and does not copy credentials between them. |
 | R | Only for R work. The Notebook's R session needs the `jsonlite` package. Without `Rscript`, the service, documents, files and saved results still work. Rho never installs project packages by itself. |
 | Python 3 | macOS and Linux use it for the file writer lock. Windows does not need it. The Notebook's Python session uses it too. |
@@ -25,6 +25,11 @@ yourself. Explain the options to the person and let them choose:
 - point npm at a user prefix (`npm config set prefix ~/.npm-global` plus a PATH entry), or use
   a Node version manager;
 - run the global install with `sudo` themselves.
+
+If the install succeeded but `rho` is not found, npm's command folder is not on this shell's
+`PATH`: it is `$(npm prefix -g)/bin` on macOS and Linux, and the `npm prefix -g` folder itself on
+Windows. Use the full path, and tell the person to open a new terminal or restart their Agent
+app. Do not install again.
 
 ## Start
 
@@ -55,45 +60,45 @@ those exist, keep using them.
 Keep `--state-dir` outside `--root`, so each project stays an ordinary folder.
 
 **From your own shell tool, keep it running after the call ends.** A service started in the
-foreground of your shell tool dies with that tool call, and a plain `&` may be lost too. On
-macOS and Linux, use:
+foreground of your shell tool dies with that tool call. Add `--background` to the start, on
+every system (`rho.cmd` on Windows):
 
 ```sh
-nohup rho --root ~/Rho/projects --state-dir ~/Rho/state > ~/Rho/rho.log 2>&1 &
+rho --root ~/Rho/projects --state-dir ~/Rho/state --background
 ```
 
-Then wait for the first line of the log, which is one JSON object:
+It returns once Rho is ready, within a minute, and prints the ready line first, one JSON object:
 
 ```json
 {"ready":{"url":"http://127.0.0.1:49353","connectionFile":"/…/connection.json","apiVersion":"2.0","openUrl":"…","startup":{"projects":"…","state":"…","core":"…","rscript":"…"}}}
 ```
 
-Poll the log for a few seconds. Do not assume the service is up because the command returned.
-Tell the person the `url`. `startup.rscript` shows which R it found, and `startup.core` the
-binary for managed runs. Without a Core, managed runs are unavailable and everything else works.
+Then the process and the log: `<state>/rho.log`, with the previous start's in
+`<state>/rho.previous.log`. A start that fails prints Rho's own output and exits 1. In a separate
+command, `rho --status --state-dir ~/Rho/state` should say `"running":true` and `"answers":200`;
+if not, your client ended what your command started, and the person runs the start without
+`--background` in a terminal they keep open. Tell the person the `url`. `startup.rscript` shows
+which R it found, and `startup.core` the binary for managed runs. Without a Core, managed runs
+are unavailable and everything else works.
 
-On Windows, use PowerShell with `npm.cmd` and `rho.cmd` (plain `npm` and `rho` are PowerShell
-scripts that the default execution policy refuses), and let `cmd.exe` write the log. Started with
-`Start-Process -RedirectStandardOutput` instead, Rho holds your shell's output open and your
-command does not return:
+Do not write a script to start Rho, and do not change a shell's execution policy. On Windows,
+`--background` runs Rho under `cmd.exe` with a console no window shows, and the commands are
+`npm.cmd` and `rho.cmd`: plain `npm` and `rho` are PowerShell scripts that the default execution
+policy refuses. The [setup page](https://yulab-smu.top/Rho/doc/setup.md#on-windows) has every
+Windows step.
 
-```powershell
-$log = "$HOME\Rho\rho.log"; Remove-Item $log -ErrorAction SilentlyContinue
-Remove-Item Env:LC_ALL, Env:LC_CTYPE -ErrorAction SilentlyContinue
-$rho = (Get-Command rho.cmd).Source
-$line = "`"$rho`" --root `"$HOME\Rho\projects`" --state-dir `"$HOME\Rho\state`" > `"$log`" 2>&1"
-Start-Process cmd.exe -ArgumentList "/d /s /c `"$line`"" -WindowStyle Hidden
-```
+A version whose `rho --help` does not list `--background` is started with
+`nohup rho … > ~/Rho/rho.log 2>&1 &` on macOS and Linux, and the log is polled for the ready line.
 
-Then wait for the ready line in the log as above. The `Remove-Item Env:` line keeps a shell's
-`LC_CTYPE=C.UTF-8`, which Windows has no locale for, from Rho's R. The
-[setup page](https://yulab-smu.top/Rho/doc/setup.md#on-windows) has every Windows step.
+Rho runs until it is stopped, the person logs out or the machine restarts, or the container or
+sandbox that holds it ends, and it does not start again by itself.
 
 **Useful flags.** `rho --help` lists the full set for the installed version.
 
 | Flag | Effect |
 | --- | --- |
-| `--open` | Open the address in the default browser |
+| `--open` | Open the address in the default browser. On a machine with no display it opens nothing and says so |
+| `--background` | Return once Rho is ready and leave it running, with its output in `<state>/rho.log` |
 | `--example off` | Do not copy the example project (a new state otherwise copies "PA14 quorum sensing" into the projects folder once) |
 | `--agent-backend codex-acp` | Codex in the Agent panel (default: Claude Code via `claude-acp`) |
 | `--claude PATH`, `--codex PATH` | Choose the Agent client binary (or `RHO_CLAUDE`, `RHO_CODEX`) |
@@ -113,6 +118,9 @@ and Python sessions; their in-memory values are lost.
 - From anywhere, when `rho --help` lists `--stop`: `rho --stop --state-dir "$HOME/Rho/state"` (no
   `--state-dir` means `~/Rho/state`; `rho.cmd` on Windows). It stops the service in order, as
   Ctrl+C does, and prints `{"stopped":…}` once it has ended. It says so when nothing runs there.
+  The log's last line is then `{"shutdown":…,"by":"rho --stop","at":…}`; `rho --status` reads it.
+  A log that ends without that line belongs to a Rho that crashed (its error is in the log) or
+  was ended from outside, which no process can record.
 - In its own terminal: Ctrl+C (Ctrl+Break on Windows).
 - Started in the background by a version without `--stop`, on Windows: `Stop-Process -Id <pid>`
   ends it at once, without the `{"shutdown":…}` line; a managed Host it started keeps running.
@@ -153,3 +161,4 @@ agrees (see Stop). Projects, conversations, notes and kept versions stay in thei
 | `<root>/<project>/.claude/skills/<name>/SKILL.md` | The project's own skills (how work is done here) |
 | `<root>/<project>/.rho/` | Plugin state for the project, such as Notebook cells and plots in `.rho/plugins/kernel/`. Do not edit it by hand |
 | `<state>/` | Service state and credentials (`connection.json`, `agent-*.json`). Never inside a project |
+| `<state>/rho.log`, `<state>/rho.previous.log` | The output of a `--background` start and of the one before it |

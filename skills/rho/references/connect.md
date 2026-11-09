@@ -58,6 +58,16 @@ The reply is one JSON line:
 ```
 
 Rho 0.5.6 and earlier return only `mcp` and `claude`. The same entries follow `rho connect`.
+
+The reply holds no credential bytes, but `connectionFile`, `mcp.args` and the ready entries name
+the credential file's path. Use them to configure; when you report, name the project and the
+server name rather than pasting the reply into a chat or an issue.
+
+Before adding an entry with your client's CLI, check that the CLI reads its own configuration:
+`claude mcp list` or `codex mcp list` should list servers, or say there are none, without an
+error. Codex's `failed to resolve CODEX_HOME` ("Could not find home directory") means your shell
+does not see the folder the person's app uses. Do not set `HOME` or `CODEX_HOME` for the whole
+system: give the person the `--grant … --agent codex` command to run in their own terminal.
 Whichever command you used, configure your client like this:
 
 - **Any MCP client:** register the returned `mcp.name`, `mcp.command` and `mcp.args`

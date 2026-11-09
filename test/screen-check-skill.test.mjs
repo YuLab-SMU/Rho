@@ -39,9 +39,11 @@ test('every failure kind the Skill names is one the command emits', async () => 
   }
 });
 
-test('the setup page downloads the reference, and the Skill routes to it', async () => {
+test('the setup page installs the Skill from the package, which ships the reference, and the Skill routes to it', async () => {
   const setup = await fs.readFile(path.join(root, 'SETUP.md'), 'utf8');
-  assert.equal(setup.match(/references\/screen-check\.md/g)?.length, 2, 'both the Bash and the PowerShell download lists name it');
+  assert.match(setup, /rho --install-skill /); assert.match(setup, /rho\.cmd --install-skill /);
+  assert.ok(JSON.parse(await fs.readFile(path.join(root, 'package.json'), 'utf8')).files.includes('skills/rho'), 'the package ships skills/rho');
+  await fs.access(path.join(root, 'skills', 'rho', 'references', 'screen-check.md'));
   const skill = await fs.readFile(path.join(root, 'skills', 'rho', 'SKILL.md'), 'utf8');
   assert.match(skill, /\[references\/screen-check\.md\]\(references\/screen-check\.md\)/);
 });

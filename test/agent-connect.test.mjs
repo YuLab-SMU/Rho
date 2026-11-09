@@ -208,9 +208,14 @@ test('rho connect finds the running Rho that holds the folder, so the prompt nee
     const { execFile } = await import('node:child_process');
     const run = (...extra) => new Promise(resolve => execFile(info.command[0], [...info.command.slice(1), ...extra],
       { env: { ...process.env, RHO_RUNNING_DIR: runningDir, HOME: home, USERPROFILE: home }, timeout: 30000 }, (error, stdout, stderr) => resolve({ code: error?.code ?? 0, stdout, stderr })));
+    // The same state folder named through a link (as /tmp is /private/tmp on macOS) is one Rho.
+    const link = path.join(scratch, 'link');
+    await fs.symlink(s.root, link, 'junction');
+    await announce({ stateDirectory: path.join(link, '.service'), url: s.service.url, pid: process.pid });
     const found = await run('--as', 'found-agent', '--json');
     assert.equal(found.code, 0, found.stderr);
     assert.equal(JSON.parse(found.stdout).projectId, s.project.id);
+    await withdraw(path.join(link, '.service'));
     await withdraw(s.service.state.directory);
     const lost = await run('--as', 'found-agent');
     assert.equal(lost.code, 1);

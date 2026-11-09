@@ -97,6 +97,25 @@ try {
     check('The launcher stopped in order on SIGTERM', { orderly: true });
   }
 
+  // The setup page's commands, through the installed shim as an Agent's shell runs them: the Skill
+  // from the package, then a background start that must return (spawnSync waits for its output to
+  // close), its status from a separate command, and an orderly stop, on every platform. This root's
+  // name has spaces and Chinese characters.
+  const shim = (...args) => windows
+    ? run(['"' + bin + '"', ...args.map(a => a.startsWith('--') ? a : '"' + a + '"')].join(' '), [], { cwd: root, shell: true, timeout: 120000 })
+    : run(bin, args, { cwd: root, timeout: 120000 });
+  assert.equal(shim('--version').trim(), JSON.parse(await fs.readFile(path.join(pkg, 'package.json'), 'utf8')).version);
+  const { skill } = JSON.parse(shim('--install-skill', path.join(root, 'skills', 'rho')));
+  assert.equal(skill.name, 'rho'); assert.ok(skill.files.includes('SKILL.md') && skill.files.length > 1);
+  started = Date.now();
+  const background = JSON.parse(shim('--root', projects, '--state-dir', state, '--background').split('\n')[0]).ready;
+  const returned = Date.now() - started;
+  const { status } = JSON.parse(shim('--status', '--state-dir', state));
+  assert.deepEqual([status.running, status.answers, status.url], [true, 200, background.url]);
+  assert.deepEqual(JSON.parse(shim('--stop', '--state-dir', state)), { stopped: { state } });
+  assert.match(JSON.parse(shim('--status', '--state-dir', state)).status.note, /stopped in order on rho --stop/);
+  check('The setup commands: Skill from the package, background start, status and stop', { skillFiles: skill.files.length, returnedMs: returned });
+
   // The packaged acceptances find R on PATH and the Core through the installation, as a person's would.
   const recovery = run(process.execPath, ['scripts/recovery-acceptance.mjs', path.join(root, 'recovery')], { cwd: pkg });
   check('Packaged recovery acceptance', { checks: passedLines(recovery) });

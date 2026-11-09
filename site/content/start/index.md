@@ -55,7 +55,10 @@ rho --root /absolute/projects --state-dir /absolute/service-state
 ```
 
 Create the projects directory first. Keep service state outside it, so a project stays an
-ordinary folder. Startup prints the loopback URL and the location of the connection file — never
+ordinary folder. Add `--background` to either start to get your terminal back once Rho is ready;
+its output then goes to `rho.log` in the state folder. `rho --status` says whether it runs, at
+which address and how it last ended, and `rho --stop` stops it in order. On Windows the command
+is `rho.cmd`. Startup prints the loopback URL and the location of the connection file — never
 the credential. Opening that URL in a browser on the same machine is the access: a same-origin
 request from loopback is answered as the local person, with no link, no code and no expiry.
 

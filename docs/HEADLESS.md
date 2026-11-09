@@ -98,7 +98,25 @@ second, then waits until the state's writer lock is free and the process that se
 it, named in `connection.json`, has ended. It prints `{"stopped":{"state":…}}`, and the
 service's own output ends with its `{"shutdown":…}` line. It exits 1 when nothing holds
 that state, or when the service there is an earlier version that never takes the
-request (after 10 s, removing it). A start removes a request no service took.
+request (after 10 s, removing it). A start removes a request no service took. The
+`{"shutdown":…}` line names what stopped the service (`by`: `rho --stop`, `SIGTERM`,
+`SIGINT` or `SIGBREAK`) and when (`at`).
+
+`--background` added to a start runs the same start detached, with its output in
+`<state>/rho.log`; the previous start's log becomes `rho.previous.log`. The command returns
+once the service prints its ready line, which it prints first, then the process and the log,
+and exits 0. When the service ends first it prints the service's output and exits with its
+code; after 60 s without a ready line it says so and exits 1, leaving the service starting.
+A state that is already running is refused before anything is started. On Windows the
+service runs under `cmd.exe` with a console that shows no window, so the console programs it
+starts share that console; the service is outside the job that ends `cmd.exe` when the
+command returns ([episode](INSTALL-FEEDBACK-EPISODE.md)). `rho --status [--state-dir DIR]`
+prints one JSON line: whether a service holds that state, its address and process, whether
+the address answers, the log, a note on how the last service ended (in order, with its
+`by` and `at`, or without a shutdown line), and the other services that announced
+themselves on this machine. `rho --install-skill DIR` copies the Agent Skill the package
+ships into DIR, refusing a folder that holds another skill, and `rho --version` prints the
+version.
 
 `--port`, `--rscript`, `--core`, `--plugins` and `--limits` are explicit
 operator selections; `RHO_RSCRIPT`, `RHO_CORE_BINARY` and `RHO_PYTHON` select
