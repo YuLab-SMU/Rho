@@ -223,3 +223,18 @@ selects Plugins `ce1185f` and Rho's 49 commits since `v0.5.6`: figures in the No
 Agent's messages in R and Python, plugin pictures and remote plugin markets, externally started
 Agent work in the project views, any ACP Agent, `rho connect` and `rho --stop`, the Windows setup
 fixes, the guidance to run scripts in the session and CSVs with an unnamed row-name column.
+
+[CI 42539296957](https://github.com/YuLab-SMU/Rho/actions/runs/42539296957) passed all 18 jobs on
+release commit `3ba229d8`: 337 of 341 tests on macOS and Linux and 321 on Windows, the rest skipped
+and none failed, and offline installs on the four platforms and on Linux with Node 24 and 26. Tag
+`v0.5.7` and [release 42539964113](https://github.com/YuLab-SMU/Rho/actions/runs/42539964113)
+published that 26,464,038-byte candidate (SHA-256 `abf194db…0732e`) without rebuilding, with
+[provenance log entry 3759812451](https://search.sigstore.dev/?logIndex=3759812451), at 00:24:28
+UTC on 2026-11-09. The registry served it at 00:39:11, about 15 minutes later, with the same bytes,
+as `latest`. A fresh install from the registry names the three selected commits with no
+overrides, its four Cores and 14 plugin packages match their recorded hashes, and the installed
+`rho` started the shipped project on a disposable state, served its page and stopped with
+`rho --stop`. The site was deployed from the same commit (`gh-pages` `6280ecf0`): front page,
+documentation, setup page, Skill and market; all 146 added or changed files matched once Pages had
+built. The demo keeps its earlier build: on its tour the current WebUI asks for
+`agent.sessions.list` and `figure.read`, which the recording does not answer.
