@@ -1,11 +1,25 @@
 const { ConnectionError, readConnection, resolveWorkspace, publicError, connectionFiles, projectConnection } = require('./connection.cjs');
 const fs = require('node:fs/promises');
+let Schema;
+try { Schema = require('@deepseek-ai/schemastery'); }
+catch (error) { console.warn('dsh-rho: bundle configuration is unavailable:', error.message); }
 const { observeDshSession } = require('../lib/observe.cjs');
 
 const isRhoTool = name => name.startsWith('mcp__rho__');
 
 exports.name = 'dsh-rho';
 exports.inject = ['connection', 'agents', 'tools', 'sessionQuery'];
+// Harness reads a bundle's exported Config to put it in the plugin configuration
+// ledger, which gives the bundle its own settings page. The browser half renders
+// the card through `plugins.bundle.config`.
+if (Schema) exports.Config = Schema.object({
+  connectionFile: Schema.string().default('').description('Absolute path to one Rho agent connection file.'),
+  connectionFiles: Schema.array(Schema.string()).default([]).description('Absolute paths to other Rho agent connection files, one per project.'),
+  command: Schema.string().default('rho').description('Rho executable used for the MCP bridge.'),
+  args: Schema.array(Schema.string()).default([]).description('Arguments placed before --mcp.'),
+  maxBridges: Schema.number().min(1).step(1).default(8).description('Maximum simultaneous conversation bridges.'),
+  toolCallTimeoutMs: Schema.number().min(1000).step(1).default(300000).description('MCP tool reply wait in milliseconds.'),
+});
 exports.apply = async (ctx, config = {}) => {
   const bindings = new Map();
   let disposed = false;

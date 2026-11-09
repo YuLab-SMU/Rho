@@ -6,7 +6,7 @@ follow the shared Notebook, inspect files, tables and figures, and ask about a
 selected result. Copy that question back to the original Harness conversation;
 the Agent reads its frozen context and writes its reply into Rho.
 
-Version **0.1.6** ships the **Rho conversation tab** and **Rho sidebar entry** with
+Version **0.1.7** ships the **Rho conversation tab** and **Rho sidebar entry** with
 its prebuilt launcher, display metadata and original Rho icon. Both entries
 show **Open Rho workspace**, which opens the existing application in Harness's
 Browser beside the conversation. **Open in system browser** is also available;
@@ -18,17 +18,25 @@ Credentials and the rest of Rho’s snapshot stay on the Host. No Rho views or r
 bundled, and opening the interface starts no service or analysis.
 
 The [episode](../../docs/DSH-RHO-EPISODE.md) records the observed integration and
-its limits. Version 0.1.6 declares Harness 0.2.1-rc.5 and 0.2.2-rc.1
-compatibility; the current installation was checked in Desktop 0.2.2-rc.1.
+its limits. Version 0.1.7 declares Harness 0.2.1-rc.5 and 0.2.2-rc.1
+compatibility; the previous installation was checked in Desktop 0.2.2-rc.1.
 It reads cold sessions through the public session-query lease. The
 [external work episode](../../docs/EXTERNAL-WORK-EPISODE.md) records the latter
 Desktop installation and the shared Graph, Console and Studio presentation. The
 [market index](https://yulab-smu.top/Rho/market/index.json) selects
-the prebuilt 0.1.5 package from an immutable public Git commit, with its icon and
-checked Harness compatibility. Use the fixed Git source in the [current source guide](https://github.com/YuLab-SMU/Rho/blob/main/docs/DEEPSEEK-HARNESS.md)
-for 0.1.6 until the index is separately updated. This is Rho's own index; add it to Harness's
+the prebuilt 0.1.7 package from an immutable public Git commit, with its icon and
+checked Harness compatibility. This is Rho's own index; add it to Harness's
 Discover sources to search for Rho. It is not in Harness's official default
-source, and the adapter is not published to npm.
+source.
+
+Harness renders a plugin settings entry when a bundle declares a `Config` schema
+and registers a `plugins.bundle.config` card. Version 0.1.7 does both, so
+**Plugins → Rho** has its own configuration section. Harness renders a new-version
+control only for a third-party bundle installed from a registry spec such as
+`dsh-rho@0.1.7`; a bundle installed from a Git source, tarball, link or local path
+has no version section by design. The Git market index remains the delivery route
+for this release, so installing from Discover does not produce that control.
+See [Distribution route](#distribution-route).
 
 ## Install into Harness
 
@@ -63,7 +71,7 @@ export DSH_HOME="$HOME/.dsh-rho"
 export RHO_DSH_CONNECTION="/absolute/path/to/the/agent-connection.json"
 # Only when rho is outside PATH:
 # export RHO_DSH_COMMAND="/absolute/path/to/node_modules/.bin/rho"
-dsh plugin --profile web add /absolute/path/to/dsh-rho-0.1.6.tgz --ignore-scripts
+dsh plugin --profile web add /absolute/path/to/dsh-rho-0.1.7.tgz --ignore-scripts
 dsh --profile web --no-open
 ```
 
@@ -86,6 +94,26 @@ which Harness already discovers. Otherwise its unchanged source directory
 `skills/rho` can be linked into `$DSH_HOME/skills/rho`. It is not copied into this
 bundle. The MCP tools also expose Rho's live operation contracts and owner skills.
 
+## Plugin settings
+
+Version 0.1.7 exports a `Config` schema for `connectionFile`, `connectionFiles`,
+`command`, `args`, `maxBridges` and `toolCallTimeoutMs`, and its browser half
+registers a `plugins.bundle.config` card under the package name. Harness therefore
+lists Rho as a configurable bundle and renders the card on **Plugins → Rho**,
+between the description and the component rows.
+
+The card reads and writes the same configuration the profile patch holds. It
+shows the agent connection file paths, the Rho command, extra arguments, the
+bridge limit and the tool reply wait. Save writes the changed fields; turn the
+bundle off and on for connection and command changes to take effect. A profile
+patch of a higher layer can override a value written here, and a read-only or
+unavailable configuration is shown without pretending to be editable. Entering
+paths in the card does not copy the credential files themselves anywhere.
+
+Editing `cordis.patch.yml` by hand remains supported. Both routes lead to the
+same `resolveWorkspace` check: one existing project grant per canonical folder,
+no grant creation and no fallback to another project.
+
 ## Harness Desktop
 
 Use **Plugins → Add plugin** to install the tarball, then **Enable now**. Desktop
@@ -95,7 +123,7 @@ new tarball through the same page. This releases the MCP bridge and UI, leaving
 the existing Rho service and Notebook running.
 
 A Desktop app opened from Finder may not inherit shell exports. Its profile
-`cordis.patch.yml` can hold one explicit configuration. Version 0.1.5 removes the
+`cordis.patch.yml` can hold one explicit configuration. The 0.1.5 release removed the
 separate `rho-mcp` entry: remove that old override when upgrading. There is one
 connection selection for both the launcher and tools.
 
@@ -199,8 +227,15 @@ node adapters/dsh-rho/market.mjs --commit <full-published-source-commit>
 Validate the output with Harness's `parseMarketIndex`, and verify a fresh install
 of its `marketInstallTarget` before publishing `site/market/index.json` to
 `gh-pages`. The generator copies metadata and the commit's timestamp from the
-selected commit, rather than following a branch at install time. npm publication,
-TUI and other operating systems remain outside the observed integration.
+selected commit, rather than following a branch at install time.
+
+Harness's own version section and update control require the installed profile
+dependency to be a registry spec under its own name (`dsh-rho@0.1.7`), with a
+semver version in the manifest. A Git commit, tarball, link or path spec is
+deliberately excluded, so the Git index above never produces that control.
+Publishing the package to a registry and installing it by name is a separate
+delivery decision with its own evidence; it is not part of this release. TUI and
+other operating systems remain outside the observed integration.
 
 
 ## Read-only conversation observation

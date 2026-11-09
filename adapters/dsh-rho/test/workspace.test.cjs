@@ -159,3 +159,21 @@ test('a cold conversation is read through a disposed session-query lease without
   assert.equal(h.cutsClosed(), before + 2, 'both the header lease and capture lease are disposed');
   assert.equal(h.mounts.length, mounts, 'reading never resumes a cold Agent');
 });
+
+test('the exported Config declares the bundle settings page and keeps the bridge defaults', () => {
+  const host = require('../src/host.cjs');
+  assert.equal(host.name, 'dsh-rho');
+  assert.equal(typeof host.apply, 'function');
+  assert.equal(typeof host.Config, 'function', 'Harness reads an exported Config schema for the plugin settings page');
+  assert.deepEqual(host.Config({}), {
+    connectionFile: '', connectionFiles: [], command: 'rho', args: [], maxBridges: 8, toolCallTimeoutMs: 300000,
+  });
+  const selected = host.Config({ connectionFiles: ['/tmp/a.json', '/tmp/b.json'], maxBridges: 3, command: '/opt/rho', args: ['--verbose'] });
+  assert.deepEqual(selected.connectionFiles, ['/tmp/a.json', '/tmp/b.json']);
+  assert.deepEqual(selected.args, ['--verbose']);
+  assert.equal(selected.maxBridges, 3);
+  assert.equal(selected.command, '/opt/rho');
+  assert.throws(() => host.Config({ maxBridges: 0 }), />= 1/);
+  assert.throws(() => host.Config({ toolCallTimeoutMs: 10 }), />= 1000/);
+  assert.throws(() => host.Config({ connectionFiles: 'not-an-array' }));
+});
