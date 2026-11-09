@@ -1,6 +1,6 @@
 # Rho status
 
-Updated: 2026-11-08.
+Updated: 2026-11-09.
 
 ## Current focus
 
@@ -19,9 +19,7 @@ The existing service and R session keep running; after the isolated preview chec
 
 The [third-party plugin channel](THIRD-PARTY-PLUGINS.md) now installs independent packages; sclet and a generated package have real native/browser [evidence](THIRD-PARTY-PLUGINS-EPISODE.md). The application path is included in 0.5.5; external plugin packages retain their own delivery.
 
-[dsh-rho project matching](DSH-RHO-EPISODE.md#conversation-project-matching) binds
-tools and the launcher to the same verified folder. The earlier public 0.1.5 Git
-package was checked in Desktop; the current 0.1.6 source candidate is described above.
+[dsh-rho project matching](DSH-RHO-EPISODE.md#conversation-project-matching) binds tools and the launcher to the same verified folder. The earlier public 0.1.5 Git package was checked in Desktop. The [0.1.7 source candidate](DEEPSEEK-HARNESS.md#plugin-settings-and-updates) exports a `Config` schema for the connection files, command, arguments, bridge limit and reply wait and registers a `plugins.bundle.config` card, so Harness gives the bundle its own settings entry: 9 adapter checks, a fresh tarball install and a disposable Harness profile passed, but the rendered card is not yet observed in a running Desktop. Harness gives a new-version control only to a bundle installed from a registry spec, so the Git and tarball route keeps off/uninstall/install and a registry release remains an unselected delivery decision. The checked `site/market/index.json` selects 0.1.7 from the source commit; site publication, source push and any release are separate steps.
 Result review and offline evidence retain their [episode](REVIEW-EVIDENCE-EPISODE.md).
 Native tools remain normal; Core is optional. No Core execution behavior changed. [P3 continuity](P3-CONTINUITY-EPISODE.md) reproduced a 64-turn stop and continued it after reopening; the restarted Notebook's in-memory state did not survive, and four native choices remained. Claude sessions now prefer Auto, and Rho sets no step or wall cap by default. Rerun so, P3 asked for no permission; the Agent's MCP bridge had cut Notebook calls at 30 s and then 300 s, and without those cuts P3 finished in the shared R session in 12.9 minutes.
 
