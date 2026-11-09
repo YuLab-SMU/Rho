@@ -1,0 +1,75 @@
+# Publishes the DeepSeek Harness adapter in adapters/dsh-rho to npm as `dsh-rho` when a
+# dsh-rho-vX.Y.Z tag names the version in its package.json. The package holds the committed
+# files (lib/ is built and checked in), the same ones a Git install of that commit receives.
+# Run by hand on main, it rehearses everything but the publication.
+#
+# npm authenticates through Trusted Publishing (OIDC) once the package's npmjs.com settings trust
+# owner YuLab-SMU, repository Rho, workflow publish-dsh-rho.yml and environment npm. npm cannot
+# trust a workflow for a package that does not exist yet, so until then the CLI falls back to the
+# repository secret NPM_TOKEN; only the first publication needs it.
+name: Publish dsh-rho
+
+on:
+  push:
+    tags: ['dsh-rho-v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-dsh-rho-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Test and pack
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with: { node-version: '22', package-manager-cache: false }
+      - name: Require the tag to name the version
+        if: github.ref_type == 'tag'
+        working-directory: adapters/dsh-rho
+        run: test "$GITHUB_REF_NAME" = "dsh-rho-v$(node -p 'require("./package.json").version')"
+      - run: npm ci --ignore-scripts
+        working-directory: adapters/dsh-rho
+      - run: npm test
+        working-directory: adapters/dsh-rho
+      - name: Pack
+        run: |
+          mkdir package
+          npm pack ./adapters/dsh-rho --ignore-scripts --pack-destination package
+          cd package && sha256sum *.tgz | tee SHA256SUMS
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with: { name: dsh-rho, path: package/, if-no-files-found: error }
+
+  publish:
+    name: Publish to npm
+    needs: check
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with: { node-version: '22', registry-url: 'https://registry.npmjs.org', package-manager-cache: false }
+      # Trusted Publishing needs npm 11.5.1 or later; Node 22 ships npm 10.
+      - run: npm install --global npm@11
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with: { name: dsh-rho, path: package }
+      - name: Publish
+        working-directory: package
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          sha256sum -c SHA256SUMS
+          npm publish ./dsh-rho-*.tgz --access public --provenance
+          echo "Published \`dsh-rho@${GITHUB_REF_NAME#dsh-rho-v}\` from ${GITHUB_SHA}." >> "$GITHUB_STEP_SUMMARY"
+          cat SHA256SUMS >> "$GITHUB_STEP_SUMMARY"

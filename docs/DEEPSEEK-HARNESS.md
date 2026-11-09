@@ -135,11 +135,21 @@ but the files they name are: keep those files outside the project and out of Git
 The **new version** control some other bundles show is a different mechanism.
 Harness offers it only to a third-party bundle installed from a registry spec such
 as `dsh-rho@0.1.7`, whose manifest declares a semver version; Git, tarball, link
-and local-path installs are deliberately excluded, as are official bundles. This
-release keeps the immutable Git source and Rho's own index, so its upgrade path
-remains off → uninstall → install. Publishing `dsh-rho` to a registry and
-installing it by name is a separate delivery decision that has not been made or
-verified here.
+and local-path installs are deliberately excluded, as are official bundles. A
+Git or tarball install therefore keeps off → uninstall → install as its upgrade
+path.
+
+A `dsh-rho-vX.Y.Z` tag naming the adapter's version runs
+[`publish-dsh-rho.yml`](../.github/workflows/publish-dsh-rho.yml): it tests and
+packs the committed adapter files, the same ones a Git install of that commit
+receives, and publishes them to npm with provenance in the `npm` environment. No
+one logs in to npm for a release. npm authenticates the workflow through Trusted
+Publishing once the package's npmjs.com settings trust owner `YuLab-SMU`,
+repository `Rho`, workflow `publish-dsh-rho.yml` and environment `npm`. npm can
+add that only to a package that already exists, so the first publication falls
+back to the repository secret `NPM_TOKEN`; a new trusted publisher must then
+publish successfully within two days. Until a registry version is published and
+installed by name, the new-version control remains unobserved.
 
 ## Use Web Harness
 
