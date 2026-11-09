@@ -10,6 +10,11 @@ prescriptive design system. How it changes next is decided by reviewing real run
 screens do not yet show. Avoid unnecessary secondary labels and descriptions: let the
 layout do the explaining.
 
+![The application during a short session](figures/demo.gif)
+
+The clip runs for about 30 seconds: the projects list, the answer board with its figure and
+table, a script and a table opened, and panes moved and resized while the work stays in place.
+
 ## The Agent's view of the sending tab
 
 Each message sent from the Agent panel carries that tab's page and, in Studio,
