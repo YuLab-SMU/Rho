@@ -14,7 +14,7 @@ const shortTemp = process.platform === 'win32' ? tmpdir() : '/tmp';
 const peer = `import fs from 'node:fs';import readline from 'node:readline';
 const out=v=>process.stdout.write(JSON.stringify({jsonrpc:'2.0',...v})+'\\n');let sid='new-session';
 readline.createInterface({input:process.stdin}).on('line',l=>{const r=JSON.parse(l),reply=result=>out({id:r.id,result});
- if(r.method)fs.appendFileSync(process.env.PEER_LOG,JSON.stringify({method:r.method,sessionId:r.params?.sessionId??null})+'\\n');
+ if(r.method)fs.appendFileSync(process.env.PEER_LOG,JSON.stringify({method:r.method,sessionId:r.params?.sessionId??null,pid:process.pid})+'\\n');
  if(r.method==='initialize')reply({protocolVersion:1,agentCapabilities:{loadSession:true,sessionCapabilities:{fork:{}}}});
  if(r.method==='session/new')reply({sessionId:sid});
  if(r.method==='session/load'){sid=r.params.sessionId;reply({});}
@@ -122,4 +122,16 @@ test('the next message continues the same session; a held session is refused unl
   const viaCodex = await call('conversation.start', { changeId: 'codex', text: 'Go on.', continue: { session: codex.id } });
   const codexRead = await answered(call, viaCodex.conversation.conversationId);
   assert.equal(codexRead.conversation.client, 'codex'); assert.equal(codexRead.conversation.sessionId, codexId);
+  // Codex's writer lock names no process. While Rho's own connection keeps the thread open, the
+  // lock is that connection's: the next message goes on in the same session.
+  const lock = path.join(process.env.CODEX_HOME, 'thread-writer-locks', codexId + '.lock');
+  await fs.mkdir(path.dirname(lock), { recursive: true }); await fs.writeFile(lock, '');
+  assert.equal((await call('agent.sessions.list')).sessions.find(s => s.sessionId === codexId).open, null);
+  await call('conversation.send', { conversationId: viaCodex.conversation.conversationId, changeId: 'codex-next', text: 'More.' });
+  assert.equal((await answered(call, viaCodex.conversation.conversationId)).turns.at(-1).state, 'completed');
+  // Without that connection, a held thread is another window's.
+  process.kill((await requests()).findLast(r => r.method === 'session/prompt').pid, 'SIGKILL');
+  for (let i = 0; i < 200 && !(await call('agent.sessions.list')).sessions.find(s => s.sessionId === codexId).open; i++) await new Promise(r => setTimeout(r, 20));
+  await assert.rejects(call('conversation.send', { conversationId: viaCodex.conversation.conversationId, changeId: 'codex-held', text: 'More.' }), e => e.error?.kind === 'condition' && /open in Codex/.test(e.message));
+  await fs.rm(lock);
 });

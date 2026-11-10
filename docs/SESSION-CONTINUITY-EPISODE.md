@@ -145,17 +145,64 @@ Harness as available, with Claude Code still the default.
   run, "continue a copy" read as plain text beside the notice; it is now
   underlined, checked again with a listed session held by a live process.
 
+## Codex in Rho's own panel
+
+On 2026-11-10 the person's own Codex conversation in Rho (the PA14 project)
+answered its first messages, and then every new message was refused with "This
+session is open in Codex. Close it there to continue here. Nothing was sent."
+No other window had the session open.
+
+A disposable run reproduced it: Codex through codex-acp 2.3.0, Westlake HPC
+`westlakehpc/glm-5.3-flash` through the local gateway, Rho and Codex sharing
+one Codex home, as on the person's machine. The first message was answered.
+The second was refused at once and again 5 s later, and so was the third. Codex
+keeps `thread-writer-locks/<thread>.lock` while a thread is loaded for writing.
+`lsof` named the holder as the `codex` app-server that Rho's own adapter
+started. The adapter keeps it for its idle period (5 min), so Rho read its own
+connection as another window. A Claude Code holder is a named process, which
+Rho traces back to its adapter. A Codex lock names no process, so this
+conversation could never pass the check.
+
+The lock is exclusive. With Rho's adapter holding a thread, an outside
+`codex exec resume` of that thread failed with "thread … already has an active
+writer", and the adapter's next prompt then succeeded. So while this
+conversation's own connection has the thread open, no other window can hold
+it. Rho now counts a Codex lock as its own in that case, for sending and in
+the session list. Without that connection, a lock still means another window.
+
+After the change, the same run answered four messages in a row, and the
+session list showed the thread as not open elsewhere after each one. In Chrome,
+the Agent panel with Codex answered three messages in a row (48, 12 and 13 s),
+with no refusal on screen. `test/session-continuity.test.mjs` now holds a
+fixture Codex lock: the next message goes through while Rho's connection is
+open, and is refused after that connection's process is killed. Without the
+change, this test fails.
+
+Seen in the same runs, not changed here:
+
+- With the Codex on PATH (0.167.0), codex-acp 2.3.0 failed every prompt of the
+  Westlake configuration (`MODEL_PROVIDER` and `CODEX_CONFIG`) with "This chat
+  uses westlake-hpc, but your current provider is openai", which reached the
+  panel only as "Internal error". `codex exec` with the same provider answered.
+  The runs above used the Codex bundled with the Agent plugin (0.164.0).
+- From the second message on, Codex's "Model metadata for
+  `westlakehpc/glm-5.3-flash` not found" warning appears in the answer text.
+
 ## Limits
 
-Codex continuation was checked with a test Agent and the person's real Codex
-records (read only), not a real Codex model run. Harness sessions are listed
+Codex continuation of a session started outside Rho was checked with a test
+Agent and the person's real Codex records (read only); a real Codex model ran
+only in Rho's own conversations. If Codex released a thread while Rho's
+connection stayed open and another window then took it, Rho would send, and
+Codex would refuse the turn. Harness sessions are listed
 only through the dsh-rho adapter's observation; a `dsh headless` session is not
 listed, though it continues. Native Harness records were not read directly.
 Turns sent from another window are matched to Rho's by their words, so two
 identical messages close together can pair wrongly. An idle Claude Code window
 that holds a session counts as open, as Claude Code records it; a Codex lock
-file is taken as open without testing the lock. Other clients, Windows and
-independent users were not observed.
+file not held by this conversation's own connection is taken as open without
+testing the lock. Other clients, Windows and independent users were not
+observed.
 
 ## npm delivery
 

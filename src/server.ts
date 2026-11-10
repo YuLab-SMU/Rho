@@ -725,7 +725,7 @@ export class RhoService {
       return [{ ...s, continueWith, ...(open !== undefined ? { open } : {}), ...(conversation ? { conversationId: conversation.conversationId } : {}) }];
     });
     // A session held only by Rho's own connection is not open elsewhere.
-    for (const s of sessions) if (s.open && s.conversationId && await this.conversations.owns(p, s.conversationId, s.open.pid)) s.open = null;
+    for (const s of sessions) if (s.open && s.conversationId && await this.conversations.owns(p, s.conversationId, s.open.pid, s.producer)) s.open = null;
     sessions.sort((a, b) => b.lastAt.localeCompare(a.lastAt));
     return { sessions: sessions.slice(0, 128), omitted: external.omitted + native.omitted + Math.max(0, sessions.length - 128) };
   }

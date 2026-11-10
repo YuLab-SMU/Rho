@@ -247,3 +247,16 @@ setup page without scripts ([setup reports](INSTALL-FEEDBACK-EPISODE.md)); `rho 
 `rho tool` for Agents outside Rho ([outside Agents](OUTSIDE-AGENT-EPISODE.md)); and the Skill's
 WorkBuddy guidance. The [WorkBuddy connector](WORKBUDDY-CONNECTOR-EPISODE.md) asks for 0.5.8 or
 later. Before its tag the suite passed 343 of 346 on macOS arm64 (3 skipped, Windows only).
+
+[CI 42750253162](https://github.com/YuLab-SMU/Rho/actions/runs/42750253162) passed all 18 jobs on
+release commit `ea5bc3d2`. Tag `v0.5.8` and
+[release 42753703498](https://github.com/YuLab-SMU/Rho/actions/runs/42753703498) found that run's
+candidate, verified it and published it without rebuilding at 04:07:10 UTC on 2026-11-10: about
+26.5 MB, 3,229 files, shasum `8c233da0…`, tarball SHA-256 `c4628754…ca7be`, with
+[provenance log entry 3777418705](https://search.sigstore.dev/?logIndex=3777418705). The registry
+served it at 05:03 UTC, about 56 minutes later, with the same bytes, as `latest`. A fresh install
+from the registry into a disposable prefix took 2 s: `rho --version` said 0.5.8; `rho open` on a
+folder named "my folder 文件夹" outside the projects folder started Rho in 1 s and wrote its
+`.rho/README.md`; `rho tool index --as workbuddy` answered with that project's id; `--status`
+reported it running with its page at 200; and `--stop` stopped it. The site was not redeployed for
+0.5.8, and the WorkBuddy connector upload remains the person's.

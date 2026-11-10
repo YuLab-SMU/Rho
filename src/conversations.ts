@@ -511,10 +511,13 @@ export class Conversations {
     });
   }
   /** Whether a process holding a session open is Rho's own connection to this conversation: the
-   * Agent its adapter started. */
-  async owns(project: Project, conversationId: string, pid: number | undefined) {
-    const adapter = (this.drivers.get(project.id + '/' + conversationId)?.driver as { pid?: number | null } | undefined)?.pid;
-    if (!adapter || !pid || process.platform === 'win32') return false;
+   * Agent its adapter started. Codex names no holding process, but it lets one writer open a
+   * thread at a time; while this conversation's own connection is open, that writer is Rho's. */
+  async owns(project: Project, conversationId: string, pid: number | undefined, producer?: string) {
+    const driver = this.drivers.get(project.id + '/' + conversationId)?.driver as { pid?: number | null; connected?: boolean } | undefined, adapter = driver?.pid;
+    if (!adapter) return false;
+    if (!pid && producer === 'codex') return !!driver.connected;
+    if (!pid || process.platform === 'win32') return false;
     const { execFile } = await import('node:child_process');
     let current = pid;
     for (let depth = 0; depth < 4 && current > 1; depth++) {
@@ -527,7 +530,7 @@ export class Conversations {
   private async notHeld(project: Project, producer: string, sessionId: string, existing: boolean, conversationId?: string) {
     if (producer !== 'claude-code' && producer !== 'codex') return;
     const found = await this.ports.nativeSession?.(project, producer, sessionId) ?? null;
-    const holder = found?.open && !(conversationId && await this.owns(project, conversationId, found.open.pid)) ? found.open : null;
+    const holder = found?.open && !(conversationId && await this.owns(project, conversationId, found.open.pid, producer)) ? found.open : null;
     requireThat(!holder, 'condition', `This session is open in ${holder?.where ?? 'another window'}. Close it there to continue here${existing ? '' : ', or continue a copy'}. Nothing was sent.`, { heldBy: holder?.where ?? null });
   }
   async send(project: Project, by: string, input: { conversationId: string; changeId: string; text: string; contexts?: string[]; uiContext?: UiLocation; continuationOf?: string }) {
