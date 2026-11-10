@@ -129,7 +129,8 @@ the row tables scrolled inside their frame.
   is read and when it cannot be drawn. In Chromium 156 with the Rust parser turned off
   (`--disable-features=XMLParsingRust,XMLRustForNonXslt,XMLParsingRustNonXslt`), the old view
   failed with the same message and the new one drew all 17,180 marks in the Notebook; a hover
-  read SPARCL1's row. Safari itself was not opened.
+  read SPARCL1's row. Safari itself was not opened. The fix is Plugins `888fe50`, selected by Rho
+  on 2026-11-10.
 - **Agent client.** The first Agent run ended with an internal error. The test HOME's wrapper
   was CommonJS under Rho's `"type": "module"`, and the throwaway HOME hid the R user
   library. Both belong to the harness, not to the product.
