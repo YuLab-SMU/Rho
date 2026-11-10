@@ -118,6 +118,24 @@ themselves on this machine. `rho --install-skill DIR` copies the Agent Skill the
 ships into DIR, refusing a folder that holds another skill, and `rho --version` prints the
 version.
 
+`rho open [FOLDER]` (the current folder without it) uses the running Rho that already has the
+folder as a project, else the one for `--state-dir` (`~/Rho/state`), which it starts with
+`--background` on `--root` (`~/Rho/projects`) and any start flags given when nothing runs there.
+It opens the folder as a project where it is and opens `<url>/#project=<id>` in the default
+browser (`--no-browser` skips that; `--json` prints one line). Its text reply says what to tell
+the person, that Rho is a page in their browser, and how an Agent works there. To open a folder
+outside the projects folder it calls `project.open` with the folder's full path, which only the
+state's operator credential may do: the folder becomes a project of the local person's tab
+alone (`selectedProjects`, as a folder chosen in the system dialog), kept across restarts. A tab
+or an Agent still names folders inside its root. An earlier Rho refuses the full path, and the
+command says how to proceed ([episode](OUTSIDE-AGENT-EPISODE.md)).
+
+`rho tool index|resolve|call|read [INPUT | -] --as NAME [--project FOLDER]` serves an Agent whose
+client cannot load the MCP server in the current session. It grants the project to session NAME
+as `rho connect` does (the same NAME keeps the same credential), starts `rho --mcp` on that grant
+for one call, and prints the tool's JSON reply, exiting 1 on an error reply. `rho tool list`
+prints the four tools' input schemas. Work done this way is the Agent session's, as over MCP.
+
 `--port`, `--rscript`, `--core`, `--plugins` and `--limits` are explicit
 operator selections; `RHO_RSCRIPT`, `RHO_CORE_BINARY` and `RHO_PYTHON` select
 equivalent runtimes. A Core override is outside bundled digest verification.

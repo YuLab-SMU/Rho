@@ -14,16 +14,8 @@ const link = (url: string, code: string) => url + '/#pair=' + code;
 // there, so `rho --stop` leaves this file in the state folder and the running launcher looks for it,
 // as Rho asks its Host to stop on Windows.
 const stopRequest = (stateDirectory: string) => path.join(stateDirectory, 'service.stop');
-// --open says when it could not open a browser, so a start on a machine without a screen (a server,
-// a container, an Agent's sandbox) does not look like one that opened a tab nobody sees.
 function openBrowser(target: string) {
-  if (process.platform === 'linux' && !process.env.DISPLAY && !process.env.WAYLAND_DISPLAY && !process.env.WSL_DISTRO_NAME) {
-    process.stderr.write(`No browser was opened: this machine has no display (DISPLAY and WAYLAND_DISPLAY are unset). Open ${target} in a browser on this machine, or forward its port to one that has a browser.\n`);
-    return;
-  }
-  const [command, args] = process.platform === 'darwin' ? ['open', [target]] : process.platform === 'win32' ? ['cmd', ['/c', 'start', '""', target]] : ['xdg-open', [target]];
-  const failed = (why: string) => process.stderr.write(`Could not open a browser (${why}). Open ${target} yourself.\n`);
-  spawn(command, args, { stdio: 'ignore', detached: true }).on('error', error => failed(error.message)).on('exit', code => { if (code) failed(`${command} exited with ${code}`); }).unref();
+  void import('./background.js').then(({ openInBrowser }) => openInBrowser(target)).then(result => { if (!result.opened) process.stderr.write(result.note + '\n'); });
 }
 // A generic ACP agent is any program that speaks ACP v1 over stdio. Its command is either a
 // JSON argv array (safest for paths with spaces) or a simple command line.
@@ -40,38 +32,45 @@ function parseAcpCommand(spec: string | undefined): { file: string; args: string
   if (!parts.length) throw new Error('--acp-command is empty.');
   return { file: parts[0], args: parts.slice(1) };
 }
-const usage = `Develop, install and manage independent plugins:
-  rho plugin --help
+const usage = `Rho is a workspace in the web browser on this machine, where a person and their Agent work
+on the same folder: files, figures, tables, a live R and Python Notebook and notes.
+
+Open a folder in Rho, in the browser, starting Rho in the background when it is not running
+(the current folder without FOLDER; rho open --help for its options):
+  rho open [FOLDER]
+Say whether Rho runs for a state folder (~/Rho/state without --state-dir), at which address, how
+the last one ended, and which others run on this machine:
+  rho --status [--state-dir SERVICE_STATE]
+Stop it in order, as Ctrl+C in its window does:
+  rho --stop [--state-dir SERVICE_STATE]
 Print this version:
   rho --version
-Verify a read-only evidence package:
-  rho --verify-evidence PATH
-Start Rho on ~/Rho/projects and ~/Rho/state, and say where it is and what is missing:
+
+For an Agent:
+  rho connect [PROJECT_FOLDER] --as NAME     add Rho's tools to your MCP client (rho connect --help)
+  rho tool index --as NAME                   call the same tools from your shell now (rho tool --help)
+  rho --install-skill SKILL_DIRECTORY        install the Rho Agent Skill this version ships
+
+Start Rho on ~/Rho/projects and ~/Rho/state in this terminal, and say where it is and what is missing:
   rho
-Start Rho:
+Start Rho with chosen folders and options:
   rho --root PROJECTS_DIRECTORY --state-dir SERVICE_STATE [--core ABSOLUTE_CORE_BINARY] [--rscript ABSOLUTE_RSCRIPT] [--python PYTHON] [--ssh SSH] [--serverctl SERVERCTL] [--claude CLAUDE_CODE_BINARY] [--codex CODEX_BINARY] [--agent-backend claude-acp|codex-acp|claude-cli|acp] [--acp-command JSON_ARGV] [--port PORT] [--limits JSON_FILE] [--plugins documents,files,...] [--example on|off] [--open]
-Start it in the background instead, add --background to either start: it returns once Rho is
-ready, with Rho's output in SERVICE_STATE/rho.log and the last start's in rho.previous.log:
-  rho [--root PROJECTS_DIRECTORY --state-dir SERVICE_STATE ...] --background
-Say whether Rho runs for a state folder, at which address, how the last one ended, and which others run:
-  rho --status [--state-dir SERVICE_STATE]
-Stop the Rho running for a state folder (~/Rho/state without --state-dir), as Ctrl+C in its window does:
-  rho --stop [--state-dir SERVICE_STATE]
-Install the Rho Agent Skill that ships with this version into a folder an Agent loads skills from:
-  rho --install-skill SKILL_DIRECTORY
-A narrower browser link (optional):
+Add --background to either start to have it return once Rho is ready, with Rho's output in
+SERVICE_STATE/rho.log and the last start's in rho.previous.log.
+
+Less common:
+  rho plugin --help                          develop, install and manage independent plugins
+  rho --verify-evidence PATH                 verify a read-only evidence package
   rho --pair PRIVATE_CONNECTION_FILE [--root PROJECTS_RELATIVE_DIRECTORY] [--open]
-Connect yourself, an Agent, to a project of the running Rho (what a setup prompt asks):
-  rho connect [PROJECT_FOLDER] --as NAME [--state-dir SERVICE_STATE] [--json]
-Add Rho to your own Claude Code or Codex for one project:
+                                             a narrower, expiring browser link (optional)
   rho --grant PRIVATE_CONNECTION_FILE --project PROJECTS_RELATIVE_DIRECTORY --agent claude-code|codex
-Give any MCP Agent access to one project and print its stdio MCP configuration:
+                                             add Rho to your own Claude Code or Codex for one project
   rho --grant PRIVATE_CONNECTION_FILE --project PROJECTS_RELATIVE_DIRECTORY [--session NAME]
   rho --grant PRIVATE_CONNECTION_FILE --project-id EXISTING_PROJECT_ID --session NAME
-Serve that access to the Agent over MCP (stdio):
-  rho --mcp AGENT_CONNECTION_FILE
-Observe an external ACP client (use this as its agent command):
+                                             give any MCP Agent one project; prints its stdio MCP configuration
+  rho --mcp AGENT_CONNECTION_FILE            serve that access to the Agent over MCP (stdio)
   rho --acp /absolute/project --acp-agent claude|codex
+                                             observe an external ACP client (use as its agent command)
 --example off starts Rho without the project it ships; a new state otherwise gets that project
 once, copied into the projects directory. --open opens the printed url in the default browser.
 Without --port a start takes the port this state's last start had, and a new one only when that
@@ -111,6 +110,10 @@ if (process.argv[2] === 'plugin') {
   catch (error) { process.stderr.write((error instanceof Error ? error.message : String(error)) + '\n'); process.exitCode = 1; }
 } else if (process.argv[2] === 'connect') {
   process.exitCode = await (await import('./connect-cli.js')).connectCli(process.argv.slice(3));
+} else if (process.argv[2] === 'open') {
+  process.exitCode = await (await import('./open-cli.js')).openCli(process.argv.slice(3));
+} else if (process.argv[2] === 'tool') {
+  process.exitCode = await (await import('./open-cli.js')).toolCli(process.argv.slice(3));
 } else {
 let parsed;
 try { parsed = parseArgs({ options }); }

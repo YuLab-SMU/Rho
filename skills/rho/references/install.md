@@ -33,6 +33,13 @@ app. Do not install again.
 
 ## Start
 
+**To open a folder (after 0.5.7):** `rho open [FOLDER]` finds the running Rho or starts one in
+the background on `~/Rho/state` and `~/Rho/projects`, makes the folder a project where it is,
+and opens its page in the browser. `--state-dir`, `--root` and start flags such as
+`--agent-backend codex-acp` apply when it has to start Rho; `--no-browser` and `--json` change
+what it does at the end. The rest of this section is for starting Rho without opening a folder,
+or on a version without `rho open`.
+
 First check that no service is already running for the state folder you plan to use (see
 SKILL.md). If one is, give the person its address instead of starting another.
 

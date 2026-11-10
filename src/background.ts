@@ -14,6 +14,22 @@ import { running } from './running.js';
 const cli = fileURLToPath(new URL('./cli.js', import.meta.url));
 export const logFile = (stateDirectory: string) => path.join(stateDirectory, 'rho.log');
 export const previousLogFile = (stateDirectory: string) => path.join(stateDirectory, 'rho.previous.log');
+// --open says when it could not open a browser, so a start on a machine without a screen (a server,
+// a container, an Agent's sandbox) does not look like one that opened a tab nobody sees. The opener
+// is given 5 s to say it failed; one still running then is taken as opening.
+export function openInBrowser(target: string): Promise<{ opened: boolean; note: string }> {
+  if (process.platform === 'linux' && !process.env.DISPLAY && !process.env.WAYLAND_DISPLAY && !process.env.WSL_DISTRO_NAME)
+    return Promise.resolve({ opened: false, note: `No browser was opened: this machine has no display (DISPLAY and WAYLAND_DISPLAY are unset). Open ${target} in a browser on this machine, or forward its port to one that has a browser.` });
+  const [command, args] = process.platform === 'darwin' ? ['open', [target]] : process.platform === 'win32' ? ['cmd', ['/c', 'start', '""', target]] : ['xdg-open', [target]];
+  return new Promise(resolve => {
+    const failed = (why: string) => resolve({ opened: false, note: `Could not open a browser (${why}). Open ${target} yourself.` });
+    // Both stay referenced until the opener answers, or this process could end before it does.
+    const child = spawn(command, args as string[], { stdio: 'ignore', detached: true, windowsHide: true });
+    const timer = setTimeout(() => { child.unref(); resolve({ opened: true, note: 'Opened in the default browser.' }); }, 5000);
+    child.on('error', error => { clearTimeout(timer); failed(error.message); });
+    child.on('exit', code => { clearTimeout(timer); if (code) failed(`${command} exited with ${code}`); else resolve({ opened: true, note: 'Opened in the default browser.' }); });
+  });
+}
 // The command a person or an Agent types on this system: in PowerShell plain `rho` is a script
 // that Windows' default execution policy refuses, while `rho.cmd` runs everywhere.
 export const rhoCommand = process.platform === 'win32' ? 'rho.cmd' : 'rho';
@@ -73,10 +89,10 @@ function spawnWindows(args: string[], log: string): ChildProcess {
 
 // Starts the same command in the background with its output in the state's rho.log, keeps the
 // last start's log as rho.previous.log, and returns once the service is ready or has failed.
-export async function startInBackground(args: string[], stateDirectory: string, waitMs = 60000) {
+export async function startInBackground(args: string[], stateDirectory: string, { waitMs = 60000, quiet = false } = {}) {
   const state = path.resolve(stateDirectory), log = logFile(state);
   await fs.mkdir(state, { recursive: true });
-  const say = (text: string) => process.stdout.write(text + '\n'), fail = (text: string, code = 1) => { process.stderr.write(text.trimEnd() + '\n'); return code; };
+  const say = (text: string) => { if (!quiet) process.stdout.write(text + '\n'); }, fail = (text: string, code = 1) => { process.stderr.write(text.trimEnd() + '\n'); return code; };
   if (await connection(state) && await holds(state)) {
     const url = (await connection(state))?.url;
     return fail(`Rho is already running for ${state}${typeof url === 'string' ? ' at ' + url : ''}. Open that url, or stop that service before starting it again.`);
@@ -112,6 +128,7 @@ export async function startInBackground(args: string[], stateDirectory: string, 
   child.unref();
   const pid = (await connection(state))?.pid;
   say(ready);
+  try { const url = JSON.parse(ready).ready.url; say(`Rho is a workspace in the browser: open ${url} in a browser on this machine.`); } catch {}
   say(`Rho runs in the background${Number.isInteger(pid) ? ` as process ${pid}` : ''}, with its output in ${log}.`);
   say(`Check it:  ${rhoCommand} --status --state-dir "${state}"`);
   say(`Stop it:   ${rhoCommand} --stop --state-dir "${state}"`);

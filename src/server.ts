@@ -873,6 +873,18 @@ export class RhoService {
         return { cancelled: false, project };
       } finally { this.pickingFolder = false; }
     }
+    // The person's own state credential (`rho open`) may name any folder on this machine by its full
+    // path, as the dialog lets them choose one: a folder outside the projects folder becomes theirs
+    // in their own tab and nobody else's. A tab or an Agent names folders inside its root only.
+    if (method === 'project.open' && principal.id === 'operator' && path.isAbsolute(b.path)) return this.serial('projects', async () => {
+      const folder = await fs.realpath(b.path).catch(() => { throw new Fault('not_found', `There is no folder ${b.path}.`, { path: b.path }); });
+      const root = await fs.realpath(this.state.root);
+      const inside = folder === root || folder.startsWith(root + path.sep);
+      const person = this.state.principals.find(x => x.id === localBrowserId);
+      requireThat(inside || person, 'unavailable', 'This service has no tab of the person at this machine to give the folder to.');
+      const p = inside ? await this.state.open(path.relative(root, folder) || '.') : await this.state.openForPerson(folder, person!, this.config.nativeFolders?.maxProjects ?? nativeFolderLimits.maxProjects);
+      return { ...p, host: await this.bridge.capability(p.root) };
+    });
     if (method === 'project.create' || method === 'project.open') return this.serial('projects', async () => {
       const root = principal.projectRoot ?? this.state.root;
       const relative = method === 'project.create' ? b.name : b.path;

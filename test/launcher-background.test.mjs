@@ -33,7 +33,8 @@ test('--background returns once Rho is ready, --status says how it runs and how 
     const lines = first.stdout.trim().split('\n');
     const { ready } = JSON.parse(lines[0]);
     assert.match(ready.url, /^http:\/\/127\.0\.0\.1:\d+$/);
-    assert.match(lines[1], /^Rho runs in the background as process \d+, with its output in /);
+    assert.equal(lines[1], `Rho is a workspace in the browser: open ${ready.url} in a browser on this machine.`);
+    assert.match(lines[2], /^Rho runs in the background as process \d+, with its output in /);
     // The command has ended; Rho has not.
     let now = await status();
     assert.deepEqual([now.status.running, now.status.answers, now.status.url, now.status.log], [true, 200, ready.url, path.join(state, 'rho.log')]);

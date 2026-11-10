@@ -9,6 +9,24 @@ export interface SourceFolder { id: string; root: string; name: string }
 export interface FolderSelection extends SourceFolder { principalId: string; expiresAt: number }
 export interface Project { id: string; root: string; openedAt: string; nativeSelected?: true; name?: string; sources?: SourceFolder[]; workspace?: true; visibilityRoot?: string; creation?: { id: string; digest: string; author: string }; example?: { version: string } }
 export interface Principal { id: string; tokenHash: string; projectId?: string; methods: string[]; kind?: 'browser'; profile?: 'layered-business' | 'layered-presentation'; pluginFilter?: string[]; projectRoot?: string; selectedProjects?: string[]; expiresAt?: string; label?: string; conversationId?: string; added?: AddedTo; client?: { name: string; version?: string } }
+export const rhoFolderNote = `# .rho
+
+Rho keeps this project's own state here: Notebook sessions, cells and figures, kept versions of
+files, conversations and layouts. These files are internal and change between versions; reading
+them does not tell you what Rho can do, and editing them can break the project.
+
+The person sees this folder in Rho, a workspace in their web browser. To open it there:
+
+    rho open
+
+To work in it as an Agent, use Rho's tools rather than these files: from your shell now with
+\`rho tool index --as NAME\` (\`rho tool --help\`), or as an MCP server that
+\`rho connect . --as NAME\` adds to your client. Run R and Python in the project's Notebook
+(\`kernel.run\`), so the person sees each step and figure on the page. When you tell them what
+you did, tell them where to look: this project's page in their browser, whose address
+\`rho open --no-browser\` prints (without \`--no-browser\` it also opens the page).
+`;
+
 export async function lease(directory: string) {
   // Best effort: say who holds it when the platform can tell us. Never a failure.
   const holder = (file: string) => {
@@ -179,6 +197,15 @@ export class State {
     // The local person's access does not expire; a linked tab's does. Demanding an expiry here
     // refused every folder this machine's own tab picked, after the person had chosen it.
     requireThat(this.principals.includes(principal) && principal.kind === 'browser' && principal.methods.includes('project.pick') && (!principal.expiresAt || Date.parse(principal.expiresAt) > Date.now()), 'unauthorized', 'This tab no longer has access. No selected folder was opened.');
+    return this.openFor(root, principal, maxProjects);
+  }
+  // A folder the person named with their own state credential (`rho open`), as if they had chosen
+  // it in the dialog: their tab gets that folder alone, kept across restarts.
+  async openForPerson(root: string, person: Principal, maxProjects: number) {
+    requireThat(this.principals.includes(person) && person.kind === 'browser' && !person.expiresAt, 'unauthorized', 'Only the person at this machine is given a folder this way.');
+    return this.openFor(root, person, maxProjects);
+  }
+  private async openFor(root: string, principal: Principal, maxProjects: number) {
     const selected = principal.selectedProjects ?? [];
     const canonical = await fs.realpath(root), id = digest(canonical).slice(0, 32);
     requireThat(selected.includes(id) || selected.length < maxProjects, 'limit', 'This tab has reached its selected-project limit. Existing projects remain available.', { limit: 'nativeFolders.maxProjects', maximum: maxProjects });
@@ -209,6 +236,10 @@ export class State {
     if (!this.acquired.has(project.id)) {
       const directory = await stateDirectory(project.root, '.rho/rho');
       this.releases.push(await lease(directory)); this.acquired.add(project.id);
+      // Agents outside Rho look in .rho first and read its state files to find out how to work
+      // here (every observed run did, one for two minutes). This note sends them to the commands.
+      const note = path.join(project.root, '.rho', 'README.md');
+      if (await fs.readFile(note, 'utf8').catch(() => '') !== rhoFolderNote) await fs.writeFile(note, rhoFolderNote).catch(() => {});
     }
   }
   async project(id: string, principal: Principal) {

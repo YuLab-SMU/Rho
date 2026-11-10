@@ -54,6 +54,9 @@ yourself, on any version:
 rho --root /absolute/projects --state-dir /absolute/service-state
 ```
 
+To work on a folder you already have, `rho open` in it (or `rho open <folder>`) starts Rho in the
+background when it is not running and opens that folder in your browser, where it is.
+
 Create the projects directory first. Keep service state outside it, so a project stays an
 ordinary folder. Add `--background` to either start to get your terminal back once Rho is ready;
 its output then goes to `rho.log` in the state folder. `rho --status` says whether it runs, at

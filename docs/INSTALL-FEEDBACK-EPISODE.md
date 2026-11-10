@@ -104,8 +104,12 @@ Before that, by hand: a failed start (no projects folder) printed Rho's `ENOENT`
 ends without a shutdown line; a restart kept the stop's log as `rho.previous.log`.
 
 The suite on macOS: 340 of 343, 3 skipped (Windows only), after one test that required the page
-to list the Skill's files was changed to require the package to ship them. CI on macOS, Linux and
-Windows, with the installed checks on four platforms, is recorded with the next change.
+to list the Skill's files was changed to require the package to ship them.
+[CI run 42646616217](https://github.com/YuLab-SMU/Rho/actions/runs/42646616217) on `511309a6`
+passed every job once its macOS Core build, cancelled before it started, was run again: the
+suite on macOS, Linux and Windows, and the installed check, with `--version`, `--install-skill`,
+`--background`, `--status` and `--stop` through the installed `rho` and `rho.cmd`, on macOS arm64,
+Linux arm64, Linux x64 with Node 22, 24 and 26, and Windows x64.
 
 ## Not done
 

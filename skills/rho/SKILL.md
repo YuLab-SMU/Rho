@@ -15,13 +15,49 @@ You keep your own tools and permissions. Rho adds four MCP tools (`rho_index`, `
 `rho_call`, `rho_read`) scoped to one project. It grants nothing beyond that project and adds
 no approval of its own.
 
-## First find out where things stand
+## The person asks you to start or open Rho
 
-Do this before running any install or start command.
+When `rho --version` answers, one command does it, in the folder they mean or naming it:
+
+```sh
+rho open                      # or: rho open "<folder>"     (rho.cmd on Windows)
+```
+
+It starts Rho in the background when it is not running, makes the folder a Rho project where
+it is (nothing is copied or moved), opens the folder's page in the person's browser, and prints
+the address, what to tell the person and how you work in it. Do not check Node, look for state
+folders or read Rho's files first: those checks are for installing and for failures. Codex adds
+`--agent-backend codex-acp`, so Rho's Agent panel uses Codex too.
+
+Then tell the person, in their words, what it printed: **Rho is a page in their web browser**,
+not this chat or a terminal; the address; what they find there (the folder's files, figures and
+tables, a live R and Python Notebook, notes, and an Agent panel where they can ask an Agent to
+work while they watch); and that Rho keeps running until `rho --stop`.
+
+Without `rho`, or when `rho open` is unknown (versions up to 0.5.7), see
+[install](references/install.md). When it fails, it says why: report that.
+
+## The person asks you to work in the project
+
+- **Rho's tools are loaded** (`rho_index` or `mcp__rho-<folder>__rho_index`): use them.
+- **They are not loaded in this session**, as in clients that load MCP servers only when a session
+  starts: call the same four tools from your shell, now, with `rho tool index|resolve|call|read`
+  `--as NAME` (`rho tool --help`; `rho tool list` gives their inputs). Do not read Rho's source
+  or call its HTTP API yourself. `rho connect` adds the tools to your client for later sessions.
+- Run R and Python as cells in the project's Notebook (`kernel.run`), not with a separate
+  `Rscript` or `python`, so the person sees each step, value and figure on the page and can
+  select points in a figure ([analysis](references/analysis.md)).
+- When you report, say where to look: the project's page in their browser, with its address
+  (`rho open --no-browser` prints it; without the flag it also opens the page). "The notebook"
+  alone can read as some other notebook.
+
+## Find out where things stand
+
+Before installing, or when `rho open` is unavailable or fails.
 
 | Question | How to check | Next |
 | --- | --- | --- |
-| Is Node in range? | `node -v`: Rho needs `>=22.22.0 <27` | Out of range: say how to get Node 22, 24 or 26, and stop |
+| Is Node in range? | `node -v`: Rho is tested on `>=22.22.0 <27` | A Node 22 below 22.22 is untested: say so and go on. Below 22 or from 27: say how to get Node 22, 24 or 26, and stop. |
 | Is Rho installed, which version? | `rho --version`, or `npm ls -g @rho-workspace/rho` (`npm ls --prefix <folder> @rho-workspace/rho` for an install into a folder). Versions before `--version` exit 2 on it; `rho --help` lists what this install accepts | Not installed: [install](references/install.md) |
 | Is a service already running? | `rho --status [--state-dir <state>]` prints one JSON line: whether Rho runs for that state folder (`~/Rho/state` without the flag), its `url`, whether it `answers` (`200`), how it last ended, and the `others` running on this machine. On a version without `--status`, `node -p "require('<state>/connection.json').url"` reads only the address (the file also holds a token), and `curl -s -o /dev/null -w '%{http_code}' <url>` answers `200` when it runs and `000` when nothing listens. The usual state folders are `~/Rho/state` (the setup page, and a start without flags) and `~/.rho-service` (earlier prompts on Rho's site) | Running: use that address. Not running: [start](references/install.md#start) |
 | Are you connected to a project? | You can call `rho_index` (it may be listed as `mcp__rho-<folder>__rho_index`) | Not connected: [connect](references/connect.md) |

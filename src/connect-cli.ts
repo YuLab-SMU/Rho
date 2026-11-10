@@ -56,6 +56,40 @@ export function connectText(reply: GrantReply, root: string) {
 
 const within = (folder: string, root: string) => folder === root || folder.startsWith(root.endsWith(path.sep) ? root : root + path.sep);
 
+export type Found = { client: RhoClient; state: string; project: { id: string; root: string } };
+// The running Rho that holds a folder as a project: the state folder given, else each Rho that
+// noted it is running and the default state. Each `rho connect`, `rho open` and `rho tool` asks this.
+export async function findProject(folder: string, given: string | null): Promise<{ found: Found } | { found: null; code: number; message: string; running: { client: RhoClient; state: string }[] }> {
+  // One Rho is one state folder, however its path is written: a home reached through a link
+  // (/tmp is /private/tmp on macOS) names it twice.
+  const real = async (place: string) => fs.realpath(place).catch(() => path.resolve(place));
+  const listed = given ? [given] : [...(await running()).map(note => note.stateDirectory), defaultStateDirectory()];
+  const states = [...new Map(await Promise.all(listed.map(async state => [await real(state), state] as const))).values()];
+  const held: (Found & { depth: number })[] = [], up: { client: RhoClient; state: string }[] = [];
+  const stopped: string[] = [], other: string[] = [];
+  for (const state of states) {
+    let client: RhoClient;
+    try { client = await RhoClient.fromFile(path.join(state, 'connection.json')); }
+    catch { if (given) return { found: null, code: 1, message: `No Rho has run with the state folder ${state}.`, running: [] }; continue; }
+    try {
+      const projects = await client.call('project.list', {});
+      up.push({ client, state });
+      // The innermost project holding the folder, so a project inside another's folder is itself.
+      const roots = await Promise.all(projects.map(async p => ({ project: p, root: await fs.realpath(p.root).catch(() => null) })));
+      const found = roots.filter(r => r.root && within(folder, r.root)).sort((a, b) => b.root!.length - a.root!.length)[0];
+      if (found) held.push({ client, state, project: found.project, depth: found.root!.length }); else other.push(`${state} (${client.connection.url})`);
+    } catch (error) {
+      const e = error as { cause?: { code?: string }; error?: { message?: string }; message?: string };
+      if (e?.cause?.code === 'ECONNREFUSED') { stopped.push(`${state} (last at ${client.connection.url})`); continue; }
+      return { found: null, code: 1, message: e?.error?.message ?? e?.message ?? String(error), running: up };
+    }
+  }
+  if (held.length > 1) return { found: null, code: 1, running: up, message: `More than one running Rho has ${folder} as a project: ${held.map(h => `${h.state} (${h.client.connection.url})`).join(', ')}. Ask the person which one they use, and run this again with --state-dir and its state folder.` };
+  if (held[0]) return { found: held[0] };
+  if (other.length) return { found: null, code: 1, running: up, message: `${folder} is not a project of the Rho running for ${other.join(', ')}. Open it in Rho first: rho open "${folder}".` };
+  return { found: null, code: 1, running: up, message: `Rho is not running${stopped.length ? ` for ${stopped.join(', ')}` : ' on this machine'}. Start it and open this folder with: rho open "${folder}".` };
+}
+
 export async function connectCli(args: string[]): Promise<number> {
   const fail = (code: number, message: string) => { process.stderr.write(message.trimEnd() + '\n'); return code; };
   let parsed;
@@ -70,38 +104,9 @@ export async function connectCli(args: string[]): Promise<number> {
   const asked = path.resolve(positionals[0] ?? process.cwd());
   const folder = await fs.realpath(asked).catch(() => null);
   if (!folder) return fail(1, `There is no folder ${asked}.`);
-  // The Rho to ask: the state folder given, else each Rho that noted it is running and the
-  // default state, of which the one holding the folder as a project is the one meant.
-  const given = values['state-dir'] ? path.resolve(values['state-dir']) : null;
-  // One Rho is one state folder, however its path is written: a home reached through a link
-  // (/tmp is /private/tmp on macOS) names it twice.
-  const real = async (folder: string) => fs.realpath(folder).catch(() => path.resolve(folder));
-  const listed = given ? [given] : [...(await running()).map(note => note.stateDirectory), defaultStateDirectory()];
-  const states = [...new Map(await Promise.all(listed.map(async state => [await real(state), state] as const))).values()];
-  const held: { client: RhoClient; state: string; project: { id: string; root: string }; depth: number }[] = [];
-  const stopped: string[] = [], other: string[] = [];
-  for (const state of states) {
-    let client: RhoClient;
-    try { client = await RhoClient.fromFile(path.join(state, 'connection.json')); }
-    catch { if (given) return fail(1, `No Rho has run with the state folder ${state}.`); continue; }
-    try {
-      const projects = await client.call('project.list', {});
-      // The innermost project holding the folder, so a project inside another's folder is itself.
-      const roots = await Promise.all(projects.map(async p => ({ project: p, root: await fs.realpath(p.root).catch(() => null) })));
-      const found = roots.filter(r => r.root && within(folder, r.root)).sort((a, b) => b.root!.length - a.root!.length)[0];
-      if (found) held.push({ client, state, project: found.project, depth: found.root!.length }); else other.push(`${state} (${client.connection.url})`);
-    } catch (error) {
-      const e = error as { cause?: { code?: string }; error?: { message?: string }; message?: string };
-      if (e?.cause?.code === 'ECONNREFUSED') { stopped.push(`${state} (last at ${client.connection.url})`); continue; }
-      return fail(1, e?.error?.message ?? e?.message ?? String(error));
-    }
-  }
-  if (held.length > 1) return fail(1, `More than one running Rho has ${folder} as a project: ${held.map(h => `${h.state} (${h.client.connection.url})`).join(', ')}. Ask the person which one they use, and run this again with --state-dir and its state folder.`);
-  const chosen = held[0];
-  if (!chosen) {
-    if (other.length) return fail(1, `${folder} is not a project of the Rho running for ${other.join(', ')}. Ask the person to open it in Rho, or give the folder of a project they opened.`);
-    return fail(1, `Rho is not running${stopped.length ? ` for ${stopped.join(', ')}` : ' on this machine'}. Ask the person to start it, then run this again.`);
-  }
+  const search = await findProject(folder, values['state-dir'] ? path.resolve(values['state-dir']) : null);
+  if (!search.found) return fail(search.code, search.message);
+  const chosen = search.found;
   try {
     const reply = await grantReply(chosen.client, chosen.project, session);
     process.stdout.write(values.json ? JSON.stringify(reply) + '\n' : connectText(reply, chosen.project.root));

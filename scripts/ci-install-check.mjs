@@ -116,6 +116,18 @@ try {
   assert.match(JSON.parse(shim('--status', '--state-dir', state)).status.note, /stopped in order on rho --stop/);
   check('The setup commands: Skill from the package, background start, status and stop', { skillFiles: skill.files.length, returnedMs: returned });
 
+  // What an outside Agent runs for "start this project with Rho": a folder outside the projects
+  // folder opened where it is, Rho started for it, then Rho's tools from the shell.
+  const elsewhere = path.join(root, 'elsewhere 文件夹');
+  await fs.mkdir(elsewhere);
+  started = Date.now();
+  const { open } = JSON.parse(shim('open', elsewhere, '--state-dir', state, '--root', projects, '--no-browser', '--json'));
+  assert.deepEqual([open.started, open.folder, open.browser.opened], [true, await fs.realpath(elsewhere), false]);
+  const index = JSON.parse(shim('tool', 'index', '--as', 'ci-check', '--project', elsewhere, '--state-dir', state));
+  assert.equal(index.value.scopeHint.projectId, open.projectId);
+  assert.deepEqual(JSON.parse(shim('--stop', '--state-dir', state)), { stopped: { state } });
+  check('rho open starts Rho on a folder outside its projects folder, and rho tool reaches it', { ms: Date.now() - started });
+
   // The packaged acceptances find R on PATH and the Core through the installation, as a person's would.
   const recovery = run(process.execPath, ['scripts/recovery-acceptance.mjs', path.join(root, 'recovery')], { cwd: pkg });
   check('Packaged recovery acceptance', { checks: passedLines(recovery) });

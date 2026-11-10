@@ -36,6 +36,26 @@ The reply tells you the rest:
 `--json` prints the reply as JSON, in the same form as `--grant` below. If the folder is not a
 project, the name is missing or Rho is not running, the command says so and exits non-zero.
 
+## Call the tools from your shell (after 0.5.7)
+
+Most clients load MCP servers only when a session starts, so the session that added Rho cannot
+call it. `rho tool` calls the same four tools from your shell, with the grant `rho connect`
+gives the same NAME:
+
+```sh
+rho tool index --as my-agent                                   # operations and a catalogRef
+rho tool resolve '{"catalogRef":"…","selected":["kernel.run"]}' --as my-agent
+rho tool call - --as my-agent < cell.json                      # {"operation":"kernel.run","contractRef":"…","input":{…}}
+rho tool read '{"ref":"…","path":"…"}' --as my-agent
+```
+
+Run it in the project folder or add `--project FOLDER`. The input is the MCP tool's input as JSON
+(`-` reads it from standard input, which avoids quoting); `rho tool list --as NAME` prints each
+tool's input schema. The reply is the tool's JSON reply, and the exit code is 1 when it is an
+error. What it does is recorded as your session, as through MCP, and the person sees it on the
+page. Do not call Rho's HTTP API with the state's `connection.json` instead: that is the person's
+own credential, and the work would not be recorded as yours.
+
 ## Grant one project (every version)
 
 The service must be running. `--project` is the folder's name relative to `--root`. Quote

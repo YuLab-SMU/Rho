@@ -203,8 +203,9 @@ Rscript -e 'p <- c("ggplot2", "dplyr", "tidyr", "patchwork", "scales", "car", "D
 
 Keep it brief, in their language:
 
-1. **The address to open,** `http://127.0.0.1:…`. Opening it in a browser on this machine is
-   all the access needed: no account, link or code.
+1. **Rho is a page in their web browser,** not this chat or a terminal: the address
+   `http://127.0.0.1:…`. Opening it in a browser on this machine is all the access needed: no
+   account, link or code.
 2. **Where things are:** projects in `~/Rho/projects`, service state in `~/Rho/state`, the log
    at `~/Rho/state/rho.log`, and the version installed.
 3. **What is done and what is missing,** step by step, and what works without what is missing.
@@ -214,7 +215,9 @@ Keep it brief, in their language:
      Rho's tools and the skill are available.
 
    Read the example's `README.md` and suggest three questions they could ask about it.
-5. **How to check, stop and start Rho:** `rho --status` says whether it runs and how it last
+5. **How to open their own folders:** `rho open <folder>`, or asking an Agent to open the folder
+   with Rho. The folder stays where it is and opens as a project in their browser.
+6. **How to check, stop and start Rho:** `rho --status` says whether it runs and how it last
    ended. `rho --stop --state-dir "$HOME/Rho/state"` stops it in order and prints
    `{"stopped":…}` once it has ended. Start it again with the command from step 4.
 
