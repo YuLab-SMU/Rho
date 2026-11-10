@@ -5,8 +5,13 @@
 // request once, with its shell and file tools and nothing to approve. Variants: `bare` (only `rho`
 // on PATH, as an Agent that never installed the Skill) and `skill` (the Skill this checkout ships,
 // installed in the Agent's skills folder). Runs go in parallel, so a question gets a rate.
+// `--client workbuddy` runs WorkBuddy's own agent core instead (the codebuddy CLI inside
+// /Applications/WorkBuddy.app, with its built-in skills and a throwaway WorkBuddy config folder);
+// its `skill` variant is the Skill of the WorkBuddy connector (adapters/workbuddy-rho). WorkBuddy's
+// models need the desktop app's login, so the route is given as a custom model, and the tools the
+// desktop app adds (market search, connector requests, image generation) are absent.
 //
-//   npm run build && node scripts/outside-agent-trials.mjs <case.json> [--runs 3] [--variants bare,skill] [--model ROUTE] [--out DIR]
+//   npm run build && node scripts/outside-agent-trials.mjs <case.json> [--runs 3] [--variants bare,skill] [--model ROUTE] [--client claude|workbuddy] [--out DIR]
 //
 // A case is JSON: { "name", "prompt", "copy": "/absolute/folder", "folder": "Projects/<name>",
 // "exclude": ["names", "not", "copied"], "minutes": 10, "before": "open" }; "before": "open" runs
@@ -32,6 +37,8 @@ const model = option('model', process.env.MODEL ?? 'westlakehpc/glm-5.3-flash');
 const out = path.resolve(option('out', `/tmp/ro-${Date.now().toString(36)}`));
 const minutes = Number(trial.minutes ?? 10);
 const claude = process.env.RHO_TRIAL_CLAUDE ?? path.join(os.homedir(), '.local/bin/claude');
+const client = option('client', 'claude');
+const workbuddy = '/Applications/WorkBuddy.app/Contents', wbCli = workbuddy + '/Resources/app.asar.unpacked/cli/bin/codebuddy';
 const repo = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const cli = path.join(repo, 'dist/cli.js');
 const gateway = JSON.parse(await fs.readFile(path.join(os.homedir(), '.claude/settings.json'), 'utf8')).env ?? {};
@@ -44,16 +51,36 @@ async function oneRun(variant, n) {
   await fs.mkdir(bin, { recursive: true }); await fs.mkdir(path.join(home, '.claude'), { recursive: true, mode: 0o700 });
   const skip = new Set(trial.exclude ?? []);
   await fs.cp(trial.copy, folder, { recursive: true, filter: source => !skip.has(path.basename(source)) });
-  await fs.writeFile(path.join(bin, 'rho'), `#!/bin/sh\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(cli)} "$@"\n`, { mode: 0o755 });
+  // The wrapper puts the recorders first itself: WorkBuddy's shell rebuilds PATH with /usr/bin
+  // ahead of the caller's folders, where the real `open` would open a tab on this machine.
+  await fs.writeFile(path.join(bin, 'rho'), `#!/bin/sh\nPATH=${JSON.stringify(bin)}:"$PATH" exec ${JSON.stringify(process.execPath)} ${JSON.stringify(cli)} "$@"\n`, { mode: 0o755 });
   for (const opener of ['open', 'xdg-open']) await fs.writeFile(path.join(bin, opener), `#!/bin/sh\necho "$@" >> ${JSON.stringify(path.join(dir, 'opened.log'))}\n`, { mode: 0o755 });
   await fs.writeFile(path.join(home, '.claude/settings.json'), JSON.stringify({ permissions: { defaultMode: 'dontAsk', allow: ['Bash', 'Read', 'Glob', 'Grep', 'Write', 'Edit', 'Skill'] } }), { mode: 0o600 });
   const env = { PATH: [bin, path.dirname(process.execPath), '/usr/local/bin', '/opt/homebrew/bin', '/usr/bin', '/bin', '/usr/sbin', '/sbin'].join(':'), HOME: home, TMPDIR: process.env.TMPDIR ?? '/tmp', LANG: 'en_US.UTF-8',
     ...(process.env.R_LIBS_USER ? { R_LIBS_USER: process.env.R_LIBS_USER } : {}), ...gateway, ...Object.fromEntries(slots.map(k => [k, model])) };
-  if (variant === 'skill') await run(process.execPath, [cli, '--install-skill', path.join(home, '.claude/skills/rho')], { env });
+  let command = claude, argv = ['-p', trial.prompt, '--output-format', 'stream-json', '--verbose'];
+  if (client === 'workbuddy') {
+    // WorkBuddy's agent core as the desktop app starts it, with its built-in skills, the route as a
+    // custom model and its tools allowed in its own settings.
+    const config = path.join(home, '.workbuddy'), resources = workbuddy + '/Resources';
+    await fs.mkdir(config, { recursive: true, mode: 0o700 });
+    await fs.writeFile(path.join(config, 'models.json'), JSON.stringify([{ id: model, name: model, vendor: 'Custom', url: `${gateway.ANTHROPIC_BASE_URL ?? 'http://127.0.0.1:3425'}/v1/chat/completions`, apiKey: 'trial', supportsToolCall: true, supportsImages: false, supportsReasoning: true, useCustomProtocol: false }]));
+    await fs.writeFile(path.join(config, 'settings.json'), JSON.stringify({ permissions: { allow: ['Bash', 'Read', 'Glob', 'Grep', 'Write', 'Edit', 'Skill'] } }));
+    Object.assign(env, { ELECTRON_RUN_AS_NODE: '1', CODEBUDDY_FORCE_LITE_WB_BUNDLE: '1', CODEBUDDY_CONFIG_DIR: config, WORKBUDDY_CONFIG_DIR: config,
+      CODEBUDDY_BUILTIN_SKILLS_DIR: resources + '/app.asar.unpacked/resources/plugins/workbuddy-builtin/skills', CODEBUDDY_HOST: 'workbuddy-desktop',
+      WORKBUDDY_APP_NAME: 'WorkBuddy', WORKBUDDY_PRODUCT_NAME: 'WorkBuddy', WORKBUDDY_LOCALE: 'zh-CN', WORKBUDDY_RESOURCES_PATH: resources,
+      WORKBUDDY_PROMPT_TEMPLATES_DIR: resources + '/app.asar.unpacked/resources/templates', CLIENT_INFO_PLATFORM: 'WorkBuddy', CLIENT_INFO_PRODUCT_NAME: 'WorkBuddy' });
+    if (variant === 'skill') {
+      const built = JSON.parse((await run(process.execPath, [path.join(repo, 'adapters/workbuddy-rho/build.mjs'), path.join(dir, 'connector')])).stdout);
+      await fs.cp(path.join(built.folder, 'skills/rho'), path.join(config, 'skills/rho'), { recursive: true });
+    }
+    command = workbuddy + '/MacOS/Electron';
+    argv = [wbCli, '-p', trial.prompt, '--model', 'custom-local:' + model, '--output-format', 'stream-json', '--permission-mode', 'dontAsk'];
+  } else if (variant === 'skill') await run(process.execPath, [cli, '--install-skill', path.join(home, '.claude/skills/rho')], { env });
   if (trial.before === 'open') { const opened = await run(process.execPath, [cli, 'open', '--no-browser'], { env, cwd: folder }); if (opened.code) throw new Error('rho open failed: ' + opened.stderr); }
 
   const began = Date.now(), lines = [];
-  const agent = spawn(claude, ['-p', trial.prompt, '--output-format', 'stream-json', '--verbose'], { cwd: folder, env, stdio: ['ignore', 'pipe', 'pipe'] });
+  const agent = spawn(command, argv, { cwd: folder, env, stdio: ['ignore', 'pipe', 'pipe'] });
   let buffered = '';
   agent.stdout.on('data', chunk => { buffered += chunk; let i; while ((i = buffered.indexOf('\n')) >= 0) { const line = buffered.slice(0, i); buffered = buffered.slice(i + 1); try { lines.push({ t: (Date.now() - began) / 1000, ...JSON.parse(line) }); } catch {} } });
   let stderr = ''; agent.stderr.on('data', b => { stderr = (stderr + b).slice(-4000); });
@@ -76,6 +103,8 @@ async function oneRun(variant, n) {
   const said = c => c.name === 'Bash' ? String(c.input?.command ?? '') : c.name === 'Read' ? String(c.input?.file_path ?? '') : '';
   const firstRhoAt = calls.find(c => /\brho(\.cmd)? (tool|open|connect)\b/.test(said(c)))?.t ?? null;
   const stateReads = calls.filter(c => /\.rho\/(rho|plugins|agent)\//.test(said(c))).length;
+  // Edits of an MCP configuration: a server added there needs approval in WorkBuddy and a new session.
+  const mcpConfig = calls.filter(c => /mcp\.json|mcp add/.test(said(c) + (c.name === 'Write' || c.name === 'Edit' ? String(c.input?.file_path ?? '') : ''))).length;
 
   // Every Rho this run started: the notes in its home, and processes started with a state in it.
   const notes = await fs.readdir(path.join(home, 'Rho/running')).catch(() => []);
@@ -95,7 +124,7 @@ async function oneRun(variant, n) {
   }
   const opened = (await fs.readFile(path.join(dir, 'opened.log'), 'utf8').catch(() => '')).trim().split('\n').filter(Boolean);
   const answer = final?.result ?? '';
-  const result = { variant, n, exit: code, seconds: Math.round((Date.now() - began) / 1000), turns: final?.num_turns, readyAt, firstRhoAt, stateReads, skillRead, toolCalls: calls.length,
+  const result = { variant, n, exit: code, seconds: Math.round((Date.now() - began) / 1000), turns: final?.num_turns, readyAt, firstRhoAt, stateReads, mcpConfig, skillRead, toolCalls: calls.length,
     byTool: calls.reduce((m, c) => (m[c.name] = (m[c.name] ?? 0) + 1, m), {}), services, opened,
     told: { browser: /浏览器|browser/i.test(answer), address: /http:\/\/127\.0\.0\.1:\d+/.test(answer) }, commands, answer, stderr: code ? stderr : undefined };
   await fs.writeFile(path.join(dir, 'result.json'), JSON.stringify(result, null, 2));
@@ -103,8 +132,8 @@ async function oneRun(variant, n) {
 }
 
 await fs.mkdir(out, { recursive: true });
-await fs.writeFile(path.join(out, 'trial.json'), JSON.stringify({ ...trial, model, runs, variants }, null, 2));
+await fs.writeFile(path.join(out, 'trial.json'), JSON.stringify({ ...trial, model, runs, variants, client }, null, 2));
 const all = await Promise.all(variants.flatMap(v => Array.from({ length: runs }, (_, i) => oneRun(v, i + 1))));
 await fs.writeFile(path.join(out, 'summary.json'), JSON.stringify(all.map(({ commands, answer, ...r }) => r), null, 2));
-for (const r of all) console.log(JSON.stringify({ run: `${r.variant}-${r.n}`, seconds: r.seconds, readyAt: r.readyAt, firstRhoAt: r.firstRhoAt, stateReads: r.stateReads, skill: r.skillRead, calls: r.toolCalls, services: r.services.map(s => `${s.state}:${s.running ? 'up' : 'down'}${s.folderIsProject ? '+project' : ''}`), opened: r.opened.length, told: r.told }));
+for (const r of all) console.log(JSON.stringify({ run: `${r.variant}-${r.n}`, seconds: r.seconds, readyAt: r.readyAt, firstRhoAt: r.firstRhoAt, stateReads: r.stateReads, mcpConfig: r.mcpConfig, skill: r.skillRead, calls: r.toolCalls, services: r.services.map(s => `${s.state}:${s.running ? 'up' : 'down'}${s.folderIsProject ? '+project' : ''}`), opened: r.opened.length, told: r.told }));
 console.log(out);

@@ -240,3 +240,10 @@ overrides, its four Cores and 14 plugin packages match their recorded hashes, an
 documentation, setup page, Skill and market; all 146 added or changed files matched once Pages had
 built. The demo keeps its earlier build: on its tour the current WebUI asks for
 `agent.sessions.list` and `figure.read`, which the recording does not answer.
+
+Version 0.5.8 selects the same Core, `8bed8ef`, and Plugins, `ce1185f`, as 0.5.7, with Rho's
+commits since `v0.5.7`: `rho … --background`, `--status`, `--install-skill`, `--version` and a
+setup page without scripts ([setup reports](INSTALL-FEEDBACK-EPISODE.md)); `rho open` and
+`rho tool` for Agents outside Rho ([outside Agents](OUTSIDE-AGENT-EPISODE.md)); and the Skill's
+WorkBuddy guidance. The [WorkBuddy connector](WORKBUDDY-CONNECTOR-EPISODE.md) asks for 0.5.8 or
+later. Before its tag the suite passed 343 of 346 on macOS arm64 (3 skipped, Windows only).

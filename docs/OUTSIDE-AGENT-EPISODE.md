@@ -10,8 +10,9 @@ runs them again.
 
 ## The WorkBuddy session
 
-From WorkBuddy's own session file for that conversation. The Rho Skill was installed in
-`~/.workbuddy/skills/rho`; the Agent never loaded it.
+From WorkBuddy's own session file for that conversation. The Rho Skill in
+`~/.workbuddy/skills/rho` was imported seven minutes after the conversation began, so the
+conversation did not list it ([WorkBuddy connector](WORKBUDDY-CONNECTOR-EPISODE.md)).
 
 | Request | Wall time | What the time went to |
 | --- | --- | --- |
@@ -19,9 +20,11 @@ From WorkBuddy's own session file for that conversation. The Rho Skill was insta
 | New workspace, illustrated analysis | about 21 min | A sub-agent read Rho's source for 5 min 19 s to learn what a workspace is. The Agent then called Rho's HTTP API with the state's operator credential from scripts in `/tmp`, guessed a resource kind and retried. It concluded that "Rho 的文档视图是源码编辑器，没有渲染预览" and made a separate HTML report: it had placed the report in `rho.editor`, the source editor it found in the code, while Rho has a Markdown reader (`markdown.reader`) |
 | Volcano plot to select genes | about 19 min | A sub-agent read Rho's source for 12 min 29 s to find how a figure becomes selectable. The cells then ran through the HTTP API as the operator, not as an Agent session |
 
-The Agent called no Rho tool in that session: WorkBuddy's MCP configuration names Rho servers for
-three other projects (`rho-project`, `rho-ggtree`, `rho-pa14-quorum-sensing`) and none for this
-one, and nothing told it another way in than the operator's HTTP API.
+The Agent called no Rho tool in that session. WorkBuddy's MCP configuration held three Rho
+servers its own Agent had added, `rho-project` for this project among them, but WorkBuddy runs such
+a server only after the person approves it, and none was approved
+([WorkBuddy connector](WORKBUDDY-CONNECTOR-EPISODE.md)). Nothing told the Agent another way in than
+the operator's HTTP API.
 
 ## Trials
 
@@ -107,11 +110,23 @@ Agent meets there. With a line asking for the page's address in each report, two
 round's four answers gave it (`http://127.0.0.1:…/#project=…`), one pointed to "本页右侧的
 Notebook 面板" without it, and one did not say where.
 
+## CI
+
+[CI 42736131288](https://github.com/YuLab-SMU/Rho/actions/runs/42736131288) on `553b7f78`: the
+first attempt failed only in Test win32-x64, where `agent-observation.test.mjs` ("browser observes
+only its project…") got `host_unavailable` with `os error 2` on the project Host's named pipe. The
+rerun passed every job, and the installed check ran `rho open` on a folder outside the projects
+folder and `rho tool index` through `rho`/`rho.cmd` on the four platforms, in about 1.8 to 2.7 s.
+The failure is Core's: on Windows `IpcListener::bind` creates no pipe, the accept thread that
+`serve` starts after printing its ready line makes the first instance, and each next one only on
+its next loop, so a client right after ready, or between two connections, can find none (read in
+Rho-core `8bed8ef`). It is open work for Rho-core.
+
 ## Not done
 
-- WorkBuddy itself was not run again: its Agent and model (Hy4) are not scriptable here. The
-  trials use Claude Code with another model, so they show what the commands and texts do for an
-  Agent that reads them, not WorkBuddy's own behaviour.
+- WorkBuddy's desktop app and model (Hy4) were not run again. The trials here use Claude Code;
+  the [WorkBuddy connector](WORKBUDDY-CONNECTOR-EPISODE.md) episode runs WorkBuddy's own agent
+  core with another model.
 - The workspace request (workspace, rendered report, figures in views) was not repeated.
   Whether `rho tool` leads an Agent to `markdown.reader` is unobserved.
 - `rho open` and `rho tool` were run on macOS only; Windows (`rho.cmd`) runs in CI.

@@ -33,7 +33,7 @@ app. Do not install again.
 
 ## Start
 
-**To open a folder (after 0.5.7):** `rho open [FOLDER]` finds the running Rho or starts one in
+**To open a folder (0.5.8 and later):** `rho open [FOLDER]` finds the running Rho or starts one in
 the background on `~/Rho/state` and `~/Rho/projects`, makes the folder a project where it is,
 and opens its page in the browser. `--state-dir`, `--root` and start flags such as
 `--agent-backend codex-acp` apply when it has to start Rho; `--no-browser` and `--json` change

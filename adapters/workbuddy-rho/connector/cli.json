@@ -1,0 +1,30 @@
+{
+  "runtime": {
+    "type": "node",
+    "version": ">=22.22.0 <27"
+  },
+  "init": {
+    "darwin": "npm install -g @rho-workspace/rho@latest",
+    "linux": "npm install -g @rho-workspace/rho@latest",
+    "win32": "npm install -g @rho-workspace/rho@latest"
+  },
+  "versionCheck": {
+    "command": {
+      "darwin": "rho --version",
+      "linux": "rho --version",
+      "win32": "rho.cmd --version"
+    },
+    "minVersion": "0.5.8"
+  },
+  "status": {
+    "darwin": "rho --version",
+    "linux": "rho --version",
+    "win32": "rho.cmd --version"
+  },
+  "statusMatch": "\\b\\d+\\.\\d+\\.\\d+\\b",
+  "unAuth": {
+    "darwin": "rho --version",
+    "linux": "rho --version",
+    "win32": "rho.cmd --version"
+  }
+}

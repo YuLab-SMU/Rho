@@ -1,0 +1,22 @@
+{
+  "name": "Rho",
+  "name_zh": "Rho 数据分析工作区",
+  "name_en": "Rho",
+  "description": "A local data-analysis workspace in your browser. You and WorkBuddy share one R/Python project: a live Notebook, files, figures, tables and notes on one page. WorkBuddy opens your folder in Rho and runs the analysis as Notebook cells you can watch and steer, with figures whose points you can select.",
+  "description_zh": "在本机浏览器里打开的数据分析工作区。你和 WorkBuddy 共用同一个 R/Python 项目：实时 Notebook、文件、图表、表格和笔记都在一个页面上。WorkBuddy 把你的文件夹在 Rho 里打开，把分析作为 Notebook 单元来运行，你能看着每一步、随时介入，还能直接选中图上的点。",
+  "description_en": "A local data-analysis workspace in your browser. You and WorkBuddy share one R/Python project: a live Notebook, files, figures, tables and notes on one page. WorkBuddy opens your folder in Rho and runs the analysis as Notebook cells you can watch and steer, with figures whose points you can select.",
+  "source": "rho-workspace",
+  "type": "cli",
+  "version": "1.0.0",
+  "examples_zh": [
+    "用 Rho 打开这个项目文件夹",
+    "在 Rho 的 Notebook 里画这份差异表达结果的火山图，我要自己选感兴趣的基因",
+    "把这份 CSV 在 Rho 里做一次完整分析：清洗、统计、画图，留好脚本和说明"
+  ],
+  "examples_en": [
+    "Open this project folder in Rho",
+    "Draw a volcano plot of these differential expression results in Rho's Notebook so I can pick the genes I care about",
+    "Analyse this CSV in Rho from cleaning to statistics and figures, and keep the scripts and notes"
+  ],
+  "minWorkbuddyVersion": "4.24.0"
+}
