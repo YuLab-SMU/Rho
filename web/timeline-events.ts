@@ -3,6 +3,7 @@ import type { BrowserClient, WorkspaceSnapshot } from '../src/browser.js';
 import type { RhoOutput } from '../src/contract.generated.js';
 import { eventMarks, type EventMark, type LaneOwner, type SourcedEvent } from '../src/timeline-events.js';
 import { agentName } from './agent-now.js';
+import { agentDisplayName } from './brand-marks.js';
 import type { GraphTurn } from '../src/work-graph.js';
 
 // The protected resources are the service and this tab: each plugin's newest events, read
@@ -33,8 +34,11 @@ export function useEventMarks(client: BrowserClient, snapshot: WorkspaceSnapshot
     }, Math.max(0, last.current + eventLimits.readMs - Date.now()));
     return () => clearTimeout(timer);
   }, [client, snapshot.project.id, snapshot.cursor, key]);
+  // An Agent the person connected (Claude Code in a terminal, WorkBuddy) has no conversation
+  // record of its own here: what it did that no session's record names goes under its name.
   const owners: LaneOwner[] = useMemo(() => [...(snapshot.conversations ?? []).map(c => ({ conversationId: c.conversationId, principal: c.principal, title: c.agentTitle || c.title, agent: agentName(c.client) })),
-    ...turns.filter(t => t.external).map(t => ({ conversationId: t.conversationId, principal: null, title: t.conversationTitle, agent: t.agent, eventKeys: (t.kernelCells ?? []).map(id => 'kernel.events:' + id) }))], [snapshot.conversations, turns]);
+    ...turns.filter(t => t.external).map(t => ({ conversationId: t.conversationId, principal: null, title: t.conversationTitle, agent: t.agent, eventKeys: (t.kernelCells ?? []).map(id => 'kernel.events:' + id) })),
+    ...(snapshot.agents ?? []).filter(a => !a.conversationId).map(a => { const name = agentDisplayName(a.label ?? 'Agent'); return { conversationId: a.principal, principal: a.principal, title: name, agent: name }; })], [snapshot.conversations, snapshot.agents, turns]);
   const marks = useMemo(() => eventMarks(events, owners, Date.now()), [events, owners]);
   return { marks, problem };
 }

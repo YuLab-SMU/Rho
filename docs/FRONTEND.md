@@ -433,7 +433,10 @@ inspect what happened. The application gives those actions direct places:
   carrying their start time. Past six lanes it keeps its height and scrolls, opening on
   the newest. What the plugins record joins it: each plugin may name a read of who did
   what and when (Notebook cells, Console commands), and each event goes to the lane of
-  whoever did it: You, the conversation whose Agent did it, or Outside Rho. Every
+  whoever did it: You, or the conversation whose Agent did it, wherever that
+  conversation was started. An Agent the person connected from its own window (Claude
+  Code in a terminal, WorkBuddy) has a lane under its name for what no session's record
+  names; the `rho` command and callers whose access is gone have the two lanes left. Every
   stretch of time is wide enough for its steps before the rest is shared by duration,
   so a minute of cells beside days of messages stays readable. The legend counts and
   filters them, refused or unknown steps are marked, pauses fold to a short gap, and
@@ -658,10 +661,13 @@ message box rather than offering to ask.
 Shared notes opens `project-notes.md` in the existing Documents owner. A failed work read keeps the previous
 view and offers Refresh. The cursor invalidates the read model; individual sources
 and resources retain their own versions. See the [observed loop](ACP-EPISODE.md#shared-workspace-loop).
-External ACP sessions use the same work surface with their own source identity,
-plans, usage and read-only latest reply there. Their permission choices stay in the
-original client; the Agent panel continues such a session in the folder once no
-other window holds it. The visible Overview rereads external projections every
+Work progress shows one card per conversation of an Agent, whichever way Rho came to
+know it: the conversation in the Agent panel, the session the Agent keeps in its own
+files, the same session seen while another window runs it, and its activity kept by the
+Host are one card. A card names its Agent and its state, shows the plan, usage and latest
+reply Rho has, and opens the conversation in the Agent panel; none says where the
+session began. A permission choice waiting in another window is said to wait there, and
+the Agent panel continues such a session once no other window holds it. The visible Overview rereads external projections every
 1.5 seconds; it does not start a collector, Agent or Host. Turn cancellation keeps
 unfinished tool outcomes unknown and does not claim all native processes exited.
 

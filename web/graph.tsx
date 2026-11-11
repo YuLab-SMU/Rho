@@ -785,8 +785,8 @@ function Timeline({ graph, marks = [], cursor, playing, running, speed, onSpeed,
     for (const t of spans) { const last = out.at(-1); if (last && t.start <= last.end + 30000) last.end = Math.max(last.end, t.end); else out.push({ start: t.start, end: Math.max(t.end, t.start + 1000) }); }
     return out;
   }, [graph.turns, marks]);
-  // One lane per conversation, in the order they began; the person's own lane above them and
-  // anyone else's below.
+  // One lane per conversation, in the order they began, with the person's own lane above them.
+  // A connected Agent's lane is one of them; callers Rho no longer knows come last.
   const lanes = useMemo(() => {
     const out: Array<{ id: string; title: string; agent: string; who: Who; start: number; turns: typeof graph.turns }> = [];
     for (const t of [...graph.turns].sort((a, b) => a.start - b.start)) {
@@ -887,7 +887,7 @@ function Timeline({ graph, marks = [], cursor, playing, running, speed, onSpeed,
         {lanes.map(l => {
           // Conversations that share a title lead with when they started, which a cut name still shows.
           const brand = l.who === 'conversation' ? brandOf(l.agent) : null, twin = l.who === 'conversation' && lanes.some(o => o !== l && o.title === l.title), name = twin && l.turns[0] ? clock(l.turns[0].start) + ' · ' + l.title : l.title;
-          return <li key={l.id} title={name} data-who={l.who}>{brand ? <BrandMark brand={brand} size={13} /> : <Icon name={l.who === 'person' ? 'person' : l.who === 'other' ? 'monitor' : 'chat'} size={13} />}<span>{name}</span></li>;
+          return <li key={l.id} title={name} data-who={l.who}>{brand ? <BrandMark brand={brand} size={13} /> : <Icon name={l.who === 'person' ? 'person' : 'chat'} size={13} />}<span>{name}</span></li>;
         })}
       </ol>
       <div className="tl-plot">

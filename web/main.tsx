@@ -11,6 +11,7 @@ import { sourceItems, sourceRowOrder, useProjectFiles, type SourceItem } from '.
 import { FormSwitch, savedForm, saveForm, useLiveValues, type Prepared } from '@rho-workspace/plugin-kernel/ui';
 import { ExternalConversationsContext, useExternalConversations } from './external-conversations.js';
 import { workSessions } from '../src/external-work.js';
+import { agentDisplayName } from './brand-marks.js';
 import { useAgentNow, type AgentNow } from './agent-now.js';
 import { NotesPanel, useProjectNotes } from './project-notes.js';
 import { compositionName, defaultWorkspace, fileKey, openInWorkspace, processComposition, processConversation } from './canvas.js';
@@ -199,7 +200,8 @@ function App() {
       try {
         for await (const value of client.observe(project.id).observe(abort.signal)) {
           if (abort.signal.aborted) return;
-          setSnapshot(value); setProject(value.project); setProjects(list => list.map(p => p.id === value.project.id ? value.project : p)); live();
+          // Each Agent with access carries the name the page shows for it, so every view names it alike.
+          setSnapshot(value.agents ? { ...value, agents: value.agents.map(a => ({ ...a, name: agentDisplayName(a.label ?? 'Agent') })) } : value); setProject(value.project); setProjects(list => list.map(p => p.id === value.project.id ? value.project : p)); live();
         }
       } catch (e) { if (!abort.signal.aborted) lost(e); }
     })();

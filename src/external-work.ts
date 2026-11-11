@@ -19,6 +19,27 @@ export function workSessions(owned: readonly Owned[], outside: readonly Summary[
     .sort((a, b) => b.lastAt.localeCompare(a.lastAt));
 }
 
+// The cards of work in progress, one per conversation of an Agent, whichever way Rho came to know
+// it: the conversation in the Agent panel, the session the Agent keeps in its own files
+// (external-session), the same session seen while another window runs it (external-acp) and its
+// activity kept by the Host (native-transcript) are one conversation, joined by the Agent's own
+// session id. open names the conversation a card opens in the Agent panel, when there is one.
+// A conversation of the Agent panel has a card while it answers or waits for a choice; boarded,
+// the answer board already shows it answering, so only a waiting choice is repeated.
+type WorkRead = RhoOutput<'project.work.read'>['sessions'][number];
+export function workCards(sessions: readonly WorkRead[], boarded: boolean): Array<{ session: WorkRead; open?: string }> {
+  const ids = (source: string) => new Map(sessions.flatMap(s => s.source === source && s.sessionId ? [[s.sessionId, s] as const] : []));
+  const kept = ids('external-session'), seen = ids('external-acp'), here = new Set(sessions.flatMap(s => s.conversationId && s.sessionId ? [s.sessionId] : []));
+  return sessions.flatMap(session => {
+    const native = session.sessionId ?? null;
+    if (session.conversationId) return (session.pendingPermissions ?? 0) > 0 || (!boarded && session.state === 'running') ? [{ session, open: session.conversationId }] : [];
+    if (native && here.has(native)) return [];
+    if (session.source === 'external-session') return native && seen.has(native) ? [] : [{ session, open: session.id }];
+    if (session.source === 'native-transcript' && native && (seen.has(native) || kept.has(native))) return [];
+    return [{ session, open: native ? kept.get(native)?.id : undefined }];
+  });
+}
+
 const json = (text: string): Record<string, any> | null => { try { const v = JSON.parse(text); return v && typeof v === 'object' && !Array.isArray(v) ? v : null; } catch { return null; } };
 const bytes = (text: string) => new TextEncoder().encode(text).length;
 const rhoCall = (name: string) => name === 'kernel.run' || /^mcp__[\w.-]+__rho_call$/.test(name);

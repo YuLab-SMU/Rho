@@ -86,16 +86,15 @@ try {
   report.checks.push('an existing externally created Codex session loaded through the ACP relay; original identity and replay retained, with no Rho conversation or prompt');
   browser = await chromium.launch({ executablePath: process.env.RHO_UI_CHROME ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', headless: true });
   page = await browser.newPage({ viewport: { width: 1440, height: 900 } }); page.on('pageerror', e => report.browserErrors.push(e.message));
-  await page.goto(service.url); await page.locator('.project-row').filter({ hasText: 'External ACP episode' }).click(); await page.getByText('Input stays in the original client', { exact: true }).waitFor(); await snap('external-attached');
+  await page.goto(service.url); await page.locator('.project-row').filter({ hasText: 'External ACP episode' }).click(); await page.locator('.work-session').first().waitFor(); await snap('external-attached');
   const running = prompt(external, sessionId, 'Use update_plan to report two steps: run the gate, then write the result. Run python3 gate.py exactly once in the foreground with exec_command yield_time_ms=30000. Do not background, retry or edit gate.py. After it finishes, use apply_patch to create external-result.txt containing the remembered phrase and sum, then mark the plan complete.');
   running.catch(() => {});
   const pid = Number(await until(() => fs.readFile(path.join(project.root, 'gate.pid'), 'utf8').catch(() => ''), Boolean, 'external foreground gate')); pids.add(pid);
   await until(work, w => w.sessions[0].state === 'running' && w.sessions[0].observation.plan?.entries.length, 'live external plan');
   await page.locator('.session-plan').waitFor(); await snap('live-external-plan');
-  assert.equal(await page.getByRole('button', { name: 'Continue conversation', exact: true }).count(), 0);
   await service.close(); service = null;
   assert.equal(external.child.exitCode, null, 'Rho shutdown must not own the external process'); process.kill(pid, 0);
-  await start(); await page.reload(); await page.getByText('Input stays in the original client', { exact: true }).waitFor(); await snap('rho-restarted-external-running');
+  await start(); await page.reload(); await page.locator('.work-session').first().waitFor(); await snap('rho-restarted-external-running');
   await until(work, w => w.sessions[0]?.id === identity, 'Rho read connection restored');
   await fs.writeFile(path.join(project.root, 'gate.release'), 'release'); assert.equal((await running).stopReason, 'end_turn');
   const completed = await until(work, w => w.sessions[0].state === 'completed' && w.files.some(f => f.path === 'external-result.txt'), 'external result observed');

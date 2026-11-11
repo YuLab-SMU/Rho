@@ -240,7 +240,7 @@ keeps the person's terms. Seed skills and records from failures are not built.
 [Timeline events](TIMELINE-EVENTS-EPISODE.md): a plugin names a read of who did what and when
 (Notebook 0.5.0 `kernel.events`, Console 0.3.0 `console.events`); the Graph, the Overview and a
 conversation's Studio place its events by principal: the person's cells and commands in a lane
-named You, an Agent's cells in its conversation's, others in Outside Rho. The Notebook keeps its
+named You, an Agent's cells in its conversation's wherever it was started, a connected Agent's (Claude Code in a terminal, WorkBuddy) under its name; no lane or Overview card says [inside or outside](SESSION-CONTINUITY-EPISODE.md#no-inside-and-outside) (Plugins `42c4f5c`). The Notebook keeps its
 name: in four runs of the person's "在notebook 中演示一下ggplot2", Agents used the shared R session.
 The conversation that made a Quarto file began before the Notebook existed and could not be
 replayed. Agents now read that "in the notebook" means Rho's sessions, untested on old histories.

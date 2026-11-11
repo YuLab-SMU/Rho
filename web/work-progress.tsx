@@ -3,10 +3,11 @@ import { SessionProgress } from '@rho-workspace/plugin-agent/ui';
 import { Icon, type IconName } from './icons.js';
 import type { BrowserClient, WorkspaceSnapshot } from '../src/browser.js';
 import type { RhoOutput } from '../src/contract.generated.js';
+import { workAgent, workCards } from '../src/external-work.js';
 
 export type Work = RhoOutput<'project.work.read'>;
 export interface ProjectWork { work: Work | null; problem: string; reading: boolean; refresh: () => void }
-const stateWords: Record<string, string> = { running: 'Answering', completed: 'Last message answered', failed: 'Last message failed', stopped: 'Stopped', unknown: 'Outcome unknown', retained: 'Retained native activity', idle: 'No messages' };
+const stateWords: Record<string, string> = { running: 'Answering', completed: 'Last message answered', failed: 'Last message failed', stopped: 'Stopped', unknown: 'Outcome unknown', retained: 'Activity kept', idle: 'No messages' };
 // The project's work as one bounded read, repeated while it is shown: linked Agent sessions,
 // the files their tools named and the shared notes. Reading starts no Agent or Host.
 export function useProjectWork(client: BrowserClient, snapshot: WorkspaceSnapshot, enabled: boolean, onPresence: (present: boolean) => void): ProjectWork {
@@ -26,7 +27,7 @@ export function useProjectWork(client: BrowserClient, snapshot: WorkspaceSnapsho
     };
     const schedule = () => { if (!timer.current) timer.current = setTimeout(() => { timer.current = null; void read(); }, 750); };
     request.current = schedule; void read();
-    // External ACP connections are owned outside this service and have their own cursor.
+    // A session another window runs moves on its own, not with this service's cursor.
     const external = setInterval(() => { if (!document.hidden) schedule(); }, 1500);
     return () => { clearInterval(external); live = false; controller.abort(); if (timer.current) clearTimeout(timer.current); timer.current = null; request.current = null; };
   }, [client, snapshot.project.id, enabled]);
@@ -34,25 +35,29 @@ export function useProjectWork(client: BrowserClient, snapshot: WorkspaceSnapsho
   return { work, problem, reading, refresh: () => request.current?.() };
 }
 
-// Work in progress: a conversation started in Rho shows here while it answers or waits for a
-// choice. Finished ones are listed once, on the Agent page.
-// boarded: the answer board above shows the conversations started in Rho as they answer, so only
-// a choice waiting in one of them is repeated here.
+// Work in progress, one card per conversation of an Agent, whichever way Rho came to know it:
+// the conversation in the Agent panel, the session the Agent keeps in its own files, the same
+// session seen while another window runs it, and its activity kept by the Host are one
+// conversation. Each card names its Agent and opens the conversation; none says where it began.
+// A conversation of the Agent panel shows here while it answers or waits for a choice; finished
+// ones are listed once, on the Agent page.
+// boarded: the answer board above shows those conversations as they answer, so only a choice
+// waiting in one of them is repeated here.
 export function WorkSessions({ state, openConversation, openActivity, boarded = false }: { state: ProjectWork; openConversation: (id: string) => void; openActivity: () => void; boarded?: boolean }) {
   const { work, problem, reading, refresh } = state;
-  const shown = work?.sessions.filter(session => !session.conversationId || (session.pendingPermissions ?? 0) > 0 || (!boarded && session.state === 'running')) ?? [];
+  const shown = workCards(work?.sessions ?? [], boarded);
   if (!shown.length && !problem) return null;
   return <section className="project-section project-work" aria-label="Project work">
     <div className="section-heading"><h2>Work progress</h2><button className="text-button" disabled={reading} onClick={refresh}>{reading ? 'Reading…' : 'Refresh'}</button></div>
     {problem && <p role="alert">{problem} Retained observations remain below.</p>}
-    {shown.length > 0 && <div className="work-sessions">{shown.map(session => <article className="work-session" key={session.id}>
-      <header><div><h3>{session.title}</h3><p>{stateWords[session.state] ?? session.state} · {session.source === 'acp' ? (session.agent === 'codex' ? 'Codex · ACP' : 'Claude Code · ACP') : session.source === 'external-acp' ? 'External ACP' : session.source === 'native-transcript' ? 'Native transcript' : session.source === 'external-session' ? 'DeepSeek Harness · Outside Rho' : 'Claude CLI'}</p></div>
-        {session.conversationId ? <button onClick={() => openConversation(session.conversationId!)}>Continue conversation</button> : session.source === 'external-acp' ? <span className="muted">Input stays in the original client</span> : <button onClick={() => session.source === 'external-session' ? openConversation(session.id) : openActivity()}>{session.source === 'external-session' ? 'View conversation' : 'View activity'}</button>}</header>
-      {session.observation ? <SessionProgress observation={session.observation} /> : session.source === 'native-transcript' ? <p className="muted">Input stays in the original window. Retained through cursor {session.cursor}; {session.droppedEvents ?? 0} events dropped.</p> : session.source === 'external-session' ? <p className="muted">Messages, tool calls and reported results come from the Agent’s own record.</p> : <p className="muted">No session projection retained yet.</p>}
-      {session.source === 'external-acp' && <>
-        {(session.pendingPermissions ?? 0) > 0 && <p role="status">Waiting for a permission choice in the original client.</p>}
-        {session.lastMessage && <details><summary>Latest reply · read only</summary><p className="external-reply">{session.lastMessage}</p>{(session.omittedMessageChars ?? 0) > 0 && <small>Later reply text was not retained.</small>}</details>}
-      </>}
+    {shown.length > 0 && <div className="work-sessions">{shown.map(({ session, open }) => <article className="work-session" key={session.id}>
+      <header><div><h3>{session.title}</h3><p>{stateWords[session.state] ?? session.state}{session.agent ? ' · ' + workAgent(session.agent) : ''}</p></div>
+        {open ? <button onClick={() => openConversation(open)}>Open conversation</button> : session.source === 'native-transcript' ? <button onClick={openActivity}>View activity</button> : null}</header>
+      {session.observation ? <SessionProgress observation={session.observation} />
+        : session.source === 'native-transcript' ? <p className="muted">Its activity is kept from the Agent’s own record{(session.droppedEvents ?? 0) > 0 ? `; ${session.droppedEvents} events were dropped` : ''}.</p>
+        : session.source === 'external-session' ? <p className="muted">Messages, tool calls and reported results come from the Agent’s own record.</p> : <p className="muted">Nothing of this session is kept yet.</p>}
+      {(session.pendingPermissions ?? 0) > 0 && !session.conversationId && <p role="status">Waiting for a permission choice in the window it is running in.</p>}
+      {session.lastMessage && <details><summary>Latest reply</summary><p className="external-reply">{session.lastMessage}</p>{(session.omittedMessageChars ?? 0) > 0 && <small>Later reply text was not retained.</small>}</details>}
     </article>)}</div>}
   </section>;
 }

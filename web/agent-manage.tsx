@@ -128,7 +128,7 @@ function Conversations({ client, snapshot, settings, exists, onContinue, onPath,
     </div>
     {notice && <p className="conv-notice" role="status">{notice.text}{notice.undo && <button className="text-button" onClick={() => { notice.undo!(); setNotice(null); }}>Undo</button>}</p>}
     {problem && <p className="inline-error" role="alert">{problem}</p>}
-    {external.problem && <p className="inline-error" role="alert">Sessions started outside Rho could not be read: {external.problem} Retrying.</p>}
+    {external.problem && <p className="inline-error" role="alert">The sessions your Agents keep for this folder could not be read: {external.problem} Retrying.</p>}
     {external.omitted > 0 && <p className="conv-notice" role="status">{external.omitted} more {external.omitted === 1 ? 'session' : 'sessions'} in this folder {external.omitted === 1 ? 'is' : 'are'} not listed.</p>}
     {showTrash ? <TrashList trash={trash} settings={settings} onRestore={summary => void act('conversation.restore', summary)} onDelete={summary => void act('conversation.delete', summary)} />
       : groups.length ? groups.map(group => <div key={group.label} className="conv-day">

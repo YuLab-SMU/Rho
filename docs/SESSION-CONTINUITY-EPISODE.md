@@ -210,6 +210,66 @@ and fails on the previous Plugins. npm 0.5.9, installed fresh from the
 registry, gave the same Chrome result as `b2c6197`. The person's own machine was
 not checked; its project folder is not on this one.
 
+## No inside and outside
+
+On 2026-11-11 the user, looking at their own project, asked why there was still an "Outside Rho"
+kind of conversation: a conversation in Rho's panel and one in the Agent's own window are both
+just a conversation of some Agent.
+
+### What the run showed
+
+A disposable project on the build the user was running, with a Claude Code session kept in the
+Agent's own files, a DeepSeek Harness session kept by its adapter and two Notebook cells run by an
+Agent connected from its own window:
+
+- The Overview's work progress card for the Harness session read "Last message answered · DeepSeek
+  Harness · Outside Rho" and offered "View conversation". The label was fixed text for every such
+  session; the same code called other sessions "External ACP" and "Native transcript" and said
+  their input stays in the original client or window.
+- The timeline of the Graph and the Overview put the connected Agent's cells in a lane named
+  "Outside Rho", and the Notebook signed them "An Agent".
+- Tasks and the Agent page already listed all three as conversations of their Agents.
+
+![Before: the card says Outside Rho](figures/unified-before-overview.jpg)
+
+### Changes
+
+- Work progress shows one card per conversation of an Agent. The conversation in the Agent panel,
+  the session the Agent keeps in its own files, the same session seen while another window runs
+  it and its activity kept by the Host are joined by the Agent's own session id. A card names its
+  Agent and its state and offers Open conversation wherever a conversation is listed; none says
+  where the session began. A permission choice waiting in another window is said to wait there.
+- A timeline event goes to the lane of the conversation whose Agent did it, wherever that
+  conversation was started. An Agent the person connected (Claude Code in a terminal, WorkBuddy)
+  has a lane under its own name and mark for what no session's record names. Two lanes are left:
+  the `rho` command of whoever runs the service, and An Agent for callers whose access is gone.
+- Each Agent with access carries the name the page shows for it, and the Notebook (Plugins
+  `42c4f5c`) signs a connected Agent's cells with it.
+- The Agent plugin presents `agent.sessions.list` and `agent.sessions.read` as Agent conversations
+  and Read a conversation, no longer as external conversations whose input remains elsewhere.
+
+![After: the card names the Agent, and its cells have a lane](figures/unified-after-overview.jpg)
+
+### Verification
+
+- The same project and data under the earlier build and this one, in Chrome at 1600 × 1000, the
+  Overview, Graph and Notebook read in both. Before: the card and lane above. After: the card
+  reads "Last message answered · DeepSeek Harness" with Open conversation, the lanes are the two
+  conversations and WorkBuddy, the cells are signed WorkBuddy, and no text on those pages says
+  outside, external, original client or read only.
+- `test/work-cards.test.mjs` covers the joining of one session known in several ways and
+  `test/timeline-events.test.mjs` the lanes; `npm test` passed 351 of 354, 3 skipped (Windows only).
+
+### Left open
+
+- The card for a session another window runs through ACP was checked by its unit test only;
+  `scripts/acp-external-episode.mjs` was moved to the new card and not run.
+- A connected Agent has one lane for all its sessions' unmatched work: its principal is per
+  Agent, not per session. Cells are matched to a session through that session's own record;
+  Console commands are not.
+- Skills still say "Changed outside Rho" for a file edited without a recorded change. That is about
+  a file, not a conversation, and was left.
+
 ## Limits
 
 Codex continuation of a session started outside Rho was checked with a test
