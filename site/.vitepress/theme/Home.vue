@@ -1,10 +1,19 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { onMounted, ref } from 'vue';
 import { withBase } from 'vitepress';
 
-// The registry's version when pages-site.mjs built the site; empty in a build without it.
+// The registry's version when pages-site.mjs built the site; empty in a build without it. Once
+// the page is open it shows the version npm serves now, so a new release needs no new
+// deployment; the built one stays when the registry cannot be read.
 declare const __RHO_NPM_VERSION__: string;
-const version = __RHO_NPM_VERSION__;
+const version = ref(__RHO_NPM_VERSION__);
+onMounted(async () => {
+  try {
+    const response = await fetch('https://registry.npmjs.org/@rho-workspace/rho/latest', { signal: AbortSignal.timeout?.(8000) });
+    const latest = response.ok ? (await response.json())?.version : null;
+    if (typeof latest === 'string' && /^\d+\.\d+\.\d+$/.test(latest)) version.value = latest;
+  } catch { /* the built version stays */ }
+});
 
 const install = `npm install -g @rho-workspace/rho
 rho --root /absolute/projects --state-dir /absolute/service-state`;

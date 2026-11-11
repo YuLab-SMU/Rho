@@ -20,6 +20,16 @@ to its actual implementation and configuration. Consult
 for those owner boundaries. Application-local storage does not make an external
 model or service local.
 
+## Website
+
+The website at <https://yulab-smu.top/Rho/> is static files served by GitHub Pages. When
+its front page or the documentation's home page opens, the visitor's browser asks the npm
+registry (`registry.npmjs.org`) for the current version of `@rho-workspace/rho` and its
+publication date, so the page names the release npm serves. npm receives that request as
+it receives any download, with the browser's address and headers; the page sends no cookie
+or identifier of its own and shows the version it was built with when the registry does
+not answer.
+
 ## Requirements for application delivery
 
 Before delivering a data-handling feature, document what it reads and writes,

@@ -1,7 +1,8 @@
 // Assembles the GitHub Pages tree for https://yulab-smu.top/Rho/ in site/.pages:
 //   index.html  the front page (site/home), filled with the npm release, the install sentence in
 //               each language it is offered in, the setup page's steps, the recorded prompts and
-//               the prompts each selected plugin declares for itself
+//               the prompts each selected plugin declares for itself. The page reads the release
+//               from the registry again when it opens, so a new release needs no deployment.
 //   demo/       the application's WebUI replaying site/demo/recording.json (no backend)
 //   docs/       the documentation site, built from docs/ with base /Rho/docs/
 //   doc/setup.md  SETUP.md as it is: the steps an Agent follows to install and configure Rho

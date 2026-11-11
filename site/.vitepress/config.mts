@@ -6,7 +6,8 @@ import navigation from './generated/navigation.json';
 const base = process.env.RHO_DOCS_BASE ?? '/';
 
 // The release a visitor installs is the registry's, which pages-site.mjs passes in. A build
-// without it names no version rather than this checkout's.
+// without it names no version rather than this checkout's. The home page reads the registry
+// again when it opens.
 const npmVersion = process.env.RHO_NPM_VERSION ?? '';
 
 type Item = { text: string; link: string; summary?: string; source?: string; updated?: string | null };

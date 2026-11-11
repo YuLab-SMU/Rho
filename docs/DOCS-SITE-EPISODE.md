@@ -546,3 +546,29 @@ source Markdown's GitHub anchors.
 
 Local screenshots and the link and preservation reports are in
 `work/dsh-rho/docs-01/`.
+
+## The release npm serves, read when the page opens
+
+Until 0.5.9 the front page and the documentation's home page named the version `npm view` returned
+when `pages-site.mjs` built them, so every release needed a deployment to change it. 0.5.8 was
+never deployed, and on 2026-11-11 the live pages still named 0.5.7. Both pages now ask the
+registry when they open: the front page reads `dist-tags.latest` and its publication time from
+`https://registry.npmjs.org/@rho-workspace/rho` (36 KB, cached five minutes by the registry,
+`access-control-allow-origin: *`), and the documentation's home reads the version from `…/latest`.
+The built version is what a page shows first, without script, and when the registry fails, gives
+something other than a version or does not answer within 8 s. [Privacy](../PRIVACY.md#website)
+names the request. The setup page, the Skill and every other page still change only with a
+deployment.
+
+### Checks
+
+- A full `pages:build` while npm still served 0.5.8 (0.5.9 was published but not yet served),
+  then Chrome at 1440 and 390 px on the built tree with the registry replaced: a reply naming
+  0.6.0, published 1 Dec 2026, put 0.6.0 in the front page's "Checked so far" tile and footer, the
+  date in the footer, and 0.6.0 in the documentation home's eyebrow and npm panel. A 503, a reply
+  whose version was markup, and no reply for 9 s each left 0.5.8 and 10 Nov 2026, with no page
+  error. The real registry was asked from the local page with no CORS error and answered 0.5.8.
+  The changed tile and footer were looked at in screenshots at both widths.
+- `pages:check` with `DEMO_NARROW=1` on the same tree: 0 page errors, 0 front-page problems and
+  0 failed assets; the demo's unanswered requests are the recording's known gap.
+- Apart from the version, the date and the script, the built front page matched the deployed one.
