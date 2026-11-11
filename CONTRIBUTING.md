@@ -19,7 +19,8 @@ silently change a task or native session. Verify behavior in the selected owner;
 a component check alone does not prove an application composition.
 
 For documents, check links and anchors, render the complete changed batch and
-inspect all pages. Test UI changes in the actual application.
+inspect all pages. Test UI changes in the actual application; `npm run dev` shows it
+from source as files are saved ([Frontend](docs/FRONTEND.md#from-source)).
 Report only checks actually executed and retain material failures and limits.
 
 Routine Rho work is checked, committed and published directly on organization

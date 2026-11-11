@@ -706,6 +706,24 @@ These are current implementation values, not an accepted design system; they cha
 when a reviewed result calls for it. The shared CSS variable interface lets owner
 views use the application's colors.
 
+## From source
+
+`npm run dev` serves the browser application as `web/` is on disk, through Vite's dev server on
+this machine (port 5173 or the next free one; `--port`). A saved stylesheet shows in place. A
+saved component shows once the page has reloaded itself, at the same address. The page stands in
+front of a built service (`dist/`). Without folders that is the Rho already running on the folders
+`rho` uses, which is left running when the command ends; when none runs, one is started for the
+run and stopped with it. `--root` and `--state-dir` choose other folders, such as a throwaway
+project folder, and `--example off` leaves the shipped project out of a new state. Changes under
+`src/` need `npm run build:service` and a new service, and a plugin's views follow that plugin's
+own build.
+
+The service still answers only its own origin. The page server passes its own page's requests on
+as the service's and passes any other origin on as it came, which the service refuses. A view's
+rendered receipt names the selected browser build, so a receipt from this page is refused.
+`test/dev.test.mjs` starts the command on a throwaway folder and checks the page, both service
+cases and the refused origin.
+
 ## Verification
 
 `npm run acceptance:frontend` exercises the application using disposable projects,
