@@ -55,7 +55,7 @@ async function setup(t) {
   ].map(r => JSON.stringify(r)).join('\n') + '\n');
   const call = (m, b = {}) => person.call(m, { projectId: p.id, ...b });
   const requests = async () => (await fs.readFile(process.env.PEER_LOG, 'utf8').catch(() => '')).split('\n').filter(Boolean).map(l => JSON.parse(l));
-  return { root, config, p, call, requests, admin };
+  return { root, config, p, call, requests, admin, person };
 }
 async function answered(call, conversationId) {
   for (let i = 0; i < 300; i++) {
@@ -83,6 +83,19 @@ test('Agent sessions in the project folder are listed and read from the Agents\'
   assert.deepEqual(counted.turns.map(t => ({ prompt: t.prompt, reply: t.reply, tools: t.tools.map(x => [x.name, x.detail, x.exitCode]) })), [{ prompt: 'Count the rows.', reply: '153 rows.', tools: [['Command', 'wc -l data.csv', 0]] }]);
   assert.deepEqual(await requests(), [], 'no Agent was started to list or read');
   assert.equal((await call('conversation.list')).conversations.length, 0);
+});
+
+// Codex keeps every folder's sessions in one place. A project opened after another, in the same
+// service, saw the first project's Codex sessions in its Studio and could read them.
+test('a project opened after another lists and reads none of the other project\'s sessions', async t => {
+  const { root, call, admin, person } = await setup(t);
+  const first = await call('agent.sessions.list');
+  assert.equal(first.sessions.length, 2);
+  await fs.mkdir(path.join(root, 'second'));
+  const second = await admin.call('project.open', { path: 'second' }), other = (m, b = {}) => person.call(m, { projectId: second.id, ...b });
+  assert.deepEqual((await other('agent.sessions.list')).sessions, []);
+  for (const s of first.sessions) await assert.rejects(other('agent.sessions.read', { session: s.id }), /not in this project/);
+  assert.equal((await call('agent.sessions.list')).sessions.length, 2, 'the first project still lists its own');
 });
 
 test('the next message continues the same session; a held session is refused unless continued as a copy', async t => {
