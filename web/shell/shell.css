@@ -107,19 +107,14 @@
 .shell-panel { overflow: hidden; }
 .shell-owner { position: relative; }
 .shell-owner > * { flex: 1; min-height: 0; }
-.shell-bar { display: flex; align-items: center; gap: 8px; flex: none; min-height: 38px; padding: 3px 16px; border-bottom: 1px solid var(--color-hairline); font-size: 12px; }
-.shell-bar button, .shell-source button, .shell-interruption button, .shell-digest button, .agent-column button { min-height: 28px; padding: 4px 8px; font-size: 12px; }
-.shell-break { flex: 1; }
-.shell-follow { background: transparent; border-color: var(--color-hairline); white-space: nowrap; }
-.shell-follow[aria-pressed=true] { background: var(--color-accent-soft); color: var(--color-accent); border-color: var(--color-accent); }
+.shell-source button, .shell-interruption button, .shell-digest button, .agent-column button { min-height: 28px; padding: 4px 8px; font-size: 12px; }
 .shell-quiet, .shell-link { border: 0; background: transparent; color: var(--color-muted); padding: 3px 6px; }
 .shell-link { color: var(--color-accent); }
 .shell-link:hover { text-decoration: underline; }
 .shell-agent { min-width: 0; max-width: 50%; border: 0; background: transparent; justify-content: flex-start; gap: 6px; }
-.shell-agent-who { color: var(--color-meta); }
 .shell-agent-object { min-width: 0; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .shell-agent-state { min-width: 0; color: var(--color-meta); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 400; }
-.shell-held, .shell-meta { color: var(--color-meta); }
+.shell-meta { color: var(--color-meta); }
 .shell-interruption { display: flex; align-items: center; gap: 10px; flex: none; padding: 10px 16px; background: var(--color-amber-soft); border-bottom: 1px solid var(--color-amber-line); font-size: 13px; }
 .shell-interruption-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .shell-interruption.problem { color: var(--color-failed); }
@@ -227,11 +222,8 @@ button.agent-output-name { border: 0; background: transparent; padding: 0; justi
   .shell-stage { padding: 7px; }
   .shell-tabbar { padding-inline: 4px; }
   .shell-tabs button { max-width: 65vw; padding-inline: 10px; }
-  .shell-bar { flex-wrap: wrap; gap: 5px; padding: 6px 10px; }
   .shell-agent { max-width: none; width: 100%; }
   .shell-agent-state { margin-left: auto; }
-  .shell-bar .shell-break { display: none; }
-  .shell-bar > .shell-evidence-toggle { margin-left: auto; }
   .shell-source { padding: 6px 9px; }
   .shell-run, .shell-action { padding: 20px 14px; }
   .shell-run h2 { font-size: 16px; }

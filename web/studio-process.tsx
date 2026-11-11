@@ -300,7 +300,7 @@ export function ProcessStudio({ client, snapshot, files, conversationId, notesTe
       <div ref={stage} className="process-stage">
         {problem && <p className="inline-error" role="alert">{problem}</p>}
         {restoreProblem && <p className="inline-error" role="alert">{restoreProblem}</p>}
-        {composition ? <Workspace key={projectId + compositionId} {...workspace} bar={false} composition={composition} snapshot={snapshot} client={client} openView={openView} presence={presence} arrange={at === null} following={following || at !== null} empty={emptied} addView={reopenMenu} />
+        {composition ? <Workspace key={projectId + compositionId} {...workspace} composition={composition} snapshot={snapshot} client={client} openView={openView} presence={presence} arrange={at === null} following={following || at !== null} empty={emptied} addView={reopenMenu} />
           : <div className="studio-empty"><span className="empty-symbol">{running ? <span className="pulse-dot large" aria-hidden="true" /> : <Icon name="layout" size={26} stroke={1.5} />}</span>
             <h2>{problem ? 'Work could not be read' : loading ? 'Reading the conversation…' : running ? (summary?.agent ?? 'The Agent') + ' is starting' : 'Nothing to show yet'}</h2>
             <p>{problem ? 'Earlier records are kept. This page will retry.' : running ? 'The data it reads, the code it writes, the commands it runs and the results they make appear here as it works.' : 'This conversation has not read or made any project files.'}</p></div>}

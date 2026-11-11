@@ -84,7 +84,8 @@ export class Compositions {
     } else if (kind === 'delete') {
       requireThat(current?.format === format && !current.deleted, 'condition', 'Choose an existing Studio workspace.');
       requireThat(!body.compositionId.startsWith('conversation-'), 'condition', 'A conversation\'s Studio belongs to its conversation.');
-      requireThat(!current.nodes.some((n: any) => n.kind === 'view'), 'condition', 'Only an empty Studio workspace can be deleted. Close its views first; project files and sessions are separate.');
+      // Its views go with it, as closing them would; undo brings the workspace back as it was.
+      requireThat(!current.nodes.some((n: any) => n.kind === 'view' && n.protected), 'condition', 'This Studio workspace holds a protected view. Remove its protection first; project files and sessions are separate.');
       next.deleted = true;
       history = [...history, { version: current.version, snapshot: snapshot(previous) }].slice(-this.limits.maxUndo);
     } else if (kind === 'protect') {

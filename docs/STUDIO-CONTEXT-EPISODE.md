@@ -38,11 +38,14 @@ person navigates or the layout changes. Another tab has its own location. Names
 and paths are data, not instructions or scope grants; collecting the context reads
 no named project file and starts no runtime.
 
-`composition.delete` conditionally removes an **empty structured Studio layout**
-from active lists. It preserves the layout's identity, version, receipts and undo
-history in the same owner record. Nonempty, conversation and active-task layouts
-are refused. It does not remove project files, shared document buffers, resources
-or conversations, and stops no session. `composition.undo` restores the layout.
+`composition.delete` conditionally removes a **structured Studio layout** from
+active lists. It preserves the layout's identity, version, receipts and undo
+history in the same owner record. Conversation and active-task layouts are refused;
+from 2026-11-11 a layout with views is deleted with them, as closing each would, and
+only one holding a protected view is refused (earlier, any layout with views was;
+[closing a workspace](SIMULATED-PROJECT-EPISODE.md#one-set-of-session-views)). It does
+not remove project files, shared document buffers, resources or conversations, and
+stops no session. `composition.undo` restores the layout.
 Recreating it uses its retained version; an old deletion request returns its old
 receipt and cannot delete the new version. Format-3 archives keep deleted layouts.
 

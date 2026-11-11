@@ -8,7 +8,7 @@ import { CheckedClient as RhoClient } from './checked-client.mjs';
 import { BrowserClient } from '../dist/browser.js';
 import { captureUiContext } from '../dist/ui-context.js';
 
-test('empty Studio deletion is scoped, conditional, reversible and never deletes a recreated layout on retry', async () => {
+test('Studio workspace deletion is scoped, conditional, reversible and never deletes a recreated layout on retry', async () => {
   const root = await fs.mkdtemp(path.join(tmpdir(), 'rho-studio-delete-'));
   let service = await new RhoService({ root, stateDir: path.join(root, 'state'), workspace: { maxCompositions: 3 } }).start();
   try {
@@ -39,15 +39,23 @@ test('empty Studio deletion is scoped, conditional, reversible and never deletes
     const replayed = await agent.call('composition.delete', request);
     assert.equal(replayed.receipt.version, 2); assert.equal(replayed.version, 5); assert.ok(!replayed.deleted);
     assert.ok((await call('observation.snapshot', {})).compositions.some(x => x.compositionId === 'workspace-3'));
-    // A real document and its dirty buffer survive the refusal of a nonempty layout.
+    // A workspace goes with its views, as closing them would: a real document and its dirty
+    // buffer stay, and undo brings the views back. A protected view keeps its workspace.
     const doc = await call('document.open', { path: 'analysis.R' });
     await call('document.edit', { documentId: doc.id, expectedVersion: doc.version, edits: [{ from: 0, to: 0, insert: '# unsaved\n' }], undoGroup: 'unsaved' });
-    await replace('workspace-3', 5, 'put-view', [
+    const editor = [
       { id: 'root', kind: 'group', children: ['editor'] },
       { id: 'editor', kind: 'view', component: 'rho.editor', version: '0.2.0', props: { title: 'analysis.R' }, bindings: { document: { kind: 'live-document', documentId: doc.id } } }
-    ]);
-    await assert.rejects(agent.call('composition.delete', { ...request, expectedVersion: 6, changeId: 'nonempty' }), e => e.error.kind === 'condition');
+    ];
+    await replace('workspace-3', 5, 'put-view', editor);
+    const closed = await agent.call('composition.delete', { ...request, expectedVersion: 6, changeId: 'nonempty' });
+    assert.equal(closed.deleted, true);
+    assert.ok(!(await call('observation.snapshot', {})).compositions.some(x => x.compositionId === 'workspace-3'));
     assert.equal((await call('document.read', { documentId: doc.id })).content, '# unsaved\n');
+    const back = await call('composition.undo', { compositionId: 'workspace-3', expectedVersion: 7, changeId: 'undo-nonempty' });
+    assert.ok(!back.deleted); assert.deepEqual(back.nodes.find(n => n.id === 'editor')?.bindings, editor[1].bindings);
+    await call('view.protection.set', { compositionId: 'workspace-3', expectedVersion: 8, changeId: 'protect-editor', viewId: 'editor', protected: true });
+    await assert.rejects(agent.call('composition.delete', { ...request, expectedVersion: 9, changeId: 'protected' }), e => e.error.kind === 'condition');
     await replace('conversation-c-example', 0, 'process');
     await assert.rejects(agent.call('composition.delete', { ...request, compositionId: 'conversation-c-example', changeId: 'process-delete' }), e => e.error.kind === 'condition');
     const other = await c.call('project.create', { name: 'other' });

@@ -42,7 +42,7 @@ export function shortWhen(iso: string, now = new Date()) {
   return minutes < 1 ? 'now' : minutes < 60 ? minutes + 'm' : minutes < 24 * 60 ? Math.round(minutes / 60) + 'h' : minutes < 7 * 24 * 60 ? Math.round(minutes / 1440) + 'd'
     : at.toLocaleDateString('en-US', { month: 'short', day: 'numeric', ...(at.getFullYear() === now.getFullYear() ? {} : { year: '2-digit' }) });
 }
-export function ProjectNavigation({ project, snapshot, current, talking = null, agentState = '', onAgents, sources, partial, sessions, places, values, onLayout, onNewLayout, onNewTask, onSection, onSources, onFile, onValue, onVariables, onAddSource, adding }: {
+export function ProjectNavigation({ project, snapshot, current, talking = null, agentState = '', onAgents, sources, partial, sessions, places, values, onLayout, onNewLayout, onCloseLayout, onNewTask, onSection, onSources, onFile, onValue, onVariables, onAddSource, adding }: {
   project: ProjectSummary; snapshot: WorkspaceSnapshot | null; current: string; sessions: SessionRow[];
   // The task whose conversation the Agent panel shows beside the page, by its row's id.
   talking?: string | null;
@@ -53,7 +53,8 @@ export function ProjectNavigation({ project, snapshot, current, talking = null, 
   sources: Record<SourceRow, SourceItem[]> | null; partial: boolean; adding: boolean;
   // The live sessions' values, or null where this tab cannot read the sessions.
   values: LiveValues | null;
-  onLayout: (id: string) => void; onNewLayout?: () => void; onNewTask: () => void; onSection: (section: Section) => void;
+  // A workspace of the person's is closed from its row: its views go with it, and Undo brings it back.
+  onLayout: (id: string) => void; onNewLayout?: () => void; onCloseLayout?: (id: string) => void; onNewTask: () => void; onSection: (section: Section) => void;
   onSources: (row: SourceRow) => void; onFile: (row: SourceRow, item: SourceItem) => void; onValue: (language: ValueLanguage, name: string) => void; onVariables: () => void; onAddSource: () => void;
 }) {
   // Which kinds are unfolded is remembered per project for this tab; the kind of the file on
@@ -95,7 +96,10 @@ export function ProjectNavigation({ project, snapshot, current, talking = null, 
         {sessions.length > shownSessions.length && <button className="nav-more" aria-label={'All ' + sessions.length + ' conversations'} title="Every conversation: search, usage and the trash" onClick={() => onSection('agent')}>All {sessions.length}<Icon name="chevron" size={11} stroke={2} /></button>}
       </div> : <p className="nav-files-note nav-none">No conversations yet</p>}
       {(layouts.length > 0 || onNewLayout) && <div role="group" aria-label="Workspaces" className="nav-group nav-workspaces">
-        {layouts.map(c => <button key={c.compositionId} className="nav-row nav-workspace" aria-current={current === 'studio:' + c.compositionId ? 'page' : undefined} onClick={() => onLayout(c.compositionId)}><Icon name="layout" size={16} /><span className="nav-row-name">{compositionName(c.compositionId)}</span><span className="nav-row-count" title={views(c)}>{c.views.length}</span></button>)}
+        {layouts.map(c => <div key={c.compositionId} className={'nav-closing' + (onCloseLayout ? ' closable' : '')}>
+          <button className="nav-row nav-workspace" title={compositionName(c.compositionId) + ' · ' + views(c)} aria-current={current === 'studio:' + c.compositionId ? 'page' : undefined} onClick={() => onLayout(c.compositionId)}><Icon name="layout" size={16} /><span className="nav-row-name">{compositionName(c.compositionId)}</span><span className="nav-row-count" aria-hidden="true">{c.views.length}</span></button>
+          {onCloseLayout && <button className="icon-button nav-close" aria-label={'Close ' + compositionName(c.compositionId)} title={'Close ' + compositionName(c.compositionId) + '. Its files, sessions and conversations stay.'} onClick={() => onCloseLayout(c.compositionId)}><Icon name="close" size={13} stroke={2} /></button>}
+        </div>)}
         {onNewLayout && <button className="nav-row nav-new" onClick={onNewLayout}><Icon name="plus" size={14} stroke={1.8} /><span className="nav-row-name">New workspace</span></button>}
       </div>}
     </section>

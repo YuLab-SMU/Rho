@@ -105,6 +105,7 @@
             "kernel.run",
             "kernel.server.skill",
             "kernel.servers",
+            "kernel.start",
             "kernel.stop",
             "media.describe",
             "object.read",

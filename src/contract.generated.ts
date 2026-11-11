@@ -5,7 +5,7 @@
 // value an accepted response carries. The service, the Node client and the browser
 // client are all written against these types; runtime validation stays with Ajv.
 //
-// Contract identity: apiVersion 2.0, schemaVersion 2, 155 operations.
+// Contract identity: apiVersion 2.0, schemaVersion 2, 156 operations.
 export interface RhoOperationError {
   kind:
     | 'invalid'
@@ -10106,6 +10106,49 @@ export interface KernelServersOutput {
   };
 }
 
+export interface KernelStartInput {
+  projectId: string;
+  language: 'r' | 'python';
+  place?: string;
+}
+
+export interface KernelStartOutput {
+  session: {
+    cells: number;
+    endedAt: string | null;
+    ending: ('stopped' | 'exited' | 'disconnected' | 'rho-closed' | 'not-started') | null;
+    host?: string | null;
+    language: 'r' | 'python';
+    pid: number | null;
+    place?: {
+      destination: string;
+      folder: string;
+      label: string;
+      placeId: string;
+    } | null;
+    problem: string | null;
+    program?: string | null;
+    sessionId: string;
+    startedAt: string;
+    startedBy: string;
+    state: 'starting' | 'idle' | 'busy' | 'ended';
+    stop: {
+      at: string;
+      by: string;
+    } | null;
+    variables: {
+      bytes: number;
+      name: string;
+      size: string;
+      summary: string;
+      type: string;
+    }[];
+    variablesAt: string | null;
+    variablesOmitted: number;
+    version: string | null;
+  };
+}
+
 export interface KernelStopInput {
   projectId: string;
   sessionId: string;
@@ -13051,6 +13094,7 @@ export interface SessionGrantInput {
     | 'kernel.run'
     | 'kernel.server.skill'
     | 'kernel.servers'
+    | 'kernel.start'
     | 'kernel.stop'
     | 'media.describe'
     | 'object.read'
@@ -15149,6 +15193,7 @@ export interface RhoOperations {
   "kernel.run": { input: KernelRunInput; output: KernelRunOutput };
   "kernel.server.skill": { input: KernelServerSkillInput; output: KernelServerSkillOutput };
   "kernel.servers": { input: KernelServersInput; output: KernelServersOutput };
+  "kernel.start": { input: KernelStartInput; output: KernelStartOutput };
   "kernel.stop": { input: KernelStopInput; output: KernelStopOutput };
   "media.describe": { input: MediaDescribeInput; output: MediaDescribeOutput };
   "object.read": { input: ObjectReadInput; output: ObjectReadOutput };
@@ -15206,5 +15251,5 @@ export type RhoInput<M extends RhoMethod> = RhoOperations[M]['input'];
 export type RhoOutput<M extends RhoMethod> = RhoOperations[M]['output'];
 
 /** The names a caller may pass to protocol.describe / protocol.validate. */
-export const rhoMethods = ["action.cancel","action.export","action.list","action.lookup","action.observe","action.output","action.retry","action.submit","agent.activity.capture","agent.activity.outputs","agent.activity.read","agent.sessions.list","agent.sessions.read","annotation.create","annotation.decide","annotation.list","annotation.read","annotation.reply","artifact.check","binding.activity","binding.activity.append","binding.close","binding.list","binding.open","capability.configure","capability.index","capability.list","capability.resolve","composition.apply","composition.delete","composition.put","composition.read","composition.undo","console.events","console.list","console.output","console.run","console.stop","console.terminal.close","console.terminal.list","console.terminal.open","console.terminal.read","console.terminal.resize","console.terminal.write","context.create","context.read","conversation.agents.add","conversation.agents.remove","conversation.configure","conversation.decide","conversation.delete","conversation.list","conversation.permission","conversation.read","conversation.restore","conversation.send","conversation.settings.check","conversation.settings.read","conversation.settings.update","conversation.start","conversation.stop","conversation.trash","data.compare","data.page","data.plot","document.abandonSave","document.change.read","document.edit","document.history","document.open","document.read","document.revert","document.save","document.undo","document.undoOwn","evidence.export","evidence.preview","extension.call","extension.content","extension.describe","extension.install","extension.list","extension.manage","extension.market.change","extension.read","feedback.read","feedback.status","feedback.submit","figure.read","figure.select","interaction.selection.read","interaction.selection.set","kernel.events","kernel.inspect","kernel.interrupt","kernel.place.check","kernel.place.copy","kernel.place.list","kernel.place.set","kernel.places","kernel.plot","kernel.read","kernel.run","kernel.server.skill","kernel.servers","kernel.stop","media.describe","object.read","observation.snapshot","project.create","project.createWorkspace","project.doctor","project.entries","project.list","project.open","project.openFile","project.pick","project.runs","project.source.add","project.source.pick","project.work.read","protocol.describe","protocol.validate","requirements.check","requirements.prepare","resource.capture","resource.list","resource.read","resource.register","selection.set","session.browser.pair","session.browser.revoke","session.connect","session.grant","session.instructions","skill.list","skill.read","skills.change","skills.list","skills.read","skills.undo","task.map.declare","task.map.present","task.map.read","task.map.respond","task.routing.put","view.close","view.observations.read","view.observe","view.protection.set","workspace.enhance","workspace.export","workspace.observe","workspace.restore","workspace.save"] as const satisfies readonly RhoMethod[];
+export const rhoMethods = ["action.cancel","action.export","action.list","action.lookup","action.observe","action.output","action.retry","action.submit","agent.activity.capture","agent.activity.outputs","agent.activity.read","agent.sessions.list","agent.sessions.read","annotation.create","annotation.decide","annotation.list","annotation.read","annotation.reply","artifact.check","binding.activity","binding.activity.append","binding.close","binding.list","binding.open","capability.configure","capability.index","capability.list","capability.resolve","composition.apply","composition.delete","composition.put","composition.read","composition.undo","console.events","console.list","console.output","console.run","console.stop","console.terminal.close","console.terminal.list","console.terminal.open","console.terminal.read","console.terminal.resize","console.terminal.write","context.create","context.read","conversation.agents.add","conversation.agents.remove","conversation.configure","conversation.decide","conversation.delete","conversation.list","conversation.permission","conversation.read","conversation.restore","conversation.send","conversation.settings.check","conversation.settings.read","conversation.settings.update","conversation.start","conversation.stop","conversation.trash","data.compare","data.page","data.plot","document.abandonSave","document.change.read","document.edit","document.history","document.open","document.read","document.revert","document.save","document.undo","document.undoOwn","evidence.export","evidence.preview","extension.call","extension.content","extension.describe","extension.install","extension.list","extension.manage","extension.market.change","extension.read","feedback.read","feedback.status","feedback.submit","figure.read","figure.select","interaction.selection.read","interaction.selection.set","kernel.events","kernel.inspect","kernel.interrupt","kernel.place.check","kernel.place.copy","kernel.place.list","kernel.place.set","kernel.places","kernel.plot","kernel.read","kernel.run","kernel.server.skill","kernel.servers","kernel.start","kernel.stop","media.describe","object.read","observation.snapshot","project.create","project.createWorkspace","project.doctor","project.entries","project.list","project.open","project.openFile","project.pick","project.runs","project.source.add","project.source.pick","project.work.read","protocol.describe","protocol.validate","requirements.check","requirements.prepare","resource.capture","resource.list","resource.read","resource.register","selection.set","session.browser.pair","session.browser.revoke","session.connect","session.grant","session.instructions","skill.list","skill.read","skills.change","skills.list","skills.read","skills.undo","task.map.declare","task.map.present","task.map.read","task.map.respond","task.routing.put","view.close","view.observations.read","view.observe","view.protection.set","workspace.enhance","workspace.export","workspace.observe","workspace.restore","workspace.save"] as const satisfies readonly RhoMethod[];
 export type RhoInputFor<M extends RhoMethod> = RhoOperations[M]['input'];

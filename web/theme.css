@@ -162,6 +162,14 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .nav-session.talking:not([aria-current=page]):hover { background: var(--color-selected); }
 /* The person's own workspaces follow the tasks. */
 .nav-workspaces { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--color-hairline); }
+/* A workspace closes from its row: the cross takes the place of its count while the row is pointed at or in reach. */
+.nav-closing { position: relative; display: flex; }
+.nav-closing > .nav-row { flex: 1; min-width: 0; }
+.nav-close { position: absolute; top: 50%; right: 4px; width: 24px; height: 24px; min-height: 24px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--color-meta); transform: translateY(-50%); opacity: 0; }
+.nav-closing.closable:is(:hover, :focus-within) > .nav-close { opacity: 1; }
+.nav-closing.closable:is(:hover, :focus-within) > .nav-row .nav-row-count { visibility: hidden; }
+.nav-close:hover { background: #dce3df; color: var(--color-ink); }
+@media (hover: none) { .nav-close { opacity: 1; } .nav-closing.closable > .nav-row .nav-row-count { visibility: hidden; } }
 .nav-none { margin: 0; padding: 4px 8px; }
 /* In the drawer the project's places are rows above its tasks. */
 .nav-places { padding-bottom: 12px; border-bottom: 1px solid var(--color-hairline); }
@@ -213,15 +221,9 @@ div.nav-files-note > .nav-more { display: block; margin: 4px 0 0 -8px; }
 .agent-chip.waiting { border-color: var(--color-amber-line); background: var(--color-amber-soft); color: var(--color-amber-text); }
 .agent-chip.waiting .pulse-dot { background: var(--color-amber); animation: none; }
 .agent-chip.waiting .agent-chip-what { color: var(--color-amber-text); font-family: var(--font-ui); }
-/* Studio: which session or workspace this is, its steps, following the Agent, the notes and
-   arranging views. The sessions and workspaces themselves are listed under Studio in the sidebar. */
+/* Studio. A conversation's Studio has a bar with its title, its steps and following the Agent;
+   a workspace has none. Both are listed under Studio in the sidebar. */
 .studio-main { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; container-type: inline-size; }
-/* A narrow Studio keeps its title and steps readable; the controls keep their icons and names in tooltips. */
-@container (max-width: 640px) { .studio-bar .view-menu summary > span, .studio-bar .shell-evidence-toggle > span { display: none; } }
-/* With the Agent's latest object in the bar, its state goes first and then the controls' names,
-   so the workspace's name and the object's stay readable. */
-@container (max-width: 900px) { .studio-bar .shell-agent-state { display: none; } }
-@container (max-width: 760px) { .studio-bar:has(.shell-agent) :is(.view-menu > summary, .shell-evidence-toggle) > span { display: none; } }
 .studio-bar { display: flex; align-items: center; gap: 10px; padding: 8px 14px; min-height: 52px; border-bottom: 1px solid var(--color-hairline); background: var(--color-surface); }
 .studio-title { display: flex; align-items: center; gap: 8px; flex: 0 1 auto; min-width: 56px; margin: 0; font-size: 14px; font-weight: 650; color: var(--color-ink); }
 .studio-title > span:not(.pulse-dot) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -230,14 +232,6 @@ div.nav-files-note > .nav-more { display: block; margin: 4px 0 0 -8px; }
    the title, also in the breadcrumb and the sidebar, shortens first. */
 .studio-bar > .steps-slot { flex: 0 0 auto; max-width: 45%; }
 .studio-bar > :is(.studio-title, .steps-slot):not(:has(+ .steps-slot)) { margin-right: auto; }
-/* The bar's controls are one kind: an icon and words on no ground, tinted while their panel is open. */
-.studio-bar :is(.view-menu > summary, .shell-bar button) { flex: none; min-height: 30px; padding: 4px 9px; gap: 6px; border: 0; border-radius: 7px; background: transparent; color: var(--color-ink); font-size: 12.5px; font-weight: 500; }
-.studio-bar :is(.view-menu > summary, .shell-bar button):hover { background: var(--color-hover); }
-.studio-bar :is(.view-menu[open] > summary, .shell-evidence-toggle[aria-expanded=true]) { background: var(--color-accent-soft); color: var(--color-accent-strong); }
-/* A person's workspace reports here what its own row used to: the Agent's latest object, held updates, Activity. */
-.bar-slot { display: contents; }
-.studio-bar .shell-bar { flex: 1 1 auto; min-width: 0; min-height: 0; padding: 0; gap: 2px; border: 0; font-size: 12.5px; }
-.studio-bar .shell-bar .shell-agent { max-width: 60%; }
 .follow-toggle { flex: none; min-height: 32px; padding: 4px 12px; border-radius: 999px; font-size: 12.5px; gap: 7px; }
 .follow-toggle.on { border-color: var(--color-accent); background: var(--color-accent-soft); color: var(--color-accent-strong); }
 .canvas-note { display: flex; align-items: center; gap: 12px; padding: 8px 16px; background: var(--color-well); border-bottom: 1px solid var(--color-hairline); color: var(--color-muted); font-size: 12.5px; }
@@ -446,11 +440,6 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 .workspace-tools { display: flex; align-items: center; gap: 14px; padding: 9px 16px; min-height: 48px; border-bottom: 1px solid var(--color-hairline); }
 .workspace-tools > .text-button svg { transform: rotate(180deg); }
 .workspace-question { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 13px; }
-.view-menu { position: relative; flex: none; }
-.view-menu summary { display: flex; align-items: center; gap: 6px; padding: 6px 8px; font-size: 12px; border-radius: 6px; }
-.view-menu summary:hover { background: var(--color-hover); }
-.view-menu > div { position: absolute; right: 0; top: 100%; z-index: 15; min-width: 220px; padding: 6px; background: white; border: 1px solid var(--color-hairline); border-radius: 9px; box-shadow: 0 8px 28px #20392b1a; }
-.view-menu button { width: 100%; justify-content: flex-start; background: transparent; border: 0; }
 .offline-bar, .inline-error { display: flex; align-items: center; gap: 12px; padding: 12px 18px; background: var(--color-amber-soft); color: var(--color-amber-text); }
 .offline-bar p, .inline-error p { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .inline-error { border-radius: 7px; font-size: 13px; }

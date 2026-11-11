@@ -91,7 +91,7 @@ try {
   await inspectResponsive(page, { name: 'installed-view', evidence, report });
   await call('document.edit', { documentId: document.id, expectedVersion: document.version, edits: [{ from: document.content.length, to: document.content.length, insert: '\nNew shared update 🧬' }], undoGroup: 'owner-edit' });
   await page.locator('[data-owner-view="summary"]').getByText('New shared update 🧬', { exact: false }).waitFor();
-  await page.getByText('Arrange views', { exact: true }).click(); await page.locator('.view-menu').getByRole('button', { name: 'Split right', exact: true }).click();
+  await page.getByRole('tab', { name: 'Shared summary', exact: true }).click({ button: 'right' }); await page.getByRole('menuitem', { name: 'Split right', exact: true }).click();
   await page.locator('.shell-split').waitFor();
   await page.reload(); await page.locator('.shell-split').waitFor();
   await page.locator('[data-owner-view="summary"]').getByText('New shared update 🧬', { exact: false }).waitFor();

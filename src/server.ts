@@ -533,11 +533,11 @@ export class RhoService {
     const capabilities = new Capabilities(this.plugins, project);
     const state = await capabilities.state();
     // The shared project listing remains available alongside an Agent's native tools.
-    const available = Object.keys(operations).filter(m => !extensionManagement.includes(m) && !m.startsWith('agent.activity.') && !m.startsWith('agent.sessions.') && !m.startsWith('session.') && !m.startsWith('conversation.') && (!m.startsWith('project.') || m === 'project.entries') && !m.startsWith('requirements.prepare') && !m.startsWith('workspace.restore') && !['task.routing.put', 'binding.activity.append', 'feedback.submit', 'view.observe', 'view.observations.read', 'task.map.respond', 'annotation.decide', 'evidence.export', 'evidence.preview', 'console.run', 'console.stop', 'kernel.stop'].includes(m) && !m.startsWith('console.terminal.'));
+    const available = Object.keys(operations).filter(m => !extensionManagement.includes(m) && !m.startsWith('agent.activity.') && !m.startsWith('agent.sessions.') && !m.startsWith('session.') && !m.startsWith('conversation.') && (!m.startsWith('project.') || m === 'project.entries') && !m.startsWith('requirements.prepare') && !m.startsWith('workspace.restore') && !['task.routing.put', 'binding.activity.append', 'feedback.submit', 'view.observe', 'view.observations.read', 'task.map.respond', 'annotation.decide', 'evidence.export', 'evidence.preview', 'console.run', 'console.stop', 'kernel.start', 'kernel.stop'].includes(m) && !m.startsWith('console.terminal.'));
     const profileMethods = profile === 'layered-presentation' ? ['binding.open', 'capability.index', 'capability.resolve', 'workspace.observe', 'workspace.enhance'] : available.filter(m => !['workspace.observe', 'workspace.enhance', ...(profile ? ['skill.list','skill.read','protocol.describe'] : [])].includes(m));
     const selected = methods ?? (profile === 'layered-presentation' ? profileMethods : (await Promise.all(profileMethods.map(async method => [method, await capabilities.isAvailable(method, state)] as const))).filter(([, enabled]) => enabled).map(([method]) => method));
     requireThat(profile !== 'layered-presentation' || selected.every(m => profileMethods.includes(m)), 'scope', 'The selected role cannot receive broader methods.');
-    requireThat(selected.every(m => !extensionManagement.includes(m) && !!operations[m] && !m.startsWith('agent.sessions.') && !m.startsWith('session.') && !m.startsWith('conversation.') && (!m.startsWith('project.') || m === 'project.entries') && !['task.routing.put', 'console.run', 'console.stop', 'kernel.stop'].includes(m) && !m.startsWith('console.terminal.')), 'invalid', 'Unknown or operator-only Agent capability.');
+    requireThat(selected.every(m => !extensionManagement.includes(m) && !!operations[m] && !m.startsWith('agent.sessions.') && !m.startsWith('session.') && !m.startsWith('conversation.') && (!m.startsWith('project.') || m === 'project.entries') && !['task.routing.put', 'console.run', 'console.stop', 'kernel.start', 'kernel.stop'].includes(m) && !m.startsWith('console.terminal.')), 'invalid', 'Unknown or operator-only Agent capability.');
     requireThat(await Promise.all(selected.map(method => capabilities.isAvailable(method, state))).then(values => values.every(Boolean)), 'unavailable', 'A requested Agent operation has no selected provider.');
     requireThat(!profile || new Set(['capability.index', 'capability.resolve', ...selected]).size <= layeredGrantLimits.maxMethods, 'limit', `Layered connection methods exceed the ${layeredGrantLimits.maxMethods}-method profile; choose an explicit narrower grant.`, { limit: 'maxMethods', maximum: layeredGrantLimits.maxMethods });
     const id = 'agent:' + digest(projectId + ':' + externalSessionId).slice(0, 32);
@@ -1216,9 +1216,11 @@ export class RhoService {
       if (method === 'console.stop') return { command: await runner.stop(b.commandId, principal.id) };
     }
     // The person and their Agent run and interrupt cells in the same sessions; only the person
-    // ends a session, since its values are gone with it.
+    // ends a session, since its values are gone with it, and starts one without a cell, as they
+    // manage the sessions' processes. An Agent's first cell starts its session.
     if (method.startsWith('kernel.')) {
       if (method === 'kernel.stop') requireThat(principal.id === localBrowserId, 'unauthorized', 'Only the person at this machine ends a live session. Open Rho in a browser on this machine.');
+      if (method === 'kernel.start') requireThat(principal.id === localBrowserId, 'unauthorized', 'Only the person at this machine starts a session without a cell. Run a cell to start one.');
       await capabilities.assertAvailable(method, principal);
       const host = this.kernelFor(p);
       if (method === 'kernel.run') return host.run({ language: b.language, code: b.code, purpose: b.purpose, notebook: b.notebook, changeId: b.changeId, by: principal.id, waitMs: b.waitMs, place: b.place, interpreter: b.interpreter });
@@ -1227,6 +1229,7 @@ export class RhoService {
       if (method === 'kernel.inspect') return host.inspect({ language: b.language, name: b.name, path: b.path, offset: b.offset, limit: b.limit, sort: b.sort, picture: b.picture });
       if (method === 'kernel.plot') return host.plot(b.cellId, b.plot);
       if (method === 'kernel.interrupt') return host.interrupt(b.cellId, principal.id);
+      if (method === 'kernel.start') return host.start({ language: b.language, place: b.place }, principal.id);
       if (method === 'kernel.stop') return host.stop(b.sessionId, principal.id);
       // Places on servers: the person and their Agent name, check and choose them, and list and
       // copy their files, each through serverctl or with the person's own ssh setup. The servers

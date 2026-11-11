@@ -29,7 +29,9 @@ export async function inspectResponsive(page, { name, evidence, report, settle, 
 }
 export const firstUnit = (view, kind) => view.locator(kind === 'editor' ? '.cm-line' : '.ag-row[row-index="0"] .ag-cell').first();
 export async function agentMarker(page) {
-  const marker = page.locator('.shell-bar [data-rho-agent]');
+  // The person's workspace has no bar since 2026-11-11; the marker is in the Agent panel when that is open.
+  const marker = page.locator('[data-rho-agent]').first();
+  if (!await marker.count()) return { visible: false, actionable: false, text: '' };
   return { visible: await marker.isVisible(), actionable: await marker.isEnabled(), text: (await marker.innerText()).replace(/\s+/g, ' ') };
 }
 export async function facts(page) {

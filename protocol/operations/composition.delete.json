@@ -841,5 +841,5 @@
       "receipt"
     ]
   },
-  "description": "Delete an empty Studio workspace layout only, never the project directory, documents, resources, conversations or running sessions. Requires its observed expectedVersion and a stable changeId. The same request returns its original receipt without deleting a recreated workspace. Nonempty, conversation and active-task layouts are refused. The deleted layout and its history remain readable with composition.read and recoverable with composition.undo; it is omitted from active workspace lists. Recreating it uses a conditional composition.apply replacement at its retained version."
+  "description": "Delete a Studio workspace layout with its views, as closing each would, never the project directory, documents or their unsaved buffers, resources, conversations or running sessions. Requires its observed expectedVersion and a stable changeId. The same request returns its original receipt without deleting a recreated workspace. Layouts holding a protected view, conversation and active-task layouts are refused. The deleted layout and its history remain readable with composition.read and recoverable with composition.undo; it is omitted from active workspace lists. Recreating it uses a conditional composition.apply replacement at its retained version."
 }

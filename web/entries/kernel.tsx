@@ -1,6 +1,6 @@
 import { useContext, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { FlowPane, FormSwitch, ObjectView, PlotsPane, ServersPane, SessionPane, VariablesPane, kernelEntries, type NotebookForm } from '@rho-workspace/plugin-kernel/ui';
+import { FlowPane, FormSwitch, ObjectView, PlotsPane, ServersPane, SessionPane, SessionsPane, VariablesPane, kernelEntries, type Linked, type NotebookForm } from '@rho-workspace/plugin-kernel/ui';
 import type { UiContribution, UiViewProps } from '../../src/ui-contract.js';
 import { WorkspaceViewsContext } from '../shell/workspace-views.js';
 
@@ -18,19 +18,28 @@ function Notebook({ viewId, view, client, snapshot, headerTarget, shell }: UiVie
   const [form, setForm] = useState<NotebookForm>(saved);
   useEffect(() => setForm(saved), [saved]);
   const choose = (next: NotebookForm) => { setForm(next); page?.setProps?.(viewId, { form: next }); };
+  // On the person's own page the Notebook leaves plots and the sessions to their views.
+  const linked: Linked | undefined = page?.showPlot && page.showSessions ? { plot: page.showPlot, sessions: page.showSessions } : undefined;
   return <>
     {headerTarget && createPortal(<FormSwitch form={form} onForm={choose} />, headerTarget, 'form-' + viewId)}
     <SessionPane client={client} snapshot={snapshot} form={form} shell={shell} scope={page?.scope}
       notebook={typeof view.props.notebook === 'string' && view.props.notebook ? view.props.notebook : undefined} notebooks={page?.notebookNames}
-      beside={{ variables: !!page?.has('rho.variables'), plots: !!page?.has('rho.plots') }}
+      beside={{ variables: !!page?.has('rho.variables'), plots: !!page?.has('rho.plots') }} linked={linked}
       prepared={!page || page.notebookTarget == null || page.notebookTarget === viewId ? page?.prepared : null} onTaken={page?.taken} onConversation={page?.openConversation} onObject={page?.openValue} />
   </>;
 }
 function Variables({ client, snapshot }: UiViewProps) {
   const page = useContext(WorkspaceViewsContext);
-  return <VariablesPane client={client} snapshot={snapshot} onObject={page?.openValue} />;
+  return <VariablesPane client={client} snapshot={snapshot} onObject={page?.openValue} onCell={page?.showCell && (cellId => page.showCell!(cellId, null))} onSessions={page?.showSessions} />;
 }
-const Plots = ({ client, snapshot, shell }: UiViewProps) => <PlotsPane client={client} snapshot={snapshot} shell={shell} />;
+function Plots({ client, snapshot, shell }: UiViewProps) {
+  const page = useContext(WorkspaceViewsContext);
+  return <PlotsPane client={client} snapshot={snapshot} shell={shell} onCell={page?.showCell && (cellId => page.showCell!(cellId, null))} />;
+}
+function Sessions({ client, snapshot }: UiViewProps) {
+  const page = useContext(WorkspaceViewsContext);
+  return <SessionsPane client={client} snapshot={snapshot} onCell={page?.showCell && (cellId => page.showCell!(cellId, null))} />;
+}
 function Flow({ client, snapshot, shell }: UiViewProps) {
   const page = useContext(WorkspaceViewsContext);
   return <FlowPane client={client} snapshot={snapshot} shell={shell} onObject={page?.openValue} onPath={shell?.openPath} onRemote={page?.openRemote} />;
@@ -44,6 +53,7 @@ function Value({ view, client, snapshot }: UiViewProps) {
 }
 
 export const notebook = contribution('rho.notebook', Notebook, { type: 'object', properties: { title: { type: 'string' }, form: { enum: ['notebook', 'console'] }, notebook: { type: 'string' } } });
+export const sessions = contribution('rho.sessions', Sessions);
 export const variables = contribution('rho.variables', Variables);
 export const plots = contribution('rho.plots', Plots);
 export const flow = contribution('rho.flow', Flow);

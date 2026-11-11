@@ -159,14 +159,14 @@ writeLines(jsonlite::toJSON(list(schemaVersion=1L,complete=TRUE,artifacts=items)
   passed('a link tab keeps its request draft across closing the panel; the clipboard is explicitly a handoff');
   await page.getByRole('tab', { name: 'analysis.R', exact: true }).click();
   const groupCount = await page.locator('.shell-group').count();
-  await page.getByText('Arrange views', { exact: true }).click();
-  await page.locator('.view-menu').getByRole('button', { name: 'Split right', exact: true }).click();
+  await page.getByRole('tab', { name: 'analysis.R', exact: true }).click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Split right', exact: true }).click();
   await page.locator('.shell-split[data-axis="horizontal"]').waitFor();
   await page.screenshot({ path: path.join(evidence, 'split-1440.png') });
   await page.reload();
   await page.locator('.shell-split[data-axis="horizontal"]').waitFor();
   assert.match(await editorContent.innerText(), /Ozone/);
-  passed('visible Arrange views menu creates a real split and reload restores it');
+  passed("a tab's own menu creates a real split and reload restores it");
   // The same layout by dragging: a tab dropped on another group's tabs joins them and its
   // emptied pane closes; dropped near a group's edge it opens a pane on that side.
   const dragTab = async (name, target, x, y) => {

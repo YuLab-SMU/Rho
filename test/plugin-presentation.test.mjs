@@ -141,7 +141,7 @@ test('plugin kinds name each way a plugin is reached from declared or installed 
   assert.equal(kinds('annotations')[0].kind, 'ui');
   assert.equal(pluginKinds({ id: 'x', package: 'fixture', state: 'available', presentation: { viewNote: 'Inside other views' } }, pluginEntries({ plugins: [], operations: [], components: [], actions: [] }, 'x'))[0].label, 'In other views');
   assert.deepEqual(names('kernel'), ['ui', 'mcp', 'skills']);
-  assert.equal(kinds('kernel')[0].count, 6);
+  assert.equal(kinds('kernel')[0].count, 7);
   // The Agent package links command-line programs in its own manifest; the catalog records them as read.
   const agent = kinds('agent');
   assert.deepEqual(agent.map(k => k.kind), ['ui', 'mcp', 'skills', 'mcp-server', 'cli']);

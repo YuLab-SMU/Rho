@@ -7,14 +7,14 @@ import { Icon } from '../icons.js';
 import { registry } from '../registry.js';
 import { useLive } from './live.js';
 import { OwnerView, availableEntry, title, viewIcon } from './owner.js';
-import { AgentColumn, Bar, Digest, Evidence, Interruption, waiting } from './layer.js';
+import { AgentColumn, Digest, Evidence, Interruption, waiting } from './layer.js';
 import { openRun, runFirstLine, RunView, SourceLine } from './facts.js';
 import { ActionForm } from './action-form.js';
 import { CommandPane } from '../console.js';
 import { ConsoleView, FilesView, KindView } from '../studio-tools.js';
 import type { SourceRow } from '../sources.js';
-import { showOnServer, type Prepared, type SessionScope } from '@rho-workspace/plugin-kernel/ui';
-import { addNotebook, addObject, addSessionView, canExplore, explorableTable, languageNames, loadTable, notebookComponent, notebookNames, notebookOf, notebookView, projectPath, scriptLanguage, scriptPrepared, sessionComponents, type Language } from '../explore.js';
+import { askCell, askPlot, showOnServer, type Prepared, type SessionScope } from '@rho-workspace/plugin-kernel/ui';
+import { addNotebook, addObject, addSessionView, canExplore, type SessionView, explorableTable, languageNames, loadTable, notebookComponent, notebookNames, notebookOf, notebookView, projectPath, scriptLanguage, scriptPrepared, sessionComponents, type Language } from '../explore.js';
 import { ExploreIn } from '../explore-in.js';
 import { useProcess } from '../process-context.js';
 import { ProcessFrame } from './process-views.js';
@@ -37,7 +37,7 @@ export const workspaceLimits = { minSplitPx: 640 };
 // The workspace shell: the owner's composition tree drawn as
 // splits and tab groups, owner views mounted within the rendering budget, and a slot for
 // what Rho adds above the work. It decides nothing about attention; useLive does.
-export function Workspace({ composition: recorded, snapshot, client, onAbout, contextTarget, principalId, onShowContext, feedbackContextActive, openView, onCommands, agentTarget, onShowAgent, presence, onPersonMoved, onConversation, onExplore, onObject, empty, prepared: given, onPrepare, bar = true, barTarget, attention = true, following = false, arrange = true, addView }: { addView?: (into: string) => ReactNode; onConversation?: (id: string) => void; onExplore?: (path: string, language: Language) => void; onObject?: (language: Language, name: string) => void; empty?: ReactNode; prepared?: Prepared | null; onPrepare?: (prepared: Prepared | null) => void; following?: boolean; arrange?: boolean; bar?: boolean; barTarget?: HTMLElement | null; attention?: boolean; presence?: { viewId: string; label: string; verb: string; live: boolean } | null; onPersonMoved?: () => void; onCommands?: (group: CommandGroup | null) => void; composition: CompositionSummary; snapshot: WorkspaceSnapshot; client: BrowserClient; onAbout: (pluginId: string) => void; contextTarget: HTMLElement | null; principalId?: string; onShowContext: () => void; feedbackContextActive: boolean; mapChipTarget?: HTMLElement | null; openView?: string; agentTarget?: HTMLElement | null; onShowAgent?: () => void }) {
+export function Workspace({ composition: recorded, snapshot, client, onAbout, contextTarget, principalId, onShowContext, feedbackContextActive, openView, onCommands, agentTarget, onShowAgent, presence, onPersonMoved, onConversation, onExplore, onObject, empty, prepared: given, onPrepare, following = false, arrange = true, addView }: { addView?: (into: string) => ReactNode; onConversation?: (id: string) => void; onExplore?: (path: string, language: Language) => void; onObject?: (language: Language, name: string) => void; empty?: ReactNode; prepared?: Prepared | null; onPrepare?: (prepared: Prepared | null) => void; following?: boolean; arrange?: boolean; presence?: { viewId: string; label: string; verb: string; live: boolean } | null; onPersonMoved?: () => void; onCommands?: (group: CommandGroup | null) => void; composition: CompositionSummary; snapshot: WorkspaceSnapshot; client: BrowserClient; onAbout: (pluginId: string) => void; contextTarget: HTMLElement | null; principalId?: string; onShowContext: () => void; feedbackContextActive: boolean; mapChipTarget?: HTMLElement | null; openView?: string; agentTarget?: HTMLElement | null; onShowAgent?: () => void }) {
   // A conversation's Studio: its files' views show their versions, and a replay arranges nothing.
   const process = useProcess();
   const live = useLive(snapshot, recorded, client, principalId, !!process), layout = live.layout;
@@ -188,6 +188,23 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
     setLayoutProblem('');
     addSessionView(client, snapshot.project.id, layout.compositionId, 'servers').then(id => { onPersonMoved?.(); setOpening(id); }, refusal);
   }
+  // The sessions' views bring each other forward on the person's page: a view of the sessions is
+  // shown where it is, or put on the page first. A cell goes to the project's notebook, which
+  // lists every cell, else to the notebook it ran in or the one last used.
+  const linking = !process && !!tree && allowed('composition.apply');
+  function showSessionView(kind: SessionView) {
+    const there = layout.views.find(v => v.component === sessionComponents[kind])?.id;
+    if (there) { onPersonMoved?.(); show(there); return; }
+    setLayoutProblem('');
+    addSessionView(client, snapshot.project.id, layout.compositionId, kind).then(id => { onPersonMoved?.(); setOpening(id); }, refusal);
+  }
+  function showCell(cellId: string, notebook: string | null) {
+    askCell(cellId);
+    const view = notebooks.find(v => !notebookOf(v)) ?? (notebook ? notebooks.find(v => notebookOf(v) === notebook) : undefined) ?? target;
+    if (view) { onPersonMoved?.(); show(view.id); return; }
+    setLayoutProblem('');
+    addNotebook(client, snapshot.project.id, layout.compositionId, null).then(id => { onPersonMoved?.(); setOpening(id); }, refusal);
+  }
   // A script's line run from its editor: the person's cell in the shared session, in the order the
   // lines were run. A page without the Notebook gets one under the script, as a console sits under
   // an editor; one in another pane comes forward in it, and the script keeps the keyboard.
@@ -232,6 +249,7 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
     prepared, taken: () => setPrepared(null), setProps: saveProps, has: component => layout.views.some(v => v.component === component),
     notebookTarget: target?.id ?? null, notebookNames: names,
     scope, openConversation: onConversation,
+    ...(linking ? { showPlot: (cellId: string, plot: number) => { askPlot(cellId, plot); showSessionView('plots'); }, showCell, showSessions: () => showSessionView('sessions') } : {}),
   };
   // A divider is written back once the person stops moving it.
   const resizing = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -450,10 +468,7 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
   }
   const focusObject = live.screen?.views.find(v => v.id === focused)?.object ?? null;
   const toggleEvidence = () => { setEvidence(v => !v); onShowAgent?.(); live.act({ kind: 'reveal', target: evidence ? null : live.screen?.agent?.object ?? 'workspace' }); };
-  const statusBar = bar && <Bar live={live} evidence={evidence} held={items.length - unhidden.length} onEvidence={toggleEvidence} attention={attention} />;
   return <ShellContext.Provider value={shellHere}><WorkspaceViewsContext.Provider value={views}><section className="workspace shell" aria-label="Layout">
-    {/* In the page's own bar when it gives one; until that bar is there, nowhere. */}
-    {statusBar && (barTarget ? createPortal(statusBar, barTarget) : barTarget === undefined && statusBar)}
     {agentTarget && createPortal(<AgentColumn live={live} agents={snapshot.agents} contexts={snapshot.contexts} prepare={prepareQuestion} principalId={principalId} evidence={evidence} onEvidence={toggleEvidence} focusObject={focusObject} />, agentTarget)}
     <Interruption live={live} items={unhidden} onHide={key => setHidden(h => [...h, key])} />
     {layoutProblem && <div className="shell-interruption problem" data-rho-layer="transient" data-rho-interruption="" role="alert"><span className="shell-interruption-text">{layoutProblem}</span><button className="shell-quiet" onClick={() => setLayoutProblem('')}>Dismiss</button></div>}

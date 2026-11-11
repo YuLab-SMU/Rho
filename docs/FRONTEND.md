@@ -60,10 +60,10 @@ its workspace ID, observed layout version and replay position. The service freez
 a bounded view summary with the message; a retry keeps that original context.
 Under a Studio message, the workspace name records where it was sent from.
 An empty workspace has no views, even when the project contains files. An Agent can
-delete that empty layout through `composition.delete` and restore it through
-`composition.undo`. Deletion removes the sidebar entry and moves an observing tab
-to another workspace, or Overview if none remains. Project files and sessions are
-separate. The [Studio context episode](STUDIO-CONTEXT-EPISODE.md) records the original
+delete a workspace's layout, with its views, through `composition.delete` and restore it
+through `composition.undo`; one holding a protected view is refused. Deletion removes the
+sidebar entry and moves an observing tab to another workspace, or Overview if none remains.
+Project files, unsaved buffers and sessions are separate. The [Studio context episode](STUDIO-CONTEXT-EPISODE.md) records the original
 misunderstanding, the real OpenCode run and the limits of this summary.
 
 ## Starting from the work
@@ -142,7 +142,7 @@ inspect what happened. The application gives those actions direct places:
   kind's page and a file's own page, with ← and → through the kind and Open in Studio
   ([pass](AGENT-CANVAS-EPISODE.md#browsing-sources-from-the-sidebar)).
   `+` adds a source folder.
-- **Terminal** is a view of a Studio workspace, placed along its foot from Add view or the
+- **Terminal** is a view of a Studio workspace, placed along its foot from a group's + or the
   command palette, with two forms chosen in its header
   ([episode](SIMULATED-PROJECT-EPISODE.md#a-real-terminal)). Terminal is the person's own login
   shell on a pseudo-terminal in the project folder, drawn with xterm.js: its prompt and colours,
@@ -166,11 +166,11 @@ inspect what happened. The application gives those actions direct places:
   into the prompt to check before Run. The board's command count opens the Console
   at that message. Only the person at this machine can run or stop commands; an
   Agent may read them ([episode](SIMULATED-PROJECT-EPISODE.md#second-pass)).
-- **Notebook** is a view of a Studio workspace, from Add view, the command palette, Skills or
+- **Notebook** is a view of a Studio workspace, from a group's +, the command palette, Skills or
   the Overview (offered while the Notebook plugin is selected). It shows the project's live R
   and Python sessions, which the person shares with the Agent. A workspace can hold several
   ([episode](SIMULATED-PROJECT-EPISODE.md#several-notebooks)): the first is the project's
-  notebook, which lists every cell of the sessions; once a page has it, Add view offers New
+  notebook, which lists every cell of the sessions; once a page has it, a group's + offers New
   notebook, a notebook of its own (Notebook 2, 3, …, renamed from its tab's menu) that lists the
   cells run in it. They share the sessions, so a value made in one is there in the others, and
   the project's notebook names the notebook each such cell was run in. A script's line, a table
@@ -181,13 +181,18 @@ inspect what happened. The application gives those actions direct places:
   then what it printed, streamed while it runs, with messages, warnings and errors in
   their place and its plots. Long code and output show their first lines. Where a session
   started or ended the list says so, and that values from before an end are gone. Each
-  cell has Edit and run and Run again. Beside the cells: each session's state with
-  Interrupt and Stop (Stop asks first), its variables with type, size and summary, and
-  the latest plots. The person's cell stays at the foot, with R or Python, a hint from
-  what the session holds and ⌘/Ctrl+Enter. Below 820 px the sessions move above the cells.
-  A view at least 840 px wide has the
-  sessions beside the cells; a narrower one folds them into one line above, and below
-  420 px the code takes its own line above R or Python and Run. A conversation's Studio
+  cell has Edit and run and Run again. The person's cell stays at the foot, with R or
+  Python, a hint from what the session holds and ⌘/Ctrl+Enter.
+  On the person's own page the Notebook is the cells and that line, and leaves the rest to
+  the other views of the sessions ([one set of views](SIMULATED-PROJECT-EPISODE.md#one-set-of-session-views)):
+  a plot of a live session is a picture in its cell, numbered as Plots counts it, that brings
+  it forward in the Plots view, which is put on the page when it has none; a value named under
+  a cell opens in its own view; and the session's state beside the line ("R 4.5.2 · idle")
+  opens Sessions. Interrupt stays at the line while a cell runs. A wide view centers the cells;
+  below 420 px the code takes its own line above R or Python and Run. Elsewhere (a conversation's
+  Studio, and the Notebook page of a tab that may not arrange one) the Notebook keeps the
+  sessions' state, variables and latest plots beside the cells, or folded into one line above
+  them in a view under 840 px. A conversation's Studio
   has a Notebook view of the sessions its Agent ran cells in, with the person's cells
   since the conversation began, cut at the moment shown; on the person's own pages it
   shows the sessions whole. The view scrolls itself and stays at the newest cell while
@@ -213,8 +218,9 @@ inspect what happened. The application gives those actions direct places:
   after the prompt (`>`/`+` in R, `>>>`/`...` in Python, a new statement at the prompt) and what
   it printed under it, messages muted, warnings amber, errors red; a cell someone else ran has
   a comment line with who and why (`# Claude Code · Fit the model`). Plots show under their
-  prompt, or as a line that opens them in place when the page has Plots. Session starts and
-  ends are marked. A bar above names each session's state with Interrupt and Stop, and Clear
+  prompt, or on the person's own page as a line that brings them forward in Plots. Session
+  starts and ends are marked. A bar above names each session's state (there, a click opens
+  Sessions) with Interrupt, and Stop where Sessions is not the place for it, and Clear
   (Ctrl+L) hides earlier output from this view only. The prompt sits under the last output:
   Enter runs finished code and goes on to another line, indented, in unfinished code (an
   open bracket or string, a trailing operator, a Python block before its empty line);
@@ -246,16 +252,29 @@ inspect what happened. The application gives those actions direct places:
   is in the editor, saved or not. A page without the Notebook gets one under the script; one
   in another pane comes forward there, and the script keeps the keyboard. Lines run in the
   order they were sent ([episode](SIMULATED-PROJECT-EPISODE.md#script-console-variables-and-plots)).
-- **Variables** and **Plots** are views of the live sessions of their own (`rho.variables`,
-  `rho.plots`), added from Add view or an empty page. Either takes a column along the page's
+- **Sessions**, **Variables** and **Plots** are views of the live sessions of their own
+  (`rho.sessions`, `rho.variables`, `rho.plots`), added from a group's +, an empty page or a
+  link in another view of the sessions. Variables or Plots takes a column along the page's
   right side, the other above or below it there, so a script with its Notebook under it and
-  these two make the four panes of a script, a console, an environment and plots. Variables
-  shows the session the newest cell ran in (or the one chosen), its state and each value's
-  type, size and summary; a name opens the value. Plots shows the newest plot of the live
-  sessions at the size of the view with the cell that drew it, steps back through the 24
-  newest (arrows, or the strip below), and brings a new one forward as it is drawn. Plots of
-  an ended session stay with their cells in the Notebook. With these views on the page, the
-  Notebook leaves its own variables and plots out.
+  these two make the four panes of a script, a console, an environment and plots; Sessions,
+  Data flow and Servers are tabs beside Variables. **Sessions** is the R and Python processes:
+  each one's version, state, where it runs (this machine and its name, or a place), the
+  program, its process ID, who started it and when, its cells and waiting cells, what its
+  values take as the session measures them, and the cell running now (which opens in the
+  Notebook), with Interrupt, Restart and Stop (both ask first); one not running says how it
+  ended and where the next starts, with Start. Sessions that ended earlier are listed under
+  them. **Variables** is an environment pane of the session the newest cell ran in (or the
+  one chosen): its state (opening Sessions), Find, and a table of Data (two-dimensional
+  values: a data frame's observations and variables, a matrix's dimensions), Values (the
+  value at a glance as the session prints it, with its length) and Functions, with type and
+  size, sorted by name, type or size. A name opens the value; its arrow unfolds a table's
+  columns with their first values, or a list's parts, and the cell that made it and those
+  that read it, each opening in the Notebook. Under 440 px the type is left to the value's
+  words. Plots shows the newest plot of the live sessions at the size of the view with the
+  cell that drew it (Show the cell brings it forward in the Notebook), steps back through the
+  24 newest (arrows, or the strip below), and brings a new one forward as it is drawn, or the
+  one a cell's picture asked for. Plots of an ended session stay with their cells in the
+  Notebook.
 - **Data flow** (`rho.flow`) shows how the values of a live session were made, as a tab beside
   Variables (else in the right column). It is a graph of values: the project files and folders
   the session read at the top, the results at the bottom (the files it wrote and the plots it
@@ -378,8 +397,8 @@ inspect what happened. The application gives those actions direct places:
   not by assuming every call on one connection belongs to that conversation. The
   [external work episode](EXTERNAL-WORK-EPISODE.md) records the actual Harness check.
 - **Studio** shows how a conversation's work was done. The sidebar lists each
-  recorded Agent session under Agent and then the person's own workspaces; the Studio bar names the
-  one shown.
+  recorded Agent session under Agent and then the person's own workspaces, marking the one
+  shown; a conversation's Studio names its conversation in a bar above it.
   The **project notes** (`project-notes.md` at the project root) are one Markdown file
   shared by the person and every session, shown in the panel beside the work from Notes
   at the end of the tabs' bar, on any page of the project. The panel holds the notes or the
@@ -419,7 +438,7 @@ inspect what happened. The application gives those actions direct places:
   the Agent: nothing opens there by itself. Sending a message from another page follows
   the turn on the Overview's board; sent from Studio, it leaves the person where they
   are (a new conversation started from a conversation's Studio opens its own), and
-  Follow opens the running conversation's Studio. The tab of an open file the Agent last
+  the topbar's Agent chip, pressed in Studio, opens the running conversation's Studio. The tab of an open file the Agent last
   named says Reading, Edited, Ran…, and the topbar names the Agent's newest action on
   every project page. Files open from the board, the Graph and Sources
   ([canvas episode](AGENT-CANVAS-EPISODE.md),
@@ -489,7 +508,7 @@ inspect what happened. The application gives those actions direct places:
   its menu, and a close names what it closed with Undo while the layout is as it left
   it. A tab's menu (right click, the context-menu key or Shift+F10) closes it or the
   group's other tabs, splits it right or down and maximizes its group. Each group's +
-  puts a view into that group from the same choices as Add view. A tab drags onto
+  puts a view into that group from the choices an empty page offers. A tab drags onto
   another group's tabs (a line marks the place), onto the middle of a group to join it,
   or within a quarter of a group's side to open a pane there; the empty strip beside a
   group's tabs drags the whole group the same ways, keeping its tabs. While something
@@ -500,18 +519,22 @@ inspect what happened. The application gives those actions direct places:
   in its stem and keeps its extension; tabs short of room share it evenly, and one without room
   for a few letters is its icon alone. Each change is one
   conditional write of the saved layout, the same the commands and the Agent use, and
-  Undo reverses it. Arrange views and the command palette offer split, move, close and
-  undo for the focused view. Below 768 px nothing drags
+  Undo reverses it. The command palette offers split, move, close and undo for the
+  focused view. Below 768 px nothing drags
   ([episode](AGENT-CANVAS-EPISODE.md#arranging-views-the-person-drags-the-agent-writes),
   [by hand](AGENT-CANVAS-EPISODE.md#the-persons-own-hands-on-the-layout)).
   A stage narrower than 640 px, as in a small window with the panel open beside it,
   shows a layout of several groups one view at a time with all its tabs, as a phone
   does; the saved layout is unchanged. New workspace, under Studio in the sidebar and in
   the command palette, makes an empty page of the person's own (Workspace 2, 3, …). An
-  empty page offers the Notebook, the Terminal, Files, Variables, Plots, Data flow, Servers and the project's files by kind; Add view
-  in the Studio bar offers the same on any of the person's pages. A file opens in the view it has
-  elsewhere in Studio, the Notebook in a pane right of what is there. Pages cannot yet be
-  renamed or removed, and they count toward the 32 layouts a project keeps.
+  empty page offers the Notebook, Sessions, Variables, Plots, Data flow, Servers, the Terminal,
+  Files and the project's files by kind; a group's + offers the same on any of the person's
+  pages. A file opens in the view it has elsewhere in Studio, the Notebook in a pane right of
+  what is there. The person's workspace has no bar of its own above its views. A workspace
+  closes from the × on its sidebar row or Close this workspace in the command palette: its
+  views go with it, so its terminals hang up, while its files, documents, sessions and
+  conversations stay; a notice offers Undo, which brings it back with its views. Pages cannot
+  yet be renamed, and closed ones still count toward the 32 layouts a project keeps.
 - **View headers** give each view's controls one form, whichever component puts them there,
   also on a file's page and atop the notes: words and an icon on no ground until pointed at,
   the view's main action (Run) in the accent, a choice of forms (Notebook or Console, Read or
@@ -522,9 +545,7 @@ inspect what happened. The application gives those actions direct places:
   Explore in R or Python button. The tabs give way to the controls, narrowing to their icons,
   down to room for the shown tab's name and every other tab's icon (168 px for one tab, 44 px
   more for each other); below that the controls take a row of their own, and a control that
-  comes with a selection can then move the view. On the person's own page the Studio bar holds the
-  Agent's latest object, held updates and Activity beside Add view and Arrange views; as
-  it narrows, the object's state goes first, then the controls' names
+  comes with a selection can then move the view
   ([episode](SIMULATED-PROJECT-EPISODE.md#toolbars)).
 - **The Agent panel** opens beside any page from the Agent button at the end of the
   tabs' bar, from a conversation in the sidebar, or from Continue on the Agent page. Its one header is the
@@ -779,7 +800,7 @@ control names. The report and images go to `work/frontend-reset/browser/` by def
 runs project files and writes an output no step names. It checks the sidebar counts,
 that a message sent from Studio leaves the person's workspace as they arranged it,
 the edited text on disk in the open editor, that nothing else opened there, the Agent
-page's record of the turn and a file it names shown in place, that Follow opens the
+page's record of the turn and a file it names shown in place, that the Agent chip opens the
 conversation's Studio, marked in the sidebar's sessions, with its data, script,
 commands, output, parts and timeline, that
 a moment chosen on the timeline at the work's first read shows the views and the

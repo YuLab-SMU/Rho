@@ -183,10 +183,10 @@
       "sha256": "7f7c106b6569c39551c28573f3a5b381f5efcbe6cf93f27f7d90c1750375cd9c"
     },
     "composition.delete": {
-      "summary": "Delete an empty Studio workspace layout only, never the project directory, documents, resources, conversations or running sessions. Requires its observed expectedVersion and a stable changeId. The same request returns its original receipt without deleting a recreated workspace. Nonempty, conversation and active-task layouts are refused. The deleted layout and its history remain readable with composition.read and recoverable with composition.undo; it is omitted from active workspace lists. Recreating it uses a conditional composition.apply replacement at its retained version.",
+      "summary": "Delete a Studio workspace layout with its views, as closing each would, never the project directory, documents or their unsaved buffers, resources, conversations or running sessions. Requires its observed expectedVersion and a stable changeId. The same request returns its original receipt without deleting a recreated workspace. Layouts holding a protected view, conversation and active-task layouts are refused. The deleted layout and its history remain readable with composition.read and recoverable with composition.undo; it is omitted from active workspace lists. Recreating it uses a conditional composition.apply replacement at its retained version.",
       "path": "operations/composition.delete.json",
-      "bytes": 26137,
-      "sha256": "1e1b1a50ccdc2b2069e3157549bdd04809485a1fdc4d3fe76bef819948fa196a"
+      "bytes": 26212,
+      "sha256": "08f8ab37afd275c90b63f4d50e21fd1ebc3821bd6228525b81210b32546da09f"
     },
     "composition.put": {
       "summary": "composition.put",
@@ -638,6 +638,12 @@
       "bytes": 3302,
       "sha256": "1101a46d0d02626c721b6f2a645a82774736d1aeef6c79aace71816c5a8315e4"
     },
+    "kernel.start": {
+      "summary": "Person at this machine only: start the R or Python session without a cell, where the place names, else where the project runs that language. A live session is returned as it is; one that is stopping is waited for first. An Agent's first cell starts its session.",
+      "path": "operations/kernel.start.json",
+      "bytes": 6559,
+      "sha256": "e254d671e8891358e61a18647302ef6044b732e87067a481da726fd43c6303ff"
+    },
     "kernel.stop": {
       "summary": "Person at this machine only: end one live session. Its values are gone, the running cell ends with an error and waiting cells are not run. A session that has ended is returned unchanged.",
       "path": "operations/kernel.stop.json",
@@ -809,8 +815,8 @@
     "session.grant": {
       "summary": "session.grant",
       "path": "operations/session.grant.json",
-      "bytes": 5414,
-      "sha256": "49937a50cc9f43449a619853013d61caadefe16f2db5b52194ea7e8e9207f796"
+      "bytes": 5442,
+      "sha256": "5c0ef899c376cbb69d722f05ebaf654a05f07a4353d5838feb3c55a5ddb21450"
     },
     "session.instructions": {
       "summary": "Person at this machine or operator only: read a prompt for the person's own MCP client to connect itself to this existing project. Returns local launcher paths, never credential contents. Reading or copying grants no access, edits no client configuration and starts no runtime.",

@@ -30,6 +30,7 @@ export function viewIcon(view: ViewDescription, snapshot: WorkspaceSnapshot): Ic
   if (view.component === 'rho.notebook') return 'code';
   if (view.component === 'rho.object') return 'braces';
   if (view.component === 'rho.variables') return 'list';
+  if (view.component === 'rho.sessions') return 'monitor';
   if (view.component === 'rho.plots') return 'chart';
   if (view.component === 'rho.flow') return 'workflow';
   if (view.component === 'rho.servers') return 'server';

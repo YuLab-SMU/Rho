@@ -49,27 +49,12 @@ const minutes = (ms: number) => { const s = Math.max(0, Math.round(ms / 1000)); 
 const when = (iso: string) => (sameDay(iso, new Date().toISOString()) ? '' : day(iso) + ' ') + clock(iso);
 const span = (a: string, b: string) => sameDay(a, b) ? when(a) + ' – ' + clock(b) : `${day(a)} ${clock(a)} – ${day(b)} ${clock(b)}`;
 // The Agent's object and its state, one press from the object itself.
-function AgentMarker({ live, who = true }: { live: Live; who?: boolean }) {
+function AgentMarker({ live }: { live: Live }) {
   const screen = live.screen!, agent = screen.agent, name = namer(live);
   if (!agent) return null;
   return <button className="shell-agent" data-rho-agent="" title={`The Agent's latest object: ${name(agent.object)}`} onClick={() => live.act({ kind: 'open', target: agent.object })}>
-    <span className={who ? 'shell-agent-who' : 'visually-hidden'}>Agent</span>{' '}<span className="shell-agent-object">{name(agent.object)}</span>{' '}<span className="shell-agent-state">{stateOf(screen.objects[agent.object])}{agent.placement === 'pending' ? ' · shows when you pause' : ''}</span>
+    <span className="visually-hidden">Agent</span>{' '}<span className="shell-agent-object">{name(agent.object)}</span>{' '}<span className="shell-agent-state">{stateOf(screen.objects[agent.object])}{agent.placement === 'pending' ? ' · shows when you pause' : ''}</span>
   </button>;
-}
-
-// Where the application follows the Agent itself, the bar leaves following to it.
-export function Bar({ live, evidence, onEvidence, held, attention = true }: { live: Live; evidence: boolean; onEvidence: () => void; held: number; attention?: boolean }) {
-  const { screen, act } = live;
-  if (!screen || !live.state) return <div className="shell-bar" role="status">Reading workspace…</div>;
-  const following = screen.attention === 'following';
-  return <div className="shell-bar" data-attention={screen.attention}>
-    <AgentMarker live={live} />
-    <span className="shell-break" />
-    {held > 0 && <span className="shell-held" role="status">{held} updates</span>}
-    {attention && <button className="shell-follow" aria-pressed={following} title="Follow the Agent's current view. Your input stops following." onClick={() => act({ kind: following ? 'unfollow' : 'follow' })}><Icon name="eye" size={14} />{following ? 'Following Agent' : 'Follow Agent'}</button>}
-    {attention && <button className="shell-quiet" onClick={() => act({ kind: screen.attention === 'away' ? 'return' : 'leave' })}>{screen.attention === 'away' ? 'Return' : 'Step away'}</button>}
-    <button className="shell-quiet shell-evidence-toggle" aria-expanded={evidence} title="Activity: the calls recorded for this workspace" onClick={onEvidence}><Icon name="list" size={15} /><span>Activity</span></button>
-  </div>;
 }
 
 // What a declared item's state means to Rho, when the Agent gave it a role.
@@ -123,15 +108,15 @@ export function AgentColumn({ live, agents, contexts = [], prepare, principalId,
   const referenceFor = (file: string) => outputs?.sourceKey ? Object.values(state.refs).find(ref => ref.artifact === outputs.sourceKey + '/' + file && ref.run === producer?.run) : undefined;
   // The newest question leads; earlier ones fold behind it.
   const shownQuestions = earlier ? questions : questions.slice(0, 1);
-  // Nothing to report and not asked for: the conversation above stays the whole panel. Activity
-  // in the workspace bar still opens the recorded calls here.
+  // Nothing to report and not asked for: the conversation above stays the whole panel. The
+  // recorded calls are in Graph.
   if (!running && !screen.items.length && !outputs?.declared.length && !questions.length && !evidence) return null;
   return <aside ref={column} className={'agent-column' + (onClose ? ' drawer' : '')} aria-label={who} data-scroll-region="" tabIndex={0} onKeyDown={event => { if (onClose && event.key === 'Escape') { event.stopPropagation(); onClose(); } }}>
     <section className="agent-card">
       <header className="agent-card-head"><span className={'agent-dot' + (running ? ' running' : '')} aria-hidden="true" /><strong>{who}</strong>
         <span className="agent-card-meta">{running ? 'running' + (since ? ' ' + minutes(now - Date.parse(since)) : '') : lastAt ? 'last action ' + when(lastAt) : 'no recorded action'}</span>
         {onClose && <button className="icon-button agent-close" aria-label={'Close ' + who} onClick={onClose}><Icon name="close" size={14} stroke={2} /></button>}</header>
-      <AgentMarker live={live} who={false} />
+      <AgentMarker live={live} />
       {screen.items.length > 0 && <section className="agent-items" aria-label="The Agent's notes">
         <ol>{screen.items.map(i => {
           const role = roleOf(live, i.id), open = i === current, target = i.artifact?.object;

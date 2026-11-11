@@ -209,9 +209,9 @@ try {
   await cell(resultId,'n').waitFor(); assert.equal(await cell(resultId,'n').innerText(), '26');
   assert.equal(await grid(resultId).locator('.ag-row[row-index="0"] input[type="checkbox"]').isChecked(), false);
   if (!await cell('original','n').isVisible()) {
-    await page.getByText('Arrange views', { exact: true }).click();
+    await page.locator('.shell-tab [role=tab][aria-selected="true"]').filter({ hasText: /result/i }).first().click({ button: 'right' });
     await page.screenshot({ path: path.join(evidence, '04-arrange-linked-result.png') });
-    await page.locator('.view-menu').getByRole('button', { name: 'Split right', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Split right', exact: true }).click();
   }
   await cell('original','n').waitFor(); await cell(resultId,'n').waitFor();
   const left = await grid('original').boundingBox(), right = await grid(resultId).boundingBox();

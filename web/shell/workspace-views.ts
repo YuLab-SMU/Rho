@@ -18,5 +18,10 @@ export interface WorkspaceViews {
   notebookNames?: Readonly<Record<string, string>>;
   scope?: SessionScope;
   openConversation?(conversationId: string): void;
+  // The sessions' views bring each other forward on this page, adding the one asked for when the
+  // page has none: a plot in Plots, a cell in the Notebook that lists it, the processes in Sessions.
+  showPlot?(cellId: string, plot: number): void;
+  showCell?(cellId: string, notebook: string | null): void;
+  showSessions?(): void;
 }
 export const WorkspaceViewsContext = createContext<WorkspaceViews | null>(null);

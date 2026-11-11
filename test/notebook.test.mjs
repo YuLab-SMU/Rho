@@ -25,8 +25,9 @@ test('the person and their Agent share a live session; only the person ends it',
   const connection = await service.agentConnection(p.id, 'notebook', grant, undefined, undefined, 'layered-business');
   assert.ok(connection.methods.length <= layeredGrantLimits.maxMethods);
   for (const method of ['kernel.run', 'kernel.read', 'kernel.inspect', 'kernel.plot', 'kernel.interrupt']) assert.ok(connection.methods.includes(method), method);
-  assert.ok(!connection.methods.includes('kernel.stop'));
+  assert.ok(!connection.methods.includes('kernel.stop') && !connection.methods.includes('kernel.start'));
   await assert.rejects(service.agentConnection(p.id, 'notebook-stop', path.join(root, 'stop.json'), ['kernel.stop']), /operator-only|Unknown/);
+  await assert.rejects(service.agentConnection(p.id, 'notebook-start', path.join(root, 'start.json'), ['kernel.start']), /operator-only|Unknown/);
 
   const agent = new RhoClient(JSON.parse(await fs.readFile(grant, 'utf8')));
   const made = await agent.call('kernel.run', { projectId: p.id, language: 'python', code: 'shared = 41', purpose: 'Define a value', changeId: 'a1', waitMs: 30000 });
@@ -67,6 +68,13 @@ test('the person and their Agent share a live session; only the person ends it',
   for (let i = 0; i < 200; i++) { read = await call('kernel.read'); if (read.sessions[0].state === 'ended') break; await new Promise(r => setTimeout(r, 20)); }
   assert.equal(read.sessions[0].ending, 'stopped');
   assert.equal(read.cells.length, 3);
+  // Only the person starts a session without a cell; an Agent's first cell starts one.
+  await assert.rejects(agent.call('kernel.start', { projectId: p.id, language: 'python' }), e => e.error?.kind === 'unauthorized');
+  await assert.rejects(admin.call('kernel.start', { projectId: p.id, language: 'python' }), e => e.error?.kind === 'unauthorized');
+  const started = await call('kernel.start', { language: 'python' });
+  assert.equal(started.session.startedBy, 'browser:local'); assert.equal(started.session.cells, 0);
+  assert.notEqual(started.session.sessionId, made.session.sessionId);
+  assert.equal((await call('kernel.start', { language: 'python' })).session.sessionId, started.session.sessionId);
 });
 
 test('a cell run in a named notebook keeps that notebook, in the session the project shares', async t => {

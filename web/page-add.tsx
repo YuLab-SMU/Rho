@@ -4,18 +4,19 @@ import { Icon } from './icons.js';
 import { fileIcon, sourceLabels } from './project.js';
 import type { SourceItem, SourceRow } from './sources.js';
 
-// What a person puts on a Studio page of their own: the Notebook, the sessions' variables,
-// plots and data flow, the project's Console and folders, and the project's files by kind, each
+// What a person puts on a Studio page of their own: the Notebook and the views of the sessions it
+// runs in (their processes, variables, plots, data flow and servers), the project's Terminal and
+// folders, and the project's files by kind, each
 // opening in the view it has elsewhere in Studio. A kind lists its first few files; the rest are
 // in its own list, which goes on the page too.
 export const pageAddLimits = { filesPerKind: 6 };
 const rows: SourceRow[] = ['results', 'data', 'code', 'reports', 'workflows', 'notes', 'references', 'environment'];
-export function PageAdd({ sources, notebook, variables = 'unavailable', plots = 'unavailable', flow = 'unavailable', servers = 'unavailable', console: commands = 'unavailable', files = 'unavailable', onTool, onNotebook, onSessionView, onFile, onAll }: {
+export function PageAdd({ sources, notebook, sessions = 'unavailable', variables = 'unavailable', plots = 'unavailable', flow = 'unavailable', servers = 'unavailable', console: commands = 'unavailable', files = 'unavailable', onTool, onNotebook, onSessionView, onFile, onAll }: {
   sources: Record<SourceRow, SourceItem[]> | null; notebook: 'absent' | 'present' | 'unavailable';
-  variables?: 'absent' | 'present' | 'unavailable'; plots?: 'absent' | 'present' | 'unavailable'; flow?: 'absent' | 'present' | 'unavailable'; servers?: 'absent' | 'present' | 'unavailable';
+  sessions?: 'absent' | 'present' | 'unavailable'; variables?: 'absent' | 'present' | 'unavailable'; plots?: 'absent' | 'present' | 'unavailable'; flow?: 'absent' | 'present' | 'unavailable'; servers?: 'absent' | 'present' | 'unavailable';
   // The project's own tools: its Console and its folders.
   console?: 'absent' | 'present' | 'unavailable'; files?: 'absent' | 'present' | 'unavailable'; onTool?: (tool: 'console' | 'files') => void;
-  onNotebook: () => void; onSessionView?: (kind: 'variables' | 'plots' | 'flow' | 'servers') => void; onFile: (path: string) => void; onAll: (row: SourceRow) => void;
+  onNotebook: () => void; onSessionView?: (kind: 'sessions' | 'variables' | 'plots' | 'flow' | 'servers') => void; onFile: (path: string) => void; onAll: (row: SourceRow) => void;
 }) {
   // A choice made from a menu closes it.
   const chose = (run: () => void) => (event: MouseEvent<HTMLButtonElement>) => { event.currentTarget.closest('details')?.removeAttribute('open'); run(); };
@@ -23,11 +24,8 @@ export function PageAdd({ sources, notebook, variables = 'unavailable', plots = 
     {notebook !== 'unavailable' && <button className="page-add-notebook" onClick={chose(onNotebook)}>
       <Icon name="code" size={17} /><span><strong>{notebook === 'present' ? 'New notebook' : 'Notebook'}</strong><small>{notebook === 'present' ? 'Its own cells, in the same R and Python sessions' : 'Live R and Python sessions you share with the Agent'}</small></span>
     </button>}
-    {commands !== 'unavailable' && onTool && <button className="page-add-notebook" onClick={chose(() => onTool('console'))}>
-      <Icon name="prompt" size={17} /><span><strong>Terminal</strong><small>{commands === 'present' ? 'On this page' : 'Your shell in the project folder, and the commands the Agent ran'}</small></span>
-    </button>}
-    {files !== 'unavailable' && onTool && <button className="page-add-notebook" onClick={chose(() => onTool('files'))}>
-      <Icon name="folder" size={17} /><span><strong>Files</strong><small>{files === 'present' ? 'On this page' : 'The project folders; a file opens beside them'}</small></span>
+    {sessions !== 'unavailable' && onSessionView && <button className="page-add-notebook" onClick={chose(() => onSessionView('sessions'))}>
+      <Icon name="monitor" size={17} /><span><strong>Sessions</strong><small>{sessions === 'present' ? 'On this page' : 'The R and Python processes: where each runs, its state, Interrupt and Stop'}</small></span>
     </button>}
     {variables !== 'unavailable' && onSessionView && <button className="page-add-notebook" onClick={chose(() => onSessionView('variables'))}>
       <Icon name="list" size={17} /><span><strong>Variables</strong><small>{variables === 'present' ? 'On this page' : 'What the live sessions hold, each value a click away'}</small></span>
@@ -40,6 +38,12 @@ export function PageAdd({ sources, notebook, variables = 'unavailable', plots = 
     </button>}
     {servers !== 'unavailable' && onSessionView && <button className="page-add-notebook" onClick={chose(() => onSessionView('servers'))}>
       <Icon name="server" size={17} /><span><strong>Servers</strong><small>{servers === 'present' ? 'On this page' : 'Run R and Python on a server you reach with ssh, and look at its files'}</small></span>
+    </button>}
+    {commands !== 'unavailable' && onTool && <button className="page-add-notebook" onClick={chose(() => onTool('console'))}>
+      <Icon name="prompt" size={17} /><span><strong>Terminal</strong><small>{commands === 'present' ? 'On this page' : 'Your shell in the project folder, and the commands the Agent ran'}</small></span>
+    </button>}
+    {files !== 'unavailable' && onTool && <button className="page-add-notebook" onClick={chose(() => onTool('files'))}>
+      <Icon name="folder" size={17} /><span><strong>Files</strong><small>{files === 'present' ? 'On this page' : 'The project folders; a file opens beside them'}</small></span>
     </button>}
     {!sources ? <p className="page-add-note" role="status">Reading the project folders…</p>
       : rows.map(row => {

@@ -102,14 +102,13 @@ try {
   // The person opens the script in Studio first and asks the Agent from there.
   await nav.getByRole('button', { name: 'List the scripts here', exact: true }).click();
   await nav.locator('.nav-file').filter({ hasText: 'analysis.R' }).click();
-  await page.locator('.studio-title').filter({ hasText: 'Workspace' }).waitFor();
+  await page.locator('.nav-workspace[aria-current=page]').filter({ hasText: 'Workspace' }).waitFor();
   await page.getByRole('button', { name: 'Agent panel', exact: true }).click();
   await page.getByRole('textbox', { name: 'Start a conversation' }).fill('Fit ozone on temperature and draw it.');
   await page.getByRole('button', { name: 'Start', exact: true }).click();
   await page.locator('.agent-chip').waitFor();
   await nav.locator('.nav-session .pulse-dot').waitFor();
-  await page.locator('.follow-toggle[aria-pressed=false]').waitFor();
-  assert.equal(await page.locator('.studio-title').textContent(), 'Workspace', 'the person stays in their own workspace');
+  assert.equal(await page.locator('.nav-workspace[aria-current=page] .nav-row-name').textContent(), 'Workspace', 'the person stays in their own workspace');
   passed('sending from the Agent panel keeps the person in their Studio workspace, with the Agent working in the top bar and on its task in the sidebar');
 
   await until(() => page.locator('[data-owner-view] .cm-content').first().innerText(), text => /fit <- lm/.test(text), 'the edited script showing the text on disk');
@@ -140,7 +139,7 @@ try {
   assert.match(await card.locator('.work-ending').textContent(), /^Answered/);
   await shot('05a-agent-page');
   await card.locator('.work-file').filter({ hasText: 'airquality.csv' }).click();
-  await page.locator('.studio-title').filter({ hasText: 'Workspace' }).waitFor();
+  await page.locator('.nav-workspace[aria-current=page]').filter({ hasText: 'Workspace' }).waitFor();
   await page.locator('[data-owner-view] .ag-row[row-index="0"]').first().waitFor();
   assert.equal(await page.getByRole('tab', { name: 'airquality.csv', exact: true }).getAttribute('aria-selected'), 'true');
   passed('the Agent page keeps what the turn changed, read, ran and answered; a file it names opens in the workspace');
@@ -148,11 +147,12 @@ try {
   // From Studio again, the next question; Follow opens the conversation's own Studio.
   await page.keyboard.press('Escape');
   await nav.getByRole('button', { name: 'Studio', exact: true }).click();
-  await page.locator('.studio-title').filter({ hasText: 'Workspace' }).waitFor();
+  await page.locator('.nav-workspace[aria-current=page]').filter({ hasText: 'Workspace' }).waitFor();
   if (!await page.getByRole('textbox', { name: /Message|Reply/ }).count()) await page.getByRole('button', { name: 'Agent panel', exact: true }).click();
   await page.getByRole('textbox', { name: /Message|Reply/ }).fill('Now read the notes.');
   await page.getByRole('button', { name: 'Send', exact: true }).click();
-  await page.locator('.follow-toggle[aria-pressed=false]').click();
+  // Following is the top bar's Agent chip; the workspace has no bar of its own.
+  await page.locator('.agent-chip').click();
   await page.locator('.place-tab[aria-current=page]').filter({ hasText: /^Studio$/ }).waitFor();
   await nav.locator('.nav-session[aria-current=page]').waitFor();
   await page.locator('.studio-title').waitFor();

@@ -182,7 +182,7 @@ try {
 
   await page.locator('.lg-file[data-node$="|results/monthly_ozone.csv"]').click();
   await page.getByRole('button', { name: /^Open (current file )?in workspace$/ }).click();
-  await page.locator('.studio-title').filter({ hasText: 'Workspace' }).waitFor();
+  await page.locator('.nav-workspace[aria-current=page]').filter({ hasText: 'Workspace' }).waitFor();
   await page.getByRole('tab', { name: /monthly_ozone\.csv/, selected: true }).waitFor();
   const snapshot = await admin.call('observation.snapshot', { projectId: opened.id });
   assert.deepEqual(snapshot.compositions.map(c => c.compositionId), ['workspace']);

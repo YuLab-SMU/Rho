@@ -60,6 +60,15 @@
     "plugin": "kernel",
     "package": "@rho-workspace/plugin-kernel",
     "entry": "./ui",
+    "component": "rho.sessions",
+    "version": "1",
+    "source": "web/entries/kernel.tsx",
+    "export": "sessions"
+  },
+  {
+    "plugin": "kernel",
+    "package": "@rho-workspace/plugin-kernel",
+    "entry": "./ui",
     "component": "rho.variables",
     "version": "1",
     "source": "web/entries/kernel.tsx",

@@ -23993,6 +23993,276 @@ export const ownerContracts: OwnerContractSnapshot = {
           },
           "requires": []
         },
+        "kernel.start": {
+          "effect": "native",
+          "inputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "language": {
+                "enum": [
+                  "r",
+                  "python"
+                ]
+              },
+              "place": {
+                "pattern": "^[a-z][a-z0-9-]{0,31}$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "language"
+            ],
+            "type": "object"
+          },
+          "outputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "session": {
+                "additionalProperties": false,
+                "properties": {
+                  "cells": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "endedAt": {
+                    "anyOf": [
+                      {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "ending": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "stopped",
+                          "exited",
+                          "disconnected",
+                          "rho-closed",
+                          "not-started"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "host": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "language": {
+                    "enum": [
+                      "r",
+                      "python"
+                    ]
+                  },
+                  "pid": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "place": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "destination": {
+                            "pattern": "^[A-Za-z0-9_.%+@:\\[\\]/][A-Za-z0-9_.%+@:\\[\\]/-]{0,254}$",
+                            "type": "string"
+                          },
+                          "folder": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "label": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "placeId": {
+                            "pattern": "^(?!local$)[a-z][a-z0-9-]{0,31}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "placeId",
+                          "label",
+                          "destination",
+                          "folder"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "problem": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "program": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "sessionId": {
+                    "pattern": "^s-[a-f0-9]{16}$",
+                    "type": "string"
+                  },
+                  "startedAt": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "startedBy": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "state": {
+                    "enum": [
+                      "starting",
+                      "idle",
+                      "busy",
+                      "ended"
+                    ]
+                  },
+                  "stop": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "at": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "by": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "by",
+                          "at"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "variables": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "bytes": {
+                          "minimum": 0,
+                          "type": "number"
+                        },
+                        "name": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "size": {
+                          "type": "string"
+                        },
+                        "summary": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "type",
+                        "size",
+                        "bytes",
+                        "summary"
+                      ],
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
+                  "variablesAt": {
+                    "anyOf": [
+                      {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "variablesOmitted": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "version": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "sessionId",
+                  "language",
+                  "state",
+                  "version",
+                  "pid",
+                  "startedAt",
+                  "startedBy",
+                  "endedAt",
+                  "ending",
+                  "stop",
+                  "problem",
+                  "variables",
+                  "variablesOmitted",
+                  "variablesAt",
+                  "cells"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "session"
+            ],
+            "type": "object"
+          },
+          "requires": []
+        },
         "kernel.stop": {
           "effect": "native",
           "inputSchema": {
@@ -27014,7 +27284,7 @@ export const ownerContracts: OwnerContractSnapshot = {
     },
     "console": {
       "package": "@rho-workspace/plugin-console",
-      "packageVersion": "0.3.1",
+      "packageVersion": "0.3.2",
       "entry": "./operations",
       "entryPath": "@rho-workspace/plugin-console/dist/operations.js",
       "entrySha256": "ee7388b95f7eaf49e4efea75764a3e2076c34c4c2db8538f94bf97b122b42c9e",
@@ -27027,9 +27297,9 @@ export const ownerContracts: OwnerContractSnapshot = {
       "packageVersion": "0.5.16",
       "entry": "./operations",
       "entryPath": "@rho-workspace/plugin-kernel/dist/operations.js",
-      "entrySha256": "0a7acb3c2d0900e8fe03d4acceaf16e11e3af7ad1b4d4f452acdbd7c69e83707",
+      "entrySha256": "114a505366ffcfe9387c746061bad37e401aedd6ec04477794d03268decd3217",
       "exports": {
-        "operationContracts": "9b331a536845223a9009b6fd0e013d228e08209e0e3ef552e1ec1f673b3dd7bd"
+        "operationContracts": "0b1909f32a38fc46269696eca544bbcb9d717fd8bc9ae46a429bb73a25d86932"
       }
     },
     "figures": {

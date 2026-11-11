@@ -1974,3 +1974,89 @@ no colours, no full-screen programs. Its output was read again every 700 ms.
 - No search in the scrollback, no links, no split terminals in one view; the colours are a light
   set that does not follow a dark system setting.
 - The website demo and `scripts/demo-tour.mjs` still walk the Console page.
+
+## One set of session views
+
+2026-11-11, after the terminal. The user: the bar across a workspace is no use any more (views are
+added in Studio, activity is in the Graph, a view is moved faster by dragging it); a workspace should
+close; and the components are each on their own. The Notebook has its own plot strip and variables
+list while Plots and Variables are views of their own, and no view manages the R and Python
+processes. Variables should read like RStudio's environment pane.
+
+### What there was
+
+- A person's workspace had a row above its views: the Agent's latest object, a count of held
+  updates, Activity and Arrange views. A conversation's Studio has its own bar with its steps.
+- `composition.delete` refused a workspace that held any view, and nothing in the page called it.
+- The Notebook drew each cell's plots, a strip of all plots and a Variables pane of its own beside
+  the cells. Plots and Variables also existed as views, each counting and listing apart. A session
+  could only be stopped from the Notebook's console form, and only a cell started one.
+
+### Changes
+
+- **No workspace bar.** Views are added from a group's +, or from the empty workspace's own list;
+  a view's tab moves by dragging it or from its right-click menu. The Agent's latest object and
+  the recorded calls stay in the Agent panel; activity is in the Graph. Following a running
+  Agent is the topbar's Agent chip, which in Studio opens its conversation's Studio as the bar's
+  Follow button did. The bar's component, its props and styles are removed.
+- **Closing a workspace.** Its sidebar row shows × on hover or focus (always, where nothing
+  hovers), and ⌘K has Close this workspace. Closing hangs up its terminals and deletes the layout
+  in one conditional write; a notice says the files, sessions and conversations are unchanged and
+  offers Undo for 15 s, which brings the workspace back as it was. The service now deletes a
+  layout with its views, as closing each would (unsaved buffers stay with their document), and
+  refuses only one holding a protected view.
+- **The Notebook links instead of repeating** (Rho-plugins, kernel). On the person's own page, a
+  cell's plot is a small thumbnail, Plot N, numbered as Plots numbers it; pressing it opens Plots at
+  that plot. The session's state is a chip that opens Sessions. The strip and the rail are gone
+  there. A conversation's Studio and a Notebook opened from a link keep the rail, since nothing is
+  beside them to link to.
+- **Variables reads like an environment pane** (`ui-variables.tsx`). Data, Values and Functions;
+  name, value summary, type (when the pane is 440 px or wider) and size; sorting, a Find box and
+  a total. A row unfolds in place through `kernel.inspect`: a data frame's columns as
+  `$ name type values…`, a list's parts, or the object's facts, with the cells that made and read
+  it linked back into the Notebook.
+- **Sessions** (`rho.sessions`, `ui-sessions.tsx`). One card per language: version, state, where it
+  runs, program, process id, who started it and when, cells and the queue, and what it holds; the
+  running cell links to the Notebook. Interrupt, Restart and Stop (both confirmed), and Start when
+  none is live. Ended sessions fold below. `kernel.start` starts a session without a cell, keeps a
+  live one and waits for one that is stopping; like `kernel.stop`, only the person at this machine
+  may call it.
+- Plots counts over every plot of the session and has Show the cell. Sessions, Variables, Plots,
+  Data flow and Servers are added as tabs beside each other.
+
+![The person's Notebook with plots as thumbnails, and Variables beside it with a data frame unfolded](figures/studio-session-views.jpg)
+
+### Verification
+
+- A throwaway project with three R cells, in a real browser at 1440 and 1100 wide, each screenshot
+  read: no bar; a plot thumbnail opened Plots at that plot and Show the cell scrolled back to it
+  and marked it; Variables unfolded `cars2` and a nested list, sorted, and found by name; Sessions
+  started a session with none running and restarted it (a new process id); the console form named
+  plots as in Plots; × on the sidebar row closed the workspace to the Overview, and Undo brought it
+  back with its views. No page error.
+- Rho-plugins: a new test that a session starts without a cell, a live one is kept and a stopping
+  one is waited for. The full suite's first run failed one test, React imported by a `.ts` file
+  the boundary rule keeps headless; the file became a `.tsx` browser part. The second run passed
+  the boundary test and failed the local read-while-running test on its count of fork folders in
+  the shared temp directory (2, not 3) while other R sessions ran on the machine; it passed in the
+  first run and 3 of 3 alone. Both runs: 218 of 221, 2 skipped.
+- Rho: new checks that a non-empty workspace is deleted with its unsaved buffer kept, undo restores
+  its bindings and a protected view refuses deletion; that an Agent has no `kernel.start` and cannot
+  be granted it, an administrator token is refused it, and the person's call starts a new session
+  once. The suite passed 353 of 356 with the debug Core, 3 skipped (Windows only). The frontend,
+  plugin-dx, sources and graph (9/9) acceptances passed. Agent-canvas first waited for the
+  workspace's title and its Follow button, both in the removed bar; it now reads the sidebar's
+  marked workspace and presses the topbar's Agent chip, and passed 10 of 10.
+
+### Left open
+
+- This is the builder's reading. The user has not seen it. In their running Rho the page changes
+  show with `npm run dev`; Sessions, Start, Restart and closing a non-empty workspace need the
+  service rebuilt and restarted, which ends the R and Python sessions it holds.
+- Restart on a server place, a Python session and the conversation Studio were not tried.
+- The shell and interaction acceptances, already open, also click the removed bar (its Agent
+  marker, Activity and run chain); they need rewriting against the Agent panel and the Graph.
+- `kernel.start` takes no change id, so a repeated start after a lost reply is answered with the
+  session the first one started rather than recognized as the same request.
+- Variables shows R and Python as the session reports them; no grid of a data frame's rows, and no
+  editing of values.
