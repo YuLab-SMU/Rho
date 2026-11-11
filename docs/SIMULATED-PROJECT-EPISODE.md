@@ -1777,3 +1777,77 @@ terminal sessions, one of them held open by a live process.
   showed as a message with "Outcome unknown", a pasted block showed its markup, a table drawn with
   box characters wrapped, and the notice that a session is open in a terminal was said twice, above
   the box and inside it.
+
+## The tools in Studio
+
+2026-11-11, after the user saw `da6a2cb4` from source in front of their own project. They marked the
+Tasks heading and the foot's Agents row and said the two could be one, the Agent where Tasks is with
+the recent conversations under it, and not to add buttons a person has to learn. They went on: the
+Notebook needs no tab of its own and belongs in Studio, where a workspace should hold several; the
+Console is a terminal that works with the Agent, needs no tab either and should look like a
+terminal; these belong in one Studio so that they work together; and a Sources row should not open
+a page of its own, which takes attention away, but show its kind in the workspace through a view
+made for it, Files like a file explorer and Variables like RStudio's object viewer.
+
+### What the screen showed
+
+The "after" picture of the previous section is this section's "before".
+
+- The Agent had two rows in the sidebar, Tasks over the conversations and Agents at the foot, and
+  the Agent button at the end of the tabs.
+- Of six tabs, Console and Notebook each held one tool alone on a page. The Notebook could also be
+  placed as a view; the Console only showed in a conversation's Studio.
+- A file chosen in the sidebar replaced the work with that file alone, a kind's "All" opened a page
+  of the kind, and Files was a page. Each choice left the workspace.
+
+### Changes
+
+- **The Agent's row heads its conversations.** Where the Tasks heading was, one row: Agent, which
+  opens the Agents that work on the project, and `+`, which starts a conversation. The
+  conversations are indented under it, with "All N". The foot keeps Plugins and Project settings.
+- **Four tabs**: Overview, Studio, Graph, Skills, and Review while there are review records. The
+  Notebook, the Console and Files are offered by Add view, an empty workspace and the command
+  palette, and what used to open the Notebook or Console page (Skills, the Overview, the board's
+  command count) puts the view in the person's workspace.
+- **The project's own views.** The Console, the Files explorer and a kind's list are views the
+  application draws (`rho.console`, `rho.files`, `rho.sources` in `web/studio-tools.tsx`), saved in
+  the workspace's layout like a plugin's. The explorer opens a folder in place, one level at a
+  time, and finds a file by name among those the sidebar counted. A kind's list groups by folder,
+  or reads newest first for results and reports, with size and time.
+- **A row shows its kind; its chevron lists it in the sidebar.** A Sources row puts its view in the
+  person's workspace: the one on screen, else the one last used, never a conversation's Studio. A
+  file chosen in a view or in the sidebar opens in the same workspace beside it.
+- **Where they land** (`withTool` in `web/explore.ts`, `placed` in `web/canvas.ts`). The explorer
+  and the lists share a pane at the left edge, a fifth of the workspace; the Console goes along the
+  foot, right of that pane, which keeps its full height; a script opens immediately right of the
+  lists. Looking at the result changed three things: the lists' pane was squeezed to a sliver once
+  four more views were open (it is widened again when it would fall under 15%), a script chosen
+  in the sidebar landed left of the explorer, and the search field's icon was squashed.
+- A tab that cannot arrange views, one opened from a link, keeps the Notebook and Console tabs,
+  the kind's page and the file's own page.
+
+![After: the Agent's row over its conversations; lists, a script, a table, the Console, the Notebook and Variables in one workspace](figures/studio-tools.jpg)
+
+### Verification
+
+- A throwaway copy of the PA14 example in a real browser at 2000 × 1028: from an empty workspace,
+  Files, Results & figures, a script, a table, the Console, the Notebook and Variables, each
+  screenshot read. The person-files acceptance's screenshots at 1440 and 390 were read too: at 390
+  the workspace shows one view at a time, so a file covers the explorer, which stays a tab.
+- The sources acceptance was rewritten for the new flow (7 checks: the chevrons list in the
+  sidebar and write no layout, a row puts its list in the workspace and a file opens beside it, a
+  sidebar file opens in the workspace, the explorer unfolds and finds, reload, the Markdown
+  reader, 1024 and 390). It and the frontend, agent-canvas, agent-page, pages and person-files
+  acceptances passed. The Agent row's locator was also moved in the continuity acceptance and the
+  session-continuity, agent-activity and agent-connect episodes, which were not run.
+- The suite passed 351 of 354 with the debug Core, 3 skipped (Windows only).
+
+### Left open
+
+- This is the builder's reading of screenshots. The user has not yet seen the result.
+- The website demo's recording and `scripts/demo-tour.mjs` were made for the tabs and pages that
+  are gone; the demo has to be walked and recorded again before the site is rebuilt.
+- The explorer does not mark the file on screen, has no arrow-key movement, and does not create,
+  rename, move or delete.
+- Below 640 px of stage a list and the file chosen from it are not on screen together.
+- The Variables row opens the existing Variables view, which is not yet an object viewer.

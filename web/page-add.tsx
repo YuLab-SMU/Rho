@@ -5,14 +5,16 @@ import { fileIcon, sourceLabels } from './project.js';
 import type { SourceItem, SourceRow } from './sources.js';
 
 // What a person puts on a Studio page of their own: the Notebook, the sessions' variables,
-// plots and data flow, and the project's files by
-// kind, each opening in the view it has elsewhere in Studio. A kind lists its first few files;
-// the rest are on its own page.
+// plots and data flow, the project's Console and folders, and the project's files by kind, each
+// opening in the view it has elsewhere in Studio. A kind lists its first few files; the rest are
+// in its own list, which goes on the page too.
 export const pageAddLimits = { filesPerKind: 6 };
 const rows: SourceRow[] = ['results', 'data', 'code', 'reports', 'workflows', 'notes', 'references', 'environment'];
-export function PageAdd({ sources, notebook, variables = 'unavailable', plots = 'unavailable', flow = 'unavailable', servers = 'unavailable', onNotebook, onSessionView, onFile, onAll }: {
+export function PageAdd({ sources, notebook, variables = 'unavailable', plots = 'unavailable', flow = 'unavailable', servers = 'unavailable', console: commands = 'unavailable', files = 'unavailable', onTool, onNotebook, onSessionView, onFile, onAll }: {
   sources: Record<SourceRow, SourceItem[]> | null; notebook: 'absent' | 'present' | 'unavailable';
   variables?: 'absent' | 'present' | 'unavailable'; plots?: 'absent' | 'present' | 'unavailable'; flow?: 'absent' | 'present' | 'unavailable'; servers?: 'absent' | 'present' | 'unavailable';
+  // The project's own tools: its Console and its folders.
+  console?: 'absent' | 'present' | 'unavailable'; files?: 'absent' | 'present' | 'unavailable'; onTool?: (tool: 'console' | 'files') => void;
   onNotebook: () => void; onSessionView?: (kind: 'variables' | 'plots' | 'flow' | 'servers') => void; onFile: (path: string) => void; onAll: (row: SourceRow) => void;
 }) {
   // A choice made from a menu closes it.
@@ -20,6 +22,12 @@ export function PageAdd({ sources, notebook, variables = 'unavailable', plots = 
   return <div className="page-add">
     {notebook !== 'unavailable' && <button className="page-add-notebook" onClick={chose(onNotebook)}>
       <Icon name="code" size={17} /><span><strong>Notebook</strong><small>{notebook === 'present' ? 'On this page' : 'Live R and Python sessions you share with the Agent'}</small></span>
+    </button>}
+    {commands !== 'unavailable' && onTool && <button className="page-add-notebook" onClick={chose(() => onTool('console'))}>
+      <Icon name="prompt" size={17} /><span><strong>Console</strong><small>{commands === 'present' ? 'On this page' : 'The commands the Agent ran, and a line to run your own'}</small></span>
+    </button>}
+    {files !== 'unavailable' && onTool && <button className="page-add-notebook" onClick={chose(() => onTool('files'))}>
+      <Icon name="folder" size={17} /><span><strong>Files</strong><small>{files === 'present' ? 'On this page' : 'The project folders; a file opens beside them'}</small></span>
     </button>}
     {variables !== 'unavailable' && onSessionView && <button className="page-add-notebook" onClick={chose(() => onSessionView('variables'))}>
       <Icon name="list" size={17} /><span><strong>Variables</strong><small>{variables === 'present' ? 'On this page' : 'What the live sessions hold, each value a click away'}</small></span>

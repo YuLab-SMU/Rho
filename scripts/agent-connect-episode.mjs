@@ -33,10 +33,10 @@ try {
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, permissions: ['clipboard-read', 'clipboard-write'] });
   const page = await context.newPage(); page.setDefaultTimeout(15000); page.on('pageerror', e => report.browserErrors.push(e.message));
   await page.goto(service.url + '/#project=' + project.id);
-  await page.locator('.project-nav').getByRole('button', { name: 'Agents', exact: true }).click();
+  await page.locator('.project-nav').getByRole('button', { name: /^Agent(,|$)/ }).click();
   await page.getByRole('tab', { name: 'Agents', exact: true }).click();
   const pane = page.locator('.outside-agents');
-  const reload = async () => { await page.reload(); await page.locator('.project-nav').getByRole('button', { name: 'Agents', exact: true }).click(); await page.getByRole('tab', { name: 'Agents', exact: true }).click(); };
+  const reload = async () => { await page.reload(); await page.locator('.project-nav').getByRole('button', { name: /^Agent(,|$)/ }).click(); await page.getByRole('tab', { name: 'Agents', exact: true }).click(); };
   await pane.getByRole('button', { name: 'Copy setup prompt', exact: true }).click();
   const prompt = await page.evaluate(() => navigator.clipboard.readText());
   assert.equal(prompt, (await call('session.instructions')).prompt);

@@ -169,9 +169,20 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .nav-badge.waiting { background: var(--color-amber-soft); color: var(--color-amber-text); border: 1px solid var(--color-amber-line); }
 .nav-heading { display: flex; align-items: center; justify-content: space-between; min-height: 26px; margin-bottom: 2px; }
 .nav-add { min-height: 24px; width: 24px; height: 24px; padding: 0; border: 0; background: transparent; color: var(--color-meta); }
+/* A row that heads its own list: the Agent, with its conversations under it. */
+.nav-parent { gap: 2px; margin-bottom: 1px; }
+.nav-parent > .nav-row { flex: 1; min-width: 0; color: var(--color-ink); font-weight: 600; }
+.nav-children { margin-left: 16px; padding-left: 8px; border-left: 1px solid var(--color-hairline); }
+.nav-children > .nav-more { align-self: flex-start; }
 .nav-add:hover:not(:disabled) { background: #e4e9e6; color: var(--color-ink); }
 .nav-twisty { display: flex; flex: none; color: var(--color-meta); transition: transform .15s; }
 .nav-row[aria-expanded=true] .nav-twisty { transform: rotate(90deg); }
+/* A kind's row opens its list in the workspace; the arrow at its end lists its files here. */
+.nav-folding { display: flex; align-items: center; gap: 1px; }
+.nav-folding > .nav-row { flex: 1; min-width: 0; }
+.nav-fold { flex: none; width: 24px; height: 28px; min-height: 28px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--color-meta); }
+.nav-fold:hover { background: #e4e9e6; color: var(--color-ink); }
+.nav-fold[aria-expanded=true] .nav-twisty { transform: rotate(90deg); }
 /* A kind's files, by folder. The list scrolls on its own so the other kinds stay in reach. */
 .nav-files { list-style: none; margin: 1px 0 6px 16px; padding: 0 0 0 8px; border-left: 1px solid var(--color-hairline); }
 .nav-folder { display: block; padding: 7px 8px 2px; color: var(--color-meta); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

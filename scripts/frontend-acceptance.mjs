@@ -90,17 +90,24 @@ writeLines(jsonlite::toJSON(list(schemaVersion=1L,complete=TRUE,artifacts=items)
     if (!await page.locator('.project-nav').isVisible()) await page.getByRole('button', { name: 'Open navigation', exact: true }).click();
     await page.locator('.project-nav, .place-tabs, dialog.drawer').getByRole('button', { name, exact: true }).click();
   };
+  // Files is an explorer in the workspace: a name is found, and a folder opens and closes in place.
   await navigate('Files');
-  await page.getByRole('button', { name: 'analysis.R', exact: true }).last().waitFor();
+  const explorer = page.locator('.tool-files'), find = explorer.getByRole('searchbox', { name: 'Find a file by name' });
+  await explorer.getByRole('button', { name: /^analysis\.R/ }).waitFor();
   await inspect('files');
-  await page.getByRole('textbox', { name: 'Filter files' }).fill('not-here');
-  await page.getByText('No files match your search.').waitFor();
-  await page.getByRole('button', { name: 'Clear search' }).click();
-  await page.getByRole('button', { name: 'data', exact: true }).click();
-  await page.getByRole('button', { name: 'README.md', exact: true }).waitFor();
-  await page.getByRole('button', { name: 'Up one folder' }).click();
-  await page.getByRole('button', { name: 'analysis.R', exact: true }).last().waitFor();
-  passed('files can be searched, nested folders traversed and the parent restored');
+  await find.fill('not-here');
+  await explorer.getByText('No file name has', { exact: false }).waitFor();
+  await find.fill('');
+  await explorer.getByRole('button', { name: /^data/ }).click();
+  await explorer.getByRole('button', { name: /^README\.md/ }).waitFor();
+  await explorer.getByRole('button', { name: /^data/ }).click();
+  await explorer.getByRole('button', { name: /^README\.md/ }).waitFor({ state: 'detached' });
+  await explorer.getByRole('button', { name: /^analysis\.R/ }).waitFor();
+  // The explorer is one more view of the workspace, and closes like any other.
+  await page.getByRole('tab', { name: 'Files', exact: true }).click();
+  await page.locator('.shell-tab-close[title="Close Files"]').click();
+  await explorer.waitFor({ state: 'detached' });
+  passed('a file is found by name, and a folder opens and closes in place');
   await navigate('Overview');
   await page.locator('.workspace-card').click();
   await page.getByRole('tab', { name: 'Coefficients', exact: true }).click();
@@ -216,7 +223,7 @@ writeLines(jsonlite::toJSON(list(schemaVersion=1L,complete=TRUE,artifacts=items)
   assert.equal(Math.round((await side.boundingBox()).width), Math.round(wideWidth));
   await page.getByRole('button', { name: 'Close Agent' }).click();
   passed('the Agent panel widens from its edge and keeps that width after reload');
-  await navigate('Agents');
+  await navigate('Agent');
   await page.locator('.activity-row').filter({ hasText: 'air-quality-fit' }).click();
   await page.getByRole('dialog', { name: 'air-quality-fit' }).waitFor();
   await page.screenshot({ path: path.join(evidence, 'run-1440.png') });

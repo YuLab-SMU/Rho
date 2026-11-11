@@ -1,0 +1,36 @@
+/* The project's own tools as views of a workspace: Console, Files and the kinds of file. */
+.tool-pane { display: flex; flex-direction: column; min-height: 0; height: 100%; background: var(--color-surface); container-type: inline-size; }
+.tool-note { margin: 0; padding: 14px 16px; color: var(--color-meta); font-size: 12.5px; }
+.tool-bar { display: flex; flex: none; align-items: center; gap: 4px; padding: 6px 8px; border-bottom: 1px solid var(--color-divider); }
+.tool-bar .icon-button { width: 28px; height: 28px; min-height: 28px; border-radius: 7px; color: var(--color-meta); }
+.tool-bar .icon-button:hover:not(:disabled) { background: var(--color-hover); color: var(--color-ink); }
+.tool-bar .icon-button.on { background: var(--color-accent-soft); color: var(--color-accent-strong); }
+.tool-search { display: flex; flex-direction: row; flex: 1; min-width: 0; align-items: center; gap: 7px; height: 28px; padding: 0 8px; border-radius: 7px; background: var(--color-well); color: var(--color-meta); }
+.tool-search input { flex: 1; min-width: 0; padding: 0; border: 0; outline: none; box-shadow: none; background: transparent; font-size: 12.5px; }
+.tool-search:focus-within { box-shadow: 0 0 0 1px var(--color-accent); }
+.tool-count { flex: none; padding: 0 4px; color: var(--color-meta); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+
+.files-list { flex: 1; min-height: 0; margin: 0; padding: 4px; overflow-y: auto; overscroll-behavior: contain; list-style: none; }
+.files-list ul { margin: 0; padding: 0; list-style: none; }
+.files-row { display: flex; width: 100%; min-height: 26px; align-items: center; justify-content: flex-start; gap: 6px; padding: 3px 8px; border: 0; border-radius: 6px; background: transparent; color: var(--color-ink); font-size: 12.5px; font-weight: 400; text-align: left; }
+.files-row:hover, .files-row:focus-visible { background: var(--color-hover); outline: none; }
+.files-row > svg { flex: none; color: var(--color-meta); }
+.files-row[aria-expanded] > svg { color: var(--color-accent); }
+.files-row.hidden-entry { color: var(--color-meta); }
+.files-twisty { display: inline-flex; flex: none; width: 11px; color: var(--color-meta); transition: transform .12s; }
+.files-twisty.open { transform: rotate(90deg); }
+.files-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.files-name small { margin-left: 8px; color: var(--color-meta); font-size: 11.5px; }
+.files-size, .files-when { flex: none; color: var(--color-meta); font-size: 11.5px; font-variant-numeric: tabular-nums; text-align: right; }
+.files-size { width: 58px; }
+.files-when { width: 52px; }
+.files-note { padding: 4px 8px; color: var(--color-meta); font-size: 12px; }
+/* A narrow pane keeps the names; sizes go first, then dates. */
+@container (max-width: 300px) { .files-when { display: none; } }
+@container (max-width: 230px) { .files-size { display: none; } }
+.kind-folder { display: flex; align-items: center; gap: 6px; margin: 8px 0 2px; padding: 0 8px; color: var(--color-meta); font-size: 11.5px; font-weight: 600; }
+.kind-list > section:first-child > .kind-folder { margin-top: 2px; }
+
+/* The Console in a pane: its page's content, scrolled inside the view. */
+.tool-console { overflow-y: auto; padding: 12px 14px; }
+.tool-console .console-page { max-width: none; }

@@ -63,20 +63,20 @@ try {
   await page.locator('.project-row').first().click();
   await page.waitForTimeout(2500);
   await page.setViewportSize({ width: 1440, height: 900 });
+  // Files is an explorer in the person's Studio workspace; a file opens beside it.
   await page.locator('.project-nav').getByRole('button', { name: 'Files', exact: true }).click();
-  await page.waitForTimeout(1200);
-  const listed = await page.locator('.files-page').innerText();
-  assert.match(listed, /notes\.md/);
-  assert.match(listed, /R/);
-  check('the Files section lists the real folder');
+  const explorer = page.locator('.tool-files');
+  await explorer.getByRole('button', { name: /^notes\.md/ }).waitFor();
+  await explorer.getByRole('button', { name: /^R(\s|$)/ }).waitFor();
+  check('the Files explorer lists the real folder');
 
-  await page.getByRole('button', { name: /^R$/ }).click();
-  await page.waitForTimeout(1000);
-  assert.match(await page.locator('.files-page').innerText(), /plot\.R/);
-  check('a subfolder can be opened from the list');
+  await explorer.getByRole('button', { name: /^R(\s|$)/ }).click();
+  await explorer.getByRole('button', { name: /^plot\.R/ }).waitFor();
+  check('a subfolder opens in place');
 
-  await page.getByRole('button', { name: /plot\.R/ }).click();
-  await page.waitForTimeout(2000);
+  await explorer.getByRole('button', { name: /^plot\.R/ }).click();
+  await page.locator('.cm-content:visible').waitFor();
+  await page.waitForTimeout(1500);
   const editor = (await page.locator('.cm-content:visible').innerText().catch(() => '')) || await page.evaluate(() => document.body.innerText);
   assert.match(editor, /datasets::cars/);
   const editorInput = page.locator('.cm-content:visible');

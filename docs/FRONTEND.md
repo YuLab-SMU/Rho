@@ -31,20 +31,23 @@ switching never changes what is running ([record](SIMULATED-PROJECT-EPISODE.md#o
   `conversation.list` per project every five seconds while the page is visible; the open project's
   own record also says when it needs a choice). Choosing one returns to where it was left in this
   tab; `+` and Rho open the projects list, where a project chosen opens on its Overview.
-- **Tasks** is the one list of the open project's conversations, newest first (eight, then
-  "All N", which opens every conversation with its search, usage and trash), each one line: its
-  Agent's mark, its title (from its section of the project notes, else the Agent's title, else its
-  first message) and how long ago it last moved, or that it is working or needs a choice. Choosing
-  one opens its Studio with its conversation in the panel, whichever window its session began in.
-  The task whose conversation the panel shows is tinted, on any page. `+` starts a new
-  conversation, and is the one New while this list is on screen. The person's own workspaces
-  follow, with New workspace.
+- **Agent** holds the project's Agents and their conversations in one place. The row opens the
+  Agents that work here and says when one is working or needs a choice; `+` starts a new
+  conversation, and is the one New while this list is on screen. Under it are the open project's
+  conversations, newest first (eight, then "All N", which opens every conversation with its
+  search, usage and trash), each one line: its Agent's mark, its title (from its section of the
+  project notes, else the Agent's title, else its first message) and how long ago it last moved,
+  or that it is working or needs a choice. Choosing one opens its Studio with its conversation in
+  the panel, whichever window its session began in. The conversation the panel shows is tinted,
+  on any page. The person's own workspaces follow, with New workspace.
 - **Sources** lists the project's files by kind, as described below.
-- At the foot, what the project is set up with: Agents (the Agents that work here), Plugins,
-  Project settings, and the connection's state with Connection & access.
-- **The tabs** are the project's places: Overview, Studio, Graph, Console, Notebook, Skills, and
-  Review while the project has review records. A file, the settings or another page reached from
-  the sidebar is named after them while it shows. A bar without room keeps the icons and the name of
+- At the foot, what the project is set up with: Plugins, Project settings, and the connection's
+  state with Connection & access.
+- **The tabs** are the project's places: Overview, Studio, Graph, Skills, and Review while the
+  project has review records. The Notebook, the Console and the project's files are views of a
+  Studio workspace, beside each other, and have no tab or page of their own
+  ([episode](SIMULATED-PROJECT-EPISODE.md#the-tools-in-studio)). The settings or another page
+  reached from the sidebar is named after the tabs while it shows. A bar without room keeps the icons and the name of
   the place on screen. At the bar's end: what the Agent is doing while it works, then Notes and Agent,
   which open the panel beside the work.
 - Below 768 CSS px the sidebar is a drawer that also lists the places, the bar names only where the
@@ -118,20 +121,30 @@ inspect what happened. The application gives those actions direct places:
   (`renv.lock`, `requirements.txt`, `environment.yml`, `pyproject.toml`, `Dockerfile`…); each file
   is in one row, while the Graph and the board keep calling a file by what it is. Variables,
   between Code and Results, lists what the live R and Python sessions hold, by session, each
-  name with its type, read again (at most once a second) as cells run; a name opens the value
-  in Studio beside the Notebook, and with no live session the row says so and offers the
-  Notebook ([episode](SIMULATED-PROJECT-EPISODE.md#sources-that-follow-the-project)). Each kind unfolds in the sidebar into
-  its files across the project and its source folders: the top level first, then by
-  folder, at most 40 there with the rest on the kind's page. Choosing one shows it
-  in place in its own view, without writing a layout: a CSV or image as a snapshot
-  of its current bytes in the table or media view, a Markdown file in the Markdown
-  reader (its to-dos tick in place; Edit shows the editor with a formatting toolbar,
-  Source when the tab cannot edit), an HTML file as its page (below), other text in the editor, highlighted when Rho
-  has its language, a registered result as its exact version. ← and → or the buttons beside "3 of 6" move through
-  the kind, ↑ and ↓ move in the sidebar, and Open in Studio places the file in the
-  workspace ([pass](AGENT-CANVAS-EPISODE.md#browsing-sources-from-the-sidebar)).
+  name with its type, read again (at most once a second) as cells run
+  ([episode](SIMULATED-PROJECT-EPISODE.md#sources-that-follow-the-project)).
+  A kind's row shows the kind in the person's workspace, as a view at the workspace's left edge:
+  its files in a list (by folder for what the work starts from, newest first for results and
+  reports, each with its size and when it last changed, a filter and Read again); for Files, an
+  explorer of the project's folders and the source folders it works in (a folder opens in place,
+  one level at a time; hidden files on request; a file found by name among the files the sidebar
+  counted, the first 200 shown); for Variables, the Variables view of the live sessions. These
+  share one pane as tabs, a fifth of the workspace wide when first placed, and widened again
+  when another view would squeeze it under 15%. A file chosen in a list, in the explorer or in
+  the sidebar opens as a view of the same workspace, so the list stays on screen beside it: a CSV
+  as a table, an image, a Markdown file in the Markdown reader (its to-dos tick in place; Edit
+  shows the editor with a formatting toolbar), an HTML file as its page (below), other text in
+  the editor, highlighted when Rho has its language, a registered result as its exact version. A
+  script opens right of the lists. The workspace is the person's own one on screen, else the one
+  they last used; a conversation's Studio is not written to. The chevron at a row's end lists
+  the kind in the sidebar instead, without changing the workspace: the top level first, then by
+  folder, at most 40 there. A tab that cannot arrange views (one opened from a link) keeps the
+  kind's page and a file's own page, with ← and → through the kind and Open in Studio
+  ([pass](AGENT-CANVAS-EPISODE.md#browsing-sources-from-the-sidebar)).
   `+` adds a source folder.
-- **Console** runs the person's own shell commands in the project folder. Newest
+- **Console** is a view of a Studio workspace, placed along its foot from Add view, the
+  command palette or the board's command count.
+  It runs the person's own shell commands in the project folder. Newest
   first, it lists each message's commands under that message in the order they ran,
   with the person's commands between them and Rho's managed runs at the end. Each
   command leads with the Agent's own words on what it was for, over the command with
@@ -144,8 +157,9 @@ inspect what happened. The application gives those actions direct places:
   into the prompt to check before Run. The board's command count opens the Console
   at that message. Only the person at this machine can run or stop commands; an
   Agent may read them ([episode](SIMULATED-PROJECT-EPISODE.md#second-pass)).
-- **Notebook** shows the project's live R and Python sessions, which the person shares
-  with the Agent (listed while the Notebook plugin is selected). Cells read in the order
+- **Notebook** is a view of a Studio workspace, from Add view, the command palette, Skills or
+  the Overview (offered while the Notebook plugin is selected). It shows the project's live R
+  and Python sessions, which the person shares with the Agent. Cells read in the order
   they ran: language and number in the gutter, who ran it (the Agent's name opens its
   conversation) and its purpose, how long it took or how it ended, the code highlighted,
   then what it printed, streamed while it runs, with messages, warnings and errors in
@@ -155,7 +169,7 @@ inspect what happened. The application gives those actions direct places:
   Interrupt and Stop (Stop asks first), its variables with type, size and summary, and
   the latest plots. The person's cell stays at the foot, with R or Python, a hint from
   what the session holds and ⌘/Ctrl+Enter. Below 820 px the sessions move above the cells.
-  The same Notebook is a view of any Studio page. A view at least 840 px wide has the
+  A view at least 840 px wide has the
   sessions beside the cells; a narrower one folds them into one line above, and below
   420 px the code takes its own line above R or Python and Run. A conversation's Studio
   has a Notebook view of the sessions its Agent ran cells in, with the person's cells
@@ -191,7 +205,7 @@ inspect what happened. The application gives those actions direct places:
   Shift+Enter adds a line, ⌘/Ctrl+Enter runs whatever is there, ↑/↓ bring back what the person
   ran, a closing bracket on an empty line steps back, Esc interrupts, and the R/Python chip
   switches language: the small chip each cell carries, also in the notebook form's input. A click in the transcript puts the keyboard in the prompt. A Studio view
-  saves its form with the page (`props.form`); the Notebook page keeps it in the browser. A
+  saves its form with the page (`props.form`). A
   Notebook placed under a script by running one of its lines starts as a console
   ([episode](SIMULATED-PROJECT-EPISODE.md#two-forms-of-the-notebook)).
 - **Explore in R or Python** sits in the header of a table view (`.csv`, `.tsv`, also
@@ -279,8 +293,8 @@ inspect what happened. The application gives those actions direct places:
   name in the Notebook, and each name a cell made or changed (listed under the cell while
   its session is live; removed names are struck through), opens it. On the person's page
   it opens there: in a pane right of the Notebook when both keep 360 px, otherwise as a
-  tab of the pane next to the Notebook's, and later values join its tabs. From the
-  Notebook page or a conversation's Studio it opens on the person's workspace. The view
+  tab of the pane next to the Notebook's, and later values join its tabs. From a
+  conversation's Studio it opens on the person's workspace. The view
   says where in the value it is (a trail of parts back to the name), its kind, class and
   size, the session and the cell it was read after, and the code that reaches it, which
   Use in Notebook puts in the Notebook's line. A table shows its facts and a page of 50
@@ -313,11 +327,8 @@ inspect what happened. The application gives those actions direct places:
   page one region shows at a time: the list, then a skill with All skills to go back. The
   Overview's side column shows the three newest changes, each opening its skill
   ([episode](SKILLS-EPISODE.md)).
-- **Files** opens documents, browses the project's folder and the source folders it
-  works in, and filters the current folder. A source folder is named as the person
-  named it and opens one level at a time, the same way any other folder does.
 - **The Agent page** has two lists, each with its own way in: Conversations from "All N" under
-  Tasks and from the panel's title, Agents from the sidebar's foot; its tabs switch between them.
+  the sidebar's Agent row and from the panel's title, Agents from that row itself; its tabs switch between them.
   The bar above the work names the list on show.
   Conversations lists every session in
   the project folder by day, searchable and by Agent: Rho's conversations, Claude
@@ -350,8 +361,8 @@ inspect what happened. The application gives those actions direct places:
   is listed once. Notebook cells join its timeline by exact cell IDs in their receipts,
   not by assuming every call on one connection belongs to that conversation. The
   [external work episode](EXTERNAL-WORK-EPISODE.md) records the actual Harness check.
-- **Studio** shows how a conversation's work was done. The sidebar's Tasks list each
-  recorded Agent session and then the person's own workspaces; the Studio bar names the
+- **Studio** shows how a conversation's work was done. The sidebar lists each
+  recorded Agent session under Agent and then the person's own workspaces; the Studio bar names the
   one shown.
   The **project notes** (`project-notes.md` at the project root) are one Markdown file
   shared by the person and every session, shown in the panel beside the work from Notes
@@ -481,7 +492,7 @@ inspect what happened. The application gives those actions direct places:
   shows a layout of several groups one view at a time with all its tabs, as a phone
   does; the saved layout is unchanged. New workspace, under Studio in the sidebar and in
   the command palette, makes an empty page of the person's own (Workspace 2, 3, …). An
-  empty page offers the Notebook, Variables, Plots, Data flow, Servers and the project's files by kind; Add view
+  empty page offers the Notebook, the Console, Files, Variables, Plots, Data flow, Servers and the project's files by kind; Add view
   in the Studio bar offers the same on any of the person's pages. A file opens in the view it has
   elsewhere in Studio, the Notebook in a pane right of what is there. Pages cannot yet be
   renamed or removed, and they count toward the 32 layouts a project keeps.
@@ -500,9 +511,9 @@ inspect what happened. The application gives those actions direct places:
   it narrows, the object's state goes first, then the controls' names
   ([episode](SIMULATED-PROJECT-EPISODE.md#toolbars)).
 - **The Agent panel** opens beside any page from the Agent button at the end of the
-  tabs' bar, from a task in the sidebar, or from Continue on the Agent page. Its one header is the
-  conversation's title and Close; New conversation joins them while the sidebar's Tasks, which
-  has its own, is not on screen. The title opens the project's conversations, the same ones Tasks
+  tabs' bar, from a conversation in the sidebar, or from Continue on the Agent page. Its one header is the
+  conversation's title and Close; New conversation joins them while the sidebar's Agent list, which
+  has its own, is not on screen. The title opens the project's conversations, the same ones the sidebar
   lists, to change the conversation without leaving the page; its last entry leads to the Agent
   page's full list. A new
   conversation shows only what the Agent can do here. In a tab on this machine it holds conversations with

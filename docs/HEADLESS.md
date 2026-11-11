@@ -181,7 +181,7 @@ service and reports confirmation separately. Existing Hosts keep their owner.
 
 ### Connect your own Agent
 
-The project's **Agents** page, at the sidebar's foot, offers one prompt for any Agent
+The project's **Agents** page, opened by the sidebar's **Agent** row, offers one prompt for any Agent
 that can configure and run a local stdio MCP server. The prompt names the project
 and gives one command:
 
@@ -714,7 +714,7 @@ existing conditional composition transaction. No presentation model call or late
 poll is required. The accepted native-source receipt, integrity/shape result,
 layout commit and DOM receipt remain separate. A failed or incompatible placement
 keeps the registered output and current layout, with a bounded pending notice.
-The existing Files page remains reachable. It never silently replaces unrelated
+The project's files remain reachable from Files. It never silently replaces unrelated
 views or adopts a candidate as a domain decision.
 
 The controller persists the original layout transaction before commit. The same

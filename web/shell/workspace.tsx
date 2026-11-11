@@ -11,6 +11,8 @@ import { AgentColumn, Bar, Digest, Evidence, Interruption, waiting } from './lay
 import { openRun, runFirstLine, RunView, SourceLine } from './facts.js';
 import { ActionForm } from './action-form.js';
 import { CommandPane } from '../console.js';
+import { ConsoleView, FilesView, KindView } from '../studio-tools.js';
+import type { SourceRow } from '../sources.js';
 import { showOnServer, type Prepared, type SessionScope } from '@rho-workspace/plugin-kernel/ui';
 import { addNotebook, addObject, addSessionView, canExplore, explorableTable, languageNames, loadTable, notebookComponent, notebookView, projectPath, scriptLanguage, scriptPrepared, sessionComponents, type Language } from '../explore.js';
 import { ExploreIn } from '../explore-in.js';
@@ -354,7 +356,10 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
   const body = (id: string): ReactNode => {
     const view = byId.get(id)!, isVisible = visible.includes(id);
     if (view.component === 'rho.action') return <ActionForm view={view} snapshot={snapshot} client={client} live={live} />;
-    if (view.component === 'rho.console') return <CommandPane client={client} snapshot={snapshot} />;
+    // A conversation's Studio shows that conversation's commands; a workspace shows the project's.
+    if (view.component === 'rho.console') return process ? <CommandPane client={client} snapshot={snapshot} /> : <ConsoleView client={client} snapshot={snapshot} />;
+    if (view.component === 'rho.files') return <FilesView client={client} snapshot={snapshot} />;
+    if (view.component === 'rho.sources') return <KindView kind={String(view.props.kind ?? 'data') as SourceRow} snapshot={snapshot} />;
     if (view.component === 'rho.execution') {
       const operationId = String(view.props.operationId ?? id);
       return <RunView snapshot={snapshot} client={client} operationId={operationId} runs={live.runs} readRuns={live.readRuns} firstLine={runFirstLine(live, operationId)} opener={ref => () => openRef(ref)} onOpenRun={other => openRun(live, other)} chain />;

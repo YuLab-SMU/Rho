@@ -1,5 +1,5 @@
 import { BrowserApiError, type BrowserClient, type WorkspaceSnapshot } from '../src/browser.js';
-import { addAtEdge, addBeside, addInto, addWithRoom, type LayoutNode, type LayoutTree } from '../src/shell-layout.js';
+import { addAtEdge, addBeside, addInto, addWithRoom, moveToEdge, paneShare, type LayoutNode, type LayoutTree } from '../src/shell-layout.js';
 import { languageNames, loadCode, sourceCode, valueName, type Language } from '@rho-workspace/plugin-kernel/code';
 
 // Looking into a result in the live sessions the person shares with the Agent. A table loads
@@ -46,6 +46,28 @@ export function withNotebook(tree: LayoutTree | null, beside: string | null, id?
   return addBeside(tree, view as never, beside, 'right', newId);
 }
 
+// A pane added along an edge takes its share from every pane there. The explorer and the lists of
+// files are narrow to begin with, so when one falls under the floor it gets its first width back.
+function keepBrowser(tree: LayoutTree): LayoutTree {
+  const browser = tree.nodes.find(n => n.kind !== 'group' && (n.component === 'rho.files' || n.component === 'rho.sources'));
+  const holder = browser && tree.nodes.find(n => n.kind === 'group' && n.children?.includes(browser.id) && (n.presentation as { mode?: string } | undefined)?.mode !== 'split');
+  if (!browser || !holder || tree.rootId === holder.id) return tree;
+  const share = paneShare(tree, browser.id);
+  if (!(share > 0 && share < browserShares.floor)) return tree;
+  // Already a column of the page: only its width changes. Deeper in, it moves out to the left edge.
+  const parent = tree.nodes.find(n => n.kind === 'group' && n.children?.includes(holder.id));
+  const split = parent?.presentation as { mode?: string; axis?: string; weights?: number[] } | undefined;
+  if (parent && parent.id === tree.rootId && split?.mode === 'split' && split.axis === 'horizontal') {
+    const nodes = structuredClone(tree.nodes), column = nodes.find(n => n.id === parent.id)!;
+    const weights = split.weights?.length === column.children!.length ? [...split.weights] : column.children!.map(() => 1);
+    const at = column.children!.indexOf(holder.id), rest = weights.reduce((sum, weight, index) => index === at ? sum : sum + weight, 0);
+    weights[at] = rest * browserShares.first / (1 - browserShares.first);
+    column.presentation = { ...split, weights } as LayoutNode['presentation'];
+    return { rootId: tree.rootId, nodes };
+  }
+  return moveToEdge(tree, holder.id, 'left', kind => `${kind}-${crypto.randomUUID().slice(0, 8)}`, browserShares.first) ?? tree;
+}
+export const browserShares = { first: 0.2, floor: 0.15 };
 // Puts a view on a saved page, unless the page has one, with one conditional write; a newer
 // layout from another tab is read once and the view placed on it.
 async function addToPage(client: BrowserClient, projectId: string, compositionId: string, there: (nodes: unknown[] | undefined) => string | null, place: (tree: LayoutTree | null) => LayoutTree | null, change: string): Promise<string> {
@@ -56,8 +78,9 @@ async function addToPage(client: BrowserClient, projectId: string, compositionId
     }) as { version: number; rootId?: string; nodes?: unknown[] } | null;
     const found = there(current?.nodes);
     if (found) return found;
-    const next = place(current?.rootId && current.nodes?.length ? { rootId: current.rootId, nodes: current.nodes as LayoutNode[] } : null);
-    if (!next) throw new Error('The view could not be placed on this page.');
+    const placed = place(current?.rootId && current.nodes?.length ? { rootId: current.rootId, nodes: current.nodes as LayoutNode[] } : null);
+    if (!placed) throw new Error('The view could not be placed on this page.');
+    const next = keepBrowser(placed);
     try {
       await client.call('composition.apply', { projectId, compositionId, expectedVersion: current?.version ?? 0, changeId: change + '-' + crypto.randomUUID(), operations: [{ op: 'replace', rootId: next.rootId, nodes: next.nodes }] } as never);
       return there(next.nodes)!;
@@ -100,6 +123,41 @@ export function withSessionView(tree: LayoutTree | null, kind: SessionView): Lay
 }
 export const addSessionView = (client: BrowserClient, projectId: string, compositionId: string, kind: SessionView, into?: string) =>
   addToPage(client, projectId, compositionId, nodes => sessionViewOn(kind, nodes), into ? intoGroup(sessionView(kind), into) : tree => withSessionView(tree, kind), kind);
+
+// The project's own tools as views of a page: its Console, its folders as a file explorer, and
+// one kind of its files as a list. One of each per page. The Console takes a strip along the
+// page's foot, as a terminal does; the explorer and the lists share one group of tabs along its
+// left side, so the files chosen in them open beside them.
+export type Tool = 'console' | 'files' | `kind:${string}`;
+export const toolComponents = { console: 'rho.console', files: 'rho.files', kind: 'rho.sources' } as const;
+const toolKind = (tool: Tool) => tool.startsWith('kind:') ? tool.slice(5) : null;
+const isTool = (tool: Tool) => (n: LayoutNode) => n.kind !== 'group' && (toolKind(tool) ? n.component === toolComponents.kind && (n.props as { kind?: string } | undefined)?.kind === toolKind(tool) : n.component === toolComponents[tool as 'console' | 'files']);
+export const isBrowser = (n: { kind?: string; component?: unknown }) => n.kind !== 'group' && (n.component === toolComponents.files || n.component === toolComponents.kind);
+export const toolView = (tool: Tool, title: string): LayoutNode =>
+  ({ id: tool.replace(':', '-'), kind: 'view', component: toolKind(tool) ? toolComponents.kind : toolComponents[tool as 'console' | 'files'], version: '1', props: { title, ...(toolKind(tool) ? { kind: toolKind(tool) } : {}) }, bindings: {} });
+export const toolOn = (tool: Tool, nodes: unknown[] | undefined) => (nodes as LayoutNode[] | undefined)?.find(isTool(tool))?.id ?? null;
+export function withTool(tree: LayoutTree | null, tool: Tool, title: string): LayoutTree | null {
+  const view = toolView(tool, title);
+  if (!tree) return { rootId: 'root', nodes: [{ id: 'root', kind: 'group', children: [view.id] }, view] };
+  if (toolOn(tool, tree.nodes) || tree.nodes.some(n => n.id === view.id)) return null;
+  const other = tree.nodes.find(isBrowser);
+  const holder = other && tree.nodes.find(n => n.kind === 'group' && n.children?.includes(other.id) && (n.presentation as { mode?: string } | undefined)?.mode !== 'split');
+  if (tool === 'console') {
+    // Under the work, with the explorer still the whole height of the page beside both.
+    const share = other ? paneShare(tree, other.id) : 0, under = addAtEdge(tree, view as never, 'bottom', newId, toolShares.console);
+    return under && holder && share > 0 && share < 0.5 ? moveToEdge(under, holder.id, 'left', newId, share) ?? under : under;
+  }
+  if (holder) {
+    const nodes = structuredClone(tree.nodes), group = nodes.find(n => n.id === holder.id)!;
+    group.children = [...group.children!, view.id];
+    return { rootId: tree.rootId, nodes: [...nodes, view] };
+  }
+  return addAtEdge(tree, view as never, 'left', newId, toolShares.browser);
+}
+// The share of the page a tool's pane takes when it is first put there.
+export const toolShares = { console: 0.34, browser: browserShares.first };
+export const addTool = (client: BrowserClient, projectId: string, compositionId: string, tool: Tool, title: string, into?: string) =>
+  addToPage(client, projectId, compositionId, nodes => toolOn(tool, nodes), into ? intoGroup(toolView(tool, title), into) : tree => withTool(tree, tool, title), 'tool');
 
 // A value of a live session as a view: one per value on a page. A page's values share one group
 // of tabs. The first goes in a pane beside the Notebook when the Notebook's pane, on a stage

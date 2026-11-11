@@ -42,17 +42,19 @@ export function shortWhen(iso: string, now = new Date()) {
   return minutes < 1 ? 'now' : minutes < 60 ? minutes + 'm' : minutes < 24 * 60 ? Math.round(minutes / 60) + 'h' : minutes < 7 * 24 * 60 ? Math.round(minutes / 1440) + 'd'
     : at.toLocaleDateString('en-US', { month: 'short', day: 'numeric', ...(at.getFullYear() === now.getFullYear() ? {} : { year: '2-digit' }) });
 }
-export function ProjectNavigation({ project, snapshot, current, talking = null, sources, partial, sessions, places, values, onLayout, onNewLayout, onNewTask, onSection, onSources, onFile, onValue, onAddSource, adding }: {
+export function ProjectNavigation({ project, snapshot, current, talking = null, agentState = '', onAgents, sources, partial, sessions, places, values, onLayout, onNewLayout, onNewTask, onSection, onSources, onFile, onValue, onVariables, onAddSource, adding }: {
   project: ProjectSummary; snapshot: WorkspaceSnapshot | null; current: string; sessions: SessionRow[];
   // The task whose conversation the Agent panel shows beside the page, by its row's id.
   talking?: string | null;
+  // The Agent's row: what it is doing now, for a screen reader, and its page.
+  agentState?: string; onAgents: () => void;
   // The project's places as rows, where they are not tabs above the work.
   places?: PlaceRow[];
   sources: Record<SourceRow, SourceItem[]> | null; partial: boolean; adding: boolean;
   // The live sessions' values, or null where this tab cannot read the sessions.
   values: LiveValues | null;
   onLayout: (id: string) => void; onNewLayout?: () => void; onNewTask: () => void; onSection: (section: Section) => void;
-  onSources: (row: SourceRow) => void; onFile: (row: SourceRow, item: SourceItem) => void; onValue: (language: ValueLanguage, name: string) => void; onAddSource: () => void;
+  onSources: (row: SourceRow) => void; onFile: (row: SourceRow, item: SourceItem) => void; onValue: (language: ValueLanguage, name: string) => void; onVariables: () => void; onAddSource: () => void;
 }) {
   // Which kinds are unfolded is remembered per project for this tab; the kind of the file on
   // screen is always unfolded, so the person sees where they are.
@@ -79,15 +81,19 @@ export function ProjectNavigation({ project, snapshot, current, talking = null, 
     {places && <div className="nav-group nav-places">
       {places.map(p => <button key={p.key} className="nav-row" aria-current={p.current ? 'page' : undefined} onClick={p.run}><Icon name={p.icon} size={17} /><span className="nav-row-name">{p.label}</span>{p.count ? <span className="nav-row-count" aria-hidden="true">{p.count}</span> : null}</button>)}
     </div>}
-    <section className="nav-section nav-tasks" aria-labelledby="nav-tasks">
-      <div className="nav-heading"><span className="section-label" id="nav-tasks">Tasks</span><button className="icon-button nav-add" aria-label="New conversation" title="Ask the Agent in a new conversation" onClick={onNewTask}><Icon name="plus" size={15} /></button></div>
-      {sessions.length > 0 ? <div role="group" aria-label="Sessions" className="nav-group">
+    <section className="nav-section nav-tasks" aria-label="Agent">
+      {/* The Agent, with its conversations under it: the row opens the Agents, + starts a conversation. */}
+      <div className="nav-heading nav-parent">
+        <button className="nav-row" aria-label={'Agent' + agentState} aria-current={current === 'agents' ? 'page' : undefined} title="The Agents that work on this project" onClick={onAgents}><Icon name="spark" size={17} /><span className="nav-row-name">Agent</span></button>
+        <button className="icon-button nav-add" aria-label="New conversation" title="Ask the Agent in a new conversation" onClick={onNewTask}><Icon name="plus" size={15} /></button>
+      </div>
+      {sessions.length > 0 ? <div role="group" aria-label="Conversations" className="nav-group nav-children">
         {shownSessions.map(s => { const at = when(s.when); return <button key={s.id} className={'nav-row nav-session' + (talking === s.id ? ' talking' : '')} title={s.title + '\n' + s.agent + (at.full ? ' · ' + at.full : '') + (talking === s.id ? '\nIn the Agent panel' : '')} aria-current={current === 'studio:' + s.id ? 'page' : talking === s.id ? 'true' : undefined} onClick={() => onLayout(s.id)}>
           <ProviderMark name={s.agent} size={16} /><span className="nav-row-name">{s.title}</span>
           {s.waiting ? <span className="nav-badge waiting">Needs you</span> : s.running ? <span className="pulse-dot" aria-label="Working" /> : <span className="nav-when" aria-hidden="true">{shortWhen(s.when)}</span>}
         </button>; })}
         {sessions.length > shownSessions.length && <button className="nav-more" aria-label={'All ' + sessions.length + ' conversations'} title="Every conversation: search, usage and the trash" onClick={() => onSection('agent')}>All {sessions.length}<Icon name="chevron" size={11} stroke={2} /></button>}
-      </div> : <p className="nav-files-note nav-none">No tasks yet</p>}
+      </div> : <p className="nav-files-note nav-none">No conversations yet</p>}
       {(layouts.length > 0 || onNewLayout) && <div role="group" aria-label="Workspaces" className="nav-group nav-workspaces">
         {layouts.map(c => <button key={c.compositionId} className="nav-row nav-workspace" aria-current={current === 'studio:' + c.compositionId ? 'page' : undefined} onClick={() => onLayout(c.compositionId)}><Icon name="layout" size={16} /><span className="nav-row-name">{compositionName(c.compositionId)}</span><span className="nav-row-count" title={views(c)}>{c.views.length}</span></button>)}
         {onNewLayout && <button className="nav-row nav-new" onClick={onNewLayout}><Icon name="plus" size={14} stroke={1.8} /><span className="nav-row-name">New workspace</span></button>}
@@ -102,11 +108,14 @@ export function ProjectNavigation({ project, snapshot, current, talking = null, 
           // A kind beyond the four every project has is listed while the project holds some.
           if (!baseRows.includes(kind) && !items?.length) return null;
           // The live values sit between the code that makes them and the results kept from them.
-          const variables = kind === 'results' && values && <ValuesRow key="variables" values={values} open={unfolded.includes('variables')} onFold={() => fold('variables')} onValue={onValue} onNotebook={() => onSection('notebook')} />;
+          const variables = kind === 'results' && values && <ValuesRow key="variables" values={values} open={unfolded.includes('variables')} onFold={() => fold('variables')} onValue={onValue} onOpen={onVariables} onNotebook={() => onSection('notebook')} />;
           return <Fragment key={kind}>{variables}<div className={'nav-source' + (open ? ' open' : '')}>
-            <button className="nav-row" title={extra?.title} aria-expanded={open} aria-controls={'nav-files-' + kind} aria-current={current === 'sources:' + kind ? 'page' : undefined} onClick={() => fold(kind)}>
-              <Icon name={icon} size={17} /><span className="nav-row-name">{label}</span>{extra?.node}<span className="nav-twisty" aria-hidden="true"><Icon name="chevron" size={12} stroke={2} /></span>
-            </button>
+            <div className="nav-folding">
+              <button className="nav-row" title={(extra ? extra.title + ' · ' : '') + 'Show them in the workspace'} aria-current={current === 'sources:' + kind ? 'page' : undefined} onClick={() => onSources(kind)}>
+                <Icon name={icon} size={17} /><span className="nav-row-name">{label}</span>{extra?.node}
+              </button>
+              <button className="icon-button nav-fold" aria-label={(open ? 'Hide the ' : 'List the ') + noun + 's here'} title={(open ? 'Hide the ' : 'List the ') + noun + 's here'} aria-expanded={open} aria-controls={'nav-files-' + kind} onClick={() => fold(kind)}><span className="nav-twisty" aria-hidden="true"><Icon name="chevron" size={12} stroke={2} /></span></button>
+            </div>
             {open && <SourceFiles id={'nav-files-' + kind} kind={kind} label={label} items={items} partial={partial} current={current} onFile={item => onFile(kind, item)} onAll={() => onSources(kind)} />}
           </div></Fragment>;
         })}
@@ -159,17 +168,19 @@ function SourceFiles({ id, kind, label, items, partial, current, onFile, onAll }
 // name with their type. A value opens in Studio beside the Notebook. Nothing is listed for a
 // session that ended; its values are gone with it.
 const sessionName = (s: LiveSession) => s.version?.replace(/^R version (\S+).*$/, 'R $1').replace(/^Python (\S+).*$/, 'Python $1') ?? (s.language === 'r' ? 'R' : 'Python');
-function ValuesRow({ values, open, onFold, onValue, onNotebook }: { values: LiveValues; open: boolean; onFold: () => void; onValue: (language: ValueLanguage, name: string) => void; onNotebook: () => void }) {
+function ValuesRow({ values, open, onFold, onValue, onOpen, onNotebook }: { values: LiveValues; open: boolean; onFold: () => void; onValue: (language: ValueLanguage, name: string) => void; onOpen: () => void; onNotebook: () => void }) {
   const total = values.sessions.reduce((n, s) => n + s.variables.length + (s.variablesOmitted ?? 0), 0);
   const busy = values.sessions.some(s => s.state === 'busy');
   const title = !values.read ? undefined : values.sessions.length ? `${total} value${total === 1 ? '' : 's'} in the live ${values.sessions.map(s => s.language === 'r' ? 'R' : 'Python').join(' and ')} session${values.sessions.length === 1 ? '' : 's'}` : 'No live session';
   return <div className={'nav-source' + (open ? ' open' : '')}>
-    <button className="nav-row" title={title} aria-expanded={open} aria-controls="nav-values" onClick={onFold}>
-      <Icon name="list" size={17} /><span className="nav-row-name">Variables</span>
-      {busy && <span className="pulse-dot" aria-label="Running" />}
-      {values.sessions.length > 0 && <span className="nav-row-count" aria-hidden="true">{total}</span>}
-      <span className="nav-twisty" aria-hidden="true"><Icon name="chevron" size={12} stroke={2} /></span>
-    </button>
+    <div className="nav-folding">
+      <button className="nav-row" title={(title ? title + ' · ' : '') + 'Show them in the workspace'} onClick={onOpen}>
+        <Icon name="list" size={17} /><span className="nav-row-name">Variables</span>
+        {busy && <span className="pulse-dot" aria-label="Running" />}
+        {values.sessions.length > 0 && <span className="nav-row-count" aria-hidden="true">{total}</span>}
+      </button>
+      <button className="icon-button nav-fold" aria-label={(open ? 'Hide the values here' : 'List the values here')} title={(open ? 'Hide the values here' : 'List the values here')} aria-expanded={open} aria-controls="nav-values" onClick={onFold}><span className="nav-twisty" aria-hidden="true"><Icon name="chevron" size={12} stroke={2} /></span></button>
+    </div>
     {open && (!values.read ? <p id="nav-values" className="nav-files-note" role="status">Reading the live sessions…</p>
       : values.problem && !values.sessions.length ? <p id="nav-values" className="nav-files-note" role="alert">{values.problem}</p>
       : !values.sessions.length ? <div id="nav-values" className="nav-files-note">No live session. Values show here once R or Python runs a cell.<button className="nav-more" onClick={onNotebook}>Open the Notebook</button></div>

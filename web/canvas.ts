@@ -29,6 +29,8 @@ interface Node { id: string; kind: 'group' | 'view'; children?: string[]; presen
 export const canvasLimits = { maxViewsPerSide: 6 };
 const agentGroup = 'canvas-';
 const markdownReader = 'markdown.reader', htmlReader = 'html.reader';
+// The explorer and the lists of files: what is opened from them goes beside them.
+const isBrowser = (node: Node) => node.kind === 'view' && (node.component === 'rho.files' || node.component === 'rho.sources');
 const sideOf = (node: Node): Side | null => node.kind !== 'view' ? null : node.component === 'rho.editor' || node.component === markdownReader || node.component === htmlReader ? 'code' : node.component === 'rho.table' || node.component === 'rho.media' ? 'data' : null;
 
 // Files no Studio view reads; anything else that is text opens in the editor.
@@ -99,18 +101,35 @@ function placed(current: { rootId?: string; nodes?: unknown[] } | null, view: No
   if (!target) {
     target = { id: agentGroup + side, kind: 'group', children: [] };
     nodes.push(target);
-    const at = (length: number) => side === 'code' ? 0 : length;
-    if (root.presentation?.mode === 'split' && root.presentation.axis === 'horizontal') {
+    // What an explorer or a list of files opens goes beside it: the first script or note takes
+    // the pane to its right, wherever the explorer's pane is on the page.
+    const browser = nodes.find(isBrowser), holder = browser && parentOf(browser.id), above = holder && parentOf(holder.id);
+    const browses = (n: Node | undefined) => !!n && isTabs(n) && !!n.children?.length && n.children.every(child => { const v = byId(child); return !!v && isBrowser(v); });
+    const split = () => { let id = 'split', n = 1; while (byId(id)) id = 'split-' + ++n; return id; };
+    if (side === 'code' && holder && isTabs(holder)) {
+      if (above?.presentation?.mode === 'split' && above.presentation.axis === 'horizontal') {
+        const weights = above.presentation.weights?.length === above.children!.length ? [...above.presentation.weights] : above.children!.map(() => 1);
+        const index = above.children!.indexOf(holder.id) + 1, others = weights.filter((_, i) => i !== index - 1 && !browses(byId(above.children![i]!)));
+        above.children!.splice(index, 0, target.id);
+        weights.splice(index, 0, others.length ? others.reduce((x, y) => x + y, 0) / others.length : weights[index - 1]! * 3);
+        above.presentation = { ...above.presentation, weights };
+      } else {
+        const id = split();
+        nodes.push({ id, kind: 'group', children: [holder.id, target.id], presentation: { mode: 'split', axis: 'horizontal', weights: [0.24, 0.76] } });
+        if (above) above.children = above.children!.map(child => child === holder.id ? id : child); else rootId = id;
+      }
+    } else if (root.presentation?.mode === 'split' && root.presentation.axis === 'horizontal') {
       const weights = root.presentation.weights?.length === root.children!.length ? [...root.presentation.weights] : root.children!.map(() => 1);
-      const index = at(root.children!.length);
+      const index = side === 'code' ? 0 : root.children!.length;
+      // The new pane takes the room of an average working pane, not of the narrow explorer.
+      const working = weights.filter((_, i) => !browses(byId(root.children![i]!)));
       root.children!.splice(index, 0, target.id);
-      weights.splice(index, 0, weights.reduce((a, b) => a + b, 0) / weights.length);
+      weights.splice(index, 0, (working.length ? working : weights).reduce((x, y) => x + y, 0) / (working.length || weights.length));
       root.presentation = { ...root.presentation, weights };
     } else {
-      let id = 'split', n = 1;
-      while (byId(id)) id = 'split-' + ++n;
-      const children = [rootId]; children.splice(at(1), 0, target.id);
-      nodes.push({ id, kind: 'group', children, presentation: { mode: 'split', axis: 'horizontal', weights: [1, 1] } });
+      const id = split(), beside = browses(root);
+      const children = side === 'code' && !beside ? [target.id, rootId] : [rootId, target.id];
+      nodes.push({ id, kind: 'group', children, presentation: { mode: 'split', axis: 'horizontal', weights: beside ? [0.24, 0.76] : [1, 1] } });
       rootId = id;
     }
   }

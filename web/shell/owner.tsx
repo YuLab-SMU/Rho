@@ -25,6 +25,8 @@ export function title(view: ViewDescription) {
 // The tab icon follows what the view is bound to.
 export function viewIcon(view: ViewDescription, snapshot: WorkspaceSnapshot): IconName {
   if (view.component === 'rho.console') return 'prompt';
+  if (view.component === 'rho.files') return 'folder';
+  if (view.component === 'rho.sources') return ({ data: 'table', code: 'code', results: 'chart', notes: 'document', workflows: 'workflow', reports: 'report', references: 'book', environment: 'tool' } as Record<string, IconName>)[String(view.props.kind)] ?? 'folder';
   if (view.component === 'rho.notebook') return 'code';
   if (view.component === 'rho.object') return 'braces';
   if (view.component === 'rho.variables') return 'list';

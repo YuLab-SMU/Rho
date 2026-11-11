@@ -91,7 +91,7 @@ if (process.env.RHO_CONNECT_FAIL && !process.argv.includes('remove')) { process.
   await page.goto(service.url);
   await page.locator('.project-row').first().click();
   const nav = page.locator('.project-nav');
-  await nav.getByRole('button', { name: 'Agents', exact: true }).click();
+  await nav.getByRole('button', { name: /^Agent(,|$)/ }).click();
 
   // The Agents: one row per Agent this service can start; nothing is asked until the person asks.
   await page.getByRole('tab', { name: 'Agents', exact: true }).click();

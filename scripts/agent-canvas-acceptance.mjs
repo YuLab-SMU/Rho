@@ -93,16 +93,15 @@ try {
   const nav = page.locator('.project-nav, .place-tabs');
   const counts = () => page.evaluate(() => Object.fromEntries([...document.querySelectorAll('.project-nav .nav-row')].map(row => [row.querySelector('.nav-row-name')?.textContent ?? '', row.querySelector('.nav-row-count')?.textContent ?? null])));
   await until(counts, c => c.Data === '1' && c.Code === '1' && c.Notes === '1' && c['Results & figures'] === '0', 'sidebar counts by kind');
-  for (const name of ['Overview', 'Studio', 'Graph', 'Agents', 'Data', 'Code', 'Results & figures', 'Notes', 'Files']) await nav.getByRole('button', { name, exact: true }).waitFor();
-  await nav.getByRole('button', { name: 'Data', exact: true }).click();
+  for (const name of ['Overview', 'Studio', 'Graph', 'Agent', 'Data', 'Code', 'Results & figures', 'Notes', 'Files']) await nav.getByRole('button', { name, exact: true }).waitFor();
+  await nav.getByRole('button', { name: 'List the data files here', exact: true }).click();
   await nav.locator('.nav-file').filter({ hasText: 'airquality.csv' }).waitFor();
   await shot('01-sidebar-data');
   passed('the sidebar names the project places and counts its data, code, results and notes');
 
   // The person opens the script in Studio first and asks the Agent from there.
-  await nav.getByRole('button', { name: 'Code', exact: true }).click();
+  await nav.getByRole('button', { name: 'List the scripts here', exact: true }).click();
   await nav.locator('.nav-file').filter({ hasText: 'analysis.R' }).click();
-  await page.getByRole('button', { name: 'Open in Studio' }).click();
   await page.locator('.studio-title').filter({ hasText: 'Workspace' }).waitFor();
   await page.getByRole('button', { name: 'Agent panel', exact: true }).click();
   await page.getByRole('textbox', { name: 'Start a conversation' }).fill('Fit ozone on temperature and draw it.');
@@ -130,7 +129,7 @@ try {
   // The Agent page keeps what the turn did; the top bar holds the one way to the Agent panel.
   assert.equal(await page.locator('.topbar').getByRole('button', { name: 'Agent panel', exact: true }).count(), 1, 'the Agent panel opens from the top bar');
   assert.equal(await nav.getByRole('button', { name: 'Agent panel' }).count(), 0, 'and from nowhere else in the sidebar');
-  await nav.getByRole('button', { name: 'Agents', exact: true }).click(); await page.getByRole('tab', { name: /^Conversations/ }).click();
+  await nav.getByRole('button', { name: /^Agent(,|$)/ }).click(); await page.getByRole('tab', { name: /^Conversations/ }).click();
   const row = page.locator('.conv-row').filter({ hasText: 'Fit ozone on temperature and draw it.' });
   await row.getByRole('button', { name: /^Show details of / }).click();
   const card = row.locator('.conv-details');
@@ -141,9 +140,10 @@ try {
   assert.match(await card.locator('.work-ending').textContent(), /^Answered/);
   await shot('05a-agent-page');
   await card.locator('.work-file').filter({ hasText: 'airquality.csv' }).click();
-  await page.locator('.preview-body .ag-row[row-index="0"]').first().waitFor();
-  assert.equal(await page.locator('#preview-title').textContent(), 'airquality.csv');
-  passed('the Agent page keeps what the turn changed, read, ran and answered; a file it names shows in place');
+  await page.locator('.studio-title').filter({ hasText: 'Workspace' }).waitFor();
+  await page.locator('[data-owner-view] .ag-row[row-index="0"]').first().waitFor();
+  assert.equal(await page.getByRole('tab', { name: 'airquality.csv', exact: true }).getAttribute('aria-selected'), 'true');
+  passed('the Agent page keeps what the turn changed, read, ran and answered; a file it names opens in the workspace');
 
   // From Studio again, the next question; Follow opens the conversation's own Studio.
   await page.keyboard.press('Escape');

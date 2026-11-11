@@ -1,9 +1,9 @@
-// Sources acceptance: browsing a project's files by kind from the sidebar, through the real
-// service and Chrome, without model credentials. It checks that each kind unfolds into its
-// files by folder, that choosing one shows it in place in its own view without writing a
-// layout, that the arrow keys and buttons move through the kind while keys inside a table or
-// editor stay with that view, that Open in Studio places the file, and that the unfolded kinds
-// survive a reload.
+// Sources acceptance: a project's files by kind and by folder, as views of the person's workspace
+// in Studio, through the real service and Chrome, without model credentials. It checks that the
+// arrow at the end of a kind's row lists its files in the sidebar, that the row itself puts the
+// kind's list in the workspace, that a file chosen in the sidebar, in a list or in the Files
+// explorer opens as a view beside it, that keys inside a table or editor stay with that view,
+// that a Markdown note reads as formatted text, and that the listed kinds survive a reload.
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -19,12 +19,10 @@ const passed = name => { report.checks.push(name); process.stdout.write('ok · '
 let service, browser, page;
 const svg = (fill, height) => `<svg xmlns="http://www.w3.org/2000/svg" width="160" height="100"><rect width="160" height="100" fill="#fff"/><rect x="30" y="${100 - height}" width="40" height="${height}" fill="${fill}"/></svg>`;
 const shot = async name => { const file = path.join(evidence, name + '.png'); await page.screenshot({ path: file }); report.screenshots.push(path.basename(file)); };
-const shown = name => page.waitForFunction(n => document.querySelector('#preview-title')?.textContent === n && !document.querySelector('.preview-body.switching'), name, { timeout: 20000 });
-const state = () => page.evaluate(() => ({
-  title: document.querySelector('#preview-title')?.textContent ?? null, position: document.querySelector('.preview-position')?.textContent ?? null,
-  current: document.querySelector('.project-nav .nav-file[aria-current=page]')?.textContent ?? null,
-  kind: document.querySelector('.project-nav .nav-file[aria-current=page]')?.closest('.nav-source')?.querySelector('.nav-row-name')?.textContent ?? null, tab: document.querySelector('.place-tabs [aria-current=page]')?.textContent ?? null,
-}));
+// The tab of the view on show in the pane that holds it, and that view's body.
+const tab = name => page.getByRole('tab', { name, exact: true });
+const shown = name => tab(name).and(page.locator('[aria-selected=true]')).waitFor({ timeout: 20000 });
+const body = () => page.locator('[data-owner-view]:visible');
 try {
   const project = path.join(root, 'study');
   for (const [file, text] of Object.entries({
@@ -45,83 +43,83 @@ try {
   const files = () => nav.locator('.nav-file').allTextContents();
   await page.waitForFunction(() => document.querySelector('.project-nav')?.textContent?.includes('Results & figures3'), null, { timeout: 20000 });
 
-  for (const kind of ['Data', 'Code', 'Results & figures']) {
-    const row = nav.getByRole('button', { name: kind, exact: true });
-    assert.equal(await row.getAttribute('aria-expanded'), 'false');
-    await row.click();
-    assert.equal(await row.getAttribute('aria-expanded'), 'true');
+  const fold = noun => nav.getByRole('button', { name: new RegExp('^(List|Hide) the ' + noun + 's here$') });
+  for (const noun of ['data file', 'script', 'result']) {
+    assert.equal(await fold(noun).getAttribute('aria-expanded'), 'false');
+    await fold(noun).click();
+    assert.equal(await fold(noun).getAttribute('aria-expanded'), 'true');
   }
   assert.deepEqual(await files(), ['airquality.csv', 'stations.csv', 'analysis.R', 'plot.R', 'wind.svg', 'ozone.svg', 'temp.svg']);
   assert.deepEqual(await nav.locator('.nav-folder').allTextContents(), ['study', 'scripts', 'figures', 'results']);
+  assert.deepEqual((await admin.call('observation.snapshot', { projectId: opened.id })).compositions, [], 'listing writes no layout');
   await shot('01-unfolded');
-  passed('each kind unfolds in the sidebar into its files: the top level first, then by folder');
+  passed('the arrow at the end of each kind lists its files in the sidebar: the top level first, then by folder');
 
-  await nav.locator('.nav-file').filter({ hasText: 'wind.svg' }).click();
+  // A kind's own row puts its list in the workspace, and a file chosen there opens beside it.
+  await nav.getByRole('button', { name: 'Results & figures', exact: true }).click();
+  await page.locator('.place-tabs [aria-current=page]', { hasText: 'Studio' }).waitFor();
+  await shown('Results & figures');
+  const list = page.locator('.tool-kind');
+  assert.deepEqual((await list.locator('.files-name').evaluateAll(es => es.map(e => e.firstChild?.textContent))).sort(), ['ozone.svg', 'temp.svg', 'wind.svg']);
+  await list.getByRole('button', { name: /^wind\.svg/ }).click();
   await shown('wind.svg');
-  await page.locator('.preview-body img').waitFor();
-  let now = await state();
-  assert.equal(now.position, '1 of 3');
-  assert.equal(now.current, 'wind.svg');
-  assert.deepEqual([now.kind, now.tab], ['Results & figures', 'wind.svg'], 'the sidebar unfolds the kind and the bar names the file');
-  assert.match(await page.locator('.preview-name small').textContent(), /^figures · 174 B$/);
-  const snapshot = await admin.call('observation.snapshot', { projectId: opened.id });
-  assert.deepEqual(snapshot.compositions, [], 'browsing writes no layout');
-  await shot('02-figure');
-  passed('choosing a file shows it in place with its folder, size and place in its kind, without writing a layout');
+  await page.waitForFunction(() => [...document.querySelectorAll('[data-owner-view] img')].some(img => img.complete && img.naturalWidth > 0), null, { timeout: 20000 });
+  assert.ok(await list.isVisible(), 'the list stays beside the file it opened');
+  const placed = (await admin.call('observation.snapshot', { projectId: opened.id })).compositions;
+  assert.deepEqual(placed.map(c => c.compositionId), ['workspace']);
+  assert.deepEqual(placed[0].views.map(v => v.component).sort(), ['rho.media', 'rho.sources']);
+  await shot('02-list-and-figure');
+  passed("a kind's row puts its list in the workspace, and a file chosen in it opens as a view beside the list");
 
-  await page.locator('#preview-title').click();
-  await page.keyboard.press('ArrowRight'); await shown('ozone.svg');
-  await page.keyboard.press('ArrowRight'); await shown('temp.svg');
-  now = await state();
-  assert.equal(now.position, '3 of 3'); assert.equal(now.current, 'temp.svg');
-  assert.ok(await page.getByRole('button', { name: 'Next file' }).isDisabled(), 'no next file at the end');
-  await page.getByRole('button', { name: 'Previous: ozone.svg' }).click(); await shown('ozone.svg');
-  await nav.locator('.nav-file[aria-current=page]').focus();
-  await page.keyboard.press('ArrowUp'); await shown('wind.svg');
-  assert.equal(await page.evaluate(() => document.activeElement?.textContent), 'wind.svg', 'focus moves with the shown file');
-  passed('the arrow keys and buttons move through the kind; in the sidebar Up and Down do too, and the sidebar marks the file shown');
-
+  // A file chosen in the sidebar opens in the same workspace.
   await nav.locator('.nav-file').filter({ hasText: 'airquality.csv' }).click(); await shown('airquality.csv');
-  await page.locator('.preview-body .ag-row[row-index="0"]').first().waitFor({ timeout: 20000 });
-  await page.locator('.preview-body .ag-cell').first().click();
+  await page.locator('[data-owner-view] .ag-row[row-index="0"]').first().waitFor({ timeout: 20000 });
+  await page.locator('[data-owner-view] .ag-cell').first().click();
   await page.keyboard.press('ArrowRight'); await page.waitForTimeout(300);
-  assert.equal((await state()).title, 'airquality.csv', 'arrow keys in the table move between cells');
+  assert.equal(await tab('airquality.csv').getAttribute('aria-selected'), 'true', 'arrow keys in the table move between cells');
   await shot('03-table');
   await nav.locator('.nav-file').filter({ hasText: 'analysis.R' }).click(); await shown('analysis.R');
-  const editor = page.locator('.preview-body .cm-content');
-  await page.waitForFunction(() => /summary\(air\)/.test(document.querySelector('.preview-body .cm-content')?.textContent ?? ''), null, { timeout: 20000 });
-  await editor.click(); await page.keyboard.press('ArrowRight'); await page.keyboard.press('ArrowLeft'); await page.waitForTimeout(300);
-  assert.equal((await state()).title, 'analysis.R', 'arrow keys in the editor move the cursor');
+  const content = () => page.locator('[data-owner-view] .cm-content:visible').last();
+  await page.waitForFunction(() => [...document.querySelectorAll('[data-owner-view] .cm-content')].some(e => /summary\(air\)/.test(e.textContent ?? '')), null, { timeout: 20000 });
+  await content().click(); await page.keyboard.press('ArrowRight'); await page.keyboard.press('ArrowLeft'); await page.waitForTimeout(300);
+  assert.equal(await tab('analysis.R').getAttribute('aria-selected'), 'true', 'arrow keys in the editor move the cursor');
   // The script is highlighted as R once its language loads: comment and string in the code colours.
-  const colour = text => page.evaluate(t => { const span = [...document.querySelectorAll('.preview-body .cm-content span')].find(s => s.textContent === t); return span ? getComputedStyle(span).color : null; }, text);
-  await page.waitForFunction(() => [...document.querySelectorAll('.preview-body .cm-content span')].some(s => s.textContent === '# analysis'), null, { timeout: 20000 });
+  const colour = text => page.evaluate(t => { const span = [...document.querySelectorAll('[data-owner-view] .cm-content span')].find(s => s.textContent === t); return span ? getComputedStyle(span).color : null; }, text);
+  await page.waitForFunction(() => [...document.querySelectorAll('[data-owner-view] .cm-content span')].some(s => s.textContent === '# analysis'), null, { timeout: 20000 });
   assert.equal(await colour('# analysis'), 'rgb(104, 115, 111)'); assert.equal(await colour('"data/airquality.csv"'), 'rgb(61, 103, 67)');
   await shot('04-code');
-  passed('a CSV shows in its table and a script in the editor, highlighted as R; arrow keys inside a view stay with that view');
+  passed('a CSV chosen in the sidebar opens in its table and a script in the editor, highlighted as R; arrow keys inside a view stay with that view');
 
-  await page.getByRole('button', { name: 'Open in Studio' }).click();
-  await page.locator('.nav-workspace[aria-current=page]').waitFor();
-  await page.getByRole('tab', { name: 'analysis.R' }).waitFor();
-  await page.locator('[data-owner-view] .cm-content').first().waitFor();
-  await shot('05-studio');
-  await nav.locator('.nav-file').filter({ hasText: 'stations.csv' }).click(); await shown('stations.csv');
-  assert.equal((await state()).position, '2 of 2');
-  passed('Open in Studio places the file in the workspace; choosing another file returns to browsing');
+  // The folders as a file explorer, in the pane the list is in: a folder opens in place, a name is found.
+  await nav.getByRole('button', { name: 'Files', exact: true }).click();
+  await shown('Files');
+  const explorer = page.locator('.tool-files');
+  await explorer.getByRole('button', { name: /^scripts/ }).click();
+  await explorer.getByRole('button', { name: /^plot\.R/ }).waitFor();
+  assert.equal(await explorer.getByRole('button', { name: /^scripts/ }).getAttribute('aria-expanded'), 'true');
+  await explorer.getByRole('searchbox', { name: 'Find a file by name' }).fill('stations');
+  await explorer.getByRole('button', { name: /^stations\.csv/ }).click(); await shown('stations.csv');
+  await explorer.getByRole('searchbox', { name: 'Find a file by name' }).fill('nothing-like-this');
+  await explorer.getByText('No file name has', { exact: false }).waitFor();
+  await explorer.getByRole('searchbox', { name: 'Find a file by name' }).fill('');
+  await explorer.getByRole('button', { name: /^plot\.R/ }).waitFor();
+  await shot('05-explorer');
+  passed('Files is an explorer beside the work: a folder opens in place, a file is found by name and opens as a view');
 
   await page.reload();
   await nav.locator('.nav-file').first().waitFor({ timeout: 20000 });
   assert.deepEqual(await files(), ['airquality.csv', 'stations.csv', 'analysis.R', 'plot.R', 'wind.svg', 'ozone.svg', 'temp.svg']);
-  passed('the unfolded kinds are kept when the page is reloaded');
+  passed('the kinds listed in the sidebar are kept when the page is reloaded');
 
-  await nav.getByRole('button', { name: 'Notes', exact: true }).click();
+  await fold('note').click();
   await nav.locator('.nav-file').filter({ hasText: 'notes.md' }).click(); await shown('notes.md');
-  const reader = page.locator('.preview-body .rho-md-page');
+  const reader = page.locator('[data-owner-view] .rho-md-page:visible');
   await reader.locator('h1', { hasText: 'Notes' }).waitFor({ timeout: 20000 });
-  await page.waitForFunction(() => { const img = document.querySelector('.preview-body .rho-md-page img'); return img?.complete && img.naturalWidth > 0; }, null, { timeout: 20000 });
+  await page.waitForFunction(() => { const img = document.querySelector('[data-owner-view] .rho-md-page img'); return img?.complete && img.naturalWidth > 0; }, null, { timeout: 20000 });
   assert.equal(await reader.locator('.katex').count(), 1);
   assert.equal(await reader.locator('td').nth(1).textContent(), '41');
   assert.match(await reader.textContent(), /臭氧/);
-  await page.waitForFunction(() => document.querySelector('.preview-body pre[data-language=r] .rho-tok-string'), null, { timeout: 20000 });
+  await page.waitForFunction(() => document.querySelector('[data-owner-view] pre[data-language=r] .rho-tok-string'), null, { timeout: 20000 });
   assert.equal(await reader.locator('pre .rho-tok-string').evaluate(e => getComputedStyle(e).color), 'rgb(61, 103, 67)');
   await shot('06-markdown');
   // Another writer's edit to the shared buffer, as an Agent's would be, shows in the reader.
@@ -129,7 +127,7 @@ try {
   await admin.call('document.edit', { projectId: opened.id, documentId: notes.id, expectedVersion: notes.version, edits: [{ from: 2, to: 7, insert: 'Field notes' }], undoGroup: 'acceptance-notes' });
   await reader.locator('h1', { hasText: 'Field notes' }).waitFor({ timeout: 20000 });
   await page.getByRole('button', { name: /^(Edit|Source)$/ }).click();
-  await page.waitForFunction(() => /# Field notes/.test(document.querySelector('.preview-body .cm-content')?.textContent ?? ''), null, { timeout: 20000 });
+  await page.waitForFunction(() => [...document.querySelectorAll('[data-owner-view] .cm-content')].some(e => /# Field notes/.test(e.textContent ?? '')), null, { timeout: 20000 });
   await page.getByRole('button', { name: 'Read', exact: true }).click();
   await reader.getByRole('link', { name: 'the script' }).click(); await shown('analysis.R');
   passed('a Markdown note reads as formatted text with its image, math, table and highlighted code; an edit to its buffer shows; Edit shows the editor and Read returns; a link opens the file');
@@ -138,14 +136,15 @@ try {
   for (const width of [1024, 390]) {
     await page.setViewportSize({ width, height: width === 390 ? 844 : 900 }); await page.waitForTimeout(500);
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'no horizontal overflow at ' + width);
-    await shot('06-preview-' + width);
+    await shot('07-workspace-' + width);
   }
   await page.getByRole('button', { name: 'Open navigation' }).click();
-  await page.locator('dialog.drawer .nav-file').filter({ hasText: 'ozone.svg' }).click(); await shown('ozone.svg');
-  assert.equal(await page.locator('dialog.drawer').count(), 0, 'choosing a file closes the drawer');
-  await shot('07-drawer-pick-390');
+  await page.locator('dialog.drawer .nav-file').filter({ hasText: 'ozone.svg' }).click();
+  await page.waitForFunction(() => !document.querySelector('dialog.drawer'), null, { timeout: 20000 });
+  await page.waitForFunction(() => [...document.querySelectorAll('[role=tab][aria-selected=true]')].some(t => /ozone\.svg/.test(t.textContent ?? '')) || /ozone\.svg/.test(document.querySelector('.workspace')?.textContent ?? ''), null, { timeout: 20000 });
+  await shot('08-drawer-pick-390');
   assert.deepEqual(report.browserErrors, []);
-  passed('no horizontal overflow at 1024 and 390, a file chosen from the drawer is shown, and no page errors');
+  passed('no horizontal overflow at 1024 and 390, a file chosen from the drawer opens in the workspace, and no page errors');
   report.passed = true;
 } finally {
   await fs.writeFile(path.join(evidence, 'report.json'), JSON.stringify(report, null, 1));
