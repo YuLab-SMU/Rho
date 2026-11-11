@@ -121,6 +121,26 @@ test('the layout places inputs, code and commands down one side and figures abov
   assert.equal(studioTree([], null), null);
 });
 
+test('a stage without room for two columns keeps two places: what was made above how it was made', () => {
+  const views = [
+    { role: 'input', node: view('in') }, { role: 'code', node: view('code') },
+    { role: 'result', node: view('table') }, { role: 'result', node: view('fig'), figure: true }, { role: 'report', node: view('report') },
+  ];
+  const tree = studioTree(views, view(studioIds.console), view(studioIds.session), 'rows');
+  const node = id => tree.nodes.find(n => n.id === id);
+  assert.equal(tree.rootId, studioIds.root);
+  assert.equal(node(studioIds.root).presentation.axis, 'vertical');
+  assert.deepEqual(node(studioIds.root).children, [studioIds.made, studioIds.work]);
+  assert.deepEqual(node(studioIds.made).children, ['fig', 'table', 'report'], 'figures lead what was made');
+  assert.deepEqual(node(studioIds.work).children, ['code', studioIds.session, studioIds.console, 'in'], 'the script leads how it was made');
+  // Every view of the columns form is there, each once.
+  const ids = t => t.nodes.filter(n => n.kind === 'view').map(n => n.id).sort();
+  assert.deepEqual(ids(tree), ids(studioTree(views, view(studioIds.console), view(studioIds.session))));
+  // Before any result, the one place is the whole layout.
+  assert.equal(studioTree([{ role: 'code', node: view('code') }], null, null, 'rows').rootId, studioIds.work);
+  assert.equal(studioTree([], null, null, 'rows'), null);
+});
+
 test('a saved arrangement keeps what the person closed and takes later files into their role\'s place', () => {
   const derived = studioTree([{ role: 'input', node: view('in') }, { role: 'code', node: view('code') }, { role: 'result', node: view('table') }, { role: 'result', node: view('late') }], null);
   // The person closed the results and kept the rest; 'table' was there when they did, 'late' was not.

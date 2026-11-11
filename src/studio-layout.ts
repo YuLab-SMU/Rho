@@ -21,7 +21,10 @@ export interface StudioFile {
 // The protected resource is the screen: past these, a role's further files stay in the list of
 // the step they belong to, and Files keeps them all.
 export const studioLimits = { input: 3, code: 3, result: 6, report: 2 };
-export const studioIds = { root: 'studio', left: 'studio-left', input: 'studio-input', code: 'studio-code', commands: 'studio-commands', right: 'studio-right', figures: 'studio-figures', result: 'studio-result', console: 'studio-console', session: 'studio-session' };
+// Two columns of views need this much stage to stay readable (a script's lines, a table's columns);
+// a narrower stage keeps two places, one above the other, each the stage's whole width.
+export const studioWidths = { columnsPx: 1100 };
+export const studioIds = { made: 'studio-made', work: 'studio-work', root: 'studio', left: 'studio-left', input: 'studio-input', code: 'studio-code', commands: 'studio-commands', right: 'studio-right', figures: 'studio-figures', result: 'studio-result', console: 'studio-console', session: 'studio-session' };
 const unlimited = { supporting: 64, method: 64, run: 64, input: 64, report: 64 } satisfies typeof boardLimits;
 const rank: Record<StudioRole, number> = { code: 0, result: 1, report: 2, input: 3 };
 
@@ -78,10 +81,20 @@ const split = (id: string, axis: 'horizontal' | 'vertical', parts: Array<{ id: s
 // The arrangement the roles call for, from nothing. A figure is drawn at its own size, so the
 // figures have their own place above the tables and reports that scroll.
 // The cells the Agent ran in a live session share the commands' place, as another way it ran code.
-export function studioTree(views: Array<{ role: StudioRole; node: LayoutNode; figure?: boolean }>, commands: LayoutNode | null, session: LayoutNode | null = null): LayoutTree | null {
+// In rows, for a stage without room for two columns, what the work made is one place (figures
+// first) above how it was made (the script, then the cells, commands and data), each as tabs.
+export function studioTree(views: Array<{ role: StudioRole; node: LayoutNode; figure?: boolean }>, commands: LayoutNode | null, session: LayoutNode | null = null, form: 'columns' | 'rows' = 'columns'): LayoutTree | null {
   const nodes: LayoutNode[] = [];
   const region = (id: string, members: LayoutNode[]) => { if (!members.length) return null; nodes.push(group(id, members.map(m => m.id)), ...members); return id; };
   const of = (role: StudioRole) => views.filter(v => v.role === role).slice(0, studioLimits[role]);
+  if (form === 'rows') {
+    const results = [...of('result'), ...of('report')];
+    const made = region(studioIds.made, [...results.filter(v => v.figure), ...results.filter(v => !v.figure)].map(v => v.node));
+    const work = region(studioIds.work, [...of('code').map(v => v.node), session, commands, ...of('input').map(v => v.node)].filter((n): n is LayoutNode => !!n));
+    if (made && work) { nodes.push(split(studioIds.root, 'vertical', [{ id: made, weight: 1.15 }, { id: work, weight: 1 }])); return { rootId: studioIds.root, nodes }; }
+    const one = made ?? work;
+    return one ? { rootId: one, nodes } : null;
+  }
   const column = (id: string, parts: Array<{ id: string; weight: number } | null>) => {
     const present = parts.filter((p): p is { id: string; weight: number } => !!p);
     if (present.length < 2) return present[0]?.id ?? null;

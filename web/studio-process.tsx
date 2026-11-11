@@ -4,7 +4,7 @@ import type { BrowserClient, CompositionSummary, WorkspaceSnapshot } from '../sr
 import { buildWorkGraph, type GraphEvent, type GraphTurn } from '../src/work-graph.js';
 import { turnsAt } from '../src/replay.js';
 import { chapters, type Chapter } from '../src/studio-chapters.js';
-import { studioAt, studioFiles, studioIds, studioMerge, studioTree, type StudioFile } from '../src/studio-layout.js';
+import { studioAt, studioFiles, studioIds, studioMerge, studioTree, studioWidths, type StudioFile } from '../src/studio-layout.js';
 import { addInto, type LayoutNode, type LayoutTree } from '../src/shell-layout.js';
 import { askedAbout } from '../src/asking.js';
 import { capturable, kindOf, type ProjectFiles } from './sources.js';
@@ -88,7 +88,7 @@ function SideTimeline({ steps, marks, spans, at, playing, speed, running, onAt, 
     for (const s of [...spans].sort((a, b) => a.start - b.start)) { const last = out.at(-1); if (last && s.start <= last.end + 30000) last.end = Math.max(last.end, s.end); else out.push({ start: s.start, end: Math.max(s.end, s.start + 1000) }); }
     return out;
   }, [spans]);
-  const gap = 26, pad = 8, usable = Math.max(60, height - pad * 2 - gap * Math.max(0, stretches.length - 1));
+  const gap = 26, pad = 20, usable = Math.max(60, height - pad * 2 - gap * Math.max(0, stretches.length - 1));
   const sizes = stretchSizes(stretches, events, usable, 8, 96);
   const offsets: number[] = []; let y = pad;
   stretches.forEach((_, i) => { offsets.push(y); y += sizes[i] + gap; });
@@ -119,7 +119,7 @@ function SideTimeline({ steps, marks, spans, at, playing, speed, running, onAt, 
     event.preventDefault(); onAt(next);
   }
   const head = at === null ? null : toY(at);
-  const pauses = stretches.slice(1).map((s, i) => ({ y: offsets[i + 1] - gap, length: s.start - stretches[i].end }));
+  const pauses = stretches.slice(1).map((s, i) => ({ y: offsets[i + 1] - gap, length: s.start - stretches[i].end, start: s.start }));
   return <aside className="side-timeline" aria-label="Timeline">
     <div className="side-tl-controls">
       <button className="icon-button" aria-label={playing ? 'Pause' : at === null ? 'Play from the start' : 'Play from here'} onClick={onPlay}><Icon name={playing ? 'pause' : 'run'} size={15} /></button>
@@ -133,8 +133,9 @@ function SideTimeline({ steps, marks, spans, at, playing, speed, running, onAt, 
     </div>
     <div ref={track} className="side-tl-track" role="slider" tabIndex={0} aria-orientation="vertical" aria-label="Moment shown" aria-valuemin={events[0]?.at ?? 0} aria-valuemax={events.at(-1)?.at ?? 0} aria-valuenow={at ?? events.at(-1)?.at ?? 0} aria-valuetext={at === null ? 'Now' : clock(at, true)}
       onPointerDown={scrub} onPointerMove={point} onPointerLeave={() => setHover(null)} onKeyDown={keys}>
-      {stretches.map((s, i) => <span key={i} className="side-tl-stretch" style={{ top: offsets[i], height: size(i) }} aria-hidden="true"><small>{clock(s.start)}</small></span>)}
-      {pauses.map((p, i) => <span key={i} className="side-tl-fold" style={{ top: p.y, height: gap }} title={'A pause of ' + span(p.length)} aria-hidden="true"><small>{span(p.length)}</small></span>)}
+      {/* One time per stretch: the first above the track, each later one in the pause before it. */}
+      {stretches.map((s, i) => <span key={i} className="side-tl-stretch" style={{ top: offsets[i], height: size(i) }} aria-hidden="true">{i === 0 && <small>{clock(s.start)}</small>}</span>)}
+      {pauses.map((p, i) => <span key={i} className="side-tl-fold" style={{ top: p.y, height: gap }} title={'A pause of ' + span(p.length)} aria-hidden="true"><small>{clock(p.start)}</small></span>)}
       {events.map(e => <i key={e.key} className={'side-tl-mark ' + e.kind + (e.failed ? ' failed' : '') + (at !== null && e.at > at ? ' later' : '')} style={{ top: toY(e.at) }} aria-hidden="true" />)}
       {head !== null && <span className="side-tl-head" style={{ top: head }} aria-hidden="true"><small>{clock(at!, true)}</small></span>}
       {hover && <span className="side-tl-hover" style={{ top: hover.y }}>{hover.event.label} · {clock(hover.event.at, true)}</span>}
@@ -186,6 +187,14 @@ export function ProcessStudio({ client, snapshot, files, conversationId, notesTe
   }, [every, at, client, projectId]);
 
   const component = (id: string) => snapshot.catalog.components.find(c => c.id === id);
+  // The stage's own width decides whether the work's views have room for two columns.
+  const stage = useRef<HTMLDivElement>(null), [form, setForm] = useState<'columns' | 'rows'>('columns');
+  useLayoutEffect(() => {
+    const element = stage.current; if (!element) return;
+    const fit = () => { const width = element.clientWidth; if (width) setForm(width < studioWidths.columnsPx ? 'rows' : 'columns'); };
+    const observer = new ResizeObserver(fit); observer.observe(element); fit();
+    return () => observer.disconnect();
+  }, []);
   const firstRun = graph.nodes.filter(n => n.kind === 'run').reduce((min, n) => Math.min(min, n.at), Infinity);
   const firstEver = whole.nodes.filter(n => n.kind === 'run').reduce((min, n) => Math.min(min, n.at), Infinity);
   // When the Agent first ran code in a live session, from its own calls.
@@ -209,8 +218,8 @@ export function ProcessStudio({ client, snapshot, files, conversationId, notesTe
     const views = shown.flatMap(file => { const n = node(file); return n ? [{ role: file.role, node: n, figure: n.component === 'rho.media' }] : []; });
     const commands: LayoutNode | null = Number.isFinite(firstRun) ? { id: studioIds.console, kind: 'view', component: 'rho.console', version: '1', props: { title: 'Commands' }, bindings: {} } : null;
     const session: LayoutNode | null = Number.isFinite(firstCellShown) ? { id: studioIds.session, kind: 'view', component: 'rho.notebook', version: '1', props: { title: 'Notebook' }, bindings: {} } : null;
-    return studioTree(views, commands, session);
-  }, [shown, docs, captured, at, firstRun, firstCellShown, snapshot.catalog]);
+    return studioTree(views, commands, session, form);
+  }, [shown, docs, captured, at, firstRun, firstCellShown, snapshot.catalog, form]);
   const tree = useMemo((): LayoutTree | null => {
     const saved = snapshot.compositions.find(c => c.compositionId === compositionId) as CompositionSummary | undefined;
     if (!saved?.rootId || !saved.nodes?.length) return derived;
@@ -288,7 +297,7 @@ export function ProcessStudio({ client, snapshot, files, conversationId, notesTe
   const process: Process = useMemo(() => ({ conversationId, kernelCells, graph, whole, at, files: shown, every, setAt: onAt, showPath: path => setChosen(viewId(path)), holds: path => holdsOf(path, said, described, at) }), [described, conversationId, kernelCells, graph, whole, at, shown, every, said]);
   return <ProcessContext.Provider value={process}>
     <div className="process-studio">
-      <div className="process-stage">
+      <div ref={stage} className="process-stage">
         {problem && <p className="inline-error" role="alert">{problem}</p>}
         {restoreProblem && <p className="inline-error" role="alert">{restoreProblem}</p>}
         {composition ? <Workspace key={projectId + compositionId} {...workspace} bar={false} composition={composition} snapshot={snapshot} client={client} openView={openView} presence={presence} arrange={at === null} following={following || at !== null} empty={emptied} addView={reopenMenu} />

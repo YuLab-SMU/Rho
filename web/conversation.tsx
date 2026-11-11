@@ -252,7 +252,6 @@ function SessionStrip({ observation, agent, spend, describing, onDescribing }: {
         <span className="strip-tokens">{tokens(usage.used)} / {tokens(usage.size)}</span>
         {spent && <span>{spent}</span>}
       </span>}
-      {spend && spend.calls > 0 && <span className="strip-describe" title="What describing this conversation's files cost">descriptions {spendAmount(spend)}</span>}
     </summary>
     <div className="session-popover" role="group" aria-label="Session">
       {usage && <section className="session-context">

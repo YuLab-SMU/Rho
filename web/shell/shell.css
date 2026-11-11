@@ -24,8 +24,10 @@
 .shell-tabs[data-overflow=both] { -webkit-mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent); }
 /* Tabs narrow before they scroll out of sight, down to their icons, so every tab of a group
    stays in view; the one shown keeps its name and room for its close button. */
-.shell-tab { position: relative; display: flex; align-items: stretch; flex: 0 1 auto; min-width: 44px; max-width: 260px; border-bottom: 2px solid transparent; }
-.shell-tab:has([aria-selected=true]) { flex-shrink: 0; border-bottom-color: var(--color-accent); }
+/* Short of room, the tabs share it evenly up to what each name needs, so a short name is not
+   squeezed out by a long one beside it. */
+.shell-tab { position: relative; display: flex; align-items: stretch; flex: 1 1 0px; min-width: 44px; max-width: max-content; border-bottom: 2px solid transparent; }
+.shell-tab:has([aria-selected=true]) { flex: 0 0 auto; border-bottom-color: var(--color-accent); }
 .shell-tab:hover { background: var(--color-hover); }
 .shell-tab > [role=tab] { flex: 1 1 auto; justify-content: flex-start; min-width: 0; min-height: 40px; padding: 0 12px; border: 0; border-radius: 0; background: transparent; font-size: 13px; font-weight: 400; color: var(--color-meta); white-space: nowrap; }
 .shell-tab[data-closable]:has([aria-selected=true]) > [role=tab] { padding-right: 30px; }
@@ -41,7 +43,14 @@
 .shell-tabs-fill { flex: 1 1 0; min-width: 12px; }
 .shell-tabs-fill[data-movable] { cursor: grab; }
 .shell-restore { flex: none; min-height: 28px; margin-left: 8px; padding: 4px 9px; gap: 5px; border: 0; border-radius: 6px; background: var(--color-accent-soft); color: var(--color-accent-strong); font-size: 12px; font-weight: 500; }
-.shell-tab-name { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+/* A name is its stem and its extension on one line. The stem shortens first; once it has no room
+   for a few letters the extension wraps out of sight, and with no room for the stem either the
+   whole name does (the empty first item holds the line), so a narrow tab is its icon alone, never
+   a bare ".csv" or one letter. */
+.shell-tab-name { display: flex; flex-wrap: wrap; min-width: 0; max-width: 236px; max-height: 1.5em; line-height: 1.5; overflow: hidden; }
+.shell-tab-name::before { content: ''; flex: none; width: 0; height: 1.5em; }
+.shell-tab-stem { flex: 1 1 5ch; min-width: 5ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.shell-tab-ext { flex: none; }
 .shell-header-slot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-left: auto; min-width: 0; }
 .shell-header-slot:not(:has(.shell-view-header > *)) { display: none; }
 .shell-view-header { display: contents; }

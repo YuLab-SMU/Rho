@@ -1,6 +1,6 @@
 # Browser application
 
-Updated 2026-11-07. The frontend was reset at the user's request. Previous frontend
+Updated 2026-11-11. The frontend was reset at the user's request. Previous frontend
 plans, visual specifications, Paper references and appearance rulers have been
 removed from the working repository. Git retains their history; they do not govern
 this implementation. This document describes the current application, not another
@@ -332,7 +332,11 @@ inspect what happened. The application gives those actions direct places:
   data it read above the script it wrote and a Commands view of what ran, with a Session
   view beside it once the Agent ran cells in a live session, figures above
   the tables and reports beside them, each role in one place up to its limit
-  (`studioLimits`). A file's view says which kept version it shows, with earlier and later.
+  (`studioLimits`). A stage under 1100 px wide (`studioWidths`) has no room for two columns of
+  readable views, so the work is laid out in two rows of its whole width: what it made, figures
+  first, above the script, the Notebook, Commands and the data. One line above a file says what it
+  holds and, when the work kept more than one version, which one shows, with earlier and later
+  ([fewer things at once](SIMULATED-PROJECT-EPISODE.md#fewer-things-at-once)).
   The parts of the work sit in a chip in the Studio bar, named by the Agent's own words
   between steps or by what the steps did, with rounds of editing and running; time runs
   down the stage's right edge beside the Agent panel, long pauses folded, with the cells and
@@ -422,7 +426,9 @@ inspect what happened. The application gives those actions direct places:
   drags, each side of the page takes it as a column or row a third of the page.
   Double-clicking that strip shows the group alone in this browser tab until Restore.
   Tabs narrow to their icons before they scroll, the shown tab keeping its name, and a
-  view's controls take a second row when the group has no room for both. Each change is one
+  view's controls take a second row when the group has no room for both. A file's name shortens
+  in its stem and keeps its extension; tabs short of room share it evenly, and one without room
+  for a few letters is its icon alone. Each change is one
   conditional write of the saved layout, the same the commands and the Agent use, and
   Undo reverses it. Arrange views and the command palette offer split, move, close and
   undo for the focused view. Below 768 px nothing drags
@@ -487,7 +493,8 @@ inspect what happened. The application gives those actions direct places:
   episode](AGENT-UI-EPISODE.md) records the observations, checks and limits.
 
 The topbar names the way back — the projects list, then the project, then the open
-workspace — and keeps only the current place below 768 CSS px. A rail at the far left
+workspace, or Studio for a conversation's Studio, which its own bar names — and keeps only the
+current place below 768 CSS px. A rail at the far left
 belongs to the application: Rho opens the projects list, then the eight most recently
 opened projects as avatars in the service's order (where initials collide, by the part
 of the name that differs, such as 18 and 41), a dot on each one whose Agent is

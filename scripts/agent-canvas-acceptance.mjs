@@ -153,7 +153,7 @@ try {
   await page.getByRole('textbox', { name: /Message|Reply/ }).fill('Now read the notes.');
   await page.getByRole('button', { name: 'Send', exact: true }).click();
   await page.locator('.follow-toggle[aria-pressed=false]').click();
-  await page.locator('.location-name').filter({ hasText: /^Studio · / }).waitFor();
+  await page.locator('.location-name').filter({ hasText: /^Studio$/ }).waitFor();
   await nav.locator('.nav-session[aria-current=page]').waitFor();
   await page.locator('.studio-title').waitFor();
   await until(tabs, list => ['airquality.csv', 'analysis.R', 'Commands', 'ozone.svg'].every(name => list.some(tab => tab.name === name)), 'the conversation\'s files and commands in its Studio');
@@ -204,7 +204,7 @@ try {
   passed('the answer board is led by the figure the first message made, and the next question follows it with its answer');
 
   await nav.getByRole('button', { name: 'Studio', exact: true }).click();
-  await page.locator('.location-name').filter({ hasText: /^Studio · / }).waitFor();
+  await page.locator('.location-name').filter({ hasText: /^Studio$/ }).waitFor();
   for (const width of [1024, 390]) {
     await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
     await page.waitForTimeout(400);

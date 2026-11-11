@@ -1,6 +1,6 @@
 # Rho status
 
-Updated: 2026-11-10.
+Updated: 2026-11-11.
 
 ## Current focus
 
@@ -84,7 +84,7 @@ side, figures above tables and reports on the other, each file's view naming the
 version it shows. A chip names the part of the work in progress, and a timeline runs
 beside the Agent panel. A moment chosen there replays the views, commands, part and
 conversation together. Arranging saves the layout as `conversation-<id>`. The person's
-own workspace still opens nothing by itself.
+own workspace still opens nothing by itself. After the user judged that Studio ugly, with many components and messy contents, a stage under 1100 px shows [two places](SIMULATED-PROJECT-EPISODE.md#fewer-things-at-once), results above the work, each file has one line above it, and tab names keep their extension; the builder's reading only, and the graph acceptance fails at its figure card on `55d677c8` too.
 
 The [project notes](SIMULATED-PROJECT-EPISODE.md#project-notes) pass lists the sessions
 under Studio in the sidebar, then the person's workspaces, and shares one set of notes

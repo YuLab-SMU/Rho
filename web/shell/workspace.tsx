@@ -25,6 +25,12 @@ import type { MenuItem } from './menu.js';
 import './shell.css';
 
 type Tabs = Extract<Region, { kind: 'tabs' }>;
+// A file's name shortens in its stem and keeps its extension, so a script, its figure and its
+// table that share a name still read apart in narrow tabs.
+function TabName({ name }: { name: string }) {
+  const dot = name.lastIndexOf('.'), ext = dot > 0 && name.length - dot <= 6 && !/\s/.test(name.slice(dot)) ? name.slice(dot) : '';
+  return <span className="shell-tab-name" title={name}><span className="shell-tab-stem">{ext ? name.slice(0, dot) : name}</span>{ext && <span className="shell-tab-ext">{ext}</span>}</span>;
+}
 export const workspaceLimits = { minSplitPx: 640 };
 // The workspace shell: the owner's composition tree drawn as
 // splits and tab groups, owner views mounted within the rendering budget, and a slot for
@@ -378,7 +384,8 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
   };
   const render: TabRender = {
     label: id => title(byId.get(id)!), container,
-    title: id => { const v = byId.get(id)!; return <><Icon name={viewIcon(v, snapshot)} size={14} stroke={2} /><span className="shell-tab-name">{title(v)}</span>{presence?.viewId === id && <span className={'agent-presence' + (presence.live ? ' live' : '')} title={presence.label}><span className="pulse-dot" aria-hidden="true" />{presence.verb}</span>}</>; },
+    name: id => title(byId.get(id)!) + (presence?.viewId === id ? ', ' + presence.verb : ''),
+    title: id => { const v = byId.get(id)!; return <><Icon name={viewIcon(v, snapshot)} size={14} stroke={2} /><TabName name={title(v)} />{presence?.viewId === id && <span className={'agent-presence' + (presence.live ? ' live' : '')} title={presence.label}><span className="pulse-dot" aria-hidden="true" />{presence.verb}</span>}</>; },
   };
   const groupName = (id: string) => groups.length === 1 ? 'Views' : `Views ${groups.findIndex(g => g.id === id) + 1} of ${groups.length}`;
   const firstTitle = (region: Region): string => { const id = region.kind === 'tabs' ? shown(region) : viewOrder(region)[0]; return id ? title(byId.get(id)!) : 'view'; };
@@ -436,8 +443,8 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
         : narrow ? <section className="shell-group">
           <div className="shell-tabbar"><div ref={narrowList} className="shell-tabs" role="tablist" aria-label="Views" onKeyDown={moveNarrow}>
             {order.map((id, i) => <div key={id} className="shell-tab" data-closable={canArrange ? '' : undefined}>
-              <button id={tabId + i} role="tab" aria-selected={id === focused} aria-controls={tabId + 'panel'} tabIndex={id === focused ? 0 : -1} aria-keyshortcuts={canArrange ? 'Delete' : undefined} onClick={() => { if (id !== focused) onPersonMoved?.(); show(id); }}
-                onKeyDown={event => { if (event.key === 'Delete' && canArrange) { event.preventDefault(); closeTab(id); } }}><span className="shell-tab-name">{title(byId.get(id)!)}</span></button>
+              <button aria-label={title(byId.get(id)!)} id={tabId + i} role="tab" aria-selected={id === focused} aria-controls={tabId + 'panel'} tabIndex={id === focused ? 0 : -1} aria-keyshortcuts={canArrange ? 'Delete' : undefined} onClick={() => { if (id !== focused) onPersonMoved?.(); show(id); }}
+                onKeyDown={event => { if (event.key === 'Delete' && canArrange) { event.preventDefault(); closeTab(id); } }}><TabName name={title(byId.get(id)!)} /></button>
               {canArrange && id === focused && <button className="shell-tab-close" tabIndex={-1} aria-hidden="true" title={'Close ' + title(byId.get(id)!)} onClick={() => closeTab(id)}><Icon name="close" size={12} stroke={2} /></button>}
             </div>)}
           </div>{canArrange && addView && <AddButton name="Views" content={() => addView(groupNode(groupOf(root, focused)?.id ?? root.id))} />}</div>

@@ -602,7 +602,7 @@ function App() {
   // heading names the section itself, so the trail carries only the path back.
   const crumbs: Array<{ label: string; run?: () => void }> = !project || screen === 'home' ? [{ label: 'Projects' }]
     : screen === 'plugins' ? [{ label: 'Projects', run: goHome }, { label: name(project), run: showOverview }, { label: pluginTitle || 'Plugins' }]
-    : studioOpen ? [{ label: 'Projects', run: goHome }, { label: name(project), run: showOverview }, { label: shownProcess ? 'Studio · ' + shownTitle : compositionName(composition?.compositionId ?? compositionId) }]
+    : studioOpen ? [{ label: 'Projects', run: goHome }, { label: name(project), run: showOverview }, { label: shownProcess ? 'Studio' : compositionName(composition?.compositionId ?? compositionId) }]
     : section === 'file' && shownFile ? [{ label: 'Projects', run: goHome }, { label: name(project), run: showOverview }, { label: sourceLabels[shownFile.row], run: () => showSources(shownFile.row) }, { label: fileOnScreen?.name ?? shownFile.key.split('/').at(-1)! }]
     : [{ label: 'Projects', run: goHome }, { label: name(project) }];
   const followingHere = following && shownId === followTarget.current;

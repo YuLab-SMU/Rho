@@ -4,7 +4,8 @@ import { Icon } from '../icons.js';
 import { FloatingMenu, MenuItems, under, type MenuItem, type MenuPoint } from './menu.js';
 
 type Tabs = Extract<Region, { kind: 'tabs' }>;
-export interface TabRender { title: (id: string) => ReactNode; label: (id: string) => string; container: (id: string) => HTMLElement }
+// `name` is the tab's accessible name where its drawn title is laid out in parts.
+export interface TabRender { title: (id: string) => ReactNode; label: (id: string) => string; name?: (id: string) => string; container: (id: string) => HTMLElement }
 // What the person can do with a group's tabs besides choosing one: close a tab, open its menu,
 // add a view into the group, maximize the group, and move the whole group by its empty strip.
 export interface TabTools { close?: (id: string) => void; menu?: (id: string) => MenuItem[]; add?: () => ReactNode; movable?: boolean; maximized?: boolean; onMaximize?: () => void }
@@ -121,7 +122,7 @@ export function TabGroup({ group, name, selected, onSelect, onHeader, render, dr
       <div className="shell-tabstrip" style={{ '--tabs': group.views.length } as CSSProperties} onDragOver={overTabs} onDrop={drop} data-drop={here?.zone === 'tab' && here.before === null ? 'end' : undefined}>
         <div ref={list} className="shell-tabs" role="tablist" aria-label={name} onKeyDown={move}>
           {group.views.map((id, i) => <div key={id} className="shell-tab" data-dragging={draggingView === id ? '' : undefined} data-drop={here?.zone === 'tab' && here.before === id ? 'before' : undefined} data-closable={tools?.close ? '' : undefined}>
-            <button id={base + '-tab-' + i} role="tab" aria-selected={id === selected} aria-controls={base + '-panel'} tabIndex={id === selected ? 0 : -1} title={render.label(id)} onClick={() => onSelect(id)}
+            <button id={base + '-tab-' + i} role="tab" aria-selected={id === selected} aria-controls={base + '-panel'} tabIndex={id === selected ? 0 : -1} title={render.label(id)} aria-label={render.name?.(id)} onClick={() => onSelect(id)}
               onKeyDown={event => tabKey(event, id)} onContextMenu={event => tabMenu(event, id)} aria-keyshortcuts={tools?.close ? 'Delete' : undefined}
               onMouseDown={event => { if (event.button === 1 && tools?.close) event.preventDefault(); }} onAuxClick={event => { if (event.button === 1 && tools?.close) { event.preventDefault(); tools.close(id); } }}
               draggable={!!drag} onDragStart={event => { if (!drag) return; event.stopPropagation(); event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData(dragType, id); drag.start({ kind: 'view', id }); }} onDragEnd={() => drag?.end()}>{render.title(id)}</button>

@@ -1509,3 +1509,73 @@ on a service of its own (port 53977), typed into the Notebook in headless Chrome
 - `npm install` in Rho-plugins fails: Markdown and Annotations still name Documents up to 0.4.7
   as a peer while Documents is 0.4.9. The HTML package was linked by hand.
 - No independent person has used Data flow or the page view.
+
+## Fewer things at once
+
+2026-11-11. The user sent a screenshot of the P3 conversation's Studio at 2000 × 1090 with the
+notes and the Agent panel open and judged it ugly: many components, and what they show is messy.
+The same screen was reproduced with the shipped PA14 project's recorded session, in a real
+browser at the same size, and read before and after.
+
+![Before: four views in a stage of 885 px](figures/studio-before.jpg)
+
+### What the screen showed
+
+- Six columns stood side by side: the rail, the sidebar, the notes, two columns of views, the
+  timeline and the Agent panel. The stage between the notes and the timeline was 885 px wide (about
+  1010 px in the user's screenshot) and still held four views, each 370–480 px wide: the script
+  wrapped every comment line, the table showed four columns and the figure was a thumbnail.
+- Every file view spent two lines before its content, a description cut at the view's width and
+  "Version 1 of 1 · kept 12:43", and its controls took a third row because the tabs left no room.
+- The script, its figure and its table share one name, so three groups led with the same
+  "rnaseq_differential_expressi…"; the other tabs were icons beside one or two letters.
+- The conversation's title was written four times: in the topbar, the Studio bar, the notes'
+  heading and the sidebar, where each session took three lines.
+- The table said "This table has no row key; row selection is unavailable." above every ordinary
+  CSV, and its row count touched the view's edge.
+- The timeline put a time and a pause length around every fold in a 60 px column; the panel's foot
+  carried the cost of describing files beside the conversation's own.
+
+### Changes
+
+- **Two places in a narrow stage.** Under 1100 px of stage (`studioWidths.columnsPx`), a
+  conversation's Studio lays the work out in rows: what it made in one group, figures first, above
+  how it was made (the script, then the Notebook, Commands and the data) in another, each the
+  stage's whole width. With room it keeps the two columns. The stage's own width decides, so closing
+  the notes or the panel brings the columns back. A saved arrangement is the person's and is kept.
+- **One line above a file.** What the file holds, then "Version 2 of 2" with earlier and later only
+  when the work kept more than one version. A file with one kept version says nothing about it; when
+  it was kept is in the line's title. A file with no kept version still says so.
+- **Tab names.** A name shortens in its stem and keeps its extension. Tabs short of room share it
+  evenly up to what each name needs; a tab without room for a few letters is its icon, with the
+  name in its title and as its accessible name.
+- **The title once per place.** The topbar says "Studio" for a conversation's Studio and the Studio
+  bar names it; a session in the sidebar keeps two lines.
+- **Timeline.** 46 px wide with thinner marks; one time per stretch, the first above the track and
+  each later one in the pause before it, whose length is in its title.
+- **Smaller things.** The notes read at 13.5 px. The cost of descriptions is in the session card
+  only. In Rho-plugins (Tables, source only, not yet selected), the table's toolbar has side padding
+  and the row-key sentence is the row count's title.
+
+![After: results above, the work below](figures/studio-rows.jpg)
+
+### Verification
+
+- The same capture after the change, at 2000 × 1090 with both panels (rows), with the notes closed
+  (columns) and at 1440 × 900 (one view at a time, as before), each screenshot read.
+- `test/studio-process.test.mjs` covers the rows form: both places, their order and the same views
+  as the columns form. The full suite passed 344 of 347 with the debug Core (3 skipped, Windows only).
+- The agent-canvas, frontend and sources acceptances passed; agent-canvas now waits for "Studio" in
+  the topbar and the title in the Studio bar. The graph acceptance fails at its meaning-row figure
+  card ("Figure: PNG image…" is absent), the same on the unchanged commit `55d677c8`.
+- Plugins: 211 of 214 passed, 2 skipped; `presentation.test.mjs` fails on the Agent plugin's
+  `agent.sessions.list` label, which this change does not touch.
+
+### Left open
+
+- This is the builder's reading of two screens. No person has said the result is easier to follow.
+- With seven results in one group, six tabs are icons; whether a list reads better than tabs there
+  is not tried. The Notebook and Commands share a group with the script, so only one shows at a time.
+- The user's Commands view listed five "Background wait" rows of `sleep`; those rows were not
+  reproduced (the P3 project is gone) and are unchanged.
+- The Agent panel's error and continuation notes, the sidebar and the Overview were not changed.
