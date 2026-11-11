@@ -24,7 +24,7 @@ export function PageAdd({ sources, notebook, variables = 'unavailable', plots = 
       <Icon name="code" size={17} /><span><strong>{notebook === 'present' ? 'New notebook' : 'Notebook'}</strong><small>{notebook === 'present' ? 'Its own cells, in the same R and Python sessions' : 'Live R and Python sessions you share with the Agent'}</small></span>
     </button>}
     {commands !== 'unavailable' && onTool && <button className="page-add-notebook" onClick={chose(() => onTool('console'))}>
-      <Icon name="prompt" size={17} /><span><strong>Console</strong><small>{commands === 'present' ? 'On this page' : 'The commands the Agent ran, and a line to run your own'}</small></span>
+      <Icon name="prompt" size={17} /><span><strong>Terminal</strong><small>{commands === 'present' ? 'On this page' : 'Your shell in the project folder, and the commands the Agent ran'}</small></span>
     </button>}
     {files !== 'unavailable' && onTool && <button className="page-add-notebook" onClick={chose(() => onTool('files'))}>
       <Icon name="folder" size={17} /><span><strong>Files</strong><small>{files === 'present' ? 'On this page' : 'The project folders; a file opens beside them'}</small></span>

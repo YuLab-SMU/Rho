@@ -44,7 +44,7 @@ switching never changes what is running ([record](SIMULATED-PROJECT-EPISODE.md#o
 - At the foot, what the project is set up with: Plugins, Project settings, and the connection's
   state with Connection & access.
 - **The tabs** are the project's places: Overview, Studio, Graph, Skills, and Review while the
-  project has review records. The Notebook, the Console and the project's files are views of a
+  project has review records. The Notebook, the Terminal and the project's files are views of a
   Studio workspace, beside each other, and have no tab or page of their own
   ([episode](SIMULATED-PROJECT-EPISODE.md#the-tools-in-studio)). The settings or another page
   reached from the sidebar is named after the tabs while it shows. A bar without room keeps the icons and the name of
@@ -142,9 +142,18 @@ inspect what happened. The application gives those actions direct places:
   kind's page and a file's own page, with ← and → through the kind and Open in Studio
   ([pass](AGENT-CANVAS-EPISODE.md#browsing-sources-from-the-sidebar)).
   `+` adds a source folder.
-- **Console** is a view of a Studio workspace, placed along its foot from Add view, the
-  command palette or the board's command count.
-  It runs the person's own shell commands in the project folder. Newest
+- **Terminal** is a view of a Studio workspace, placed along its foot from Add view or the
+  command palette, with two forms chosen in its header
+  ([episode](SIMULATED-PROJECT-EPISODE.md#a-real-terminal)). Terminal is the person's own login
+  shell on a pseudo-terminal in the project folder, drawn with xterm.js: its prompt and colours,
+  keys to a running program (Ctrl+C), full-screen programs, at the size of the view. The view
+  keeps its terminal with the page, so a reload or another tab returns to the same shell and
+  the last megabyte it printed. Closing the view hangs the shell up, a shell that ended offers
+  a new one, and a project keeps four at once. Only the person at this machine has one: an
+  Agent cannot be granted it, and a tab opened from a link shows Commands. It needs `python3`
+  on macOS or Linux; on Windows the view says so and offers Commands. Commands is the record
+  the Console page showed, also opened by the board's command count.
+  It runs the person's own single shell commands in the project folder. Newest
   first, it lists each message's commands under that message in the order they ran,
   with the person's commands between them and Rho's managed runs at the end. Each
   command leads with the Agent's own words on what it was for, over the command with
@@ -499,7 +508,7 @@ inspect what happened. The application gives those actions direct places:
   shows a layout of several groups one view at a time with all its tabs, as a phone
   does; the saved layout is unchanged. New workspace, under Studio in the sidebar and in
   the command palette, makes an empty page of the person's own (Workspace 2, 3, …). An
-  empty page offers the Notebook, the Console, Files, Variables, Plots, Data flow, Servers and the project's files by kind; Add view
+  empty page offers the Notebook, the Terminal, Files, Variables, Plots, Data flow, Servers and the project's files by kind; Add view
   in the Studio bar offers the same on any of the person's pages. A file opens in the view it has
   elsewhere in Studio, the Notebook in a pane right of what is there. Pages cannot yet be
   renamed or removed, and they count toward the 32 layouts a project keeps.

@@ -236,6 +236,42 @@
       "bytes": 4548,
       "sha256": "e6b356ab63b53b58c76f1c18b6cb5278dbf1f27a4b08b629ded484fb55715c06"
     },
+    "console.terminal.close": {
+      "summary": "Person at this machine only: hang up the terminal's shell, as closing a terminal window does.",
+      "path": "operations/console.terminal.close.json",
+      "bytes": 3316,
+      "sha256": "94b84db0f2c2cc58b7d340454c217d6b92c8e98e499b9e9b224d9b906f8351bc"
+    },
+    "console.terminal.list": {
+      "summary": "Person at this machine only: their open terminals in this project, with each one's size, how much it has printed and whether its shell has ended.",
+      "path": "operations/console.terminal.list.json",
+      "bytes": 3534,
+      "sha256": "e2880daedafbcd435c208c785fdaa4d37443d180a6a17eed4580f4e613e5e2f0"
+    },
+    "console.terminal.open": {
+      "summary": "Person at this machine only: start their shell on a pseudo-terminal in the project folder (or a folder inside it), at the size given. It lives while Rho runs; a project keeps a few at once. Not available on Windows yet.",
+      "path": "operations/console.terminal.open.json",
+      "bytes": 3624,
+      "sha256": "67d764554b3fc84add4ea7055ccf57ef35576e64fe50b522cfb5bdd99d3cded1"
+    },
+    "console.terminal.read": {
+      "summary": "Person at this machine only: the bytes a terminal printed after an offset, in base64, waiting up to waitMs when there is nothing new. Bytes older than the kept scrollback are counted in dropped.",
+      "path": "operations/console.terminal.read.json",
+      "bytes": 4107,
+      "sha256": "674b3addd94675bf48b2af4fa15bca1354104a61f4d7b37de2730381a885a9c0"
+    },
+    "console.terminal.resize": {
+      "summary": "Person at this machine only: tell the terminal how many columns and rows are shown.",
+      "path": "operations/console.terminal.resize.json",
+      "bytes": 3529,
+      "sha256": "c9687af501ace7effe5eadd79233d4130c5eefc1994e3fa04fab9c2aa8756320"
+    },
+    "console.terminal.write": {
+      "summary": "Person at this machine only: send typed text to the terminal's shell.",
+      "path": "operations/console.terminal.write.json",
+      "bytes": 949,
+      "sha256": "554ea6f7f2fefb2631daa715e2912f627d5a4fe927cc847e3f22250b7c695684"
+    },
     "context.create": {
       "summary": "context.create",
       "path": "operations/context.create.json",
@@ -773,8 +809,8 @@
     "session.grant": {
       "summary": "session.grant",
       "path": "operations/session.grant.json",
-      "bytes": 5188,
-      "sha256": "2e23b33da965d9085eddabde5a22e5d25b3eb2c90adb438905b4616e3f36559b"
+      "bytes": 5414,
+      "sha256": "49937a50cc9f43449a619853013d61caadefe16f2db5b52194ea7e8e9207f796"
     },
     "session.instructions": {
       "summary": "Person at this machine or operator only: read a prompt for the person's own MCP client to connect itself to this existing project. Returns local launcher paths, never credential contents. Reading or copying grants no access, edits no client configuration and starts no runtime.",

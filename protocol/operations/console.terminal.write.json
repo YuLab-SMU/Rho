@@ -1,0 +1,46 @@
+{
+  "method": "console.terminal.write",
+  "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "projectId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "data": {
+        "maxLength": 65536,
+        "minLength": 1,
+        "type": "string"
+      },
+      "terminalId": {
+        "pattern": "^t-[a-f0-9]{16}$",
+        "type": "string"
+      }
+    },
+    "required": [
+      "projectId",
+      "terminalId",
+      "data"
+    ],
+    "type": "object"
+  },
+  "outputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "bytes": {
+        "minimum": 0,
+        "type": "integer"
+      },
+      "terminalId": {
+        "pattern": "^t-[a-f0-9]{16}$",
+        "type": "string"
+      }
+    },
+    "required": [
+      "terminalId",
+      "bytes"
+    ],
+    "type": "object"
+  },
+  "description": "Person at this machine only: send typed text to the terminal's shell."
+}

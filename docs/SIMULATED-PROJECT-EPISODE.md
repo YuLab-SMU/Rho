@@ -1909,3 +1909,68 @@ session belongs to the project and a language, one R and one Python.
 - A notebook's cells are found among the 300 newest of the project's 500; a closed notebook's
   cells stay in the project's notebook under "Another notebook".
 - A notebook is not a file: it cannot be saved as `.Rmd` or `.ipynb`, reordered or edited in place.
+
+## A real terminal
+
+2026-11-11, the third part of the same request: the Console is a terminal that works with the
+Agent, it does not look like one, and since it is a terminal it should be a professional one.
+
+### What there was
+
+The Console ran each command in a process of its own (`shell -lc`), with no terminal behind it
+and nothing kept between commands: no prompt, no `cd` that lasts, no keys to a running program,
+no colours, no full-screen programs. Its output was read again every 700 ms.
+
+### Changes
+
+- **The person's shell on a pseudo-terminal** (Rho-plugins, Console 0.3.2, `TerminalHost`). It is
+  their login shell in the project folder with `TERM=xterm-256color`, opened by a few lines of
+  Python, which macOS and Linux have, so Rho ships no compiled module. The service keeps the last
+  megabyte each terminal printed. Rho adds `console.terminal.open`, `list`, `read`, `write`,
+  `resize` and `close`.
+- **The person's alone.** Every one of those operations, the reads too, is refused to anyone but
+  the person at this machine, and none can be put in an Agent's grant. They are not written to the
+  activity record and do not wait in the project's queue, so typing is not held up by another
+  request and a read that waits for output holds nothing else.
+- **Drawn with xterm.js** (`web/terminal.tsx`; `@xterm/xterm` 6.0.0 and its fit addon, MIT). A read
+  waits for output instead of polling; keys typed within 4 ms go in one request; the view's size
+  is the terminal's. The view keeps its terminal with the page (`props.terminal`): a reload,
+  another tab or a view shown again returns to the same shell and what it printed.
+- **One view, two forms.** The view is named Terminal, with Terminal | Commands in its header.
+  Commands is what the Console showed: the Agent's commands by message and the person's single
+  commands. The board's command count opens it there.
+- Closing the view hangs the shell up. A shell that ended says how and offers a new one. With
+  four open in a project, the fifth is refused and the view lists the open ones to show or close.
+
+![A script, the terminal at the workspace's foot with the shell's own prompt, and the Notebook beside it](figures/studio-terminal.jpg)
+
+### Verification
+
+- The terminal host alone, then a throwaway copy of the PA14 example in a real browser at
+  2000 × 1028, each screenshot read. With the machine's own zsh setup: its prompt, right prompt
+  and colours; `tty` named a terminal device and `tput cols` the view's 214 columns; Chinese text
+  and coloured output; `top` drew full screen and left on `q`; Ctrl+C ended `sleep 60`; after a
+  reload a variable exported before it was still set; Commands and back kept the output; `exit`
+  said the shell ended and Start a new shell gave one without that variable. 1024 and 390 wide
+  had no sideways overflow. The figure was taken with a plain prompt.
+- Rho-plugins: two new tests (a real terminal with a size, Ctrl+C and an exit code; the limits)
+  and the presentation test pass.
+- Rho: the suite passed 353 of 356 with the debug Core, 3 skipped (Windows only), with a new test
+  that the person opens, types, reads, sizes and closes a terminal through the service, that a
+  waiting read does not hold another request, and that an Agent's grant and calls are refused.
+  The agent-canvas, frontend and sources acceptances passed.
+
+### Left open
+
+- This is the builder's reading. The user has not seen it; their own running Rho has no terminal
+  until it is built and started again.
+- Windows has no terminal yet (it needs ConPTY), and a machine without `python3` is told so.
+- A terminal ends with Rho. Nothing of it is kept across a restart but what the shell itself keeps.
+- The prompt's symbols need a Nerd Font installed; the view names the common ones before the
+  machine's monospace face. Headless Chrome drew boxes for them.
+- What is typed in the terminal is not in Commands, the Graph or the Overview: the Agent cannot
+  see it, and the person's work there leaves no record in Rho. Whether the Agent may be shown a
+  terminal, or type in one with the person's leave, is the user's to say.
+- No search in the scrollback, no links, no split terminals in one view; the colours are a light
+  set that does not follow a dark system setting.
+- The website demo and `scripts/demo-tour.mjs` still walk the Console page.

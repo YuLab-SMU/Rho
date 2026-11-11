@@ -1,8 +1,10 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { BrowserClient, WorkspaceSnapshot } from '../src/browser.js';
 import { ConsolePage } from './console.js';
 import { Icon, type IconName } from './icons.js';
 import { fileIcon, size, sourceLabels, type Entry } from './project.js';
+import { TerminalPane } from './terminal.js';
 import { folderName, kindOf, type ProjectFiles, type ResourceRef, type SourceItem, type SourceRow } from './sources.js';
 import './studio-tools.css';
 
@@ -20,11 +22,33 @@ export interface StudioTools {
 export const StudioToolsContext = createContext<StudioTools | null>(null);
 const outside = <p className="tool-note">This view shows in a Studio workspace.</p>;
 
-// The project's commands: the Agent's by message, the person's own between them, and the line to run one.
-export function ConsoleView({ client, snapshot }: { client: BrowserClient; snapshot: WorkspaceSnapshot }) {
+// The Terminal view has two forms. Terminal is the person's own shell, in the project folder.
+// Commands is the record: the Agent's commands by message, the person's single commands between
+// them, and a line to run one. The view keeps its form and its terminal with the page.
+export type TerminalForm = 'terminal' | 'commands';
+export function ConsoleView({ client, snapshot, view, headerTarget, onProps }: {
+  client: BrowserClient; snapshot: WorkspaceSnapshot; view: { props: Record<string, unknown> };
+  headerTarget?: HTMLElement | null; onProps?: (props: Record<string, unknown>) => void;
+}) {
   const tools = useContext(StudioToolsContext);
+  // Only the person at this machine has a terminal; another tab reads the commands.
+  const typed = snapshot.catalog.operations.some(o => o.method === 'console.terminal.open' && o.authorized && o.state === 'available');
+  const saved: TerminalForm = view.props.form === 'commands' || !typed ? 'commands' : 'terminal';
+  const [form, setForm] = useState<TerminalForm>(saved);
+  useEffect(() => setForm(saved), [saved]);
+  // A message's commands, asked for from the board, show in the record.
+  useEffect(() => { if (tools?.consoleTurn) setForm('commands'); }, [tools?.consoleTurn]);
   if (!tools) return outside;
-  return <div className="tool-pane tool-console"><ConsolePage client={client} snapshot={snapshot} files={tools.files} focusTurn={tools.consoleTurn} onPath={tools.open} onConversation={tools.conversation} /></div>;
+  const choose = (next: TerminalForm) => { setForm(next); onProps?.({ form: next }); };
+  return <>
+    {headerTarget && typed && createPortal(<div className="tool-forms" role="group" aria-label="Show">
+      <button type="button" aria-pressed={form === 'terminal'} title="Your shell, in the project folder" onClick={() => choose('terminal')}>Terminal</button>
+      <button type="button" aria-pressed={form === 'commands'} title="The commands the Agent ran, by message, and single commands of your own" onClick={() => choose('commands')}>Commands</button>
+    </div>, headerTarget)}
+    {form === 'terminal'
+      ? <TerminalPane client={client} projectId={snapshot.project.id} terminalId={typeof view.props.terminal === 'string' ? view.props.terminal : null} onTerminal={terminal => onProps?.({ terminal })} onCommands={() => choose('commands')} />
+      : <div className="tool-pane tool-console"><ConsolePage client={client} snapshot={snapshot} files={tools.files} focusTurn={tools.consoleTurn} onPath={tools.open} onConversation={tools.conversation} /></div>}
+  </>;
 }
 
 const day = (iso?: string) => {

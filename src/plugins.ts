@@ -14,7 +14,7 @@ const executionInputSchema = ownerContracts.selected.execution.input as Record<s
 import type { executionLimits, Objects } from '@rho-workspace/plugin-r';
 import type { Annotations, annotationLimits } from '@rho-workspace/plugin-annotations';
 import type { AgentContext } from '@rho-workspace/plugin-agent';
-import type { consoleLimits } from '@rho-workspace/plugin-console';
+import type { consoleLimits, terminalLimits } from '@rho-workspace/plugin-console';
 import type { kernelLimits } from '@rho-workspace/plugin-kernel';
 import type { skillsLimits } from '@rho-workspace/plugin-skills';
 
@@ -47,6 +47,8 @@ export interface PluginConfig {
   r?: Partial<typeof executionLimits>;
   annotations?: Partial<typeof annotationLimits>;
   console?: Partial<typeof consoleLimits>;
+  // The person's terminals: how many a project keeps and how much output each holds.
+  terminal?: Partial<typeof terminalLimits>;
   kernel?: Partial<typeof kernelLimits>;
   skills?: Partial<typeof skillsLimits>;
   capabilityLimits?: { maxReceipts?: number };

@@ -1,0 +1,16 @@
+/* The terminal in a pane: the screen takes the view, with a quiet line under it when the shell has ended. */
+.terminal-pane { display: flex; flex-direction: column; min-height: 0; height: 100%; background: var(--color-surface); }
+.terminal-screen { flex: 1; min-height: 0; padding: 8px 4px 4px 12px; overflow: hidden; }
+.terminal-screen .xterm { height: 100%; }
+.terminal-screen .xterm-viewport { background: transparent !important; }
+.terminal-note { flex: none; margin: 0; padding: 7px 14px; border-top: 1px solid var(--color-divider); color: var(--color-meta); font-size: 12.5px; }
+.terminal-refused { padding: 14px 16px; color: var(--color-ink); font-size: 13px; }
+.terminal-refused p { margin: 0 0 8px; max-width: 62ch; }
+.terminal-refused ul { margin: 0 0 10px; padding: 0; list-style: none; }
+.terminal-refused li { display: flex; align-items: center; gap: 12px; padding: 3px 0; color: var(--color-meta); }
+.terminal-refused .text-button + .text-button { margin-left: 12px; }
+
+/* A view's choice of forms, in its header: the terminal, or the record of commands. */
+.tool-forms { display: inline-flex; flex: none; padding: 2px; border-radius: 8px; background: var(--color-well); }
+.tool-forms button { min-height: 0; padding: 3px 10px; border: 0; border-radius: 6px; background: none; color: var(--color-muted, var(--color-meta)); font-size: 12px; font-weight: 600; box-shadow: none; }
+.tool-forms button[aria-pressed="true"] { background: var(--color-surface); color: var(--color-ink); box-shadow: 0 1px 2px rgb(0 0 0 / 10%); }

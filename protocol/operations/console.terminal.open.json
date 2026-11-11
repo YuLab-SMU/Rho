@@ -1,0 +1,157 @@
+{
+  "method": "console.terminal.open",
+  "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "projectId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "cols": {
+        "maximum": 500,
+        "minimum": 2,
+        "type": "integer"
+      },
+      "cwd": {
+        "maxLength": 1024,
+        "type": "string"
+      },
+      "rows": {
+        "maximum": 300,
+        "minimum": 1,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "projectId",
+      "cols",
+      "rows"
+    ],
+    "type": "object"
+  },
+  "outputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "terminal": {
+        "additionalProperties": false,
+        "properties": {
+          "by": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "bytes": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "cols": {
+            "maximum": 500,
+            "minimum": 2,
+            "type": "integer"
+          },
+          "cwd": {
+            "type": "string"
+          },
+          "endedAt": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "exit": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "code": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "signal": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "code",
+                  "signal"
+                ],
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "kept": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "problem": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rows": {
+            "maximum": 300,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "shell": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "startedAt": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "terminalId": {
+            "pattern": "^t-[a-f0-9]{16}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "terminalId",
+          "by",
+          "shell",
+          "cwd",
+          "cols",
+          "rows",
+          "startedAt",
+          "endedAt",
+          "exit",
+          "bytes",
+          "kept",
+          "problem"
+        ],
+        "type": "object"
+      }
+    },
+    "required": [
+      "terminal"
+    ],
+    "type": "object"
+  },
+  "description": "Person at this machine only: start their shell on a pseudo-terminal in the project folder (or a folder inside it), at the size given. It lives while Rho runs; a project keeps a few at once. Not available on Windows yet."
+}

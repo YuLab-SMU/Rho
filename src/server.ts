@@ -209,6 +209,7 @@ export class RhoService {
   // Conversations the local person starts here; Rho holds their input and runs Claude Code.
   conversations: Conversations;
   private consoles = new Map<string, import('@rho-workspace/plugin-console').ConsoleRunner>();
+  private terminals = new Map<string, import('@rho-workspace/plugin-console').TerminalHost>();
   private kernels = new Map<string, import('@rho-workspace/plugin-kernel').KernelHost>();
   private figures = new Map<string, import('@rho-workspace/plugin-figures').Figures>();
   private skillHosts = new Map<string, import('@rho-workspace/plugin-skills').SkillsHost>();
@@ -532,11 +533,11 @@ export class RhoService {
     const capabilities = new Capabilities(this.plugins, project);
     const state = await capabilities.state();
     // The shared project listing remains available alongside an Agent's native tools.
-    const available = Object.keys(operations).filter(m => !extensionManagement.includes(m) && !m.startsWith('agent.activity.') && !m.startsWith('agent.sessions.') && !m.startsWith('session.') && !m.startsWith('conversation.') && (!m.startsWith('project.') || m === 'project.entries') && !m.startsWith('requirements.prepare') && !m.startsWith('workspace.restore') && !['task.routing.put', 'binding.activity.append', 'feedback.submit', 'view.observe', 'view.observations.read', 'task.map.respond', 'annotation.decide', 'evidence.export', 'evidence.preview', 'console.run', 'console.stop', 'kernel.stop'].includes(m));
+    const available = Object.keys(operations).filter(m => !extensionManagement.includes(m) && !m.startsWith('agent.activity.') && !m.startsWith('agent.sessions.') && !m.startsWith('session.') && !m.startsWith('conversation.') && (!m.startsWith('project.') || m === 'project.entries') && !m.startsWith('requirements.prepare') && !m.startsWith('workspace.restore') && !['task.routing.put', 'binding.activity.append', 'feedback.submit', 'view.observe', 'view.observations.read', 'task.map.respond', 'annotation.decide', 'evidence.export', 'evidence.preview', 'console.run', 'console.stop', 'kernel.stop'].includes(m) && !m.startsWith('console.terminal.'));
     const profileMethods = profile === 'layered-presentation' ? ['binding.open', 'capability.index', 'capability.resolve', 'workspace.observe', 'workspace.enhance'] : available.filter(m => !['workspace.observe', 'workspace.enhance', ...(profile ? ['skill.list','skill.read','protocol.describe'] : [])].includes(m));
     const selected = methods ?? (profile === 'layered-presentation' ? profileMethods : (await Promise.all(profileMethods.map(async method => [method, await capabilities.isAvailable(method, state)] as const))).filter(([, enabled]) => enabled).map(([method]) => method));
     requireThat(profile !== 'layered-presentation' || selected.every(m => profileMethods.includes(m)), 'scope', 'The selected role cannot receive broader methods.');
-    requireThat(selected.every(m => !extensionManagement.includes(m) && !!operations[m] && !m.startsWith('agent.sessions.') && !m.startsWith('session.') && !m.startsWith('conversation.') && (!m.startsWith('project.') || m === 'project.entries') && !['task.routing.put', 'console.run', 'console.stop', 'kernel.stop'].includes(m)), 'invalid', 'Unknown or operator-only Agent capability.');
+    requireThat(selected.every(m => !extensionManagement.includes(m) && !!operations[m] && !m.startsWith('agent.sessions.') && !m.startsWith('session.') && !m.startsWith('conversation.') && (!m.startsWith('project.') || m === 'project.entries') && !['task.routing.put', 'console.run', 'console.stop', 'kernel.stop'].includes(m) && !m.startsWith('console.terminal.')), 'invalid', 'Unknown or operator-only Agent capability.');
     requireThat(await Promise.all(selected.map(method => capabilities.isAvailable(method, state))).then(values => values.every(Boolean)), 'unavailable', 'A requested Agent operation has no selected provider.');
     requireThat(!profile || new Set(['capability.index', 'capability.resolve', ...selected]).size <= layeredGrantLimits.maxMethods, 'limit', `Layered connection methods exceed the ${layeredGrantLimits.maxMethods}-method profile; choose an explicit narrower grant.`, { limit: 'maxMethods', maximum: layeredGrantLimits.maxMethods });
     const id = 'agent:' + digest(projectId + ':' + externalSessionId).slice(0, 32);
@@ -649,7 +650,7 @@ export class RhoService {
       requireThat(read.ok, read.ok ? 'invalid' : read.kind, read.ok ? '' : (read.problems[0]?.fix ? `Request does not match the versioned schema: ${read.problems[0].fix}` : 'Request does not match the versioned schema.'), read.ok ? {} : { problems: read.problems, remedy: 'Fix the named fields and resend the same request identity.' });
       const request = read.request, contractRef = typeof req.headers['x-rho-contract-ref'] === 'string' ? req.headers['x-rho-contract-ref'] : undefined;
       let value;
-      if (body.projectId && (method.startsWith('kernel.') || method === 'extension.call')) {
+      if (body.projectId && (method.startsWith('kernel.') || method.startsWith('console.terminal.') || method === 'extension.call')) {
         // A cell may run for minutes and a run may wait for it. The live sessions keep their own
         // order, so waiting holds no other request of the project, an interrupt among them.
         const projectId = body.projectId;
@@ -762,6 +763,16 @@ export class RhoService {
       this.consoles.set(p.id, runner);
     }
     return runner;
+  }
+  // The person's terminals in a project, for the life of this service: each is their own shell.
+  private terminalsFor(p: Project) {
+    let host = this.terminals.get(p.id);
+    if (!host) {
+      const { TerminalHost } = this.plugins.need('console');
+      host = new TerminalHost(p.root, { limits: this.config.terminal, python: this.config.python });
+      this.terminals.set(p.id, host);
+    }
+    return host;
   }
   // One pair of live sessions per project for the life of this service, shared by the person
   // and their Agent. Changes reach open pages at most four times a second.
@@ -1182,6 +1193,18 @@ export class RhoService {
     const capabilities = new Capabilities(this.plugins, p);
     // The person runs and stops Console commands with their own shell; anyone holding the read
     // grant may read what ran.
+    if (method.startsWith('console.terminal.')) {
+      // A terminal is the person's own shell: opening it, typing in it and reading it are theirs alone.
+      requireThat(principal.id === localBrowserId, 'unauthorized', 'A terminal is the shell of the person at this machine. Open Rho in a browser on this machine.');
+      await capabilities.assertAvailable(method, principal);
+      const host = this.terminalsFor(p);
+      if (method === 'console.terminal.open') return host.open({ cols: b.cols, rows: b.rows, cwd: b.cwd, by: principal.id });
+      if (method === 'console.terminal.list') return host.list();
+      if (method === 'console.terminal.read') return host.read(b.terminalId, b.after, b.waitMs, b.maxBytes);
+      if (method === 'console.terminal.write') return host.write(b.terminalId, b.data);
+      if (method === 'console.terminal.resize') return host.resize(b.terminalId, b.cols, b.rows);
+      if (method === 'console.terminal.close') return host.close(b.terminalId);
+    }
     if (method.startsWith('console.')) {
       if (method === 'console.run' || method === 'console.stop') requireThat(principal.id === localBrowserId, 'unauthorized', 'Console commands run with the shell of the person at this machine. Open Rho in a browser on this machine.');
       await capabilities.assertAvailable(method, principal);
@@ -1559,6 +1582,7 @@ export class RhoService {
     await this.conversations.close();
     // Commands the person started keep running; the next start records how each is found.
     for (const runner of this.consoles.values()) await runner.close();
+    for (const host of this.terminals.values()) host.shutdown();
     // Live sessions end with Rho: their values live only in their processes.
     for (const host of this.kernels.values()) await host.close();
     for (const host of this.skillHosts.values()) await host.close();

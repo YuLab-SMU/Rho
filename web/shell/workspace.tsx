@@ -283,7 +283,12 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
   async function closeViews(ids: string[], label: string) {
     const now = treeNow();
     let next = now;
-    for (const id of ids) { live.release(id); next = next && (closeView(next, id) ?? next); }
+    for (const id of ids) {
+      const closing = byId.get(id);
+      // A Terminal view closed hangs up its shell, as closing a terminal window does.
+      if (!process && closing?.component === 'rho.console' && typeof closing.props.terminal === 'string') void client.call('console.terminal.close' as never, { projectId: snapshot.project.id, terminalId: closing.props.terminal } as never).catch(() => {});
+      live.release(id); next = next && (closeView(next, id) ?? next);
+    }
     onPersonMoved?.();
     if (next && next !== now && await writeLayout(next)) setClosed({ label, version: latest.current.version });
   }
@@ -368,7 +373,7 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
     const view = byId.get(id)!, isVisible = visible.includes(id);
     if (view.component === 'rho.action') return <ActionForm view={view} snapshot={snapshot} client={client} live={live} />;
     // A conversation's Studio shows that conversation's commands; a workspace shows the project's.
-    if (view.component === 'rho.console') return process ? <CommandPane client={client} snapshot={snapshot} /> : <ConsoleView client={client} snapshot={snapshot} />;
+    if (view.component === 'rho.console') return process ? <CommandPane client={client} snapshot={snapshot} /> : <ConsoleView client={client} snapshot={snapshot} view={view} headerTarget={isVisible ? ownHeader(id) : null} onProps={props => saveProps(id, props)} />;
     if (view.component === 'rho.files') return <FilesView client={client} snapshot={snapshot} />;
     if (view.component === 'rho.sources') return <KindView kind={String(view.props.kind ?? 'data') as SourceRow} snapshot={snapshot} />;
     if (view.component === 'rho.execution') {

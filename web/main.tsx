@@ -315,7 +315,7 @@ function App() {
   // One of the project's own tools on a page of the person's: put there, or brought forward.
   function toolOnPage(page: string, tool: Tool, into?: string) {
     if (!snapshot) return;
-    const title = tool === 'console' ? 'Console' : tool === 'files' ? 'Files' : sourceLabels[tool.slice(5) as SourceRow];
+    const title = tool === 'console' ? 'Terminal' : tool === 'files' ? 'Files' : sourceLabels[tool.slice(5) as SourceRow];
     addTool(client!, snapshot.project.id, page, tool, title, into).then(id => layout(page, id), error => setNotice(title + ' could not be added. ' + (error instanceof Error ? error.message : '')));
   }
   useEffect(() => setPrepared(null), [project?.id]);
@@ -518,7 +518,7 @@ function App() {
       { id: 'context', label: (context && !feedbackContext ? 'Hide' : 'Show') + ' context & access', icon: 'context', run: () => { setFeedbackContext(false); setContext(v => feedbackContext || !v); } },
       ...(project && snapshot && arrangeable ? [
         ...(sessions ? [{ id: 'notebook', label: 'Notebook', icon: 'code', meta: 'Studio', run: showNotebook }] satisfies Command[] : []),
-        { id: 'console', label: 'Console', icon: 'prompt', meta: 'Studio', run: () => showConsole() },
+        { id: 'console', label: 'Terminal', icon: 'prompt', meta: 'Studio', run: () => showConsole() },
         { id: 'files', label: 'Files', icon: 'folder', meta: 'Studio', run: showFiles },
         { id: 'new-workspace', label: 'New workspace', icon: 'plus', meta: 'Studio', run: newWorkspace },
       ] satisfies Command[] : []),

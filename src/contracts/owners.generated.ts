@@ -19726,6 +19726,808 @@ export const ownerContracts: OwnerContractSnapshot = {
             "type": "object"
           },
           "requires": []
+        },
+        "console.terminal.close": {
+          "effect": "native",
+          "inputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "terminalId": {
+                "pattern": "^t-[a-f0-9]{16}$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "terminalId"
+            ],
+            "type": "object"
+          },
+          "outputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "terminal": {
+                "additionalProperties": false,
+                "properties": {
+                  "by": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "bytes": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "cols": {
+                    "maximum": 500,
+                    "minimum": 2,
+                    "type": "integer"
+                  },
+                  "cwd": {
+                    "type": "string"
+                  },
+                  "endedAt": {
+                    "anyOf": [
+                      {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "exit": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "code": {
+                            "anyOf": [
+                              {
+                                "type": "integer"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "signal": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "code",
+                          "signal"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "kept": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "problem": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "rows": {
+                    "maximum": 300,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "shell": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "startedAt": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "terminalId": {
+                    "pattern": "^t-[a-f0-9]{16}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "terminalId",
+                  "by",
+                  "shell",
+                  "cwd",
+                  "cols",
+                  "rows",
+                  "startedAt",
+                  "endedAt",
+                  "exit",
+                  "bytes",
+                  "kept",
+                  "problem"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "terminal"
+            ],
+            "type": "object"
+          },
+          "requires": []
+        },
+        "console.terminal.list": {
+          "effect": "read",
+          "inputSchema": {
+            "additionalProperties": false,
+            "properties": {},
+            "required": [],
+            "type": "object"
+          },
+          "outputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "terminals": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "by": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "bytes": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "cols": {
+                      "maximum": 500,
+                      "minimum": 2,
+                      "type": "integer"
+                    },
+                    "cwd": {
+                      "type": "string"
+                    },
+                    "endedAt": {
+                      "anyOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "exit": {
+                      "anyOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "code": {
+                              "anyOf": [
+                                {
+                                  "type": "integer"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "signal": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "signal"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "kept": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "problem": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "rows": {
+                      "maximum": 300,
+                      "minimum": 1,
+                      "type": "integer"
+                    },
+                    "shell": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "startedAt": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "terminalId": {
+                      "pattern": "^t-[a-f0-9]{16}$",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "terminalId",
+                    "by",
+                    "shell",
+                    "cwd",
+                    "cols",
+                    "rows",
+                    "startedAt",
+                    "endedAt",
+                    "exit",
+                    "bytes",
+                    "kept",
+                    "problem"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "terminals"
+            ],
+            "type": "object"
+          },
+          "requires": []
+        },
+        "console.terminal.open": {
+          "effect": "native",
+          "inputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "cols": {
+                "maximum": 500,
+                "minimum": 2,
+                "type": "integer"
+              },
+              "cwd": {
+                "maxLength": 1024,
+                "type": "string"
+              },
+              "rows": {
+                "maximum": 300,
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "cols",
+              "rows"
+            ],
+            "type": "object"
+          },
+          "outputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "terminal": {
+                "additionalProperties": false,
+                "properties": {
+                  "by": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "bytes": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "cols": {
+                    "maximum": 500,
+                    "minimum": 2,
+                    "type": "integer"
+                  },
+                  "cwd": {
+                    "type": "string"
+                  },
+                  "endedAt": {
+                    "anyOf": [
+                      {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "exit": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "code": {
+                            "anyOf": [
+                              {
+                                "type": "integer"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "signal": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "code",
+                          "signal"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "kept": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "problem": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "rows": {
+                    "maximum": 300,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "shell": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "startedAt": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "terminalId": {
+                    "pattern": "^t-[a-f0-9]{16}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "terminalId",
+                  "by",
+                  "shell",
+                  "cwd",
+                  "cols",
+                  "rows",
+                  "startedAt",
+                  "endedAt",
+                  "exit",
+                  "bytes",
+                  "kept",
+                  "problem"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "terminal"
+            ],
+            "type": "object"
+          },
+          "requires": []
+        },
+        "console.terminal.read": {
+          "effect": "read",
+          "inputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "after": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "maxBytes": {
+                "maximum": 262144,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "terminalId": {
+                "pattern": "^t-[a-f0-9]{16}$",
+                "type": "string"
+              },
+              "waitMs": {
+                "maximum": 25000,
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "terminalId"
+            ],
+            "type": "object"
+          },
+          "outputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "data": {
+                "type": "string"
+              },
+              "dropped": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "more": {
+                "type": "boolean"
+              },
+              "nextOffset": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "offset": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "terminal": {
+                "additionalProperties": false,
+                "properties": {
+                  "by": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "bytes": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "cols": {
+                    "maximum": 500,
+                    "minimum": 2,
+                    "type": "integer"
+                  },
+                  "cwd": {
+                    "type": "string"
+                  },
+                  "endedAt": {
+                    "anyOf": [
+                      {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "exit": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "code": {
+                            "anyOf": [
+                              {
+                                "type": "integer"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "signal": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "code",
+                          "signal"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "kept": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "problem": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "rows": {
+                    "maximum": 300,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "shell": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "startedAt": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "terminalId": {
+                    "pattern": "^t-[a-f0-9]{16}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "terminalId",
+                  "by",
+                  "shell",
+                  "cwd",
+                  "cols",
+                  "rows",
+                  "startedAt",
+                  "endedAt",
+                  "exit",
+                  "bytes",
+                  "kept",
+                  "problem"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "data",
+              "offset",
+              "nextOffset",
+              "dropped",
+              "more",
+              "terminal"
+            ],
+            "type": "object"
+          },
+          "requires": []
+        },
+        "console.terminal.resize": {
+          "effect": "native",
+          "inputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "cols": {
+                "maximum": 500,
+                "minimum": 2,
+                "type": "integer"
+              },
+              "rows": {
+                "maximum": 300,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "terminalId": {
+                "pattern": "^t-[a-f0-9]{16}$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "terminalId",
+              "cols",
+              "rows"
+            ],
+            "type": "object"
+          },
+          "outputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "terminal": {
+                "additionalProperties": false,
+                "properties": {
+                  "by": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "bytes": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "cols": {
+                    "maximum": 500,
+                    "minimum": 2,
+                    "type": "integer"
+                  },
+                  "cwd": {
+                    "type": "string"
+                  },
+                  "endedAt": {
+                    "anyOf": [
+                      {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "exit": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "code": {
+                            "anyOf": [
+                              {
+                                "type": "integer"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "signal": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "code",
+                          "signal"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "kept": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "problem": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "rows": {
+                    "maximum": 300,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "shell": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "startedAt": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "terminalId": {
+                    "pattern": "^t-[a-f0-9]{16}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "terminalId",
+                  "by",
+                  "shell",
+                  "cwd",
+                  "cols",
+                  "rows",
+                  "startedAt",
+                  "endedAt",
+                  "exit",
+                  "bytes",
+                  "kept",
+                  "problem"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "terminal"
+            ],
+            "type": "object"
+          },
+          "requires": []
+        },
+        "console.terminal.write": {
+          "effect": "native",
+          "inputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "data": {
+                "maxLength": 65536,
+                "minLength": 1,
+                "type": "string"
+              },
+              "terminalId": {
+                "pattern": "^t-[a-f0-9]{16}$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "terminalId",
+              "data"
+            ],
+            "type": "object"
+          },
+          "outputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "bytes": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "terminalId": {
+                "pattern": "^t-[a-f0-9]{16}$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "terminalId",
+              "bytes"
+            ],
+            "type": "object"
+          },
+          "requires": []
         }
       }
     },
@@ -26215,14 +27017,14 @@ export const ownerContracts: OwnerContractSnapshot = {
       "packageVersion": "0.3.1",
       "entry": "./operations",
       "entryPath": "@rho-workspace/plugin-console/dist/operations.js",
-      "entrySha256": "1c523dfc1dbc5e3e1ca67eb0439a48d3026e0977f8ef48f94f105f658b4a6ca9",
+      "entrySha256": "ee7388b95f7eaf49e4efea75764a3e2076c34c4c2db8538f94bf97b122b42c9e",
       "exports": {
-        "operationContracts": "7de05a78f91d96eba1885e78df3f2e62bc636545315ab06203f216f92068d9c0"
+        "operationContracts": "612d012ec08eb395ae7ec5b487de8fd38bc6997b6a5c324f44e2e20b9224f9a3"
       }
     },
     "kernel": {
       "package": "@rho-workspace/plugin-kernel",
-      "packageVersion": "0.5.15",
+      "packageVersion": "0.5.16",
       "entry": "./operations",
       "entryPath": "@rho-workspace/plugin-kernel/dist/operations.js",
       "entrySha256": "0a7acb3c2d0900e8fe03d4acceaf16e11e3af7ad1b4d4f452acdbd7c69e83707",

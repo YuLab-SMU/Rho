@@ -1,0 +1,183 @@
+{
+  "method": "console.terminal.read",
+  "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "projectId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "after": {
+        "minimum": 0,
+        "type": "integer"
+      },
+      "maxBytes": {
+        "maximum": 262144,
+        "minimum": 1,
+        "type": "integer"
+      },
+      "terminalId": {
+        "pattern": "^t-[a-f0-9]{16}$",
+        "type": "string"
+      },
+      "waitMs": {
+        "maximum": 25000,
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "projectId",
+      "terminalId"
+    ],
+    "type": "object"
+  },
+  "outputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "data": {
+        "type": "string"
+      },
+      "dropped": {
+        "minimum": 0,
+        "type": "integer"
+      },
+      "more": {
+        "type": "boolean"
+      },
+      "nextOffset": {
+        "minimum": 0,
+        "type": "integer"
+      },
+      "offset": {
+        "minimum": 0,
+        "type": "integer"
+      },
+      "terminal": {
+        "additionalProperties": false,
+        "properties": {
+          "by": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "bytes": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "cols": {
+            "maximum": 500,
+            "minimum": 2,
+            "type": "integer"
+          },
+          "cwd": {
+            "type": "string"
+          },
+          "endedAt": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "exit": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "code": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "signal": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "code",
+                  "signal"
+                ],
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "kept": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "problem": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rows": {
+            "maximum": 300,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "shell": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "startedAt": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "terminalId": {
+            "pattern": "^t-[a-f0-9]{16}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "terminalId",
+          "by",
+          "shell",
+          "cwd",
+          "cols",
+          "rows",
+          "startedAt",
+          "endedAt",
+          "exit",
+          "bytes",
+          "kept",
+          "problem"
+        ],
+        "type": "object"
+      }
+    },
+    "required": [
+      "data",
+      "offset",
+      "nextOffset",
+      "dropped",
+      "more",
+      "terminal"
+    ],
+    "type": "object"
+  },
+  "description": "Person at this machine only: the bytes a terminal printed after an offset, in base64, waiting up to waitMs when there is nothing new. Bytes older than the kept scrollback are counted in dropped."
+}

@@ -45,7 +45,7 @@ export const conversationMethods = ['agent.sessions.list', 'agent.sessions.read'
 // narrower grant for a shared or subfolder-scoped tab.
 export const localBrowserId = 'browser:local';
 // Commands the person types in the Console run with their own shell, so only they hold these.
-export const consoleMethods = ['console.run', 'console.list', 'console.events', 'console.output', 'console.stop'];
+export const consoleMethods = ['console.run', 'console.list', 'console.events', 'console.output', 'console.stop', 'console.terminal.open', 'console.terminal.list', 'console.terminal.read', 'console.terminal.write', 'console.terminal.resize', 'console.terminal.close'];
 // The project's live R and Python sessions, which the person shares with their Agent.
 export const kernelMethods = ['kernel.run', 'kernel.read', 'kernel.events', 'kernel.inspect', 'kernel.plot', 'kernel.interrupt', 'kernel.stop', 'kernel.places', 'kernel.place.set', 'kernel.place.check', 'kernel.place.list', 'kernel.place.copy', 'kernel.servers', 'kernel.server.skill'];
 export const skillsMethods = ['skills.list', 'skills.read', 'skills.change', 'skills.undo'];
