@@ -260,3 +260,14 @@ folder named "my folder 文件夹" outside the projects folder started Rho in 1 
 `.rho/README.md`; `rho tool index --as workbuddy` answered with that project's id; `--status`
 reported it running with its page at 200; and `--stop` stopped it. The site was not redeployed for
 0.5.8, and the WorkBuddy connector upload remains the person's.
+
+Version 0.5.9 selects the same Core, `8bed8ef`, and Plugins `b2c6197` (Plugins `ce1185f` in 0.5.8),
+with Rho's commits since `v0.5.8`: a Codex conversation continues in Rho past its first message;
+R figures draw in browsers that parse SVG with libxml2 (Safari, WorkBuddy); a conversation's
+Studio shows fewer things at once; a table names its missing row key at its row count; and a
+project lists only the Codex sessions that ran in its own folder, where a project made after the
+example had listed the example's ([episode](SESSION-CONTINUITY-EPISODE.md#another-projects-codex-sessions)).
+Before its tag the suite passed 345 of 348 on macOS arm64 (3 skipped, Windows only). The last CI
+run on `main` before it, on `55d677c8`, failed one Windows test, `agent-observation`: a Core
+command right after the Host's ready line found no named pipe (`host_unavailable`). It had passed
+on `ea5bc3d2`, the 0.5.8 commit.

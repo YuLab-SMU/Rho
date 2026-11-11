@@ -188,6 +188,27 @@ Seen in the same runs, not changed here:
 - From the second message on, Codex's "Model metadata for
   `westlakehpc/glm-5.3-flash` not found" warning appears in the answer text.
 
+## Another project's Codex sessions
+
+On 2026-11-11 the person made a new project, P3 bulkrna, and its Studio listed
+the example project's conversations: "请解释一张已有图形…", Codex's own
+approval-review sessions and a `rho_index` probe. Codex keeps every folder's
+sessions in one place, `~/.codex/sessions`. The Agent plugin kept each file's
+summary by file alone, not by the project it had been checked for. Once one
+project was listed, a project opened later in the same Rho listed the first
+project's Codex sessions and could read them. In the other order a project
+missed its own.
+
+Plugins `b2c6197` keeps each file with the folder its session ran in and
+compares that folder with the project on every listing. A file is still read
+once per change, which matters with the person's 2,470 Codex session files.
+In Chrome, with two fixture Codex sessions in an example project shown first,
+the new project's Studio listed both sessions and an Agent count of 2 with the
+previous Plugins, and nothing with `b2c6197`; the example kept both.
+`test/session-continuity.test.mjs` opens a second project in the same service
+and fails on the previous Plugins. The person's own machine was not checked;
+its project folder is not on this one.
+
 ## Limits
 
 Codex continuation of a session started outside Rho was checked with a test
