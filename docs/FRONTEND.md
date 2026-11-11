@@ -405,46 +405,49 @@ inspect what happened. The application gives those actions direct places:
   Graph; Graph links back. Reload restores Review and its selected record. Evidence export
   previews that record and its retained references before writing a static offline reader
   ([episode](REVIEW-EVIDENCE-EPISODE.md)).
-- **Graph** draws what the Agent did: each message a row from the files it read to
-  the question, what it edited and ran, and what changed on disk while its command
-  ran; a later row refers to an earlier output. Lines say whether the Agent reported
-  it, a command named it, or a change was seen on disk. A message draws one card per
-  file holding every version kept during it, and three or more of its commands that
-  touched no project file fold into one card listing each with its ending, duration
-  and output. Cards preview tables and
-  figures from captured versions; choosing one shows those retained bytes and related
-  reviews. Older records explicitly lack a historical snapshot. Opening the current
-  file is a separate action, and replay hides captures later than its cursor. The timeline
-  below gives each conversation a lane and each step a block coloured by kind (asked,
-  read, edited, ran, changed on disk, answered), lanes with the same title carrying
-  their start time. What the plugins record joins it: each plugin may name a read of
-  who did what and when (Notebook cells, Console commands), and each event goes to the
-  lane of whoever did it: You, the conversation whose Agent did it, or Outside Rho.
-  Every stretch of time is wide enough for its steps before the rest is shared by
-  duration, so a minute of cells beside days of messages stays readable. The legend counts and filters them,
-  refused or unknown steps are marked, pauses fold to a short gap, and the work
-  replays at 1×, 2× or 4×. While the Agent works the Graph stays and follows it; a
-  step waiting for the person's choice turns amber and is answered there. Card labels
-  and previews are drawn from 62% zoom up ([episode](GRAPH-EPISODE.md)).
-  Above the process rows, a **meaning layer** draws what the project notes say: one row
-  per session's section, from its question to its findings and choices, the files they
-  rest on (each titled by what the notes say it holds), and how those files came about
-  (made by a script, reading data, taken from the process record with its basis).
-  Meaning + process, Meaning or Process shows both layers or one (remembered in this
-  browser). Each statement is traced to the first kept version of the notes that holds
-  it: who wrote it and when, or that no kept version holds it. The files it names are the
-  versions kept then, and a newer kept version or a later write on disk is named. A
-  file's "kept as" and a statement's "written in" lead into the process rows. A choice
-  shows the option in use beside the others with what each gives; Use this instead
-  drafts a message to the same conversation that the person edits and sends. Nothing
-  there waits on the person ([meaning layer](SIMULATED-PROJECT-EPISODE.md#meaning-layer)).
+- **Graph** says what was done in the project and lets a person open it down to each
+  recorded step ([levels](GRAPH-LAYERS-EPISODE.md)). Closed, the project is its lines of
+  work in the order they began: a section of the notes with its conversation, or a
+  conversation the notes do not cover. A card carries the question, the newest figure
+  and counts, and an arrow says that one line builds on files another made.
+  Conversations that changed no file stand below. Past eight lines of work the closed
+  cards are names and counts, so that all of them read at once.
+  An open line reads left to right: the files it used, the work, the files the work
+  made, and what the notes conclude from them. The work opens in place, a message into
+  its activities (looking around, cells, a script written and run in rounds, the notes,
+  the answer) and an activity into its steps. A line to a file says whether the Agent
+  reported it, a command named it or a change was seen on disk, and it is drawn on the
+  deepest open node that stands for the step it was recorded on. Nothing is left out
+  for size: what is drawn is what is open, and Close all returns to the lines.
+  Choosing a finding or choice lights the files it rests on and the work behind them,
+  names how many recorded steps that is, and offers the step that wrote it, traced by
+  the first kept version of the notes that holds it. Choosing a file shows the version
+  kept, its reviews, what happened to it step by step and what is concluded from it;
+  opening the current file is a separate action. A step shows its command, output,
+  ending and the files as kept after it. A choice shows the option in use beside the
+  others; Use this instead drafts a message the person edits and sends. Search covers
+  every level and opens what it finds. Arrow keys open and close a node and move along
+  its column.
+  The timeline below gives each conversation a lane and each step a block coloured by
+  kind (asked, read, edited, ran, changed on disk, answered), lanes with the same title
+  carrying their start time. Past six lanes it keeps its height and scrolls, opening on
+  the newest. What the plugins record joins it: each plugin may name a read of who did
+  what and when (Notebook cells, Console commands), and each event goes to the lane of
+  whoever did it: You, the conversation whose Agent did it, or Outside Rho. Every
+  stretch of time is wide enough for its steps before the rest is shared by duration,
+  so a minute of cells beside days of messages stays readable. The legend counts and
+  filters them, refused or unknown steps are marked, pauses fold to a short gap, and
+  the work replays at 1×, 2× or 4×; replay hides what came later than its cursor.
+  While the Agent works the Graph stays and follows it: its line and message open and
+  its flag sits on the node that stands for the step it is on. A step waiting for the
+  person's choice turns amber and is answered there. The map of the whole shows while
+  the person moves the view; the key to the lines opens from a button.
   While a message runs, each file it writes is read once it rests: its facts (a table's
   rows and columns, an image's size, a script's lines and functions) show at once, then
   a sentence from the model the conversation's Agent uses, marked with that model and
-  the version it read. The notes' words replace both when the Agent writes them. Results
-  and figures join their conversation's meaning row as they appear, in a row of its own
-  when the notes have no section yet
-  ([descriptions](SIMULATED-PROJECT-EPISODE.md#descriptions-while-the-work-goes-on)).
+  the version it read. The notes' words replace both when the Agent writes them
+  ([descriptions](SIMULATED-PROJECT-EPISODE.md#descriptions-while-the-work-goes-on);
+  the first Graph and the timeline are recorded in the [episode](GRAPH-EPISODE.md)).
 - **Workspaces** hold real owner views in tabs and splits, which the person arranges by
   hand. The shown tab has a close button; any tab closes with a middle click, Delete or
   its menu, and a close names what it closed with Undo while the layout is as it left
@@ -568,7 +571,16 @@ the panel row and the Graph's run card and details (`commandEnd`, `stepDuration`
 command's name; the row's details keep what ran.
 `src/work-graph.ts` builds the Graph from `conversation.read` records (a finished
 message keeps the project files that changed on disk while it ran) and the folder walk
-(`project.entries` gives each file's `modifiedAt`), and lays each message out as a row; `web/graph.tsx` draws it, the inspector, the timeline and the
+(`project.entries` gives each file's `modifiedAt`): questions, file versions and runs with their
+reported, named and observed edges (`ranFiles` tells a script a command ran from one it only
+looked at). `src/work-layers.ts` builds the levels on it without a DOM: the workspace, lines of
+work, messages, activities and steps (`buildWorkLayers`), the touches between work and files,
+the statements of the notes with the step that wrote each, and the reads over them
+(`trajectory`, `links`, `shownAs`, `lineFiles`, `flows`, `support`). `src/layers-layout.ts` places
+what is open (`layoutLayers`; `sizes.roomy` is the count of lines past which closed cards are
+brief). `web/work-turns.ts` reads every session for the Graph, `turnLimits.sessionsAtOnce` at a
+time and each in pages of `turnLimits.pageTurns` messages. `web/graph.tsx` draws the levels, the
+inspector, the timeline (`timelineLimits.lanes`) and the
 Overview's `WorkStrip`. `web/timeline-events.ts` reads each plugin's `timeline` read named in
 the catalog, and `src/timeline-events.ts` places its events in lanes by principal. `src/answer-board.ts` derives the Overview's answer board from
 the same graph: `answerBoard` gives each file and command of a message a role,
@@ -611,9 +623,8 @@ and lays the files out (`studioTree`, `studioMerge` over a saved arrangement).
 given; `web/project-notes.tsx` keeps the notes' one buffer open for the project, saves the
 person's edits and draws the panel. `src/notes-meaning.ts` reads each section into
 statements with the files they link (`notesMeaning`, `fileDescriptions`) and traces each
-to the kept notes versions (`traceStatement`); `src/meaning-graph.ts` builds the meaning
-layer and the layered graph; `web/meaning.ts` reads the kept notes versions
-(`meaningLimits`) and `web/choices.tsx` draws a choice's options. `src/file-describer.ts`
+to the kept notes versions (`traceStatement`); `web/meaning.ts` reads every kept notes
+version, `meaningLimits.versionsAtOnce` at a time, and `web/choices.tsx` draws a choice's options. `src/file-describer.ts`
 reads a file's facts (`fileFacts`, `describeLimits`) and chooses what a file holds as shown
 (`holdsOf`); `Conversations` checks the project while a message runs and asks the Agent
 component's `describeFile` for the sentence. A figure goes as an image when the Agent
@@ -728,12 +739,13 @@ the trash with Undo, restore and delete, never while the Agent answers; and over
 at 1024/390. Evidence goes to `work/agent-page-acceptance/` by default.
 
 `npm run acceptance:graph` drives a controlled peer that runs the real Rscript for two
-messages. It checks the empty Graph, the Agent's flag on the card it reads while the
-Graph stays and follows, the two rows with their lines and the reference between them,
-table and figure previews, a figure's path and its own view, arrow keys along the
-path, a reference going to its output, Play's narration, that following opens no
-files in the workspace while a node the person opens goes there, and overflow at
-1024/390. Set `RHO_RSCRIPT` if `Rscript` is not on the
+messages. It checks the empty Graph, the Agent's flag on the activity it is in while the
+Graph stays and follows, the project closed to one line of work with its counts and
+figure, the open line from what it used through its messages to what they made, a
+message opened into activities and an activity into steps by key and pointer, a figure
+leading to the step whose run changed it with the command as it ran, Play's narration,
+that following opens no files in the workspace while a file the person opens goes
+there, and overflow at 1024/390. Set `RHO_RSCRIPT` if `Rscript` is not on the
 path. Evidence goes to `work/graph-acceptance/` by default.
 
 `npm run acceptance:sources` browses a project of data, scripts in two folders and

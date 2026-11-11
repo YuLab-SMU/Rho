@@ -1,4 +1,4 @@
-import { commandEnd, conversationBlocks, displayCommand, stepDuration, type ActivityOutcome, type ConversationTurn, type SessionObservation } from './conversation-presentation.js';
+import { commandEnd, conversationBlocks, displayCommand, segments, stepDuration, type ActivityOutcome, type ConversationTurn, type SessionObservation } from './conversation-presentation.js';
 import { askedAbout } from './asking.js';
 import type { Statement, Trace } from './notes-meaning.js';
 import type { Holds } from './file-describer.js';
@@ -48,6 +48,20 @@ export function commandFiles(command: string, project: PathScope) {
   return found;
 }
 
+// The files a command line runs rather than only names: those in a part of it whose program is
+// not one that reads, lists, moves or compares files. `Rscript analysis.R` runs the script;
+// `cat analysis.R | head` and `rtk read analysis.R` look at it.
+const lookers = new Set(['cat', 'head', 'tail', 'less', 'more', 'bat', 'grep', 'egrep', 'fgrep', 'rg', 'ag', 'sed', 'awk', 'wc', 'ls', 'll', 'find', 'stat', 'file', 'diff', 'cmp', 'cp', 'mv', 'rm', 'touch', 'chmod', 'git', 'echo', 'printf', 'test', '[', 'read', 'nl', 'sort', 'uniq', 'cut', 'tee', 'open', 'code', 'vim', 'nano', 'md5', 'shasum', 'sha256sum', 'du', 'tree', 'basename', 'dirname', 'realpath', 'readlink', 'mkdir', 'sips', 'cd']);
+export function ranFiles(command: string, project: PathScope) {
+  const ran = new Set<string>();
+  for (const line of displayCommand(command).split('\n')) for (const part of segments(line)) {
+    const words = part.trim().replace(/^(\w+=\S*\s+)+/, '').replace(/^(?:(?:time|nohup|env)\s+|(?:uv|poetry)\s+run\s+)+/, '').split(/\s+/);
+    if (!words[0] || lookers.has(words[0].split('/').at(-1)!)) continue;
+    for (const path of commandFiles(part, project)) ran.add(path);
+  }
+  return ran;
+}
+
 export type FileKind = 'data' | 'code' | 'figures' | 'notes' | 'results' | null;
 export interface GraphFile { path: string; bytes: number; modifiedAt?: string; category: FileKind }
 export interface GraphTurn { conversationId: string; conversationTitle: string; agent: string; turn: ConversationTurn; observation?: SessionObservation | null;
@@ -58,8 +72,8 @@ export interface GraphInput {
   kindOf: (path: string) => FileKind;
   now: number;
 }
-// The meaning layer adds what the notes say: findings and choices (see meaning-graph.ts).
-export type NodeKind = 'question' | 'file' | 'run' | 'finding' | 'choice';
+// What the notes conclude from these nodes, and the levels above them, are in work-layers.ts.
+export type NodeKind = 'question' | 'file' | 'run';
 export type EventAction = 'ask' | 'read' | 'edit' | 'write' | 'run' | 'changed' | 'capture' | 'answer' | 'report';
 // Declared: written in the project notes, by the Agent or the person; not checked.
 export type Basis = 'reported' | 'named' | 'observed' | 'declared';
@@ -81,28 +95,16 @@ export interface GraphNode {
   waiting?: { conversationId: string; turn: string; permission: string; title: string; options: Array<{ id: string; name: string; kind: string }> };
   // The events that touched this node, oldest first.
   events: GraphEvent[];
-  // A node of the meaning layer: what the notes say and where that came from.
-  meaning?: MeaningInfo;
-}
-export interface MeaningInfo {
-  session: string; conversationId: string | null;
-  statement?: Statement; trace?: Trace;
-  // A file: what it holds, from the notes (and where that was written), a model or its facts.
-  description?: Holds & { trace?: Trace };
-  todos?: { done: number; total: number };
-  // A row whose notes have no section yet: its question is the person's message, this node.
-  message?: { id: string; at: number };
 }
 // The message an edge was recorded in: a file one message made and a later one read is drawn
 // with that later message.
 export interface GraphEdge { id: string; from: string; to: string; label: string; basis: Basis; at: number; turn: string }
 export interface GraphTurnSpan { id: string; conversationId: string; title: string; agent: string; start: number; end: number; running: boolean }
-export interface WorkGraph { nodes: GraphNode[]; edges: GraphEdge[]; events: GraphEvent[]; turns: GraphTurnSpan[]; live: { node: string; label: string; waiting?: boolean } | null; omittedTurns: number; omittedNodes?: number }
+export interface WorkGraph { nodes: GraphNode[]; edges: GraphEdge[]; events: GraphEvent[]; turns: GraphTurnSpan[]; live: { node: string; label: string; waiting?: boolean } | null }
 
-// The protected resource is the browser and the service it reads: the graph reads at most this
-// many conversations and messages of each, and draws at most this many nodes. Past a limit it
-// keeps the newest messages and says how many it left out.
-export const graphLimits = { conversations: 6, turnsPerConversation: 8, nodes: 160 };
+// Nothing is left out of the graph for its size: every message that was read is in it. What a page
+// draws of it at once is the page's own matter (the Graph draws the levels a person has opened,
+// see work-layers.ts).
 // A file that changed on disk this soon after a step still counts as changing during it.
 const settleMs = 2500;
 
@@ -114,6 +116,8 @@ export function buildWorkGraph(input: GraphInput): WorkGraph {
   const ordered = [...input.turns].sort((a, b) => (time(a.turn.sentAt) ?? 0) - (time(b.turn.sentAt) ?? 0));
   const nodes = new Map<string, GraphNode>(), edges = new Map<string, GraphEdge>(), events: GraphEvent[] = [], spans: GraphTurnSpan[] = [];
   const files = new Map(input.files.map(f => [f.path, f]));
+  // Every path a step has touched so far, whichever version of it a node stands for.
+  const touched = new Set<string>();
   let live = null as WorkGraph['live'], inTurn = '';
   let evidence: ConversationTurn['evidence'] | undefined;
   const fileNode = (path: string, at: number, exact?: NonNullable<ConversationTurn['evidence']>['records'][number]['snapshots'][number], reported?: { id: string; version: string }) => {
@@ -121,6 +125,7 @@ export function buildWorkGraph(input: GraphInput): WorkGraph {
     const selected = exact ?? [...observed].reverse().find(s => (time(s.observedAt) ?? Infinity) <= at);
     const id = 'f:' + path + (selected ? '@' + selected.resource.id : reported ? '@' + reported.id + ':' + reported.version : evidence ? '@' + inTurn + ':unrecorded' : '');
     let node = nodes.get(id);
+    touched.add(path);
     if (!node) {
       const seen = files.get(path);
       node = { id, kind: 'file', title: path.split('/').at(-1) ?? path, at, path, category: seen?.category ?? input.kindOf(path), exists: !!seen, bytes: selected?.bytes ?? seen?.bytes, modifiedAt: seen?.modifiedAt, events: [], ...(selected ? { resource: selected.resource, capturedAt: time(selected.observedAt) ?? at, captureSource: String(selected.source.kind) } : reported ? { resource: reported, captureSource: 'tool reply' } : { gap: evidence ? evidence.records.find(r => r.path === path)?.reason ?? 'No historical snapshot was captured.' : 'No historical version was kept in this record.' }) };
@@ -171,14 +176,16 @@ export function buildWorkGraph(input: GraphInput): WorkGraph {
         note(run, { key: activity.key, at: from, turn: turn.id, action: 'run', label: activity.outcome === 'requested' ? 'Running' : 'Ran', outcome: activity.outcome });
         edge(q.id, run.id, 'ran', 'reported', from);
         runs.push({ node: run, ...window });
-        // A command names the script it runs and sometimes the files it reads or writes; which
-        // is which a command line does not say, unless the file changed while it ran.
+        // A command names the script it runs and sometimes the files it reads or writes. A script
+        // given to a program that runs things is run; which of the other files it reads or writes
+        // a command line does not say, unless the file changed while it ran.
+        const ran = ranFiles(command, input.project);
         for (const path of commandFiles(command, input.project)) {
-          if (!files.has(path) && !nodes.has('f:' + path)) continue;
+          if (!files.has(path) && !touched.has(path)) continue;
           const modified = time(files.get(path)?.modifiedAt), code = (files.get(path)?.category ?? input.kindOf(path)) === 'code';
           // A file that changed while the command ran is drawn as changing then, below.
           if (!code && modified !== null && modified >= window.from && modified <= window.to + settleMs) continue;
-          edge(fileNode(path, from).id, run.id, code ? 'runs' : 'named', 'named', from);
+          edge(fileNode(path, from).id, run.id, code && ran.has(path) ? 'runs' : 'named', 'named', from);
         }
         if (isLive) live = { node: run.id, label: 'Running' };
         return;
@@ -245,26 +252,6 @@ export function buildWorkGraph(input: GraphInput): WorkGraph {
       live = { node: node.id, label: 'Needs your choice', waiting: true };
     }
   });
-  // The newest messages are kept whole when the graph would grow past its node limit.
-  let omittedTurns = 0;
-  if (nodes.size > graphLimits.nodes) {
-    const keep = new Set<string>();
-    const byTurn = [...spans].reverse();
-    let count = 0;
-    for (const span of byTurn) {
-      const own = [...nodes.values()].filter(n => n.events.some(e => e.turn === span.id) && !keep.has(n.id));
-      if (count + own.length > graphLimits.nodes && count > 0) { omittedTurns++; continue; }
-      for (const n of own) keep.add(n.id);
-      count += own.length;
-    }
-    for (const id of [...nodes.keys()]) if (!keep.has(id)) nodes.delete(id);
-  }
-  const omittedNodes = Math.max(0,nodes.size - graphLimits.nodes);
-  if (omittedNodes) {
-    const ordered = [...nodes.values()].sort((a,b) => Number(b.kind === 'question') - Number(a.kind === 'question') || b.at - a.at);
-    const keep = new Set(ordered.slice(0,graphLimits.nodes).map(n=>n.id));
-    for (const id of nodes.keys()) if (!keep.has(id)) nodes.delete(id);
-  }
   // A kept version is on its file's card. Its own line from the question is drawn only when
   // nothing else in that message touches the file (a read, an edit, a command naming it);
   // otherwise it repeats the path beside it.
@@ -274,7 +261,7 @@ export function buildWorkGraph(input: GraphInput): WorkGraph {
   return {
     nodes: [...nodes.values()].sort((a, b) => a.at - b.at), edges: kept,
     events: events.filter(e => nodes.has(e.node)).sort((a, b) => a.at - b.at), turns: spans.filter(s => nodes.has('q:' + s.id)),
-    live: live && nodes.has(live.node) ? live : null, omittedTurns, omittedNodes,
+    live: live && nodes.has(live.node) ? live : null,
   };
 }
 
@@ -347,131 +334,4 @@ export function lineage(graph: Pick<WorkGraph, 'edges'>, id: string) {
   const nodes = new Set([...up, ...down]);
   const edges = new Set(graph.edges.filter(e => (up.has(e.from) && up.has(e.to)) || (down.has(e.from) && down.has(e.to))).map(e => e.id));
   return { nodes, edges };
-}
-
-// A left-to-right layered layout: each node one column after everything it comes from, a node
-// nothing points to pulled beside what it feeds, rows ordered to keep edges short, and each
-// node then moved toward its neighbours without overlapping. Deterministic for the same graph.
-export interface LayoutBox { id: string; width: number; height: number; at: number }
-export interface Placed { x: number; y: number; width: number; height: number; column: number }
-export function layoutGraph(boxes: LayoutBox[], links: Array<{ from: string; to: string }>, gap = { x: 96, y: 28 }) {
-  const ids = boxes.map(b => b.id), box = new Map(boxes.map(b => [b.id, b]));
-  const outgoing = new Map(ids.map(id => [id, [] as string[]])), incoming = new Map(ids.map(id => [id, [] as string[]]));
-  // Edges keep their direction. One that would close a cycle, found walking from the oldest
-  // node, is ignored for columns; it is still drawn.
-  const byTime = [...boxes].sort((a, b) => a.at - b.at || a.id.localeCompare(b.id)).map(b => b.id);
-  const rank = new Map(byTime.map((id, i) => [id, i]));
-  const declared = new Map(ids.map(id => [id, [] as string[]]));
-  for (const link of links) if (box.has(link.from) && box.has(link.to) && link.from !== link.to && !declared.get(link.from)!.includes(link.to)) declared.get(link.from)!.push(link.to);
-  const state = new Map<string, 1 | 2>(), finished: string[] = [];
-  for (const startId of byTime) {
-    if (state.has(startId)) continue;
-    const stack: Array<{ id: string; next: number }> = [{ id: startId, next: 0 }];
-    state.set(startId, 1);
-    while (stack.length) {
-      const top = stack.at(-1)!, targets = [...declared.get(top.id)!].sort((a, b) => rank.get(a)! - rank.get(b)!);
-      if (top.next >= targets.length) { state.set(top.id, 2); finished.push(top.id); stack.pop(); continue; }
-      const to = targets[top.next++];
-      if (state.get(to) === 1) continue;
-      outgoing.get(top.id)!.push(to); incoming.get(to)!.push(top.id);
-      if (!state.has(to)) { state.set(to, 1); stack.push({ id: to, next: 0 }); }
-    }
-  }
-  const order = finished.reverse();
-  const column = new Map<string, number>();
-  for (const id of order) column.set(id, Math.max(0, ...incoming.get(id)!.map(p => column.get(p)! + 1)));
-  // A node nothing points to sits just before the first thing it feeds.
-  for (const id of order) if (!incoming.get(id)!.length && outgoing.get(id)!.length) column.set(id, Math.max(0, Math.min(...outgoing.get(id)!.map(c => column.get(c)!)) - 1));
-  const columns: string[][] = [];
-  for (const id of order) (columns[column.get(id)!] ??= []).push(id);
-  for (let c = 0; c < columns.length; c++) columns[c] ??= [];
-  // Barycentre sweeps order each column by the average row of its neighbours.
-  const row = () => { const m = new Map<string, number>(); for (const col of columns) col.forEach((id, i) => m.set(id, i)); return m; };
-  for (let pass = 0; pass < 6; pass++) {
-    const at = row(), forward = pass % 2 === 0;
-    const range = forward ? columns.keys() : [...columns.keys()].reverse();
-    for (const c of range) {
-      const score = (id: string) => { const near = (forward ? incoming : outgoing).get(id)!.map(n => at.get(n)!); return near.length ? near.reduce((a, b) => a + b, 0) / near.length : at.get(id)!; };
-      columns[c].sort((a, b) => score(a) - score(b) || rank.get(a)! - rank.get(b)!);
-      columns[c].forEach((id, i) => at.set(id, i));
-    }
-  }
-  // Column widths follow their widest card; rows stack, then relax toward their neighbours.
-  const widths = columns.map(col => Math.max(0, ...col.map(id => box.get(id)!.width)));
-  const xs: number[] = []; let x = 0;
-  for (let c = 0; c < columns.length; c++) { xs[c] = x; x += widths[c] + gap.x; }
-  const y = new Map<string, number>();
-  for (const col of columns) {
-    const total = col.reduce((sum, id) => sum + box.get(id)!.height, 0) + gap.y * Math.max(0, col.length - 1);
-    let top = -total / 2;
-    for (const id of col) { y.set(id, top); top += box.get(id)!.height + gap.y; }
-  }
-  const centre = (id: string) => y.get(id)! + box.get(id)!.height / 2;
-  for (let pass = 0; pass < 8; pass++) {
-    for (const col of (pass % 2 ? [...columns].reverse() : columns)) {
-      for (const id of col) {
-        const near = [...incoming.get(id)!, ...outgoing.get(id)!];
-        if (near.length) y.set(id, near.reduce((sum, n) => sum + centre(n), 0) / near.length - box.get(id)!.height / 2);
-      }
-      // Keep the column's order and spacing: push down past the one above, then pull the
-      // whole column back so its middle stays where the neighbours wanted it.
-      const wanted = col.reduce((sum, id) => sum + centre(id), 0) / Math.max(1, col.length);
-      for (let i = 1; i < col.length; i++) { const above = col[i - 1], min = y.get(above)! + box.get(above)!.height + gap.y; if (y.get(col[i])! < min) y.set(col[i], min); }
-      const now = col.reduce((sum, id) => sum + centre(id), 0) / Math.max(1, col.length), shift = wanted - now;
-      if (shift < 0) for (const id of col) y.set(id, y.get(id)! + shift);
-    }
-  }
-  const placed = new Map<string, Placed>();
-  let minY = Infinity, maxY = -Infinity;
-  for (const id of ids) { const top = y.get(id)!; minY = Math.min(minY, top); maxY = Math.max(maxY, top + box.get(id)!.height); }
-  if (!ids.length) { minY = 0; maxY = 0; }
-  for (const id of ids) placed.set(id, { x: xs[column.get(id)!], y: y.get(id)! - minY, width: box.get(id)!.width, height: box.get(id)!.height, column: column.get(id)! });
-  return { placed, width: Math.max(0, x - gap.x), height: maxY - minY, columns: columns.length };
-}
-
-// Each message is one row read left to right: what it took in, the question, what it changed
-// and ran, and what that made. A node lives in the row of the message that first touched it;
-// a later message that reads or changes it shows a small reference to it in its own row, so
-// rows stay short and the path still connects. Questions line up in one column.
-export interface LaneItem { id: string; node: string; proxy: boolean; lane: number }
-export interface LaneLink { id: string; from: string; to: string; edge: GraphEdge }
-export function laneLayout(graph: Pick<WorkGraph, 'nodes' | 'edges' | 'turns'>, size: (node: GraphNode, proxy: boolean) => { width: number; height: number }, gap = { x: 88, y: 26, lane: 64 }) {
-  const lanes = graph.turns.map(t => t.id), laneOf = new Map(lanes.map((id, i) => [id, i]));
-  const byId = new Map(graph.nodes.map(n => [n.id, n]));
-  const home = (node: GraphNode) => laneOf.get(node.kind === 'question' ? node.turn! : node.events[0]?.turn ?? '') ?? 0;
-  const items = new Map<string, LaneItem>();
-  for (const node of graph.nodes) items.set(node.id, { id: node.id, node: node.id, proxy: false, lane: home(node) });
-  const links: LaneLink[] = [];
-  const at = (id: string, lane: number) => {
-    const item = items.get(id)!;
-    if (item.lane === lane) return id;
-    const proxy = 'p' + lane + ':' + id;
-    if (!items.has(proxy)) items.set(proxy, { id: proxy, node: id, proxy: true, lane });
-    return proxy;
-  };
-  for (const edge of graph.edges) {
-    const lane = laneOf.get(edge.turn) ?? items.get(edge.to)!.lane;
-    links.push({ id: edge.id, from: at(edge.from, lane), to: at(edge.to, lane), edge });
-  }
-  const placed = new Map<string, Placed>(), rows: Array<{ lane: number; turn: string; y: number; height: number }> = [];
-  const perLane = lanes.map((_, lane) => {
-    const own = [...items.values()].filter(i => i.lane === lane);
-    const result = layoutGraph(own.map(i => ({ id: i.id, at: byId.get(i.node)!.at, ...size(byId.get(i.node)!, i.proxy) })), links.filter(l => items.get(l.from)!.lane === lane && items.get(l.to)!.lane === lane), { x: gap.x, y: gap.y });
-    const question = own.find(i => !i.proxy && byId.get(i.node)!.kind === 'question');
-    return { own, result, qColumn: question ? result.placed.get(question.id)!.column : 0 };
-  });
-  // Shift each row so its question stands in the same column as every other row's.
-  const align = Math.max(0, ...perLane.map(l => l.qColumn));
-  const columnWidth = new Map<number, number>();
-  perLane.forEach(l => { for (const [id, p] of l.result.placed) { const c = p.column + align - l.qColumn; columnWidth.set(c, Math.max(columnWidth.get(c) ?? 0, p.width)); void id; } });
-  const xs: number[] = []; let x = 0;
-  const lastColumn = Math.max(-1, ...columnWidth.keys());
-  for (let c = 0; c <= lastColumn; c++) { xs[c] = x; x += (columnWidth.get(c) ?? 0) + gap.x; }
-  let y = 0;
-  perLane.forEach((l, lane) => {
-    for (const [id, p] of l.result.placed) { const c = p.column + align - l.qColumn; placed.set(id, { ...p, column: c, x: xs[c] + (columnWidth.get(c)! - p.width) / 2, y: y + p.y }); }
-    rows.push({ lane, turn: lanes[lane], y, height: l.result.height });
-    y += l.result.height + (l.own.length ? gap.lane : 0);
-  });
-  return { placed, items: [...items.values()], links, rows, width: Math.max(0, x - gap.x), height: Math.max(0, y - gap.lane) };
 }

@@ -1,10 +1,11 @@
 // Graph acceptance: a controlled ACP peer does two messages of R work in a disposable project
 // through the real service and Chrome; it runs the real Rscript, so the outputs are real. No
 // model credentials are used. It checks that the Graph stays on screen while the Agent works and
-// shows where it is, that each message is a row from what it read to what changed while its
-// command ran, that a later row refers to an earlier output, that cards preview tables and
-// figures, that choosing a node shows its path and the file in its own view, that a replay
-// narrates the work, and that the files the Agent touched open in the one shared workspace.
+// shows where it is; that the work is one line that opens into its messages, a message into its
+// activities and an activity into its recorded steps, with every line to a file moving to the
+// node on screen; that a figure is drawn on its card and can be followed to the step that made
+// it and that step's record; that a replay narrates the work; and that a file a person opens
+// goes to the one shared workspace.
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -64,6 +65,7 @@ async function until(read, accept, label, timeout = 30000) {
   let value;
   while (Date.now() < deadline) {
     value = await read().catch(error => ({ error: error.message }));
+    if (process.env.RHO_GRAPH_DEBUG && Array.isArray(value)) { const seen = JSON.stringify(value.filter(v => v?.flag || v?.kind === 'line' || v?.kind === 'frame').map(v => [v.kind, v.flag, (v.label ?? '').slice(0, 50)])); if (seen !== until.last) { until.last = seen; process.stdout.write('  · ' + seen + '\n'); } }
     if (accept(value)) return value;
     await new Promise(resolve => setTimeout(resolve, 150));
   }
@@ -72,9 +74,10 @@ async function until(read, accept, label, timeout = 30000) {
   throw new Error(label + ' did not happen. Last: ' + JSON.stringify(shown).slice(0, 1600));
 }
 const shot = async name => { const file = path.join(evidence, name + '.png'); await page.screenshot({ path: file }); report.screenshots.push(path.basename(file)); };
-const cards = () => page.evaluate(() => [...document.querySelectorAll('.graph-node')].map(n => ({ id: n.dataset.node, label: n.getAttribute('aria-label'), later: n.hasAttribute('data-later'), dimmed: n.hasAttribute('data-dimmed'), flag: n.querySelector('.graph-flag')?.textContent ?? null })));
+const cards = () => page.evaluate(() => [...document.querySelectorAll('.graph-node')].map(n => ({ id: n.dataset.node, kind: n.dataset.kind, label: n.getAttribute('aria-label') ?? n.querySelector('.lg-main')?.getAttribute('aria-label') ?? '', later: n.hasAttribute('data-later'), dimmed: n.hasAttribute('data-dimmed'), flag: n.querySelector('.graph-flag')?.textContent ?? null })));
 // What each drawn link says, whether or not the zoom is near enough to print it on the line.
-const lines = () => page.evaluate(() => [...document.querySelectorAll('.graph-edge')].map(g => g.getAttribute('class').replace('graph-edge ', '') + ' · ' + (g.getAttribute('data-label') ?? '')));
+const lines = () => page.evaluate(() => [...document.querySelectorAll('.graph-edge')].map(g => g.dataset.kind + ' · ' + g.getAttribute('class').split(' ')[1] + ' · ' + (g.getAttribute('data-label') ?? '')));
+const titles = kind => page.locator('.lg-row.level-' + kind + ' .lg-title').allTextContents();
 try {
   await fs.writeFile(path.join(root, 'peer.mjs'), peer);
   const project = path.join(root, 'ozone');
@@ -91,7 +94,7 @@ try {
   page.on('pageerror', error => report.browserErrors.push(error.message));
   await page.goto(service.url);
   await page.locator('.project-row').first().click();
-  const nav = page.locator('.project-nav');
+  const nav = page.locator('.project-nav, .place-tabs');
   await nav.getByRole('button', { name: 'Graph', exact: true }).click();
   await page.getByRole('heading', { name: 'Nothing to draw yet' }).waitFor();
   await shot('01-empty');
@@ -100,13 +103,13 @@ try {
   await page.getByRole('button', { name: 'Agent panel', exact: true }).click();
   await page.getByRole('textbox', { name: 'Start a conversation' }).fill('How does ozone change by month?');
   await page.getByRole('button', { name: 'Start', exact: true }).click();
-  const live = await until(cards, c => c.some(card => card.flag === 'Claude Code · Reading' && /airquality\.csv/.test(card.label)), 'the Agent shown reading on its card');
+  // Following opens the line and the message the Agent is in; its flag is on the activity under way.
+  await until(cards, c => c.some(card => card.kind === 'activity' && card.flag === 'Claude Code · Reading' && /airquality\.csv/.test(card.label)), 'the Agent shown reading on its activity');
   await page.locator('.graph-tools .follow-toggle[aria-pressed=true]').waitFor();
   assert.ok(await page.locator('.graph-page').isVisible(), 'the Graph stays on screen while the Agent works');
   assert.equal(await page.locator('.graph-now').textContent(), 'Live');
   await shot('02-live');
-  passed('sending from the Graph keeps it on screen and follows: the card the Agent is reading carries its flag');
-  void live;
+  passed('sending from the Graph keeps it on screen and follows: the line and message open, and the activity the Agent is in carries its flag');
 
   await until(() => page.locator('.graph-now').textContent(), t => t === 'Now', 'the first message ending', 40000);
   await page.getByRole('textbox', { name: /Message|Reply/ }).fill('Plot the monthly means and note the finding.');
@@ -114,85 +117,88 @@ try {
   await until(() => page.locator('.graph-now').textContent(), t => t === 'Live', 'the second message running');
   await until(() => page.locator('.graph-now').textContent(), t => t === 'Now', 'the second message ending', 40000);
   await page.getByRole('button', { name: 'Agent panel', exact: true }).click();
-  // The project keeps no notes; the meaning row is made of what was read from its results.
-  await page.locator('.graph-layers button', { hasText: /^Meaning$/ }).click();
-  const meaning = await until(cards, c => c.some(card => /^Result: 5 rows × 2 columns: Month, mean_ozone, results\/monthly_ozone\.csv/.test(card.label)) && c.some(card => /^Question: .*Asked \d\d:\d\d · no notes yet$/.test(card.label)), 'the results described by what was read from them');
-  assert.ok(meaning.some(card => /^Figure: PNG image, \d+ × \d+ px/.test(card.label)), meaning.map(c => c.label).join(' | '));
-  await shot('03a-meaning');
-  // What the Agent did, as the rest of this check reads it.
-  await page.locator('.graph-layers button', { hasText: /^Process$/ }).click();
-  await page.getByRole('button', { name: 'Fit the graph' }).click();
-  await page.waitForTimeout(600);
-  const drawn = await until(cards, c => c.filter(card => !card.id.startsWith('p')).length === 10 && c.some(card => /ozone_by_month\.png/.test(card.label)), 'both messages drawn');
-  // Each file card is the version the message kept, named by its digest.
-  assert.ok(drawn.filter(c => /^(?:p\d+:)?f:/.test(c.id)).every(c => /@[0-9a-f]{64}$/.test(c.id)), 'every file card names a kept version');
-  const ids = drawn.map(c => c.id.replace(/@[0-9a-f]{64}$/, '')).sort();
-  assert.deepEqual(ids, ['f:analysis.R', 'f:data/airquality.csv', 'f:notes.md', 'f:plot.R', 'f:results/monthly_ozone.csv', 'f:results/ozone_by_month.png', 'p1:f:results/monthly_ozone.csv', ...ids.filter(id => /^q:|^r:/.test(id))].sort());
-  assert.equal(ids.filter(id => id.startsWith('q:')).length, 2);
-  assert.equal(ids.filter(id => id.startsWith('r:')).length, 2);
-  const drawnLines = await lines();
-  assert.equal(drawnLines.filter(l => l === 'observed · changed while it ran').length, 2, 'both outputs changed while their command ran: ' + drawnLines.join(', '));
-  assert.ok(drawnLines.includes('named · runs') && drawnLines.includes('reported · read') && drawnLines.includes('reported · edited'), drawnLines.join(', '));
-  // Previews are drawn when the graph is near enough to read them; zoom in as a person would.
-  for (let i = 0; i < 4 && parseInt(await page.locator('.graph-zoom-value').textContent()) < 62; i++) { await page.getByRole('button', { name: 'Zoom in' }).click(); await page.waitForTimeout(300); }
-  await page.locator('.graph-node[data-node^="f:data/airquality.csv@"] .graph-preview.table small').filter({ hasText: '153 rows × 6 columns' }).waitFor();
-  await until(() => page.locator('.graph-node[data-node^="f:results/ozone_by_month.png@"] .graph-preview img').evaluate(img => img.naturalWidth), w => w === 640, 'the figure previewed on its card');
-  await shot('03-two-rows');
-  passed('without notes, the meaning row shows each result by what was read from it: a table\'s rows and columns, a figure\'s size');
-  passed('each message is a row from what it read to what changed while its command ran; a later row refers to an earlier output; cards preview tables and figures');
 
-  await page.locator('.graph-node[data-node^="f:results/ozone_by_month.png@"]').first().click();
-  await page.locator('.graph-overlay').filter({ hasText: 'the path to and from ozone_by_month.png' }).waitFor();
-  const focused = await cards();
-  assert.deepEqual(focused.filter(c => c.dimmed).map(c => c.id.replace(/@[0-9a-f]{64}$/, '')), ['f:notes.md'], 'only what is off the figure\'s path steps back');
+  // The top level: one line of work standing for both messages and every step.
+  await page.getByRole('button', { name: 'Close all' }).click();
+  await until(cards, c => c.length === 1 && c[0].kind === 'line' && /^Line of work: .*2 messages, 9 steps, 5 files made$/.test(c[0].label), 'the work as one line of 2 messages, 9 steps and 5 files made');
+  assert.match(await page.locator('.graph-heading p').textContent(), /1 line of work, 2 messages, 9 recorded steps/);
+  await until(() => page.locator('.lg-line .graph-preview img').evaluate(img => img.naturalWidth).catch(() => 0), w => w === 640, 'the newest figure on the line\'s card');
+  await shot('03-line');
+  passed('closed, the project is one line of work that says what it stands for: 2 messages, 9 steps, 5 files made, with its newest figure');
+
+  // Opened: what it used, the two messages, what they made. Each link is on the message.
+  await page.locator('.lg-line .lg-toggle').click();
+  await page.locator('.lg-frame').waitFor();
+  assert.deepEqual(await page.locator('.lg-label').allTextContents(), ['Used', 'Work', 'Made']);
+  assert.equal((await titles('ask')).length, 2);
+  const open = await cards();
+  assert.deepEqual(open.filter(c => c.kind === 'file').map(c => c.id.split('|')[1]).sort(), ['analysis.R', 'data/airquality.csv', 'notes.md', 'plot.R', 'results/monthly_ozone.csv', 'results/ozone_by_month.png']);
+  assert.match(open.find(c => c.id.endsWith('|analysis.R')).label, /Was here before; changed/);
+  let drawn = await lines();
+  assert.equal(drawn.filter(l => /^makes · observed · .*changed/.test(l)).length, 2, 'both outputs changed while a command of their message ran: ' + drawn.join(', '));
+  assert.ok(drawn.includes('uses · reported · read') && drawn.some(l => /^makes · reported · .*edited/.test(l)), drawn.join(', '));
+  await until(() => page.locator('.lg-file[data-node$="|results/ozone_by_month.png"] .graph-preview img').evaluate(img => img.naturalWidth).catch(() => 0), w => w === 640, 'the figure drawn on its card');
+  await shot('04-line-open');
+  passed('opened, the line reads from what it used through its two messages to what they made; the figure is drawn on its card');
+
+  // A message into its activities, an activity into its steps; the links move down with them.
+  await page.locator('.lg-row.level-ask .lg-main').first().focus();
+  await page.keyboard.press('ArrowRight');
+  await until(() => titles('activity'), t => t.length === 2, 'the first message\'s activities');
+  // One look at the data before the script belongs to writing the script.
+  assert.deepEqual(await titles('activity'), ['Edited analysis.R and ran it once', 'Answered']);
+  await page.locator('.lg-row.level-activity.kind-build .lg-toggle').click();
+  await until(() => titles('step'), t => t.length === 3, 'the steps of the script\'s activity');
+  assert.deepEqual(await titles('step'), ['Read data/airquality.csv', 'Edited analysis.R', 'Ran Rscript analysis.R']);
+  drawn = await lines();
+  const stepWires = await page.evaluate(() => [...document.querySelectorAll('.graph-edge')].filter(g => g.dataset.kind === 'makes').map(g => g.dataset.label));
+  assert.ok(stepWires.includes('edited') && stepWires.includes('changed'), 'the step that edited the script and the step whose run changed the result each have their own line: ' + stepWires.join(', '));
+  await shot('05-steps');
+  passed('a message opens into its activities and an activity into its recorded steps, by key or pointer; each line to a file is on the step it was recorded on');
+
+  // From a result to the step that made it, and that step's record.
+  await page.locator('.lg-file[data-node$="|results/ozone_by_month.png"]').click();
   const inspector = page.getByRole('complementary', { name: /Figure ozone_by_month\.png/ });
   await until(() => inspector.locator('[data-owner-view] img, img').first().evaluate(img => img.naturalWidth).catch(() => 0), w => w === 640, 'the figure in its own view');
-  assert.match(await inspector.locator('.graph-relations li').first().textContent(), /Rscript plot\.R.*changed while it ran/);
-  await shot('04-figure-path');
-  // The keyboard walks the path: left from the figure is the command that ran while it changed.
-  await page.locator('.graph-node[data-node^="f:results/ozone_by_month.png@"]').first().focus();
-  await page.keyboard.press('ArrowLeft');
-  assert.match(await page.evaluate(() => document.activeElement?.dataset.node ?? ''), /^r:/);
-  passed('choosing a figure shows its path back to the data and the question, and the figure itself; arrows walk the path');
-
-  // The reference in the second row goes to the output where the first row made it.
-  await page.keyboard.press('Escape');
-  // Walking centred the command; fitting brings the second row's reference back in view.
-  await page.getByRole('button', { name: 'Fit the graph' }).click();
-  await page.waitForTimeout(500);
-  await page.locator('.graph-ref').click();
-  await page.getByRole('complementary', { name: /Result monthly_ozone\.csv/ }).waitFor();
-  // The version the first row kept, read only, or the file as it is now when none was kept.
-  await page.locator('.graph-inspector .snapshot-view tbody tr, .graph-inspector .ag-row[row-index="0"]').first().waitFor();
-  passed('a reference goes to the output in the row that made it, shown in its table');
+  const focused = await cards();
+  assert.ok(focused.filter(c => !c.dimmed).some(c => c.kind === 'ask' && /Plot the monthly means/.test(c.label)) && focused.find(c => c.id.endsWith('|notes.md')).dimmed, 'only what touched the figure stays');
+  await inspector.locator('.graph-history .graph-link', { hasText: 'Ran Rscript plot.R' }).click();
+  const record = page.getByRole('complementary', { name: 'Step Ran a command' });
+  assert.equal(await record.locator('.graph-command').textContent(), 'Rscript plot.R');
+  assert.match(await record.locator('.graph-facts').first().textContent(), /Bash · .*\d\d:\d\d:\d\d/);
+  assert.match(await record.locator('.lg-above').textContent(), /Plot the monthly means.*Wrote plot\.R and ran it once/);
+  await until(() => page.locator('.lg-row.level-step[data-selected] .lg-title').textContent().catch(() => ''), t => t === 'Ran Rscript plot.R', 'the step shown in the graph, its message and activity opened');
+  await shot('06-figure-to-step');
+  passed('a figure leads to the step whose run changed it: the message and activity open, the step is chosen and its record shows the command as it ran');
   await page.getByRole('button', { name: 'Close', exact: true }).click();
 
+  await page.getByRole('button', { name: 'Fit the graph' }).click();
   await page.getByRole('button', { name: 'Play the work from the start' }).click();
   const caption = await until(() => page.locator('.graph-caption').textContent(), t => /changed while Rscript analysis\.R ran/.test(t ?? ''), 'the replay narrating the first output', 20000);
   assert.ok((await cards()).some(c => c.later), 'later work is drawn faintly during the replay');
-  await shot('05-replay');
+  await shot('07-replay');
   await until(() => page.locator('.graph-now').getAttribute('aria-pressed'), v => v === 'true', 'the replay returning to now', 30000);
   passed('Play narrates the work in order and returns to now: ' + caption.replace(/^\d\d:\d\d:\d\d/, '').trim());
 
-  await page.locator('.graph-node[data-node^="f:results/monthly_ozone.csv@"]').first().click();
+  await page.locator('.lg-file[data-node$="|results/monthly_ozone.csv"]').click();
   await page.getByRole('button', { name: /^Open (current file )?in workspace$/ }).click();
-  await page.locator('.location-name').filter({ hasText: 'Workspace' }).waitFor();
+  await page.locator('.studio-title').filter({ hasText: 'Workspace' }).waitFor();
   await page.getByRole('tab', { name: /monthly_ozone\.csv/, selected: true }).waitFor();
   const snapshot = await admin.call('observation.snapshot', { projectId: opened.id });
   assert.deepEqual(snapshot.compositions.map(c => c.compositionId), ['workspace']);
-  const titles = (await admin.call('composition.read', { projectId: opened.id, compositionId: 'workspace' })).views.map(v => v.props.title).sort();
+  const viewTitles = (await admin.call('composition.read', { projectId: opened.id, compositionId: 'workspace' })).views.map(v => v.props.title).sort();
   // Following shows the Agent's work on the Graph and the answer board; it does not fill the
   // person's workspace. Only the node they opened is there.
-  assert.deepEqual(titles, ['monthly_ozone.csv']);
-  await shot('06-workspace');
-  passed('following does not open files behind the person; a node they open goes to the one shared workspace');
+  assert.deepEqual(viewTitles, ['monthly_ozone.csv']);
+  await shot('08-workspace');
+  passed('following does not open files behind the person; a file they open goes to the one shared workspace');
 
   await nav.getByRole('button', { name: 'Graph', exact: true }).click();
   for (const width of [1024, 390]) {
     await page.setViewportSize({ width, height: width === 390 ? 844 : 768 });
     await page.waitForTimeout(500);
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'no horizontal overflow at ' + width);
-    await shot('07-graph-' + width);
+    await shot('09-graph-' + width);
   }
   assert.deepEqual(report.browserErrors, []);
   passed('no horizontal overflow at 1024 and 390, and no page errors');

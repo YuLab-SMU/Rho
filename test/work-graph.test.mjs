@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildWorkGraph, foldVersions, laneLayout, layoutGraph, lineage, projectPath } from '../dist/work-graph.js';
+import { buildWorkGraph, foldVersions, lineage, projectPath } from '../dist/work-graph.js';
 
 const root = '/work/project';
 const kindOf = path => /\.R$/.test(path) ? 'code' : /\.svg$/.test(path) ? 'figures' : /^results\//.test(path) ? 'results' : /\.csv$/.test(path) ? 'data' : /\.md$/.test(path) ? 'notes' : null;
@@ -101,42 +101,6 @@ test('what the service recorded as changing during a message stays with it after
     'r:c1/t1:0 > f:results/figure.png changed while it ran', 'q:c1/t1 > f:old.csv removed meanwhile', 'r:c1/t2:0 > f:results/figure.png changed while it ran']);
 });
 
-test('the layout places each node after what it comes from, without overlaps, the same way each time', () => {
-  const boxes = [['data', 0], ['q', 1], ['code', 2], ['run', 3], ['out1', 4], ['out2', 5], ['q2', 6], ['note', 7]].map(([id, t]) => ({ id, width: 200, height: id.startsWith('q') ? 120 : 90, at: t }));
-  const links = [['data', 'q'], ['q', 'code'], ['q', 'run'], ['code', 'run'], ['run', 'out1'], ['run', 'out2'], ['out1', 'q2'], ['q2', 'note']].map(([from, to]) => ({ from, to }));
-  const a = layoutGraph(boxes, links), b = layoutGraph(boxes, links);
-  assert.deepEqual([...a.placed], [...b.placed]);
-  const col = id => a.placed.get(id).column;
-  for (const { from, to } of links) assert.ok(col(from) < col(to), from + ' before ' + to);
-  // A source is placed before what reads it even when it was first touched later.
-  const late = layoutGraph([{ id: 'q', width: 200, height: 100, at: 0 }, { id: 'input', width: 200, height: 100, at: 5 }, { id: 'out', width: 200, height: 100, at: 9 }], [{ from: 'input', to: 'q' }, { from: 'q', to: 'out' }]);
-  assert.deepEqual(['input', 'q', 'out'].map(id => late.placed.get(id).column), [0, 1, 2]);
-  assert.equal(col('data'), col('q') - 1, 'a source sits just before what it feeds');
-  const all = [...a.placed.values()];
-  for (const p of all) for (const o of all) if (p !== o && p.column === o.column) assert.ok(p.y + p.height <= o.y || o.y + o.height <= p.y, 'no overlap in a column');
-  assert.ok(all.every(p => p.y >= 0 && p.x >= 0));
-  // A cycle does not stop the layout.
-  const cyclic = layoutGraph(boxes.slice(0, 2), [{ from: 'data', to: 'q' }, { from: 'q', to: 'data' }]);
-  assert.equal(cyclic.placed.size, 2);
-});
-
-test('each message is a row; a file from an earlier row is referred to in the later one, and questions line up', () => {
-  const graph = buildWorkGraph(input([
-    turn('t1', 'Summarise', 0, 10, [tool('r', 'Read', 1, root + '/data/air.csv'), tool('w', 'Write', 3, root + '/results/summary.csv')]),
-    turn('t2', 'Plot the summary', 50, 60, [tool('s', 'Read', 52, root + '/results/summary.csv'), tool('p', 'Write', 54, root + '/plot.R'), tool('b', 'Bash', 58, 'Rscript plot.R')])
-  ], [{ path: 'data/air.csv', bytes: 9, modifiedAt: at(-90), category: 'data' }, { path: 'results/summary.csv', bytes: 12, modifiedAt: at(3), category: 'results' }, { path: 'plot.R', bytes: 30, modifiedAt: at(54), category: 'code' }]));
-  const size = (node, proxy) => proxy ? { width: 200, height: 50 } : { width: 240, height: node.kind === 'question' ? 120 : 90 };
-  const lanes = laneLayout(graph, size);
-  assert.deepEqual(lanes.rows.map(r => r.turn), ['c1/t1', 'c1/t2']);
-  const items = Object.fromEntries(lanes.items.map(i => [i.id, i.lane]));
-  assert.deepEqual(items, { 'q:c1/t1': 0, 'f:data/air.csv': 0, 'f:results/summary.csv': 0, 'q:c1/t2': 1, 'f:plot.R': 1, 'r:c1/t2:2': 1, 'p1:f:results/summary.csv': 1 });
-  assert.ok(lanes.links.some(l => l.from === 'p1:f:results/summary.csv' && l.to === 'q:c1/t2'), 'the later row reads the reference');
-  const q1 = lanes.placed.get('q:c1/t1'), q2 = lanes.placed.get('q:c1/t2');
-  assert.equal(q1.x + q1.width / 2, q2.x + q2.width / 2, 'questions stand in one column');
-  const bottom = Math.max(...lanes.items.filter(i => i.lane === 0).map(i => lanes.placed.get(i.id).y + lanes.placed.get(i.id).height));
-  assert.ok(lanes.items.filter(i => i.lane === 1).every(i => lanes.placed.get(i.id).y > bottom), 'the second row is below the first');
-});
-
 test('a command that ran and failed stays on the graph with how it ended, how long it ran and what it printed', () => {
   const graph = buildWorkGraph(input([turn('t1', 'Fit the model', 0, 20, [
     { ...tool('m', 'Bash', 9, 'rtk Rscript model.R', 'rejected'), startedAt: at(6), exitCode: 1, output: { text: 'Error in lm()\nExecution halted', lines: 2, bytes: 29, cut: false } },
@@ -162,9 +126,9 @@ test('same path keeps distinct captured versions and old events do not acquire a
  assert.ok(!graph.edges.some(e=>/produced/.test(e.label)));
 });
 
-test('one oversized turn respects the drawing cap and all drawn links reference retained nodes',()=>{
+test('a turn with many outputs keeps every one of them, and all links reference kept nodes',()=>{
  const t=turn('t','Many outputs',0,20,Array.from({length:220},(_,i)=>tool('w'+i,'Write',3,root+'/results/'+i+'.csv')));
- const graph=buildWorkGraph(input([t],[]));assert.equal(graph.nodes.length,160);assert.ok(graph.omittedNodes>0);
+ const graph=buildWorkGraph(input([t],[]));assert.equal(graph.nodes.length,221);
  const ids=new Set(graph.nodes.map(n=>n.id));assert.ok(graph.edges.every(e=>ids.has(e.from)&&ids.has(e.to)));assert.ok(ids.has('q:c1/t'));
 });
 

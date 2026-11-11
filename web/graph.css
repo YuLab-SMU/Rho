@@ -100,7 +100,13 @@
 .graph-caption { position: absolute; left: 50%; top: 14px; display: flex; align-items: center; gap: 10px; max-width: min(640px, calc(100% - 32px)); padding: 7px 14px; border-radius: 999px; background: var(--color-ink); color: white; font-size: 13px; transform: translateX(-50%); box-shadow: 0 10px 24px -12px #000a; pointer-events: none; }
 .graph-caption time { color: #b9c7c0; font-variant-numeric: tabular-nums; }
 .graph-caption span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.graph-map { position: absolute; left: 16px; bottom: 62px; padding: 0; border: 1px solid var(--color-hairline); border-radius: 10px; background: #fffffff2; box-shadow: 0 6px 18px -12px #1c2a2466; cursor: pointer; overflow: hidden; }
+/* The map and the zoom controls stand together. The map shows while the view moves or the pointer
+   is on them, and fades when the view rests, so it never stays over what is being read. */
+.graph-nav { position: absolute; left: 16px; bottom: 16px; display: flex; flex-direction: column; align-items: flex-start; gap: 0; pointer-events: none; }
+.graph-nav > * { pointer-events: auto; }
+.graph-map { margin-bottom: 8px; padding: 0; border: 1px solid var(--color-hairline); border-radius: 10px; background: #fffffff2; box-shadow: 0 6px 18px -12px #1c2a2466; cursor: pointer; overflow: hidden;
+  opacity: 0; visibility: hidden; transition: opacity .25s .5s, visibility 0s .75s; }
+.graph-map.awake, .graph-nav:hover .graph-map, .graph-nav:focus-within .graph-map { opacity: 1; visibility: visible; transition: opacity .12s, visibility 0s; }
 .graph-map svg { display: block; }
 .graph-map rect { fill: #cfd8d3; }
 .graph-map rect.tone-question { fill: #d9a9b4; }
@@ -112,10 +118,13 @@
 .graph-map rect.off { opacity: .3; }
 .graph-map rect.live { fill: var(--color-accent); }
 .graph-map .graph-map-frame { fill: #1e6b5212; stroke: var(--color-accent); stroke-width: 1.5; }
-.graph-zoom { position: absolute; left: 16px; bottom: 16px; display: flex; align-items: center; gap: 2px; padding: 3px; border: 1px solid var(--color-hairline); border-radius: 10px; background: var(--color-surface); box-shadow: 0 6px 18px -12px #1c2a2466; cursor: default; }
+.graph-zoom { display: flex; align-items: center; gap: 2px; padding: 3px; border: 1px solid var(--color-hairline); border-radius: 10px; background: var(--color-surface); box-shadow: 0 6px 18px -12px #1c2a2466; cursor: default; }
 .graph-zoom .icon-button { width: 30px; height: 30px; min-height: 30px; }
 .graph-zoom-value { min-width: 42px; color: var(--color-muted); font-size: 12px; text-align: center; font-variant-numeric: tabular-nums; }
-.graph-legend { position: absolute; right: 16px; bottom: 16px; display: flex; flex-wrap: wrap; gap: 14px; padding: 7px 12px; border: 1px solid var(--color-hairline); border-radius: 10px; background: #fffffff2; color: var(--color-muted); font-size: 12px; cursor: default; }
+.graph-legend { position: absolute; right: 16px; bottom: 16px; display: flex; flex-direction: column-reverse; align-items: flex-end; gap: 6px; color: var(--color-muted); font-size: 12px; cursor: default; }
+.graph-key { display: inline-flex; align-items: center; gap: 7px; min-height: 30px; padding: 3px 11px; border: 1px solid var(--color-hairline); border-radius: 10px; background: var(--color-surface); color: var(--color-muted); font-size: 12px; box-shadow: 0 6px 18px -12px #1c2a2466; }
+.graph-key:hover, .graph-legend.open .graph-key { color: var(--color-ink); }
+.graph-key-list { display: flex; flex-direction: column; gap: 7px; padding: 10px 13px; border: 1px solid var(--color-hairline); border-radius: 10px; background: var(--color-surface); box-shadow: 0 10px 26px -14px #1c2a2470; }
 .graph-legend span { display: inline-flex; align-items: center; gap: 7px; }
 .graph-legend .line { display: inline-block; width: 22px; height: 0; border-top: 1.6px solid #9fada6; }
 .graph-legend .line.named { border-top-style: dashed; }
@@ -279,3 +288,137 @@
 .meaning-files li .graph-link { max-width: 100%; }
 .meaning-files li .graph-link span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); font-size: 12px; }
 .meaning-files small { flex: none; color: var(--color-meta); font-size: 11.5px; }
+
+/* The levels of the work. A line of work is a card; opened, it is a frame whose work column
+   opens in place, a message into its activities and an activity into its steps. */
+.lg-label { position: absolute; color: var(--color-meta); font-size: 10.5px; font-weight: 650; letter-spacing: .07em; text-transform: uppercase; white-space: nowrap; }
+.graph-node.lg-line, .graph-node.lg-row { padding: 0; cursor: default; }
+.lg-main { display: flex; flex: 1; align-items: stretch; justify-content: flex-start; gap: 0; min-width: 0; min-height: 0; padding: 0; border: 0; border-radius: inherit; background: transparent; color: inherit; font-weight: 400; text-align: left; }
+.lg-main:hover, .lg-main:active { background: transparent; }
+.lg-toggle { flex: none; width: 24px; height: 24px; min-height: 0; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--color-meta); }
+.lg-toggle:hover { background: var(--color-hover); color: var(--color-ink); }
+.lg-toggle svg { transition: transform .16s; }
+.lg-toggle.open svg { transform: rotate(90deg); }
+.graph-node[data-selected] { border-color: var(--color-accent); box-shadow: 0 0 0 3px #1e6b5226, 0 10px 24px -12px #1e6b5255; }
+.lg-facts { display: flex; flex-wrap: wrap; gap: 4px 6px; margin-top: auto; overflow: hidden; }
+.lg-facts span { padding: 1px 7px; border-radius: 999px; background: var(--color-well); color: var(--color-muted); font-size: 11.5px; white-space: nowrap; }
+.lg-facts span.bad { background: var(--color-amber-soft); color: var(--color-amber-text); }
+
+.lg-line .lg-main { flex-direction: column; gap: 4px; padding: 12px 40px 12px 14px; }
+.lg-line .lg-toggle { position: absolute; right: 9px; top: 9px; }
+.lg-line .graph-node-head .brand-mark, .lg-line .graph-node-head > svg:last-child { margin-left: auto; }
+.lg-line .graph-node-title { font-size: 15.5px; line-height: 1.32; }
+.lg-said { display: -webkit-box; overflow: hidden; -webkit-line-clamp: 3; -webkit-box-orient: vertical; color: var(--color-muted); font-size: 12.5px; line-height: 1.45; }
+.lg-line .graph-preview { flex: 1; margin: 6px 0; }
+.lg-line.quiet { background: #fbfcfbd9; box-shadow: none; }
+.lg-line.quiet .lg-main { gap: 3px; padding: 9px 36px 9px 12px; }
+.lg-line.quiet .graph-node-title { font-size: 13.5px; -webkit-line-clamp: 1; }
+.lg-line.quiet .graph-node-head { display: none; }
+
+.lg-frame { position: absolute; border: 1px solid var(--color-hairline-strong); border-radius: 14px; background: #ffffffb8; box-shadow: 0 1px 2px #1c2a2410, 0 18px 40px -28px #1c2a2455; }
+.lg-frame[data-selected] { border-color: var(--color-accent); }
+.lg-frame[data-dimmed] { opacity: .45; }
+.lg-frame-head { display: flex; align-items: center; gap: 6px; height: 50px; padding: 0 14px 0 10px; border-bottom: 1px solid var(--color-divider); }
+.lg-frame-head .lg-main { align-items: center; gap: 14px; height: 100%; }
+.lg-frame-head strong { overflow: hidden; font-size: 15px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.lg-frame-head .lg-facts { flex: none; flex-wrap: nowrap; margin: 0; }
+
+.lg-row { flex-direction: row !important; align-items: stretch; gap: 0; }
+.lg-row .lg-toggle { align-self: center; margin-left: 5px; }
+.lg-row .lg-main { align-items: center; gap: 9px; padding: 0 12px 0 10px; }
+.lg-row .lg-toggle + .lg-main { padding-left: 4px; }
+.lg-text { display: flex; flex: 1; flex-direction: column; gap: 1px; min-width: 0; }
+.lg-title { overflow: hidden; font-size: 14px; font-weight: 600; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
+.lg-meta { flex: none; max-width: 46%; overflow: hidden; color: var(--color-meta); font-size: 11.5px; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.lg-answer { overflow: hidden; color: var(--color-muted); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.lg-row.level-ask { background: #fbfbf8; }
+.lg-row.level-ask .lg-main { flex-wrap: wrap; align-content: center; row-gap: 3px; }
+.lg-row.level-ask .lg-text { flex-basis: calc(100% - 40px); }
+.lg-row.level-ask .lg-title { font-size: 14.5px; }
+.lg-row.level-ask .lg-meta { max-width: 100%; margin-left: 33px; }
+.lg-row.level-ask.open { border-style: dashed; box-shadow: none; }
+.lg-row.level-ask.open .lg-main { flex-wrap: nowrap; }
+.lg-row.level-ask.open .lg-text { flex-basis: auto; }
+.lg-row.level-ask.open .lg-meta { margin-left: 0; max-width: 50%; }
+.lg-row.level-ask .graph-node-icon { background: var(--color-hue-rose); color: var(--color-hue-rose-ink); }
+.lg-row.level-activity { border-radius: 9px; box-shadow: none; }
+.lg-row.level-activity .lg-title { font-weight: 550; font-size: 13.5px; }
+.lg-row.level-activity.kind-build .graph-node-icon { background: var(--color-hue-iris); color: var(--color-hue-iris-ink); }
+.lg-row.level-activity.kind-notes .graph-node-icon { background: var(--color-hue-clay); color: var(--color-hue-clay-ink); }
+.lg-row.level-activity.kind-cells .graph-node-icon { background: var(--color-hue-moss); color: var(--color-hue-moss-ink); }
+.lg-row.level-activity.kind-answer .graph-node-icon { background: var(--color-hue-rose); color: var(--color-hue-rose-ink); }
+.lg-row.level-step { border-color: transparent; border-radius: 6px; background: transparent; box-shadow: none; }
+.lg-row.level-step:hover { border-color: var(--color-hairline); background: var(--color-surface); box-shadow: none; }
+.lg-row.level-step .lg-main { gap: 7px; padding: 0 8px 0 6px; }
+.lg-row.level-step .graph-node-icon { width: 18px; height: 18px; border-radius: 5px; background: transparent; color: var(--color-meta); }
+.lg-row.level-step .lg-title { font-size: 13px; font-weight: 450; color: var(--color-ink); }
+.lg-row.level-step.action-execute .lg-title { font-family: var(--font-mono); font-size: 12px; }
+.lg-row.level-step.action-say .lg-title { color: var(--color-muted); font-style: italic; }
+.lg-row.level-step .lg-meta { font-size: 11px; }
+.lg-row[data-bad] .lg-meta, .lg-row.level-step[data-bad] .graph-node-icon { color: var(--color-amber-text); }
+.lg-row.level-step[data-selected] { border-color: var(--color-accent); background: var(--color-surface); box-shadow: 0 0 0 2px #1e6b5222; }
+
+.lg-file { flex-direction: row !important; flex-wrap: wrap; align-items: center; align-content: flex-start; gap: 4px 9px !important; padding: 7px 11px !important; border-radius: 9px; box-shadow: none; }
+.lg-file .lg-title { font-size: 13px; }
+.lg-bundle { border-style: dashed; background: #fbfcfbe6; }
+.lg-note { overflow: hidden; color: var(--color-meta); font-size: 11.5px; text-overflow: ellipsis; white-space: nowrap; }
+.lg-note.warn { color: var(--color-amber-text); }
+.lg-file.figure .graph-preview { flex: 1 0 100%; height: 96px; margin: 2px 0 0; }
+.lg-claim { flex-direction: row !important; align-items: flex-start; gap: 9px !important; padding: 9px 12px !important; border-left: 3px solid var(--color-hue-clay); border-radius: 9px; background: #fffdf9; box-shadow: none; }
+.lg-claim .graph-node-icon { width: 20px; height: 20px; border-radius: 6px; background: var(--color-hue-clay); color: var(--color-hue-clay-ink); }
+.lg-claim-text { display: -webkit-box; overflow: hidden; -webkit-line-clamp: 3; -webkit-box-orient: vertical; font-size: 13px; line-height: 1.4; }
+.lg-claim.kind-choice { border-left-color: var(--color-hairline-strong); background: var(--color-surface); }
+.lg-claim.kind-choice .lg-claim-text { -webkit-line-clamp: 2; color: var(--color-muted); }
+.lg-claim.kind-choice .graph-node-icon { background: var(--color-well); color: var(--color-muted); }
+.lg-claim[data-ground=none], .lg-claim[data-ground=named] { border-left-style: dashed; }
+.lg-claim .lg-note.warn { margin-top: 2px; }
+
+.graph-edge.wire-flow path { stroke: #7f9289; stroke-width: 2; }
+.graph-edge.wire-rests path { stroke: #c79a6a; stroke-width: 1.2; }
+/* Until something is chosen, the lines inside a frame are a quiet texture; choosing draws the ones that matter. */
+.graph-edge.wire-uses path, .graph-edge.wire-makes path { stroke-width: 1.1; opacity: .6; }
+.graph-edge.wire-rests path { opacity: .55; }
+.graph-edge.wire-uses.on path, .graph-edge.wire-makes.on path, .graph-edge.wire-rests.on path { opacity: 1; }
+.graph-edge.wire-uses.on path, .graph-edge.wire-makes.on path, .graph-edge.wire-rests.on path { stroke: var(--color-accent); stroke-width: 2; }
+.graph-map rect.map-frame { fill: #e7ece9; }
+.graph-map rect.map-line, .graph-map rect.map-ask { fill: #d9a9b4; }
+.graph-map rect.map-activity, .graph-map rect.map-step { fill: #b9c4be; }
+.graph-map rect.map-file { fill: #9cc19f; }
+.graph-map rect.map-claim { fill: #d8b994; }
+
+/* Far out, a card is its name. */
+.graph-world[data-zoom=far] .lg-said, .graph-world[data-zoom=far] .lg-facts, .graph-world[data-zoom=far] .lg-meta, .graph-world[data-zoom=far] .lg-answer, .graph-world[data-zoom=far] .lg-note, .graph-world[data-zoom=far] .lg-label { display: none; }
+.graph-world[data-zoom=far] .lg-line .graph-node-title { font-size: min(calc(11.5px / var(--k)), 30px); line-height: 1.15; -webkit-line-clamp: 4; }
+.graph-world[data-zoom=far] .lg-frame-head strong { font-size: min(calc(11px / var(--k)), 26px); }
+
+.lg-above { display: flex; flex-wrap: wrap; gap: 0 2px; margin: -6px 0 -8px -7px; }
+.lg-above .graph-link { max-width: 100%; min-height: 24px; color: var(--color-muted); font-size: 12px; }
+.lg-above .graph-link + .graph-link::before { content: '›'; margin-right: 6px; color: var(--color-meta); }
+.lg-quote { margin: 0; padding: 8px 12px; border-left: 3px solid var(--color-accent-soft); background: #fbfcfb; font-size: 13.5px; line-height: 1.5; }
+.lg-quote cite { display: block; margin-top: 4px; color: var(--color-meta); font-size: 11.5px; font-style: normal; }
+.lg-purpose { margin: 0; font-size: 14px; font-weight: 500; line-height: 1.45; }
+.lg-steps { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
+.lg-steps li { display: grid; grid-template-columns: 62px minmax(0, 1fr); align-items: center; column-gap: 4px; }
+.lg-steps time { color: var(--color-meta); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.lg-steps .graph-link { min-height: 24px; font-size: 12.5px; }
+.lg-steps li[data-bad] .graph-link svg { color: var(--color-amber-text); }
+.lg-claims li { align-items: flex-start; flex-direction: column; gap: 0; }
+.lg-claims .graph-link { align-items: flex-start; max-width: 100%; }
+.lg-claims .graph-link span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; white-space: normal; line-height: 1.4; }
+.lg-claims .graph-link svg { margin-top: 3px; }
+.lg-claims small { margin-left: 28px; color: var(--color-amber-text); font-size: 11.5px; }
+.graph-relations li > small { flex: none; margin-left: auto; color: var(--color-meta); font-size: 11.5px; white-space: nowrap; }
+.lg-kept { display: flex; flex-direction: column; gap: 6px; }
+/* Beside the details the canvas is narrow; the key to the lines gives way. */
+
+/* Many conversations: the lanes scroll inside the timeline, the axis stays under them. */
+.tl-body.tall { overflow-y: auto; padding-top: 8px; overscroll-behavior: contain; }
+.tl-body.tall .tl-axis { position: sticky; bottom: 0; z-index: 3; background: var(--color-surface); }
+.tl-tip.under { transform: translate(-50%, 26px); }
+/* Scrolled lanes keep their height; the names move with them. */
+.tl-body.tall { align-items: flex-start; }
+.tl-body.tall .tl-names li { flex: none; }
+/* Past sizes.roomy lines of work, a closed line is its name and counts. */
+.lg-line.brief .graph-node-title { -webkit-line-clamp: 1; }
+.graph-world[data-zoom=far] .lg-line.brief .graph-node-title { -webkit-line-clamp: 2; }
+.graph-world[data-zoom=far] .lg-line.quiet .graph-node-title { font-size: min(calc(10px / var(--k)), 23px); -webkit-line-clamp: 2; }

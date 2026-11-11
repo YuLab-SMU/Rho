@@ -1,7 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { notesMeaning, fileDescriptions, traceStatement, plainText, notesPath, topicOf, withoutPaths } from '../dist/notes-meaning.js';
-import { meaningLayer, layered } from '../dist/meaning-graph.js';
 import { buildWorkGraph, foldVersions } from '../dist/work-graph.js';
 import { holdsOf, modelName } from '../dist/file-describer.js';
 
@@ -114,65 +113,17 @@ const root = '/work/project';
 const kindOf = path => /\.py$/.test(path) ? 'code' : /\.png$/.test(path) ? 'figures' : /^results\//.test(path) ? 'results' : /\.csv$/.test(path) ? 'data' : /\.md$/.test(path) ? 'notes' : null;
 const at = s => new Date(Date.UTC(2026, 9, 30, 6, 0, s)).toISOString();
 const ms = s => Date.UTC(2026, 9, 30, 6, 0, s);
-test('the meaning layer runs from the question to findings and choices, the files they rest on, and how those files came about', () => {
-  const turn = {
-    id: 't1', by: 'local', text: 'Compare the strains.', sentAt: at(0), startedAt: at(0), endedAt: at(60), state: 'completed', model: 'm',
-    steps: [
-      { kind: 'tool', id: 'a', tool: 'Write', at: at(5), detail: root + '/analysis.py', outcome: 'returned' },
-      { kind: 'tool', id: 'b', tool: 'Bash', at: at(20), startedAt: at(10), detail: 'python3 analysis.py data/plates.csv', outcome: 'returned', exitCode: 0 },
-      { kind: 'text', at: at(30), text: 'Done.' },
-    ],
-    evidence: { records: [], omitted: 0, bytes: 0, snapshots: 0 },
-    files: { changed: [{ path: 'results/tests.csv', change: 'created', modifiedAt: at(15) }], partial: false, omitted: 0 },
-  };
-  const files = [
-    { path: 'data/plates.csv', bytes: 10, modifiedAt: at(-100), category: 'data' },
-    { path: 'analysis.py', bytes: 10, modifiedAt: at(5), category: 'code' },
-    { path: 'results/tests.csv', bytes: 10, modifiedAt: at(15), category: 'results' },
-  ];
-  const process = foldVersions(buildWorkGraph({ turns: [{ conversationId: 'c-1', conversationTitle: 'Plates', agent: 'Claude Code', turn }], files, project: { root }, kindOf, now: ms(90) }));
-  const meanings = notesMeaning(notes).slice(0, 1);
-  const traces = new Map(meanings[0].statements.map(s => [s, traceStatement(s, [], () => [], () => null)]));
-  const layer = meaningLayer({ process, meanings, traces, files, kindOf });
-  const edge = (from, to) => layer.edges.find(e => e.from === from && e.to === to);
-  assert.deepEqual(layer.turns.map(t => t.id), ['m:c-1']);
-  const finding = layer.nodes.find(n => n.kind === 'finding' && n.text.startsWith('Four'));
-  assert.equal(edge('q:m:c-1', finding.id).label, 'found');
-  assert.equal(edge(finding.id, 'm:f:results/tests.csv').label, 'rests on');
-  assert.equal(edge(finding.id, 'm:f:results/figure.png').label, 'shown in');
-  const choice = layer.nodes.find(n => n.kind === 'choice');
-  assert.equal(edge(choice.id, 'm:f:results/alt_holm.csv').label, 'instead gives');
-  const made = edge('m:f:results/tests.csv', 'm:f:analysis.py');
-  assert.equal(made.label, 'made by'); assert.equal(made.basis, 'observed', 'the process basis stays');
-  assert.equal(edge('m:f:analysis.py', 'm:f:data/plates.csv').label, 'reads');
-  assert.equal(layer.nodes.find(n => n.id === 'm:f:results/tests.csv').meaning.description.text, 'one row per strain with its p-value');
-  assert.deepEqual(layer.nodes.find(n => n.id === 'q:m:c-1').meaning.todos, { done: 1, total: 2 });
-  assert.ok(layer.traces.some(e => e.from === 'm:f:results/tests.csv' && e.label === 'kept as' && e.to.startsWith('f:results/tests.csv')));
-  const both = layered(process, layer, 'both');
-  assert.deepEqual(both.turns.map(t => t.id), ['m:c-1', 'c-1/t1'], 'the meaning rows above the process rows');
-  assert.equal(layered(process, layer, 'meaning').nodes.every(n => n.meaning), true);
-  assert.equal(layered(process, layer, 'process'), process);
-});
-
-test('files read while a message ran join its row until the notes name them, and the notes\' words lead over a model\'s or the facts', () => {
-  const process = buildWorkGraph({ turns: [], files: [], project: { root }, kindOf, now: ms(90) });
-  const meanings = notesMeaning(notes).slice(0, 1);
-  const traces = new Map(meanings[0].statements.map(s => [s, traceStatement(s, [], () => [], () => null)]));
+test('what a file holds comes from the notes\' words first, then a model\'s sentence, then the facts read from it', () => {
+  const descriptions = fileDescriptions(notesMeaning(notes).slice(0, 1));
   const read = (path, conversationId, extra = {}) => [path, { path, version: 'a'.repeat(64), bytes: 10, modifiedAt: at(16), observedAt: at(17), facts: 'facts of ' + path, sentence: null, state: 'facts', conversationId, turnId: 't1', ...extra }];
   const described = new Map([read('results/plot2.png', 'c-1'), read('results/tests.csv', 'c-1', { sentence: { text: 'a model says', version: 'a'.repeat(64), model: 'm', at: at(18) }, state: 'described' }),
-    read('results/other.csv', 'c-9', { sentence: { text: 'other table', version: 'b'.repeat(64), model: 'provider/small[1m]', at: at(19) }, state: 'described' }), read('scratch.py', 'c-1')]);
-  const layer = meaningLayer({ process, meanings, traces, files: [], kindOf, described });
-  const edge = (from, to) => layer.edges.find(e => e.from === from && e.to === to);
-  const plot = layer.nodes.find(n => n.id === 'm:f:results/plot2.png');
-  assert.deepEqual([edge('q:m:c-1', plot.id).label, edge('q:m:c-1', plot.id).basis], ['made', 'observed']);
-  assert.deepEqual([plot.meaning.description.source, plot.meaning.description.text], ['facts', 'facts of results/plot2.png']);
-  const tests = layer.nodes.find(n => n.id === 'm:f:results/tests.csv').meaning.description;
+    read('results/other.csv', 'c-9', { sentence: { text: 'other table', version: 'b'.repeat(64), model: 'provider/small[1m]', at: at(19) }, state: 'described' })]);
+  const plot = holdsOf('results/plot2.png', descriptions, described);
+  assert.deepEqual([plot.source, plot.text], ['facts', 'facts of results/plot2.png']);
+  const tests = holdsOf('results/tests.csv', descriptions, described);
   assert.deepEqual([tests.source, tests.text, tests.facts], ['notes', 'one row per strain with its p-value', 'facts of results/tests.csv']);
-  assert.ok(!layer.nodes.some(n => n.path === 'scratch.py'), 'only results and figures join a row by themselves');
-  assert.deepEqual(layer.turns.map(t => t.id), ['m:c-1', 'm:c-9'], 'a conversation with no section yet gets its own row');
-  const other = layer.nodes.find(n => n.id === 'm:f:results/other.csv').meaning.description;
+  const other = holdsOf('results/other.csv', descriptions, described);
   assert.deepEqual([other.source, other.text, other.earlier, other.model], ['model', 'other table', true, 'provider/small[1m]']);
-  assert.equal(edge('q:m:c-9', 'm:f:results/other.csv').label, 'made');
   assert.equal(holdsOf('results/other.csv', new Map(), described, ms(18)).source, 'facts', 'at an earlier moment the sentence had not arrived');
   assert.equal(holdsOf('results/other.csv', new Map(), described, ms(16)), undefined, 'nor had the file been read');
   assert.equal(modelName('provider/small[1m]'), 'small');

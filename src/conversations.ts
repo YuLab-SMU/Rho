@@ -399,7 +399,7 @@ export class Conversations {
       }
     }
     const graph=buildWorkGraph({turns:selected,files:[],project,kindOf:()=>null,now:Date.now()});
-    const model={nodes:graph.nodes.map(n=>({id:n.id,kind:n.kind,...(n.path?{path:n.path}:{}),...(n.resource?{resource:n.resource,capturedAt:n.capturedAt}:{}),...(n.gap?{gap:n.gap}:{})})),edges:graph.edges.map(e=>({from:e.from,to:e.to,label:e.label,basis:e.basis,at:e.at})),omittedTurns:graph.omittedTurns,omittedNodes:graph.omittedNodes??0};
+    const model={nodes:graph.nodes.map(n=>({id:n.id,kind:n.kind,...(n.path?{path:n.path}:{}),...(n.resource?{resource:n.resource,capturedAt:n.capturedAt}:{}),...(n.gap?{gap:n.gap}:{})})),edges:graph.edges.map(e=>({from:e.from,to:e.to,label:e.label,basis:e.basis,at:e.at})),omittedTurns:0,omittedNodes:0};
     return {turns,omitted,model};
   }
   // Moving a conversation to the trash keeps it whole and frees its place among the project's
