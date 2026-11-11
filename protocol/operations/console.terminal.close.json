@@ -118,6 +118,31 @@
           "terminalId": {
             "pattern": "^t-[a-f0-9]{16}$",
             "type": "string"
+          },
+          "typedBy": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "at": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "by": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "by",
+                  "at"
+                ],
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -132,7 +157,8 @@
           "exit",
           "bytes",
           "kept",
-          "problem"
+          "problem",
+          "typedBy"
         ],
         "type": "object"
       }
@@ -142,5 +168,5 @@
     ],
     "type": "object"
   },
-  "description": "Person at this machine only: hang up the terminal's shell, as closing a terminal window does."
+  "description": "Hang up the terminal's shell, as closing a terminal window does. An Agent closes only the terminals it opened."
 }

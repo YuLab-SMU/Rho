@@ -149,8 +149,11 @@ inspect what happened. The application gives those actions direct places:
   keys to a running program (Ctrl+C), full-screen programs, at the size of the view. The view
   keeps its terminal with the page, so a reload or another tab returns to the same shell and
   the last megabyte it printed. Closing the view hangs the shell up, a shell that ended offers
-  a new one, and a project keeps four at once. Only the person at this machine has one: an
-  Agent cannot be granted it, and a tab opened from a link shows Commands. It needs `python3`
+  a new one, and a project keeps four at once. An Agent may use it too
+  ([episode](SIMULATED-PROJECT-EPISODE.md#the-agent-in-the-terminal)): it reads what the screen
+  shows as text and types there, and the view says who last did and when; a terminal an Agent
+  opened of its own is offered here to show, and the person's own is offered back. Only the
+  person at this machine draws one; a tab opened from a link shows Commands. It needs `python3`
   on macOS or Linux; on Windows the view says so and offers Commands. Commands is the record
   the Console page showed, also opened by the board's command count.
   It runs the person's own single shell commands in the project folder. Newest
@@ -170,12 +173,15 @@ inspect what happened. The application gives those actions direct places:
   the Overview (offered while the Notebook plugin is selected). It shows the project's live R
   and Python sessions, which the person shares with the Agent. A workspace can hold several
   ([episode](SIMULATED-PROJECT-EPISODE.md#several-notebooks)): the first is the project's
-  notebook, which lists every cell of the sessions; once a page has it, a group's + offers New
-  notebook, a notebook of its own (Notebook 2, 3, …, renamed from its tab's menu) that lists the
-  cells run in it. They share the sessions, so a value made in one is there in the others, and
-  the project's notebook names the notebook each such cell was run in. A script's line, a table
-  to explore and an expression from a value's view go to the notebook the person last worked
-  in. Cells read in the order
+  notebook, whose R and Python sessions the Agent works in unless it names another; once a page
+  has it, a group's + offers New notebook, a notebook of its own (Notebook 2, 3, …, renamed from
+  its tab's menu) with R and Python sessions of its own
+  ([episode](SIMULATED-PROJECT-EPISODE.md#each-notebook-its-own-sessions)): a value made in one is
+  not in another. A notebook split beside itself or shown on another page is the same notebook.
+  Each lists only its own cells. A script's line, a table to explore and an expression from a
+  value's view go to the notebook the person last worked in, and Variables, Plots and Data flow
+  show its sessions, with a choice of notebook in their header when more than one has a session.
+  Sessions lists every notebook's sessions, by notebook. Cells read in the order
   they ran: language and number in the gutter, who ran it (the Agent's name opens its
   conversation) and its purpose, how long it took or how it ended, the code highlighted,
   then what it printed, streamed while it runs, with messages, warnings and errors in

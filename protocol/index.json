@@ -237,40 +237,46 @@
       "sha256": "e6b356ab63b53b58c76f1c18b6cb5278dbf1f27a4b08b629ded484fb55715c06"
     },
     "console.terminal.close": {
-      "summary": "Person at this machine only: hang up the terminal's shell, as closing a terminal window does.",
+      "summary": "Hang up the terminal's shell, as closing a terminal window does. An Agent closes only the terminals it opened.",
       "path": "operations/console.terminal.close.json",
-      "bytes": 3316,
-      "sha256": "94b84db0f2c2cc58b7d340454c217d6b92c8e98e499b9e9b224d9b906f8351bc"
+      "bytes": 3989,
+      "sha256": "dd90dd91e127514433d942c3311ad3456e121db78b1609d28ad07fc62c33e123"
     },
     "console.terminal.list": {
-      "summary": "Person at this machine only: their open terminals in this project, with each one's size, how much it has printed and whether its shell has ended.",
+      "summary": "The open terminals in this project, with who opened each, who else last typed there, each one's size, how much it has printed and whether its shell has ended.",
       "path": "operations/console.terminal.list.json",
-      "bytes": 3534,
-      "sha256": "e2880daedafbcd435c208c785fdaa4d37443d180a6a17eed4580f4e613e5e2f0"
+      "bytes": 4255,
+      "sha256": "c1d6e18b2feb562816ec24e3bd88214c1633d71ae8372dbdf4fd5f6d889b79a3"
     },
     "console.terminal.open": {
-      "summary": "Person at this machine only: start their shell on a pseudo-terminal in the project folder (or a folder inside it), at the size given. It lives while Rho runs; a project keeps a few at once. Not available on Windows yet.",
+      "summary": "Start a shell on a pseudo-terminal in the project folder (or a folder inside it), at the size given; the person and Agents may both use it. It lives while Rho runs; a project keeps a few at once. Not available on Windows yet.",
       "path": "operations/console.terminal.open.json",
-      "bytes": 3624,
-      "sha256": "67d764554b3fc84add4ea7055ccf57ef35576e64fe50b522cfb5bdd99d3cded1"
+      "bytes": 4286,
+      "sha256": "1d6e1c63d96291b207df344c54dcc0eddd2102b6c00767c575fec293b580820d"
     },
     "console.terminal.read": {
-      "summary": "Person at this machine only: the bytes a terminal printed after an offset, in base64, waiting up to waitMs when there is nothing new. Bytes older than the kept scrollback are counted in dropped.",
+      "summary": "Person at this machine only, for the page that draws it: the bytes a terminal printed after an offset, in base64, waiting up to waitMs when there is nothing new. Bytes older than the kept scrollback are counted in dropped.",
       "path": "operations/console.terminal.read.json",
-      "bytes": 4107,
-      "sha256": "674b3addd94675bf48b2af4fa15bca1354104a61f4d7b37de2730381a885a9c0"
+      "bytes": 4791,
+      "sha256": "87ccab23bf81f1b29a71abd3cfdcdf3c96b399678eba3a6b9b9acd958bcf83ee"
     },
     "console.terminal.resize": {
       "summary": "Person at this machine only: tell the terminal how many columns and rows are shown.",
       "path": "operations/console.terminal.resize.json",
-      "bytes": 3529,
-      "sha256": "c9687af501ace7effe5eadd79233d4130c5eefc1994e3fa04fab9c2aa8756320"
+      "bytes": 4185,
+      "sha256": "57379b17ea3c51bbb9884d6b623432300a2c6523af33a02b2e28357570da0903"
+    },
+    "console.terminal.screen": {
+      "summary": "What a terminal shows now as text: its last lines, the cursor and whether a full-screen program has the screen. Given after (the offset a write returned) and waitMs, it first waits for the output past it to come and stop.",
+      "path": "operations/console.terminal.screen.json",
+      "bytes": 5207,
+      "sha256": "14f73cf7323e79952203c18c9c165856ecad37d7ad67f3f4d07d5b4faa512330"
     },
     "console.terminal.write": {
-      "summary": "Person at this machine only: send typed text to the terminal's shell.",
+      "summary": "Send typed text to the terminal's shell, as if typed there (a command ends with \\r). The person sees it; an Agent's input is recorded as its activity. Returns the offset printed so far.",
       "path": "operations/console.terminal.write.json",
-      "bytes": 949,
-      "sha256": "554ea6f7f2fefb2631daa715e2912f627d5a4fe927cc847e3f22250b7c695684"
+      "bytes": 1157,
+      "sha256": "9df4b35aa8cc96312a240e6cec0bf3376f1a4922c66cc96cbef62cab2e1f4c17"
     },
     "context.create": {
       "summary": "context.create",
@@ -567,10 +573,10 @@
       "sha256": "fba1e5d703441d2cb304456a0cca96dc479ca93459b9f23dbec70fa750499d03"
     },
     "kernel.inspect": {
-      "summary": "One value of a live session, as its session describes it: what kind of thing it is (a table, a model, a vector, a list, a function or a value), short facts, and one page of its rows, elements or parts, each part with the code that reaches it. Never starts a session or waits for a cell: while a cell runs or waits the answer is busy. A reading that takes too long is interrupted.",
+      "summary": "One value of a notebook's live session (the project's notebook unless notebook names another), as its session describes it: what kind of thing it is (a table, a model, a vector, a list, a function or a value), short facts, and one page of its rows, elements or parts, each part with the code that reaches it. Never starts a session or waits for a cell: while a cell runs or waits the answer is busy. A reading that takes too long is interrupted.",
       "path": "operations/kernel.inspect.json",
-      "bytes": 13003,
-      "sha256": "efba3272da99a444be0458f1de7dabaf4673ea740957fc574eb810c44a507376"
+      "bytes": 13180,
+      "sha256": "9775d4f37c13bda0e4ac7551251a1458e8b249e04b49d4e60150f8b1b85fa0f3"
     },
     "kernel.interrupt": {
       "summary": "Interrupt one cell: a running cell stops and its session and values stay; a waiting cell is not run. A cell that has ended is returned unchanged.",
@@ -617,14 +623,14 @@
     "kernel.read": {
       "summary": "The live sessions and their cells, oldest cell first: code, purpose, who ran it, what it printed, its plots and how it ended, and each session's variables. Reading never starts a session.",
       "path": "operations/kernel.read.json",
-      "bytes": 17270,
-      "sha256": "59459bbc4b020d94f876abd937103c89271c121f7b3ea436cf8a2f7d97815c8a"
+      "bytes": 17405,
+      "sha256": "3951dc407906924f6f46800c30a1bfd027fb076f0369ca6a6fa97396a9548b81"
     },
     "kernel.run": {
-      "summary": "Run a cell of R or Python in the project's live session of that language, which the Agent and the person share: what one cell defines stays for the next. Starts the session when none is live, on this machine or at a place on one of the person's servers (place, or where kernel.places says that language runs next). interpreter names the program a session on this machine starts with, in a folder of the project such as .venv/bin/python; the project keeps it for that language's later sessions, and each cell records the program and version that ran it. The same changeId from the same caller returns the same cell and never runs it twice. waitMs waits for the cell to end.",
+      "summary": "Run a cell of R or Python in a notebook's live session of that language: the project's notebook, which the Agent and the person share, unless notebook names another, whose sessions are its own. What one cell defines stays for the next in that session. Starts the session when none is live, on this machine or at a place on one of the person's servers (place, or where kernel.places says that language runs next). interpreter names the program a session on this machine starts with, in a folder of the project such as .venv/bin/python; the project keeps it for that language's later sessions, and each cell records the program and version that ran it. The same changeId from the same caller returns the same cell and never runs it twice. waitMs waits for the cell to end.",
       "path": "operations/kernel.run.json",
-      "bytes": 16995,
-      "sha256": "7083cf7033fcc053f34187daa53b7252e28b68c5bffa023446a0def648ac00fa"
+      "bytes": 17220,
+      "sha256": "d2518e5f227503784a90ad2d5fc0965afb75b462e157c355cc1daf3999da7b33"
     },
     "kernel.server.skill": {
       "summary": "One skill bound to a server, as its file reads now: how that server is used. Read it before naming a place there or running work on it.",
@@ -639,16 +645,16 @@
       "sha256": "1101a46d0d02626c721b6f2a645a82774736d1aeef6c79aace71816c5a8315e4"
     },
     "kernel.start": {
-      "summary": "Person at this machine only: start the R or Python session without a cell, where the place names, else where the project runs that language. A live session is returned as it is; one that is stopping is waited for first. An Agent's first cell starts its session.",
+      "summary": "Person at this machine only: start a notebook's R or Python session without a cell (the project's notebook unless notebook names another), where the place names, else where the project runs that language. A live session is returned as it is; one that is stopping is waited for first. An Agent's first cell starts its session.",
       "path": "operations/kernel.start.json",
-      "bytes": 6559,
-      "sha256": "e254d671e8891358e61a18647302ef6044b732e87067a481da726fd43c6303ff"
+      "bytes": 6861,
+      "sha256": "6d36f47dd7c95a85cf73ca19634df62eaaf4457f38ac148992d0c80000a96093"
     },
     "kernel.stop": {
       "summary": "Person at this machine only: end one live session. Its values are gone, the running cell ends with an error and waiting cells are not run. A session that has ended is returned unchanged.",
       "path": "operations/kernel.stop.json",
-      "bytes": 6391,
-      "sha256": "24f0b348a7a6d2378393abfc3e3d80a112090cace264672a834a2d0eb159dade"
+      "bytes": 6518,
+      "sha256": "0102b3eaef4b91be1d9644ecfbad78bf55fdfcdc2365950cb31162711f54aff5"
     },
     "media.describe": {
       "summary": "media.describe",
@@ -815,8 +821,8 @@
     "session.grant": {
       "summary": "session.grant",
       "path": "operations/session.grant.json",
-      "bytes": 5442,
-      "sha256": "5c0ef899c376cbb69d722f05ebaf654a05f07a4353d5838feb3c55a5ddb21450"
+      "bytes": 5481,
+      "sha256": "8b452ea6474fc1236c9544e31a4e510fdc1a37cab99ee596631eb547add5de0c"
     },
     "session.instructions": {
       "summary": "Person at this machine or operator only: read a prompt for the person's own MCP client to connect itself to this existing project. Returns local launcher paths, never credential contents. Reading or copying grants no access, edits no client configuration and starts no runtime.",

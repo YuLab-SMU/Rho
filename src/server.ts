@@ -192,6 +192,8 @@ function clientOf(header: string | string[] | undefined) {
     return ok(name, 128) ? { name, ...(ok(version, 64) ? { version } : {}) } : null;
   } catch { return null; }
 }
+// A terminal's raw output and size are for the page that draws it; Agents read its screen as text.
+const personTerminal = ['console.terminal.read', 'console.terminal.resize'];
 export class RhoService {
   extensions: Extensions; plugins: Plugins; state: State; bridge: CoreBridge; url = ''; adminToken = ''; server: http.Server;
   // What the start did about the project Rho ships, if anything.
@@ -533,11 +535,11 @@ export class RhoService {
     const capabilities = new Capabilities(this.plugins, project);
     const state = await capabilities.state();
     // The shared project listing remains available alongside an Agent's native tools.
-    const available = Object.keys(operations).filter(m => !extensionManagement.includes(m) && !m.startsWith('agent.activity.') && !m.startsWith('agent.sessions.') && !m.startsWith('session.') && !m.startsWith('conversation.') && (!m.startsWith('project.') || m === 'project.entries') && !m.startsWith('requirements.prepare') && !m.startsWith('workspace.restore') && !['task.routing.put', 'binding.activity.append', 'feedback.submit', 'view.observe', 'view.observations.read', 'task.map.respond', 'annotation.decide', 'evidence.export', 'evidence.preview', 'console.run', 'console.stop', 'kernel.start', 'kernel.stop'].includes(m) && !m.startsWith('console.terminal.'));
+    const available = Object.keys(operations).filter(m => !extensionManagement.includes(m) && !m.startsWith('agent.activity.') && !m.startsWith('agent.sessions.') && !m.startsWith('session.') && !m.startsWith('conversation.') && (!m.startsWith('project.') || m === 'project.entries') && !m.startsWith('requirements.prepare') && !m.startsWith('workspace.restore') && !['task.routing.put', 'binding.activity.append', 'feedback.submit', 'view.observe', 'view.observations.read', 'task.map.respond', 'annotation.decide', 'evidence.export', 'evidence.preview', 'console.run', 'console.stop', 'kernel.start', 'kernel.stop'].includes(m) && !personTerminal.includes(m));
     const profileMethods = profile === 'layered-presentation' ? ['binding.open', 'capability.index', 'capability.resolve', 'workspace.observe', 'workspace.enhance'] : available.filter(m => !['workspace.observe', 'workspace.enhance', ...(profile ? ['skill.list','skill.read','protocol.describe'] : [])].includes(m));
     const selected = methods ?? (profile === 'layered-presentation' ? profileMethods : (await Promise.all(profileMethods.map(async method => [method, await capabilities.isAvailable(method, state)] as const))).filter(([, enabled]) => enabled).map(([method]) => method));
     requireThat(profile !== 'layered-presentation' || selected.every(m => profileMethods.includes(m)), 'scope', 'The selected role cannot receive broader methods.');
-    requireThat(selected.every(m => !extensionManagement.includes(m) && !!operations[m] && !m.startsWith('agent.sessions.') && !m.startsWith('session.') && !m.startsWith('conversation.') && (!m.startsWith('project.') || m === 'project.entries') && !['task.routing.put', 'console.run', 'console.stop', 'kernel.start', 'kernel.stop'].includes(m) && !m.startsWith('console.terminal.')), 'invalid', 'Unknown or operator-only Agent capability.');
+    requireThat(selected.every(m => !extensionManagement.includes(m) && !!operations[m] && !m.startsWith('agent.sessions.') && !m.startsWith('session.') && !m.startsWith('conversation.') && (!m.startsWith('project.') || m === 'project.entries') && !['task.routing.put', 'console.run', 'console.stop', 'kernel.start', 'kernel.stop'].includes(m) && !personTerminal.includes(m)), 'invalid', 'Unknown or operator-only Agent capability.');
     requireThat(await Promise.all(selected.map(method => capabilities.isAvailable(method, state))).then(values => values.every(Boolean)), 'unavailable', 'A requested Agent operation has no selected provider.');
     requireThat(!profile || new Set(['capability.index', 'capability.resolve', ...selected]).size <= layeredGrantLimits.maxMethods, 'limit', `Layered connection methods exceed the ${layeredGrantLimits.maxMethods}-method profile; choose an explicit narrower grant.`, { limit: 'maxMethods', maximum: layeredGrantLimits.maxMethods });
     const id = 'agent:' + digest(projectId + ':' + externalSessionId).slice(0, 32);
@@ -764,7 +766,7 @@ export class RhoService {
     }
     return runner;
   }
-  // The person's terminals in a project, for the life of this service: each is their own shell.
+  // The terminals in a project, for the life of this service: shells the person and Agents use.
   private terminalsFor(p: Project) {
     let host = this.terminals.get(p.id);
     if (!host) {
@@ -1194,16 +1196,23 @@ export class RhoService {
     // The person runs and stops Console commands with their own shell; anyone holding the read
     // grant may read what ran.
     if (method.startsWith('console.terminal.')) {
-      // A terminal is the person's own shell: opening it, typing in it and reading it are theirs alone.
-      requireThat(principal.id === localBrowserId, 'unauthorized', 'A terminal is the shell of the person at this machine. Open Rho in a browser on this machine.');
+      // The person and an Agent granted these may both open a terminal, read what it shows and
+      // type in it; the raw output and the size are the page's that draws it. An Agent closes only
+      // the terminals it opened. Each Agent call is recorded as its activity.
+      const person = principal.id === localBrowserId;
+      requireThat(person || !personTerminal.includes(method), 'unauthorized', 'The page that draws a terminal reads its raw output and sizes it. Read what it shows with console.terminal.screen.');
       await capabilities.assertAvailable(method, principal);
       const host = this.terminalsFor(p);
       if (method === 'console.terminal.open') return host.open({ cols: b.cols, rows: b.rows, cwd: b.cwd, by: principal.id });
       if (method === 'console.terminal.list') return host.list();
+      if (method === 'console.terminal.screen') return host.screen(b.terminalId, { after: b.after, waitMs: b.waitMs, lines: b.lines });
       if (method === 'console.terminal.read') return host.read(b.terminalId, b.after, b.waitMs, b.maxBytes);
-      if (method === 'console.terminal.write') return host.write(b.terminalId, b.data);
+      if (method === 'console.terminal.write') return host.write(b.terminalId, b.data, principal.id);
       if (method === 'console.terminal.resize') return host.resize(b.terminalId, b.cols, b.rows);
-      if (method === 'console.terminal.close') return host.close(b.terminalId);
+      if (method === 'console.terminal.close') {
+        requireThat(person || host.list().terminals.find(t => t.terminalId === b.terminalId)?.by === principal.id, 'unauthorized', 'An Agent closes only the terminals it opened. Ask the person to close this one.');
+        return host.close(b.terminalId);
+      }
     }
     if (method.startsWith('console.')) {
       if (method === 'console.run' || method === 'console.stop') requireThat(principal.id === localBrowserId, 'unauthorized', 'Console commands run with the shell of the person at this machine. Open Rho in a browser on this machine.');
@@ -1226,10 +1235,10 @@ export class RhoService {
       if (method === 'kernel.run') return host.run({ language: b.language, code: b.code, purpose: b.purpose, notebook: b.notebook, changeId: b.changeId, by: principal.id, waitMs: b.waitMs, place: b.place, interpreter: b.interpreter });
       if (method === 'kernel.read') return host.read(b.limit, b.cellId);
       if (method === 'kernel.events') return host.events(b.limit);
-      if (method === 'kernel.inspect') return host.inspect({ language: b.language, name: b.name, path: b.path, offset: b.offset, limit: b.limit, sort: b.sort, picture: b.picture });
+      if (method === 'kernel.inspect') return host.inspect({ language: b.language, notebook: b.notebook, name: b.name, path: b.path, offset: b.offset, limit: b.limit, sort: b.sort, picture: b.picture });
       if (method === 'kernel.plot') return host.plot(b.cellId, b.plot);
       if (method === 'kernel.interrupt') return host.interrupt(b.cellId, principal.id);
-      if (method === 'kernel.start') return host.start({ language: b.language, place: b.place }, principal.id);
+      if (method === 'kernel.start') return host.start({ language: b.language, place: b.place, notebook: b.notebook }, principal.id);
       if (method === 'kernel.stop') return host.stop(b.sessionId, principal.id);
       // Places on servers: the person and their Agent name, check and choose them, and list and
       // copy their files, each through serverctl or with the person's own ssh setup. The servers

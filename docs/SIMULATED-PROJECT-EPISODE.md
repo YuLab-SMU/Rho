@@ -2060,3 +2060,115 @@ processes. Variables should read like RStudio's environment pane.
   session the first one started rather than recognized as the same request.
 - Variables shows R and Python as the session reports them; no grid of a data frame's rows, and no
   editing of values.
+
+## Each notebook its own sessions
+
+2026-11-11, the user's answer to the question left open in [Several notebooks](#several-notebooks):
+a split view is the same notebook and shares its sessions; a new notebook has R and Python
+sessions of its own.
+
+### What there was
+
+Every notebook of a project ran in the project's one R and one Python session, so a value made in
+Notebook 2 was there in the project's notebook. Variables, Plots, Sessions and Data flow each
+showed those two sessions.
+
+### Changes
+
+- **A session belongs to a notebook and a language** (Rho-plugins, Notebook 0.5.18). The kernel
+  host keys a live session by both; the project's notebook names none. A cell run in Notebook 2
+  starts that notebook's own process, and its values are not in the project's. A session record
+  keeps its notebook. `kernel.inspect` and `kernel.start` take the notebook; Rho passes it on.
+  Splitting a view moves the same notebook, so it keeps its sessions.
+- **At most 8 sessions run at once** in a project (`maxSessions`). One more is refused with the
+  count and is to be stopped in Sessions.
+- **Variables, Plots and Data flow follow the notebook last worked in** in this page, as
+  RStudio's environment pane follows the session in front. A small notebook menu in their header
+  picks another. Sessions groups the cards by notebook, the project's first, and offers Start R
+  and Start Python for a notebook with nothing running. A value's view keeps the notebook it was
+  opened from.
+- The composer says where a cell runs: "R session of this notebook" in a new one, the shared one
+  in the project's. The Agent's skill says that each notebook has its own sessions and that the
+  project's is the one it uses unless it names another.
+
+![The project's Notebook, and Notebook 2 beside it running in its own R session, where the project's cars2 does not exist](figures/studio-notebook-sessions.jpg)
+
+### Verification
+
+- A throwaway project in a real browser at 1600 × 940, each screenshot read: New notebook from a
+  group's + gave Notebook 2; `y <- 42; exists("cars2")` printed `FALSE` there, though `cars2`
+  was in the project's session. Split right kept it the same notebook. Variables beside it listed
+  only `y` and named Notebook 2; pressing in the project's notebook moved it to that one's values,
+  and the menu brought Notebook 2 back. Sessions showed two groups, each with its R session and
+  process id. No page error.
+- Rho-plugins: a new kernel test that two notebooks get separate sessions, a value made in one is
+  not in the other, inspect and start take the notebook, the limit refuses one more and a
+  malformed notebook is refused. The suite passed 220 of 222, 2 skipped.
+- Rho: a new test through the service that a cell run in a named notebook keeps it and runs in its
+  own session. The suite passed 353 of 356 with the debug Core, 3 skipped (Windows only). The
+  frontend, plugin-dx, sources, graph and agent-canvas acceptances passed.
+
+### Left open
+
+- This is the builder's reading. The user has not seen it. Their running Rho needs the service
+  built and started again, which ends the R and Python sessions it holds.
+- The notebook the views follow is kept per browser tab, not with the page.
+- A closed notebook's sessions run on until stopped in Sessions, where they are listed as "A
+  closed notebook".
+- Whether a workspace's first Notebook should also be its own is still open; it is the project's.
+
+## The Agent in the terminal
+
+2026-11-11, asked in the same turn: the Agent can see and use the terminal. This answers the
+question left open in [A real terminal](#a-real-terminal).
+
+### What there was
+
+Every terminal operation was refused to anyone but the person at this machine, and none could be
+put in an Agent's grant. What was typed there left no record in Rho.
+
+### Changes
+
+- **An Agent reads a terminal as text** (Rho-plugins, Console 0.3.3). `console.terminal.screen`
+  returns what the screen shows, kept by a headless xterm (`@xterm/headless` 6.0.0, MIT) fed the
+  same output as the view, without colour codes, with wrapped lines joined. With `after` (the
+  offset `write` returns) and `waitMs` it waits for new output, then for 400 ms of quiet. The
+  result says whether it settled and whether a full-screen program owns the screen.
+- **An Agent types, opens, lists and closes.** `open`, `list`, `screen`, `write` and `close` can
+  be granted. The raw output (`read`) and the size (`resize`) stay with the page that draws the
+  terminal. An Agent closes only the terminals it opened. Its calls go to the activity record as
+  any other call.
+- **The person sees who typed.** A terminal keeps who last typed there and when (`typedBy`). A line
+  above it says so, names the terminals an Agent opened with Show it here, and on an Agent's
+  terminal says whose it is and offers Your terminal to go back.
+- The skill tells the Agent to list first, read before typing, end a command with `\r`, wait for
+  the prompt in a terminal it opened, and leave the person's terminals open.
+
+![An Agent's command typed into the person's terminal, with the line above naming it](figures/studio-agent-terminal.jpg)
+
+### Verification
+
+- The same throwaway project at 1600 × 940, with an Agent connected through `session.grant`, each
+  screenshot read. The Agent listed the terminals, typed a command in the person's and read the
+  screen after its offset: the lines matched what the view drew, and it had settled. The line
+  above named the Agent and the time. It opened a terminal of its own, which the line offered; Show it here
+  showed it and Your terminal went back. No page error.
+- Rho-plugins: a new console test that an Agent's typing is read back as text, waits for quiet and
+  records who typed. The presentation test names the new operation.
+- Rho: the terminal test now checks that an Agent's grant holds close, list, open, screen and
+  write; read and resize are refused; a write is read back through screen and recorded with its
+  Agent; the Agent closes its own terminal and not the person's.
+
+### Left open
+
+- This is the builder's reading. The user has not seen it, and their running Rho needs the
+  service built and started again.
+- What an Agent types runs in the person's shell, with their rights. The Agent's own command
+  permissions see only its call to Rho, not the command inside it. Every connected Agent's grant now
+  holds these operations. No setting withholds only them: turning the Console off for the project
+  removes the person's terminal too.
+- What the Agent types is in the activity record but not in Commands. Only the last typist is kept.
+- The Agent is named by its grant's label.
+- An Agent that types before its own shell's prompt has drawn gets the shell's partial-line mark;
+  the skill tells it to wait.
+- Windows still has no terminal.

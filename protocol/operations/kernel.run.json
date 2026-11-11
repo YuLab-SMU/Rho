@@ -475,6 +475,10 @@
               "python"
             ]
           },
+          "notebook": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+            "type": "string"
+          },
           "pid": {
             "anyOf": [
               {
@@ -670,5 +674,5 @@
     ],
     "type": "object"
   },
-  "description": "Run a cell of R or Python in the project's live session of that language, which the Agent and the person share: what one cell defines stays for the next. Starts the session when none is live, on this machine or at a place on one of the person's servers (place, or where kernel.places says that language runs next). interpreter names the program a session on this machine starts with, in a folder of the project such as .venv/bin/python; the project keeps it for that language's later sessions, and each cell records the program and version that ran it. The same changeId from the same caller returns the same cell and never runs it twice. waitMs waits for the cell to end."
+  "description": "Run a cell of R or Python in a notebook's live session of that language: the project's notebook, which the Agent and the person share, unless notebook names another, whose sessions are its own. What one cell defines stays for the next in that session. Starts the session when none is live, on this machine or at a place on one of the person's servers (place, or where kernel.places says that language runs next). interpreter names the program a session on this machine starts with, in a folder of the project such as .venv/bin/python; the project keeps it for that language's later sessions, and each cell records the program and version that ran it. The same changeId from the same caller returns the same cell and never runs it twice. waitMs waits for the cell to end."
 }

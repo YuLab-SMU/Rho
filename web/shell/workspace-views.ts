@@ -6,7 +6,7 @@ import type { Prepared, SessionScope } from '@rho-workspace/plugin-kernel/ui';
 // own props with the page, which views the page has, and in a conversation's Studio which share
 // of the live sessions it shows. The application's entries hand these to the plugins' views.
 export interface WorkspaceViews {
-  openValue?(language: 'r' | 'python', name: string): void;
+  openValue?(language: 'r' | 'python', name: string, notebook?: string): void;
   openRemote?(placeId: string, path: string): void;
   toNotebook?(language: 'r' | 'python', code: string, from: string): void;
   prepared: Prepared | null;

@@ -5,16 +5,17 @@ import '@xterm/xterm/css/xterm.css';
 import { BrowserApiError, type BrowserClient } from '../src/browser.js';
 import './terminal.css';
 
-// The person's own shell on a terminal, in the project folder: a real pseudo-terminal the
-// Console plugin keeps while Rho runs, drawn here. The view keeps its terminal's identity with
-// the page, so a reload, another tab or a view shown again comes back to the same shell and what
-// it printed. Closing the view hangs the shell up.
+// A shell on a terminal, in the project folder: a real pseudo-terminal the Console plugin keeps
+// while Rho runs, drawn here. The view keeps its terminal's identity with the page, so a reload,
+// another tab or a view shown again comes back to the same shell and what it printed. Closing the
+// view hangs the shell up. An Agent may type here too: the view says who last did and when, and
+// names a terminal an Agent opened of its own, to show here.
 //
 // A read waits this long for output before asking again; keys typed within typeBatchMs go in one
 // request; the page keeps this many lines of scrollback (the service keeps the last megabyte).
 export const terminalViewLimits = { waitMs: 20000, typeBatchMs: 4, scrollbackLines: 10000, resizeMs: 80, retryMs: 1500 };
 
-interface TerminalFacts { terminalId: string; shell: string; cwd: string; cols: number; rows: number; endedAt: string | null; exit: { code: number | null; signal: string | null } | null; bytes: number; kept: number; problem: string | null }
+interface TerminalFacts { terminalId: string; by: string; typedBy?: { by: string; at: string } | null; shell: string; cwd: string; cols: number; rows: number; endedAt: string | null; exit: { code: number | null; signal: string | null } | null; bytes: number; kept: number; problem: string | null }
 type State = { kind: 'starting' } | { kind: 'live' } | { kind: 'ended'; how: string } | { kind: 'refused'; why: string; others: TerminalFacts[] } | { kind: 'lost' };
 
 // The machine's own monospace face; a prompt drawn with a Nerd Font finds its symbols when one
@@ -36,8 +37,12 @@ function theme(element: HTMLElement) {
 }
 const ending = (facts: TerminalFacts) => facts.problem ?? (facts.exit?.signal ? `The shell was ended (${facts.exit.signal}).` : facts.exit?.code ? `The shell ended with exit code ${facts.exit.code}.` : 'The shell ended.');
 
-export function TerminalPane({ client, projectId, terminalId, onTerminal, onCommands }: {
+const clock = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+export function TerminalPane({ client, projectId, terminalId, onTerminal, onCommands, cursor, who }: {
   client: BrowserClient; projectId: string;
+  // The project's record position, read again when it moves (an Agent typed or opened a terminal),
+  // and an Agent's name by its principal.
+  cursor?: number; who?: (principal: string) => string;
   // The terminal this view keeps, and how it keeps another.
   terminalId: string | null; onTerminal: (terminalId: string) => void;
   // The record of commands, offered where a terminal cannot be opened.
@@ -48,6 +53,9 @@ export function TerminalPane({ client, projectId, terminalId, onTerminal, onComm
   const [shell, setShell] = useState('');
   // Each start counts, so an older terminal's reads stop when a new shell is asked for.
   const [round, setRound] = useState(0);
+  // The project's terminals as last listed, for who typed here and the Agents' own terminals.
+  const [listed, setListed] = useState<TerminalFacts[]>([]);
+  const [current, setCurrent] = useState<string | null>(terminalId);
   const wanted = useRef<string | null>(terminalId), seen = useRef(terminalId), fresh = useRef(false), saved = useRef(onTerminal);
   saved.current = onTerminal;
   // The page's word on which terminal this is, when it changes (another tab started a new shell).
@@ -92,7 +100,7 @@ export function TerminalPane({ client, projectId, terminalId, onTerminal, onComm
           }
           fresh.current = false; wanted.current = facts.terminalId; saved.current(facts.terminalId);
         } else if (!facts.endedAt && (facts.cols !== term.cols || facts.rows !== term.rows)) void call('console.terminal.resize', { terminalId: facts.terminalId, cols: Math.max(2, term.cols), rows: Math.max(1, term.rows) }).catch(() => {});
-        id = facts.terminalId; live = !facts.endedAt;
+        id = facts.terminalId; live = !facts.endedAt; setCurrent(id);
         setShell(facts.shell.split('/').at(-1) ?? ''); setState(live ? { kind: 'live' } : { kind: 'ended', how: ending(facts) });
         term.focus();
         // Everything it printed that is still kept, then what it prints from now on.
@@ -115,10 +123,24 @@ export function TerminalPane({ client, projectId, terminalId, onTerminal, onComm
     return () => { stop.abort(); clearTimeout(timer); clearTimeout(sized); observer.disconnect(); keys.dispose(); resized.dispose(); term.dispose(); };
   }, [client, projectId, round]);
 
+  useEffect(() => {
+    let alive = true;
+    client.call('console.terminal.list' as never, { projectId } as never).then((read: { terminals: TerminalFacts[] }) => { if (alive) setListed(read.terminals); }, () => {});
+    return () => { alive = false; };
+  }, [client, projectId, cursor, current]);
+  const here = listed.find(t => t.terminalId === current);
+  const agentTyped = here?.typedBy && here.typedBy.by.startsWith('agent:') ? here.typedBy : null;
+  // An Agent's own terminals are offered here; showing one, the person's own are offered back.
+  const agentOwn = listed.filter(t => t.terminalId !== current && !t.endedAt && (t.by.startsWith('agent:') || !!here?.by.startsWith('agent:')));
   const again = () => { fresh.current = true; setState({ kind: 'starting' }); setRound(n => n + 1); };
   const attach = (other: string) => { fresh.current = false; wanted.current = other; saved.current(other); setState({ kind: 'starting' }); setRound(n => n + 1); };
   const close = (other: string) => void client.call('console.terminal.close' as never, { projectId, terminalId: other } as never).then(again, again);
   return <div className="terminal-pane" data-state={state.kind}>
+    {(agentTyped || agentOwn.length > 0 || here?.by.startsWith('agent:')) && <p className="terminal-who" role="status">
+      {agentTyped && <span>{who?.(agentTyped.by) ?? 'An Agent'} typed here at {clock(agentTyped.at)}</span>}
+      {here?.by.startsWith('agent:') && <span>{who?.(here.by) ?? 'An Agent'}'s terminal</span>}
+      {agentOwn.map(other => <span key={other.terminalId}>{other.by.startsWith('agent:') ? `${who?.(other.by) ?? 'An Agent'} opened a terminal` : 'Your terminal'}{other.cwd ? ' in ' + other.cwd : ''} <button className="text-button" onClick={() => attach(other.terminalId)}>Show it here</button></span>)}
+    </p>}
     <div className="terminal-screen" ref={box} aria-label={shell ? `Terminal, ${shell}` : 'Terminal'} hidden={state.kind === 'refused'} />
     {state.kind === 'ended' && <p className="terminal-note" role="status">{state.how} <button className="text-button" onClick={again}>Start a new shell</button></p>}
     {state.kind === 'lost' && <p className="terminal-note" role="status">This terminal was closed, or Rho was started again since. <button className="text-button" onClick={again}>Start a new shell</button></p>}

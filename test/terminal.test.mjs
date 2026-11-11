@@ -9,7 +9,7 @@ import { RhoClient } from '../dist/client.js';
 // A Unix Host's socket lies under its project, within the socket path limit; Windows Hosts use pipes.
 const shortTemp = process.platform === 'win32' ? tmpdir() : '/tmp';
 
-test('the person has a terminal in the project folder; no Agent can be granted it, open it, read it or type in it', { skip: process.platform === 'win32' && 'Rho does not open a pseudo-terminal on Windows yet' }, async t => {
+test('the person has a terminal in the project folder, and an Agent may read its screen, type in it and open its own, recorded as its activity', { skip: process.platform === 'win32' && 'Rho does not open a pseudo-terminal on Windows yet' }, async t => {
   const root = await fs.mkdtemp(path.join(shortTemp, 'rho-terminal-'));
   await fs.mkdir(path.join(root, 'project'));
   // A plain shell, whatever the person's own is set up to print.
@@ -39,16 +39,28 @@ test('the person has a terminal in the project folder; no Agent can be granted i
   await call('project.entries');
   assert.ok(Date.now() - began < 2000, 'another request does not wait for the terminal');
 
-  // An Agent's grant never carries the terminal, by default or by name, and a call is refused.
+  // An Agent's grant carries the terminal, except its raw output and its size, which are the page's.
   const grant = path.join(root, 'agent.json');
   const connection = await service.agentConnection(p.id, 'terminal', grant);
-  assert.deepEqual(connection.methods.filter(method => method.startsWith('console.terminal.')), []);
-  for (const method of ['console.terminal.open', 'console.terminal.read', 'console.terminal.write'])
+  assert.deepEqual(connection.methods.filter(method => method.startsWith('console.terminal.')).sort(), ['console.terminal.close', 'console.terminal.list', 'console.terminal.open', 'console.terminal.screen', 'console.terminal.write']);
+  for (const method of ['console.terminal.read', 'console.terminal.resize'])
     await assert.rejects(service.agentConnection(p.id, 'terminal-' + method, path.join(root, method + '.json'), [method]), /operator-only|Unknown/);
-  const agent = new RhoClient(JSON.parse(await fs.readFile(grant, 'utf8')));
-  await assert.rejects(agent.call('console.terminal.read', { projectId: p.id, terminalId: terminal.terminalId }), error => ['unauthorized', 'scope'].includes(error.error.kind));
-  await assert.rejects(agent.call('console.terminal.write', { projectId: p.id, terminalId: terminal.terminalId, data: 'id\n' }), error => ['unauthorized', 'scope'].includes(error.error.kind));
-  await assert.rejects(agent.call('console.terminal.open', { projectId: p.id, cols: 80, rows: 24 }), error => ['unauthorized', 'scope'].includes(error.error.kind));
+  const agent = new RhoClient(JSON.parse(await fs.readFile(grant, 'utf8'))), as = (method, body = {}) => agent.call(method, { projectId: p.id, ...body });
+  await assert.rejects(as('console.terminal.read', { terminalId: terminal.terminalId }), error => ['unauthorized', 'scope'].includes(error.error.kind));
+  // It types a command into the person's terminal and reads the screen once the output settles.
+  const sent = await as('console.terminal.write', { terminalId: terminal.terminalId, data: 'echo "from the Agent $((40 + 2))"\r' });
+  const screen = await as('console.terminal.screen', { terminalId: terminal.terminalId, after: sent.offset, waitMs: 10000 });
+  assert.equal(screen.quiet, true);
+  assert.ok(screen.lines.includes('from the Agent 42'), JSON.stringify(screen.lines));
+  const listed = (await call('console.terminal.list')).terminals[0];
+  assert.equal(listed.typedBy.by, connection.principal ?? listed.typedBy.by); assert.match(listed.typedBy.by, /^agent:/);
+  const activity = (await admin.call('observation.snapshot', { projectId: p.id })).activity.entries.map(e => e.method);
+  assert.ok(activity.includes('console.terminal.write') && activity.includes('console.terminal.screen'), 'the Agent\'s calls are its recorded activity');
+  // Its own terminal it may close; the person's it may not.
+  const own = (await as('console.terminal.open', { cols: 80, rows: 24 })).terminal;
+  assert.match(own.by, /^agent:/);
+  await assert.rejects(as('console.terminal.close', { terminalId: terminal.terminalId }), error => error.error.kind === 'unauthorized');
+  assert.equal((await as('console.terminal.close', { terminalId: own.terminalId })).terminal.terminalId, own.terminalId);
 
   // Closing hangs up the shell and forgets the terminal; the waiting read is released.
   const closed = await call('console.terminal.close', { terminalId: terminal.terminalId });

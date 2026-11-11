@@ -59,6 +59,7 @@
             "console.terminal.open",
             "console.terminal.read",
             "console.terminal.resize",
+            "console.terminal.screen",
             "console.terminal.write",
             "context.create",
             "context.read",

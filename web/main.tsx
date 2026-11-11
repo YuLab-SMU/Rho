@@ -379,10 +379,10 @@ function App() {
   }
   // A value of a live session, looked at from the Notebook page or a conversation's Studio: it opens
   // on the person's workspace beside the Notebook.
-  function openObject(language: Language, name: string) {
+  function openObject(language: Language, name: string, notebook?: string) {
     if (!snapshot) return;
     const page = sharedWorkspace(), projectId = snapshot.project.id;
-    addNotebook(client!, projectId, page, null).then(() => addObject(client!, projectId, page, language, name, document.getElementById('main')?.clientWidth)).then(id => layout(page, id),
+    addNotebook(client!, projectId, page, null).then(() => addObject(client!, projectId, page, language, name, document.getElementById('main')?.clientWidth, notebook)).then(id => layout(page, id),
       error => setNotice(name + ' · ' + (error instanceof Error ? error.message : 'It could not be opened.')));
   }
   // A project file a view links to: in Studio it opens in the workspace on screen, elsewhere in place.
@@ -656,7 +656,7 @@ function App() {
           talking={agentOpen && !narrow && panelConversation ? processComposition(panelConversation) : null}
           agentState={agentNow?.waiting ? ', needs your choice' : agentNow?.running ? ', working' : ''} onAgents={pick(() => showAgentPage('agents'))}
           onNewTask={pick(() => talk())} onNewLayout={arrangeable ? pick(newWorkspace) : undefined} onCloseLayout={arrangeable ? closeWorkspace : undefined} onLayout={id => pick(() => processConversation(id) ? showProcess(id) : layout(id))()}
-          onSection={next => pick(() => go(next))()} onSources={next => pick(() => showSources(next))()} onFile={(row, item) => pick(() => showFile(row, item))()} onVariables={pick(showVariables)} values={readsValues ? values : null} onValue={(language, valueName) => pick(() => openObject(language, valueName))()} onAddSource={() => void addSource()} />)}
+          onSection={next => pick(() => go(next))()} onSources={next => pick(() => showSources(next))()} onFile={(row, item) => pick(() => showFile(row, item))()} onVariables={pick(showVariables)} values={readsValues ? values : null} onValue={(language, valueName, notebook) => pick(() => openObject(language, valueName, notebook))()} onAddSource={() => void addSource()} />)}
     </div>
     <div className="navigation-footer">
       {inProject && <button className="nav-row" aria-current={screen === 'plugins' ? 'page' : undefined} onClick={pick(plugins)}><Icon name="plugins" size={17} /><span className="nav-row-name">Plugins</span></button>}

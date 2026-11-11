@@ -77,14 +77,19 @@ test('the person and their Agent share a live session; only the person ends it',
   assert.equal((await call('kernel.start', { language: 'python' })).session.sessionId, started.session.sessionId);
 });
 
-test('a cell run in a named notebook keeps that notebook, in the session the project shares', async t => {
+test('a cell run in a named notebook keeps that notebook and runs in that notebook\'s own session', async t => {
   const { call } = await setup(t);
   const first = await call('kernel.run', { language: 'python', code: 'base = 6', changeId: 'n1', waitMs: 30000 });
-  const second = await call('kernel.run', { language: 'python', code: 'base * 7', notebook: 'nb-1a2b3c4d', changeId: 'n2', waitMs: 30000 });
+  const second = await call('kernel.run', { language: 'python', code: 'print("base" in dir())', notebook: 'nb-1a2b3c4d', changeId: 'n2', waitMs: 30000 });
   assert.equal(second.cell.state, 'done');
-  assert.equal(second.cell.sessionId, first.cell.sessionId);
-  assert.equal(second.cell.outputs.map(o => o.text ?? '').join(''), '42\n');
+  assert.notEqual(second.cell.sessionId, first.cell.sessionId);
+  assert.equal(second.session.notebook, 'nb-1a2b3c4d');
+  assert.equal(second.cell.outputs.map(o => o.text ?? '').join(''), 'False\n');
   assert.deepEqual((await call('kernel.read')).cells.map(c => c.notebook ?? null), [null, 'nb-1a2b3c4d']);
+  // A value is read in the session of the notebook named; the person starts a notebook's session.
+  assert.equal((await call('kernel.inspect', { language: 'python', name: 'base' })).state, 'shown');
+  assert.equal((await call('kernel.inspect', { language: 'python', notebook: 'nb-1a2b3c4d', name: 'base' })).state, 'missing');
+  assert.equal((await call('kernel.start', { language: 'python', notebook: 'nb-1a2b3c4d' })).session.sessionId, second.cell.sessionId);
   // The identity is a short token, not a name: the contract refuses anything else.
   await assert.rejects(call('kernel.run', { language: 'python', code: '1', notebook: 'my notebook', changeId: 'n3' }), error => error.error.kind === 'invalid');
 });

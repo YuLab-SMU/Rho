@@ -30,26 +30,27 @@ function Notebook({ viewId, view, client, snapshot, headerTarget, shell }: UiVie
 }
 function Variables({ client, snapshot }: UiViewProps) {
   const page = useContext(WorkspaceViewsContext);
-  return <VariablesPane client={client} snapshot={snapshot} onObject={page?.openValue} onCell={page?.showCell && (cellId => page.showCell!(cellId, null))} onSessions={page?.showSessions} />;
+  return <VariablesPane client={client} snapshot={snapshot} notebooks={page?.notebookNames} onObject={page?.openValue} onCell={page?.showCell && ((cellId, notebook) => page.showCell!(cellId, notebook ?? null))} onSessions={page?.showSessions} />;
 }
 function Plots({ client, snapshot, shell }: UiViewProps) {
   const page = useContext(WorkspaceViewsContext);
-  return <PlotsPane client={client} snapshot={snapshot} shell={shell} onCell={page?.showCell && (cellId => page.showCell!(cellId, null))} />;
+  return <PlotsPane client={client} snapshot={snapshot} shell={shell} notebooks={page?.notebookNames} onCell={page?.showCell && ((cellId, notebook) => page.showCell!(cellId, notebook ?? null))} />;
 }
 function Sessions({ client, snapshot }: UiViewProps) {
   const page = useContext(WorkspaceViewsContext);
-  return <SessionsPane client={client} snapshot={snapshot} onCell={page?.showCell && (cellId => page.showCell!(cellId, null))} />;
+  return <SessionsPane client={client} snapshot={snapshot} notebooks={page?.notebookNames} onCell={page?.showCell && ((cellId, notebook) => page.showCell!(cellId, notebook ?? null))} />;
 }
 function Flow({ client, snapshot, shell }: UiViewProps) {
   const page = useContext(WorkspaceViewsContext);
-  return <FlowPane client={client} snapshot={snapshot} shell={shell} onObject={page?.openValue} onPath={shell?.openPath} onRemote={page?.openRemote} />;
+  return <FlowPane client={client} snapshot={snapshot} shell={shell} notebooks={page?.notebookNames} onObject={page?.openValue} onPath={shell?.openPath} onRemote={page?.openRemote} />;
 }
 const Servers = ({ client, snapshot, shell }: UiViewProps) => <ServersPane client={client} snapshot={snapshot} shell={shell} onPath={shell?.openPath} />;
 // One value of a live session; what reaches into it waits in the Notebook's line.
 function Value({ view, client, snapshot }: UiViewProps) {
   const page = useContext(WorkspaceViewsContext);
   const language = view.props.language === 'python' ? 'python' : 'r', name = String(view.props.name ?? view.props.title ?? '');
-  return <ObjectView client={client} snapshot={snapshot} language={language} name={name} onUse={expression => page?.toNotebook?.(language, expression, name)} />;
+  const notebook = typeof view.props.notebook === 'string' && view.props.notebook ? view.props.notebook : undefined;
+  return <ObjectView client={client} snapshot={snapshot} language={language} name={name} notebook={notebook} onUse={expression => page?.toNotebook?.(language, expression, name)} />;
 }
 
 export const notebook = contribution('rho.notebook', Notebook, { type: 'object', properties: { title: { type: 'string' }, form: { enum: ['notebook', 'console'] }, notebook: { type: 'string' } } });
@@ -58,4 +59,4 @@ export const variables = contribution('rho.variables', Variables);
 export const plots = contribution('rho.plots', Plots);
 export const flow = contribution('rho.flow', Flow);
 export const servers = contribution('rho.servers', Servers);
-export const object = contribution('rho.object', Value, { type: 'object', properties: { title: { type: 'string' }, language: { enum: ['r', 'python'] }, name: { type: 'string', minLength: 1 } } });
+export const object = contribution('rho.object', Value, { type: 'object', properties: { title: { type: 'string' }, language: { enum: ['r', 'python'] }, name: { type: 'string', minLength: 1 }, notebook: { type: 'string' } } });

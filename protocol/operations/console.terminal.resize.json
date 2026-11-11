@@ -130,6 +130,31 @@
           "terminalId": {
             "pattern": "^t-[a-f0-9]{16}$",
             "type": "string"
+          },
+          "typedBy": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "at": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "by": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "by",
+                  "at"
+                ],
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -144,7 +169,8 @@
           "exit",
           "bytes",
           "kept",
-          "problem"
+          "problem",
+          "typedBy"
         ],
         "type": "object"
       }

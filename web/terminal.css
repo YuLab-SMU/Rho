@@ -14,3 +14,6 @@
 .tool-forms { display: inline-flex; flex: none; padding: 2px; border-radius: 8px; background: var(--color-well); }
 .tool-forms button { min-height: 0; padding: 3px 10px; border: 0; border-radius: 6px; background: none; color: var(--color-muted, var(--color-meta)); font-size: 12px; font-weight: 600; box-shadow: none; }
 .tool-forms button[aria-pressed="true"] { background: var(--color-surface); color: var(--color-ink); box-shadow: 0 1px 2px rgb(0 0 0 / 10%); }
+.terminal-who { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; margin: 0; padding: 6px 14px; border-bottom: 1px solid var(--color-divider); color: var(--color-meta); font-size: 12.5px; line-height: 20px; }
+.terminal-who > span { display: inline-flex; align-items: center; gap: 6px; }
+.terminal-who .text-button { min-height: 0; padding: 0 2px; font-size: 12.5px; line-height: 20px; }

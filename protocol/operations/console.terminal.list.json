@@ -114,6 +114,31 @@
             "terminalId": {
               "pattern": "^t-[a-f0-9]{16}$",
               "type": "string"
+            },
+            "typedBy": {
+              "anyOf": [
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "at": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "by": {
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "by",
+                    "at"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             }
           },
           "required": [
@@ -128,7 +153,8 @@
             "exit",
             "bytes",
             "kept",
-            "problem"
+            "problem",
+            "typedBy"
           ],
           "type": "object"
         },
@@ -140,5 +166,5 @@
     ],
     "type": "object"
   },
-  "description": "Person at this machine only: their open terminals in this project, with each one's size, how much it has printed and whether its shell has ended."
+  "description": "The open terminals in this project, with who opened each, who else last typed there, each one's size, how much it has printed and whether its shell has ended."
 }

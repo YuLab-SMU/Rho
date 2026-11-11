@@ -31,6 +31,10 @@
         "minimum": 0,
         "type": "integer"
       },
+      "offset": {
+        "minimum": 0,
+        "type": "integer"
+      },
       "terminalId": {
         "pattern": "^t-[a-f0-9]{16}$",
         "type": "string"
@@ -38,9 +42,10 @@
     },
     "required": [
       "terminalId",
-      "bytes"
+      "bytes",
+      "offset"
     ],
     "type": "object"
   },
-  "description": "Person at this machine only: send typed text to the terminal's shell."
+  "description": "Send typed text to the terminal's shell, as if typed there (a command ends with \\r). The person sees it; an Agent's input is recorded as its activity. Returns the offset printed so far."
 }

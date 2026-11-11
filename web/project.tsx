@@ -21,7 +21,8 @@ export function availability(resource: ResourceSummary) {
 export function views(composition: CompositionSummary) { return composition.views.length + (composition.views.length === 1 ? ' view' : ' views'); }
 
 import { baseRows, sourceRowOrder, type SourceItem, type SourceRow } from './sources.js';
-import type { LiveSession, LiveValues, ValueLanguage } from '@rho-workspace/plugin-kernel/ui';
+import { notebookName, type LiveSession, type LiveValues, type ValueLanguage } from '@rho-workspace/plugin-kernel/ui';
+import { notebookNames } from './explore.js';
 export type { SourceRow } from './sources.js';
 // One of the project's places: a page of its own, shown as a tab above the work, or as a row
 // in the drawer where the window has no room for tabs.
@@ -55,7 +56,7 @@ export function ProjectNavigation({ project, snapshot, current, talking = null, 
   values: LiveValues | null;
   // A workspace of the person's is closed from its row: its views go with it, and Undo brings it back.
   onLayout: (id: string) => void; onNewLayout?: () => void; onCloseLayout?: (id: string) => void; onNewTask: () => void; onSection: (section: Section) => void;
-  onSources: (row: SourceRow) => void; onFile: (row: SourceRow, item: SourceItem) => void; onValue: (language: ValueLanguage, name: string) => void; onVariables: () => void; onAddSource: () => void;
+  onSources: (row: SourceRow) => void; onFile: (row: SourceRow, item: SourceItem) => void; onValue: (language: ValueLanguage, name: string, notebook?: string) => void; onVariables: () => void; onAddSource: () => void;
 }) {
   // Which kinds are unfolded is remembered per project for this tab; the kind of the file on
   // screen is always unfolded, so the person sees where they are.
@@ -112,7 +113,7 @@ export function ProjectNavigation({ project, snapshot, current, talking = null, 
           // A kind beyond the four every project has is listed while the project holds some.
           if (!baseRows.includes(kind) && !items?.length) return null;
           // The live values sit between the code that makes them and the results kept from them.
-          const variables = kind === 'results' && values && <ValuesRow key="variables" values={values} open={unfolded.includes('variables')} onFold={() => fold('variables')} onValue={onValue} onOpen={onVariables} onNotebook={() => onSection('notebook')} />;
+          const variables = kind === 'results' && values && <ValuesRow key="variables" values={values} names={snapshot ? notebookNames(snapshot.compositions) : {}} open={unfolded.includes('variables')} onFold={() => fold('variables')} onValue={onValue} onOpen={onVariables} onNotebook={() => onSection('notebook')} />;
           return <Fragment key={kind}>{variables}<div className={'nav-source' + (open ? ' open' : '')}>
             <div className="nav-folding">
               <button className="nav-row" title={(extra ? extra.title + ' · ' : '') + 'Show them in the workspace'} aria-current={current === 'sources:' + kind ? 'page' : undefined} onClick={() => onSources(kind)}>
@@ -168,11 +169,12 @@ function SourceFiles({ id, kind, label, items, partial, current, onFile, onAll }
   </ul>;
 }
 
-// The live sessions' values as one more place in Sources: each session, then its values by
-// name with their type. A value opens in Studio beside the Notebook. Nothing is listed for a
+// The live sessions' values as one more place in Sources: each session (by its notebook's name
+// when more than one notebook has one), then its values by name with their type. A value opens in Studio beside the Notebook. Nothing is listed for a
 // session that ended; its values are gone with it.
 const sessionName = (s: LiveSession) => s.version?.replace(/^R version (\S+).*$/, 'R $1').replace(/^Python (\S+).*$/, 'Python $1') ?? (s.language === 'r' ? 'R' : 'Python');
-function ValuesRow({ values, open, onFold, onValue, onOpen, onNotebook }: { values: LiveValues; open: boolean; onFold: () => void; onValue: (language: ValueLanguage, name: string) => void; onOpen: () => void; onNotebook: () => void }) {
+function ValuesRow({ values, names, open, onFold, onValue, onOpen, onNotebook }: { values: LiveValues; names: Readonly<Record<string, string>>; open: boolean; onFold: () => void; onValue: (language: ValueLanguage, name: string, notebook?: string) => void; onOpen: () => void; onNotebook: () => void }) {
+  const several = new Set(values.sessions.map(s => s.notebook ?? '')).size > 1;
   const total = values.sessions.reduce((n, s) => n + s.variables.length + (s.variablesOmitted ?? 0), 0);
   const busy = values.sessions.some(s => s.state === 'busy');
   const title = !values.read ? undefined : values.sessions.length ? `${total} value${total === 1 ? '' : 's'} in the live ${values.sessions.map(s => s.language === 'r' ? 'R' : 'Python').join(' and ')} session${values.sessions.length === 1 ? '' : 's'}` : 'No live session';
@@ -189,10 +191,10 @@ function ValuesRow({ values, open, onFold, onValue, onOpen, onNotebook }: { valu
       : values.problem && !values.sessions.length ? <p id="nav-values" className="nav-files-note" role="alert">{values.problem}</p>
       : !values.sessions.length ? <div id="nav-values" className="nav-files-note">No live session. Values show here once R or Python runs a cell.<button className="nav-more" onClick={onNotebook}>Open the Notebook</button></div>
       : <ul id="nav-values" className="nav-files nav-values" aria-label="Variables">
-        {values.sessions.map(s => <Fragment key={s.language}>
-          <li><span className="nav-folder">{sessionName(s)}{s.state === 'busy' ? ' · running' : ''}</span></li>
-          {s.variables.length ? s.variables.slice(0, sidebarFiles).map(v => <li key={s.language + ':' + v.name}>
-            <button className="nav-file nav-value" title={`${v.name} · ${v.type}${v.size ? ' · ' + v.size : ''}${v.summary ? '\n' + v.summary : ''}`} onClick={() => onValue(s.language, v.name)}>
+        {values.sessions.map(s => <Fragment key={(s.notebook ?? '') + '|' + s.language}>
+          <li><span className="nav-folder">{sessionName(s)}{several ? ' · ' + notebookName(s.notebook, names) : ''}{s.state === 'busy' ? ' · running' : ''}</span></li>
+          {s.variables.length ? s.variables.slice(0, sidebarFiles).map(v => <li key={(s.notebook ?? '') + '|' + s.language + ':' + v.name}>
+            <button className="nav-file nav-value" title={`${v.name} · ${v.type}${v.size ? ' · ' + v.size : ''}${v.summary ? '\n' + v.summary : ''}`} onClick={() => onValue(s.language, v.name, s.notebook)}>
               <span>{v.name}</span><small>{v.type}</small>
             </button>
           </li>) : <li><span className="nav-files-note nav-values-none">No values yet</span></li>}

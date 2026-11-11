@@ -19842,6 +19842,31 @@ export const ownerContracts: OwnerContractSnapshot = {
                   "terminalId": {
                     "pattern": "^t-[a-f0-9]{16}$",
                     "type": "string"
+                  },
+                  "typedBy": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "at": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "by": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "by",
+                          "at"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -19856,7 +19881,8 @@ export const ownerContracts: OwnerContractSnapshot = {
                   "exit",
                   "bytes",
                   "kept",
-                  "problem"
+                  "problem",
+                  "typedBy"
                 ],
                 "type": "object"
               }
@@ -19977,6 +20003,31 @@ export const ownerContracts: OwnerContractSnapshot = {
                     "terminalId": {
                       "pattern": "^t-[a-f0-9]{16}$",
                       "type": "string"
+                    },
+                    "typedBy": {
+                      "anyOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "at": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "by": {
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "by",
+                            "at"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     }
                   },
                   "required": [
@@ -19991,7 +20042,8 @@ export const ownerContracts: OwnerContractSnapshot = {
                     "exit",
                     "bytes",
                     "kept",
-                    "problem"
+                    "problem",
+                    "typedBy"
                   ],
                   "type": "object"
                 },
@@ -20131,6 +20183,31 @@ export const ownerContracts: OwnerContractSnapshot = {
                   "terminalId": {
                     "pattern": "^t-[a-f0-9]{16}$",
                     "type": "string"
+                  },
+                  "typedBy": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "at": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "by": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "by",
+                          "at"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -20145,7 +20222,8 @@ export const ownerContracts: OwnerContractSnapshot = {
                   "exit",
                   "bytes",
                   "kept",
-                  "problem"
+                  "problem",
+                  "typedBy"
                 ],
                 "type": "object"
               }
@@ -20304,6 +20382,31 @@ export const ownerContracts: OwnerContractSnapshot = {
                   "terminalId": {
                     "pattern": "^t-[a-f0-9]{16}$",
                     "type": "string"
+                  },
+                  "typedBy": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "at": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "by": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "by",
+                          "at"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -20318,7 +20421,8 @@ export const ownerContracts: OwnerContractSnapshot = {
                   "exit",
                   "bytes",
                   "kept",
-                  "problem"
+                  "problem",
+                  "typedBy"
                 ],
                 "type": "object"
               }
@@ -20462,6 +20566,31 @@ export const ownerContracts: OwnerContractSnapshot = {
                   "terminalId": {
                     "pattern": "^t-[a-f0-9]{16}$",
                     "type": "string"
+                  },
+                  "typedBy": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "at": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "by": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "by",
+                          "at"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -20476,12 +20605,238 @@ export const ownerContracts: OwnerContractSnapshot = {
                   "exit",
                   "bytes",
                   "kept",
-                  "problem"
+                  "problem",
+                  "typedBy"
                 ],
                 "type": "object"
               }
             },
             "required": [
+              "terminal"
+            ],
+            "type": "object"
+          },
+          "requires": []
+        },
+        "console.terminal.screen": {
+          "effect": "read",
+          "inputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "after": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "lines": {
+                "maximum": 500,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "terminalId": {
+                "pattern": "^t-[a-f0-9]{16}$",
+                "type": "string"
+              },
+              "waitMs": {
+                "maximum": 25000,
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "terminalId"
+            ],
+            "type": "object"
+          },
+          "outputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "cursor": {
+                "additionalProperties": false,
+                "properties": {
+                  "col": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "row": {
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "row",
+                  "col"
+                ],
+                "type": "object"
+              },
+              "fullScreen": {
+                "type": "boolean"
+              },
+              "lines": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "offset": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "omitted": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "quiet": {
+                "type": "boolean"
+              },
+              "terminal": {
+                "additionalProperties": false,
+                "properties": {
+                  "by": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "bytes": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "cols": {
+                    "maximum": 500,
+                    "minimum": 2,
+                    "type": "integer"
+                  },
+                  "cwd": {
+                    "type": "string"
+                  },
+                  "endedAt": {
+                    "anyOf": [
+                      {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "exit": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "code": {
+                            "anyOf": [
+                              {
+                                "type": "integer"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "signal": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "code",
+                          "signal"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "kept": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "problem": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "rows": {
+                    "maximum": 300,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "shell": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "startedAt": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "terminalId": {
+                    "pattern": "^t-[a-f0-9]{16}$",
+                    "type": "string"
+                  },
+                  "typedBy": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "at": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "by": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "by",
+                          "at"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "terminalId",
+                  "by",
+                  "shell",
+                  "cwd",
+                  "cols",
+                  "rows",
+                  "startedAt",
+                  "endedAt",
+                  "exit",
+                  "bytes",
+                  "kept",
+                  "problem",
+                  "typedBy"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "lines",
+              "omitted",
+              "cursor",
+              "fullScreen",
+              "offset",
+              "quiet",
               "terminal"
             ],
             "type": "object"
@@ -20516,6 +20871,10 @@ export const ownerContracts: OwnerContractSnapshot = {
                 "minimum": 0,
                 "type": "integer"
               },
+              "offset": {
+                "minimum": 0,
+                "type": "integer"
+              },
               "terminalId": {
                 "pattern": "^t-[a-f0-9]{16}$",
                 "type": "string"
@@ -20523,7 +20882,8 @@ export const ownerContracts: OwnerContractSnapshot = {
             },
             "required": [
               "terminalId",
-              "bytes"
+              "bytes",
+              "offset"
             ],
             "type": "object"
           },
@@ -20653,6 +21013,10 @@ export const ownerContracts: OwnerContractSnapshot = {
               "name": {
                 "maxLength": 256,
                 "minLength": 1,
+                "type": "string"
+              },
+              "notebook": {
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
                 "type": "string"
               },
               "offset": {
@@ -22931,6 +23295,10 @@ export const ownerContracts: OwnerContractSnapshot = {
                         "python"
                       ]
                     },
+                    "notebook": {
+                      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+                      "type": "string"
+                    },
                     "pid": {
                       "anyOf": [
                         {
@@ -23603,6 +23971,10 @@ export const ownerContracts: OwnerContractSnapshot = {
                       "python"
                     ]
                   },
+                  "notebook": {
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+                    "type": "string"
+                  },
                   "pid": {
                     "anyOf": [
                       {
@@ -24004,6 +24376,10 @@ export const ownerContracts: OwnerContractSnapshot = {
                   "python"
                 ]
               },
+              "notebook": {
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+                "type": "string"
+              },
               "place": {
                 "pattern": "^[a-z][a-z0-9-]{0,31}$",
                 "type": "string"
@@ -24066,6 +24442,10 @@ export const ownerContracts: OwnerContractSnapshot = {
                       "r",
                       "python"
                     ]
+                  },
+                  "notebook": {
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+                    "type": "string"
                   },
                   "pid": {
                     "anyOf": [
@@ -24330,6 +24710,10 @@ export const ownerContracts: OwnerContractSnapshot = {
                       "r",
                       "python"
                     ]
+                  },
+                  "notebook": {
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+                    "type": "string"
                   },
                   "pid": {
                     "anyOf": [
@@ -27284,22 +27668,22 @@ export const ownerContracts: OwnerContractSnapshot = {
     },
     "console": {
       "package": "@rho-workspace/plugin-console",
-      "packageVersion": "0.3.2",
+      "packageVersion": "0.3.3",
       "entry": "./operations",
       "entryPath": "@rho-workspace/plugin-console/dist/operations.js",
-      "entrySha256": "ee7388b95f7eaf49e4efea75764a3e2076c34c4c2db8538f94bf97b122b42c9e",
+      "entrySha256": "8b6fdc948b2021a333f56360da9c05d6332ad5f2206e0bf8e40948473990cbde",
       "exports": {
-        "operationContracts": "612d012ec08eb395ae7ec5b487de8fd38bc6997b6a5c324f44e2e20b9224f9a3"
+        "operationContracts": "7657ac3ee296fe89a3ff86ff8fb2fd5e9599c7e9dd5bfbcab3f3456437cc4229"
       }
     },
     "kernel": {
       "package": "@rho-workspace/plugin-kernel",
-      "packageVersion": "0.5.16",
+      "packageVersion": "0.5.18",
       "entry": "./operations",
       "entryPath": "@rho-workspace/plugin-kernel/dist/operations.js",
-      "entrySha256": "114a505366ffcfe9387c746061bad37e401aedd6ec04477794d03268decd3217",
+      "entrySha256": "7c744c6aec112fe116bfc4ce55cdd80c728cd726c69a18dcf28a666e75897e17",
       "exports": {
-        "operationContracts": "0b1909f32a38fc46269696eca544bbcb9d717fd8bc9ae46a429bb73a25d86932"
+        "operationContracts": "64ffa8b94dffb3ba0455c55cd15d416048320838b60b52a29b0036e90fb5f1f2"
       }
     },
     "figures": {

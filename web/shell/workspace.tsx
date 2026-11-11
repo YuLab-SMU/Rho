@@ -14,7 +14,7 @@ import { CommandPane } from '../console.js';
 import { ConsoleView, FilesView, KindView } from '../studio-tools.js';
 import type { SourceRow } from '../sources.js';
 import { askCell, askPlot, showOnServer, type Prepared, type SessionScope } from '@rho-workspace/plugin-kernel/ui';
-import { addNotebook, addObject, addSessionView, canExplore, type SessionView, explorableTable, languageNames, loadTable, notebookComponent, notebookNames, notebookOf, notebookView, projectPath, scriptLanguage, scriptPrepared, sessionComponents, type Language } from '../explore.js';
+import { addNewNotebook, addNotebook, addObject, addSessionView, canExplore, type SessionView, explorableTable, languageNames, loadTable, notebookComponent, notebookNames, notebookOf, notebookView, projectPath, scriptLanguage, scriptPrepared, sessionComponents, type Language } from '../explore.js';
 import { ExploreIn } from '../explore-in.js';
 import { useProcess } from '../process-context.js';
 import { ProcessFrame } from './process-views.js';
@@ -37,7 +37,7 @@ export const workspaceLimits = { minSplitPx: 640 };
 // The workspace shell: the owner's composition tree drawn as
 // splits and tab groups, owner views mounted within the rendering budget, and a slot for
 // what Rho adds above the work. It decides nothing about attention; useLive does.
-export function Workspace({ composition: recorded, snapshot, client, onAbout, contextTarget, principalId, onShowContext, feedbackContextActive, openView, onCommands, agentTarget, onShowAgent, presence, onPersonMoved, onConversation, onExplore, onObject, empty, prepared: given, onPrepare, following = false, arrange = true, addView }: { addView?: (into: string) => ReactNode; onConversation?: (id: string) => void; onExplore?: (path: string, language: Language) => void; onObject?: (language: Language, name: string) => void; empty?: ReactNode; prepared?: Prepared | null; onPrepare?: (prepared: Prepared | null) => void; following?: boolean; arrange?: boolean; presence?: { viewId: string; label: string; verb: string; live: boolean } | null; onPersonMoved?: () => void; onCommands?: (group: CommandGroup | null) => void; composition: CompositionSummary; snapshot: WorkspaceSnapshot; client: BrowserClient; onAbout: (pluginId: string) => void; contextTarget: HTMLElement | null; principalId?: string; onShowContext: () => void; feedbackContextActive: boolean; mapChipTarget?: HTMLElement | null; openView?: string; agentTarget?: HTMLElement | null; onShowAgent?: () => void }) {
+export function Workspace({ composition: recorded, snapshot, client, onAbout, contextTarget, principalId, onShowContext, feedbackContextActive, openView, onCommands, agentTarget, onShowAgent, presence, onPersonMoved, onConversation, onExplore, onObject, empty, prepared: given, onPrepare, following = false, arrange = true, addView }: { addView?: (into: string) => ReactNode; onConversation?: (id: string) => void; onExplore?: (path: string, language: Language) => void; onObject?: (language: Language, name: string, notebook?: string) => void; empty?: ReactNode; prepared?: Prepared | null; onPrepare?: (prepared: Prepared | null) => void; following?: boolean; arrange?: boolean; presence?: { viewId: string; label: string; verb: string; live: boolean } | null; onPersonMoved?: () => void; onCommands?: (group: CommandGroup | null) => void; composition: CompositionSummary; snapshot: WorkspaceSnapshot; client: BrowserClient; onAbout: (pluginId: string) => void; contextTarget: HTMLElement | null; principalId?: string; onShowContext: () => void; feedbackContextActive: boolean; mapChipTarget?: HTMLElement | null; openView?: string; agentTarget?: HTMLElement | null; onShowAgent?: () => void }) {
   // A conversation's Studio: its files' views show their versions, and a replay arranges nothing.
   const process = useProcess();
   const live = useLive(snapshot, recorded, client, principalId, !!process), layout = live.layout;
@@ -175,10 +175,10 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
   // A new view is shown once the page's layout has it.
   const [opening, setOpening] = useState<string | null>(null);
   useEffect(() => { if (opening && byId.has(opening)) { setOpening(null); show(opening); } }, [opening, byId]);
-  function openObject(language: Language, name: string) {
-    if (process) { onObject?.(language, name); return; }
+  function openObject(language: Language, name: string, notebook?: string) {
+    if (process) { onObject?.(language, name, notebook); return; }
     setLayoutProblem('');
-    addObject(client, snapshot.project.id, layout.compositionId, language, name, stage.current?.clientWidth).then(id => { onPersonMoved?.(); setOpening(id); }, refusal);
+    addObject(client, snapshot.project.id, layout.compositionId, language, name, stage.current?.clientWidth, notebook).then(id => { onPersonMoved?.(); setOpening(id); }, refusal);
   }
   // A file a session on a server named is shown in the Servers view, in its folder there.
   function openRemote(placeId: string, path: string) {
@@ -189,8 +189,8 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
     addSessionView(client, snapshot.project.id, layout.compositionId, 'servers').then(id => { onPersonMoved?.(); setOpening(id); }, refusal);
   }
   // The sessions' views bring each other forward on the person's page: a view of the sessions is
-  // shown where it is, or put on the page first. A cell goes to the project's notebook, which
-  // lists every cell, else to the notebook it ran in or the one last used.
+  // shown where it is, or put on the page first. A cell goes to the notebook it ran in, which is put
+  // on the page when it is not there.
   const linking = !process && !!tree && allowed('composition.apply');
   function showSessionView(kind: SessionView) {
     const there = layout.views.find(v => v.component === sessionComponents[kind])?.id;
@@ -200,10 +200,11 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
   }
   function showCell(cellId: string, notebook: string | null) {
     askCell(cellId);
-    const view = notebooks.find(v => !notebookOf(v)) ?? (notebook ? notebooks.find(v => notebookOf(v) === notebook) : undefined) ?? target;
+    const view = notebooks.find(v => notebookOf(v) === notebook);
     if (view) { onPersonMoved?.(); show(view.id); return; }
     setLayoutProblem('');
-    addNotebook(client, snapshot.project.id, layout.compositionId, null).then(id => { onPersonMoved?.(); setOpening(id); }, refusal);
+    (notebook ? addNewNotebook(client, snapshot.project.id, layout.compositionId, undefined, { notebook, title: names[notebook] }) : addNotebook(client, snapshot.project.id, layout.compositionId, null))
+      .then(id => { onPersonMoved?.(); setOpening(id); }, refusal);
   }
   // A script's line run from its editor: the person's cell in the shared session, in the order the
   // lines were run. A page without the Notebook gets one under the script, as a console sits under

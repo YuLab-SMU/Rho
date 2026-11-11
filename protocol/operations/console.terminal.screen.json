@@ -1,0 +1,230 @@
+{
+  "method": "console.terminal.screen",
+  "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "projectId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "after": {
+        "minimum": 0,
+        "type": "integer"
+      },
+      "lines": {
+        "maximum": 500,
+        "minimum": 1,
+        "type": "integer"
+      },
+      "terminalId": {
+        "pattern": "^t-[a-f0-9]{16}$",
+        "type": "string"
+      },
+      "waitMs": {
+        "maximum": 25000,
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "projectId",
+      "terminalId"
+    ],
+    "type": "object"
+  },
+  "outputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "cursor": {
+        "additionalProperties": false,
+        "properties": {
+          "col": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "row": {
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "row",
+          "col"
+        ],
+        "type": "object"
+      },
+      "fullScreen": {
+        "type": "boolean"
+      },
+      "lines": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "offset": {
+        "minimum": 0,
+        "type": "integer"
+      },
+      "omitted": {
+        "minimum": 0,
+        "type": "integer"
+      },
+      "quiet": {
+        "type": "boolean"
+      },
+      "terminal": {
+        "additionalProperties": false,
+        "properties": {
+          "by": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "bytes": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "cols": {
+            "maximum": 500,
+            "minimum": 2,
+            "type": "integer"
+          },
+          "cwd": {
+            "type": "string"
+          },
+          "endedAt": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "exit": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "code": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "signal": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "code",
+                  "signal"
+                ],
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "kept": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "problem": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rows": {
+            "maximum": 300,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "shell": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "startedAt": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "terminalId": {
+            "pattern": "^t-[a-f0-9]{16}$",
+            "type": "string"
+          },
+          "typedBy": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "at": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "by": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "by",
+                  "at"
+                ],
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "terminalId",
+          "by",
+          "shell",
+          "cwd",
+          "cols",
+          "rows",
+          "startedAt",
+          "endedAt",
+          "exit",
+          "bytes",
+          "kept",
+          "problem",
+          "typedBy"
+        ],
+        "type": "object"
+      }
+    },
+    "required": [
+      "lines",
+      "omitted",
+      "cursor",
+      "fullScreen",
+      "offset",
+      "quiet",
+      "terminal"
+    ],
+    "type": "object"
+  },
+  "description": "What a terminal shows now as text: its last lines, the cursor and whether a full-screen program has the screen. Given after (the offset a write returned) and waitMs, it first waits for the output past it to come and stop."
+}

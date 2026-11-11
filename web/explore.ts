@@ -21,7 +21,7 @@ export function scriptPrepared(path: string, language: Language, dirty: boolean)
 export async function loadTable(client: BrowserClient, projectId: string, path: string, language: Language, notebook?: string | null) {
   const where = notebook ? { notebook } : {};
   const read = await client.call('kernel.read', { projectId, limit: 1 });
-  const live = read.sessions.find(s => s.language === language && s.state !== 'ended');
+  const live = read.sessions.find(s => s.language === language && s.state !== 'ended' && (s.notebook ?? null) === (notebook ?? null));
   const taken = new Set(live?.variables.map(v => v.name) ?? []);
   const name = valueName(path, language, taken), file = path.split('/').at(-1)!;
   const places = live?.place ? null : await client.call('kernel.places', { projectId }).catch(() => null);
@@ -106,15 +106,17 @@ const intoGroup = (view: LayoutNode, into: string) => (tree: LayoutTree | null):
 // The Notebook beside a view, or in the group the person chose, unless the page has one.
 export const addNotebook = (client: BrowserClient, projectId: string, compositionId: string, beside: string | null, into?: string) =>
   addToPage(client, projectId, compositionId, notebookOn, into ? intoGroup(notebookView(), into) : tree => withNotebook(tree, beside), 'notebook');
-// Another notebook on the page: a tab beside the page's notebooks, or in the group the person
-// chose. Its name counts on from the notebooks already there.
-export function addNewNotebook(client: BrowserClient, projectId: string, compositionId: string, into?: string): Promise<string> {
-  const key = crypto.randomUUID().slice(0, 8), id = 'notebook-' + key;
-  return addToPage(client, projectId, compositionId, nodes => (nodes as LayoutNode[] | undefined)?.some(n => n.id === id) ? id : null, tree => {
+// Another notebook on the page, with R and Python sessions of its own: a tab beside the page's
+// notebooks, or in the group the person chose. Its name counts on from the notebooks already
+// there. Given an existing notebook (one whose view is on another page or was closed), the view
+// shows that one under the name it has, so its cells and sessions are found again.
+export function addNewNotebook(client: BrowserClient, projectId: string, compositionId: string, into?: string, existing?: { notebook: string; title?: string }): Promise<string> {
+  const key = existing ? existing.notebook.replace(/[^A-Za-z0-9_-]/g, '.') : crypto.randomUUID().slice(0, 8), id = 'notebook-' + key;
+  return addToPage(client, projectId, compositionId, nodes => (nodes as NotebookNode[] | undefined)?.find(n => n.id === id || (existing && n.component === notebookComponent && n.props?.notebook === existing.notebook))?.id ?? null, tree => {
     const there = notebookNodes(tree?.nodes), names = new Set(there.map(n => n.props?.title));
     let number = there.length + 1;
     while (names.has('Notebook ' + number)) number++;
-    const view = { ...notebookView(id), props: { title: 'Notebook ' + number, notebook: 'nb-' + key } };
+    const view = { ...notebookView(id), props: { title: existing?.title ?? 'Notebook ' + number, notebook: existing?.notebook ?? 'nb-' + key } };
     if (into || !tree) return intoGroup(view, into ?? '')(tree);
     const last = there.at(-1), holder = last && tree.nodes.find(n => n.kind === 'group' && n.children?.includes(last.id) && (n.presentation as { mode?: string } | undefined)?.mode !== 'split');
     return holder ? addInto(tree, view as never, holder.id, newId) : addBeside(tree, view as never, null, 'right', newId);
@@ -190,15 +192,16 @@ export const addTool = (client: BrowserClient, projectId: string, compositionId:
 // the Notebook's, so that neither is squeezed. Without a width it goes beside the Notebook.
 export const objectComponent = 'rho.object';
 export const objectLimits = { minViewPx: 360 };
-export function objectViewId(language: Language, name: string) {
+// A value of a notebook's session (notebook: its identity; none for the project's notebook).
+export function objectViewId(language: Language, name: string, notebook?: string) {
   const safe = [...name].map(c => /[A-Za-z0-9_-]/.test(c) ? c : '.').join('').slice(0, 96);
   let hash = 0;
   for (const c of name) hash = (hash * 31 + c.codePointAt(0)!) >>> 0;
-  return 'object-' + language + '-' + safe + (safe === name ? '' : '-' + hash.toString(36));
+  return 'object-' + language + (notebook ? '-' + notebook : '') + '-' + safe + (safe === name ? '' : '-' + hash.toString(36));
 }
-export const objectView = (language: Language, name: string): LayoutNode => ({ id: objectViewId(language, name), kind: 'view', component: objectComponent, version: '1', props: { title: name, language, name }, bindings: {} });
-export function withObject(tree: LayoutTree | null, language: Language, name: string, width?: number): LayoutTree | null {
-  const view = objectView(language, name);
+export const objectView = (language: Language, name: string, notebook?: string): LayoutNode => ({ id: objectViewId(language, name, notebook), kind: 'view', component: objectComponent, version: '1', props: { title: name, language, name, ...(notebook ? { notebook } : {}) }, bindings: {} });
+export function withObject(tree: LayoutTree | null, language: Language, name: string, width?: number, session?: string): LayoutTree | null {
+  const view = objectView(language, name, session);
   if (!tree) return { rootId: 'root', nodes: [{ id: 'root', kind: 'group', children: [view.id] }, view] };
   if (tree.nodes.some(n => n.id === view.id)) return null;
   const sibling = tree.nodes.find(n => n.kind === 'view' && n.component === objectComponent);
@@ -211,15 +214,15 @@ export function withObject(tree: LayoutTree | null, language: Language, name: st
   const notebook = notebookOn(tree.nodes);
   return notebook ? addWithRoom(tree, view as never, notebook, width, objectLimits.minViewPx, newId) : addBeside(tree, view as never, null, 'right', newId);
 }
-export async function addObject(client: BrowserClient, projectId: string, compositionId: string, language: Language, name: string, width?: number): Promise<string> {
-  const id = objectViewId(language, name);
+export async function addObject(client: BrowserClient, projectId: string, compositionId: string, language: Language, name: string, width?: number, notebook?: string): Promise<string> {
+  const id = objectViewId(language, name, notebook);
   for (let attempt = 0; ; attempt++) {
     const current = await client.call('composition.read', { projectId, compositionId }).catch(error => {
       if (error instanceof BrowserApiError && error.error.kind === 'not_found') return null;
       throw error;
     }) as { version: number; rootId?: string; nodes?: unknown[] } | null;
     if ((current?.nodes as LayoutNode[] | undefined)?.some(n => n.id === id)) return id;
-    const next = withObject(current?.rootId && current.nodes?.length ? { rootId: current.rootId, nodes: current.nodes as LayoutNode[] } : null, language, name, width);
+    const next = withObject(current?.rootId && current.nodes?.length ? { rootId: current.rootId, nodes: current.nodes as LayoutNode[] } : null, language, name, width, notebook);
     if (!next) return id;
     try {
       await client.call('composition.apply', { projectId, compositionId, expectedVersion: current?.version ?? 0, changeId: 'object-' + crypto.randomUUID(), operations: [{ op: 'replace', rootId: next.rootId, nodes: next.nodes }] } as never);
