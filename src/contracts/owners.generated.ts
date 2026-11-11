@@ -19865,6 +19865,9 @@ export const ownerContracts: OwnerContractSnapshot = {
                 "maxItems": 16,
                 "type": "array"
               },
+              "picture": {
+                "type": "boolean"
+              },
               "sort": {
                 "additionalProperties": false,
                 "properties": {
@@ -19996,6 +19999,31 @@ export const ownerContracts: OwnerContractSnapshot = {
                       },
                       "name": {
                         "minLength": 1,
+                        "type": "string"
+                      },
+                      "picture": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "data": {
+                            "type": "string"
+                          },
+                          "height": {
+                            "minimum": 0,
+                            "type": "integer"
+                          },
+                          "width": {
+                            "minimum": 0,
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "data",
+                          "width",
+                          "height"
+                        ],
+                        "type": "object"
+                      },
+                      "pictureProblem": {
                         "type": "string"
                       },
                       "size": {
@@ -20225,6 +20253,17 @@ export const ownerContracts: OwnerContractSnapshot = {
                 "minLength": 1,
                 "type": "string"
               },
+              "runningCell": {
+                "anyOf": [
+                  {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
               "sessionId": {
                 "anyOf": [
                   {
@@ -20252,6 +20291,7 @@ export const ownerContracts: OwnerContractSnapshot = {
               "state",
               "sessionId",
               "afterCell",
+              "runningCell",
               "readAt",
               "problem",
               "object"
@@ -26166,12 +26206,12 @@ export const ownerContracts: OwnerContractSnapshot = {
     },
     "kernel": {
       "package": "@rho-workspace/plugin-kernel",
-      "packageVersion": "0.5.13",
+      "packageVersion": "0.5.14",
       "entry": "./operations",
       "entryPath": "@rho-workspace/plugin-kernel/dist/operations.js",
-      "entrySha256": "d984240d0953961897503d15419347712e5f80e23a3386074ff461e8655e7a46",
+      "entrySha256": "0f41eda742de47755100643b1655e1f881c04cc79e3dbbfb14fda4b13dafa274",
       "exports": {
-        "operationContracts": "745ad690e36329aeedfd303f58913833eb12e1326d858a28d2629a4758e836b7"
+        "operationContracts": "0526dfbed44be3584fd7c86ddac8b1a2a953b0b218cc2a6f3317e7c6871743ad"
       }
     },
     "figures": {

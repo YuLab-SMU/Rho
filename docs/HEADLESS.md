@@ -1142,10 +1142,15 @@ a session. `kernel.inspect` returns one value of a live session as its session
 describes it: its kind (table, model, vector, list, function, value or other), class,
 size and facts, a page of its rows, elements or parts, the code that reaches it and
 each part (`path` names parts by position), and the cell it was read after. A table
-sorts by a column on request; a model gives its fit and coefficients. It answers
-`none` without a live session, `busy` while a cell runs or waits, `missing`, `timeout`,
-`failed` or `ended`, and never starts, waits for or changes a session; a cell asked
-for during a reading waits for it. `kernel.plot` returns one kept plot as PNG bytes. `kernel.interrupt` names
+sorts by a column on request; a model gives its fit and coefficients, and with
+`picture` an R value that draws when printed comes with a PNG of what it drew. It
+answers `none` without a live session, `missing`, `timeout`, `failed` or `ended`, and
+never starts, waits for or changes a session; a cell asked for during a reading of
+the session waits for it. While a cell runs, a local R session on macOS or Linux is
+read from a copy of itself forked when that cell started: the value is as it was then,
+`runningCell` names the cell and `afterCell` the one before it. A session on Windows
+or a server, a Python session, a cell still waiting and a session whose values take
+more than a quarter of the machine's memory answer `busy` with the reason. `kernel.plot` returns one kept plot as PNG bytes. `kernel.interrupt` names
 a cell: a running cell is stopped with SIGINT and its session and values stay; a
 waiting cell is not run; an ended cell is returned unchanged. `kernel.stop` names a
 session and ends it (SIGTERM, then SIGKILL after `stopGraceMs`); its running cell

@@ -142,7 +142,7 @@ Studio stage under 640 px shows its views one at a time. Pages cannot yet be ren
 Values of the live sessions have a view of their own
 ([episode](SIMULATED-PROJECT-EPISODE.md#looking-at-values)). Notebook's `kernel.inspect`
 reads one value as its session describes it, without starting, waiting for or changing a
-session; each cell names the values it made, changed and removed. From the Notebook's
+session, and a local R session on macOS or Linux is [read while a cell runs](SIMULATED-PROJECT-EPISODE.md#values-while-a-cell-runs), as it was when the cell started, with a picture of what a value draws (Plugins `103d45c`; Python, Windows and servers still wait for the cell); each cell names the values it made, changed and removed. From the Notebook's
 variables or a cell's names the value opens beside the Notebook, or as a tab next to it
 when a split would leave either under 360 px: a table pages, sorts and gives each column's
 type and summary; a model its fit and coefficients; a list its parts, each opening in place

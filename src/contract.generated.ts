@@ -9361,6 +9361,7 @@ export interface KernelInspectInput {
    * @maxItems 16
    */
   path?: number[];
+  picture?: boolean;
   sort?: {
     column: number;
     descending: boolean;
@@ -9390,6 +9391,12 @@ export interface KernelInspectOutput {
     }[];
     kind: 'table' | 'model' | 'vector' | 'list' | 'function' | 'value' | 'other';
     name: string;
+    picture?: {
+      data: string;
+      height: number;
+      width: number;
+    };
+    pictureProblem?: string;
     size: string;
     table?: {
       columns: {
@@ -9431,6 +9438,7 @@ export interface KernelInspectOutput {
   } | null;
   problem: string | null;
   readAt: string;
+  runningCell: number | null;
   sessionId: string | null;
   state: 'shown' | 'busy' | 'none' | 'missing' | 'timeout' | 'failed' | 'ended';
 }

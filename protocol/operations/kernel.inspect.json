@@ -35,6 +35,9 @@
         "maxItems": 16,
         "type": "array"
       },
+      "picture": {
+        "type": "boolean"
+      },
       "sort": {
         "additionalProperties": false,
         "properties": {
@@ -167,6 +170,31 @@
               },
               "name": {
                 "minLength": 1,
+                "type": "string"
+              },
+              "picture": {
+                "additionalProperties": false,
+                "properties": {
+                  "data": {
+                    "type": "string"
+                  },
+                  "height": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "width": {
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "data",
+                  "width",
+                  "height"
+                ],
+                "type": "object"
+              },
+              "pictureProblem": {
                 "type": "string"
               },
               "size": {
@@ -396,6 +424,17 @@
         "minLength": 1,
         "type": "string"
       },
+      "runningCell": {
+        "anyOf": [
+          {
+            "minimum": 1,
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
       "sessionId": {
         "anyOf": [
           {
@@ -423,6 +462,7 @@
       "state",
       "sessionId",
       "afterCell",
+      "runningCell",
       "readAt",
       "problem",
       "object"

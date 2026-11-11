@@ -1652,3 +1652,60 @@ Studio keeps its two columns of views.
   notes or its conversation should show first is not settled.
 - The clip in [Frontend](FRONTEND.md) and the website's demo show the earlier frame. The demo tour
   was updated but not run; the ui, shell and interaction acceptances were not run.
+
+## Values while a cell runs
+
+After seeing the frame in their own project the user asked for one thing first: let the variables be
+looked at while something runs. Their screenshot showed `p_compare` open beside the Notebook with only
+"A cell is running. The value shows when it ends."
+
+### What the run showed
+
+- The R session is one process that does one thing at a time, and Notebook answered every reading
+  `busy` while a cell ran or waited. A long cell left every value's view empty unless it had been
+  read before.
+- `p_compare` is a ggplot. Read with the session idle, its view was also empty: printing it draws and
+  prints no text, and the view showed only what R prints.
+
+### Changes
+
+- Plugins `103d45c` (Notebook): when a cell starts, a local R session on macOS or Linux forks a copy
+  of itself that shares its memory and answers readings while the cell runs. A value is then read as
+  it was when the cell started; the reading names the cell (`runningCell`) and the view says "Cell 2
+  is running. This is p_compare as it was when the cell started." A value the cell has made since
+  says so. The copy is not among the code's own parallel children, leaves the random numbers where
+  they were and ends with the cell. A session whose values take more than a quarter of the
+  machine's memory is not copied and the view gives both sizes; Windows, a server and Python answer
+  as before.
+- A reading may ask for a picture of what an R value draws when printed, at most 1 MiB. The value's
+  view asks, so a ggplot shows its plot, idle or while a cell runs. Rho passes `picture` on to
+  Notebook and regenerated its copy of the contract.
+- The note about a running cell is a note, in the amber of the other notes, not a problem in red.
+
+![A ggplot's view while cell 2 runs](figures/value-while-running.jpg)
+
+### Verification
+
+- A disposable project on a service built from this change, through `npm run dev`, in Chrome at
+  2000 × 1028: a first cell made a data frame, an `lm` fit and a ggplot; a 25 s cell then changed the
+  data frame and went on. Opened from the sidebar meanwhile, `p_compare` showed its plot after
+  0.8 s, `d` its 80 rows as they were before the cell, and `fit` its coefficients, each under the
+  note; when the cell ended the views read the session itself again. Each screenshot was read. The
+  first run showed the empty ggplot view and the red note, the second that Rho dropped `picture`.
+- Notebook's own tests with R 4.5.2 on this Mac and R 4.2.2 on Debian cover the copy's values, a
+  slow reading (stopped after 0.9 s while the cell ran on), an interrupt, two cells in a row, the
+  memory limit, stopping the session and what processes are left.
+- Measured here: the copy adds about 10 ms to a cell (thirty short cells took 0.35 s with it and
+  0.06 s without), and a reading of it takes 30 to 130 ms.
+
+### Left open
+
+- Only local R sessions on macOS and Linux are read while a cell runs. Python, Windows and sessions
+  on a server still answer `busy` until the cell ends.
+- The copy shows the session as the cell found it, not what the cell has done so far.
+- A plot object that R reads by its parts (lattice, an older ggplot2, a heatmap) and a Python figure
+  show no picture.
+- The memory limit counts what R's values take; a session of several gigabytes was forked once
+  (9 ms beside a 4 GB matrix) but not run through a long cell that rewrites it.
+- The user's own Rho was running through this and keeps its earlier build and R session until it is
+  restarted.
