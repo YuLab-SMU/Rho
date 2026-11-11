@@ -206,8 +206,9 @@ In Chrome, with two fixture Codex sessions in an example project shown first,
 the new project's Studio listed both sessions and an Agent count of 2 with the
 previous Plugins, and nothing with `b2c6197`; the example kept both.
 `test/session-continuity.test.mjs` opens a second project in the same service
-and fails on the previous Plugins. The person's own machine was not checked;
-its project folder is not on this one.
+and fails on the previous Plugins. npm 0.5.9, installed fresh from the
+registry, gave the same Chrome result as `b2c6197`. The person's own machine was
+not checked; its project folder is not on this one.
 
 ## Limits
 

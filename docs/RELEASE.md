@@ -269,5 +269,19 @@ project lists only the Codex sessions that ran in its own folder, where a projec
 example had listed the example's ([episode](SESSION-CONTINUITY-EPISODE.md#another-projects-codex-sessions)).
 Before its tag the suite passed 345 of 348 on macOS arm64 (3 skipped, Windows only). The last CI
 run on `main` before it, on `55d677c8`, failed one Windows test, `agent-observation`: a Core
-command right after the Host's ready line found no named pipe (`host_unavailable`). It had passed
-on `ea5bc3d2`, the 0.5.8 commit.
+command right after the Host's ready line found no named pipe (`host_unavailable`), the Windows
+Host race already open for Rho-core in [Status](STATUS.md).
+
+[CI 43012441690](https://github.com/YuLab-SMU/Rho/actions/runs/43012441690) passed all 18 jobs on
+release commit `c8233c5d`. Tag `v0.5.9` and
+[release 43014185318](https://github.com/YuLab-SMU/Rho/actions/runs/43014185318) found that run's
+candidate, verified it and published it without rebuilding at 11:43:21 UTC on 2026-11-11, as
+`latest`, shasum `cccededb…`, with
+[provenance log entry 3809141343](https://search.sigstore.dev/?logIndex=3809141343). The registry
+still served 0.5.8 shortly after 12:24 UTC and served 0.5.9, with that shasum, at 12:42 UTC, under
+an hour after publication. A fresh install from the registry into a disposable prefix took 5 s
+and `rho --version` said 0.5.9; with that installed package, a project made after the example
+listed none of the example's Codex sessions in Chrome, and the example kept both. The site's front
+page and documentation home now [read the version from npm](DOCS-SITE-EPISODE.md#the-release-npm-serves-read-when-the-page-opens):
+they named 0.5.9 at 12:43 UTC with no deployment for it. The setup page and Skill were deployed
+the same day.

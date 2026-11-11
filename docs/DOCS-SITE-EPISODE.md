@@ -572,3 +572,24 @@ deployment.
 - `pages:check` with `DEMO_NARROW=1` on the same tree: 0 page errors, 0 front-page problems and
   0 failed assets; the demo's unanswered requests are the recording's known gap.
 - Apart from the version, the date and the script, the built front page matched the deployed one.
+
+### Deployment
+
+`gh-pages` `4d3ec0d3` replaced `index.html` and `docs/` with their build from `79dd8ba6` (129
+files); `demo/`, `img/`, `doc/`, `skills/`, `market/`, the `updates/*.json` feeds and `.nojekyll`
+stayed as they were. The same `pages:check` and registry checks passed on that tree before it was
+pushed. Pages built it at 12:24:37 UTC on 2026-11-11. Its 119 added or changed paths answered
+byte-identical to the branch, and its 28 removed paths answered `404`, some only after a first
+`503`. In Chrome at 1440 and 390 px the live pages asked the registry (`200`) and named 0.5.8,
+which npm still served.
+
+At 12:42 UTC npm served 0.5.9. At 12:43 the same live pages, still built with 0.5.8, named 0.5.9
+in the tile, the footer, the eyebrow and the npm panel, with 11 Nov 2026 as its date. No
+deployment was made for the release.
+
+`gh-pages` `04dd24f5` then replaced `doc/setup.md` and `skills/` with their files at `79dd8ba6`,
+unchanged since `v0.5.8`; the site had kept the 0.5.7 setup page. Before that, npm 0.5.8 installed
+in a throwaway home offered every command and option the page uses (`--background`, `--status`,
+`--install-skill`, `--stop`, `rho open`, `rho connect`, `rho tool`), and the Skill its
+`rho --install-skill` wrote matched `skills/` byte for byte. Pages built it at 12:39:34 UTC; the
+setup page and all eight Skill files answered byte-identical, the page as `text/markdown`.
