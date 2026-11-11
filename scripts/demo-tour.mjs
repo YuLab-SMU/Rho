@@ -24,7 +24,8 @@ export async function tour(page, url, { settle, step = () => {} }) {
   const project = () => page.getByRole('navigation', { name: 'Project', exact: true }).first();
   const main = () => page.locator('main').first();
   async function go(name) {
-    await project().getByRole('button', { name, exact: true }).click();
+    // A place is a tab above the work; a kind of file, the Agent's page and the rest are in the sidebar.
+    await page.locator('.place-tabs, .project-nav').getByRole('button', { name, exact: true }).first().click();
     await settle(); await step(name);
   }
 

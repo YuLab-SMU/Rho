@@ -86,7 +86,7 @@ try {
     assert.equal(ran.cell.state, 'done', ran.cell.problem ?? '');
   }
   await page.reload();
-  await page.locator('.project-rail').getByRole('button', { name: /^Notebook only/ }).click();
+  await page.locator('.project-nav').getByRole('button', { name: /^Notebook only/ }).click();
   const notebookWork = page.locator('.notebook-work');
   await notebookWork.getByText('Summarise the scores', { exact: true }).waitFor();
   assert.equal(await page.getByText('No work yet', { exact: true }).count(), 0, 'Notebook cells are work');
@@ -98,7 +98,7 @@ try {
   await page.waitForTimeout(500);
   const box = await asked.boundingBox();
   assert.ok(box && box.y >= 0 && box.y < 450, `the Notebook opens at the cell chosen on the Overview (top ${box?.y})`);
-  await page.locator('.project-rail').getByRole('button', { name: /^Pages 中文/ }).click();
+  await page.locator('.project-nav').getByRole('button', { name: /^Pages 中文/ }).click();
   await page.getByRole('heading', { name: 'Pages 中文', exact: true }).waitFor();
 
   // A project skill an Agent changed: the Overview names the change by its reason while the page
@@ -113,7 +113,7 @@ try {
   await page.getByRole('button', { name: 'Undo this change', exact: true }).click();
   await page.locator('.skills-change.newest .skills-change-reason').getByText(/^Undid: /).waitFor();
   assert.doesNotMatch(await fs.readFile(path.join(project.root, '.claude/skills/score-reporting/SKILL.md'), 'utf8'), /row count/, 'Undo puts the skill back as it was');
-  await page.locator('.project-nav').getByRole('button', { name: 'Overview', exact: true }).click();
+  await page.locator('.place-tabs').getByRole('button', { name: 'Overview', exact: true }).click();
 
   await page.locator('.project-nav').getByRole('button', { name: 'Project settings', exact: true }).click();
   await page.getByRole('button', { name: 'Check project', exact: true }).click();

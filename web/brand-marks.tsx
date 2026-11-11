@@ -1,5 +1,6 @@
 import type { CSSProperties } from 'react';
 import { agentIcon, agentIconById, agentName } from '@rho-workspace/plugin-agent-icons';
+import './brand-marks.css';
 
 // The marks of the Agents and model makers Rho names come from the Agent icons plugin: its
 // catalog says which words in a name identify an Agent or maker. A name is whatever the Agent

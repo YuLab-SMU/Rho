@@ -1579,3 +1579,76 @@ browser at the same size, and read before and after.
 - The user's Commands view listed five "Background wait" rows of `sleep`; those rows were not
   reproduced (the P3 project is gone) and are unchanged.
 - The Agent panel's error and continuation notes, the sidebar and the Overview were not changed.
+
+## One frame
+
+2026-11-11, after the pass above. The user judged the layout itself the larger problem: the
+application reads as one lump with no designed layout, where another application they use shows
+its spaces, its tasks and its work surface at a glance and lets them switch any of the three at any
+time. The shipped PA14 project was toured at 2000 × 1028 in a real browser, each screen read, and
+the frame rebuilt and toured again.
+
+![Before: a rail, a sidebar of twenty rows, a breadcrumb bar, and the stage between two columns of text](figures/frame-before.jpg)
+
+### What the screens showed
+
+- Navigation took two columns, a 61 px rail of project initials and a 248 px sidebar, and the
+  sidebar was one flat list of about twenty rows of five different kinds: pages (Overview, Graph,
+  Console, Notebook, Skills, Agent), the sessions and workspaces nested under Studio, the kinds of
+  file, and settings. At 1028 px of height the list was 1246 px tall, so Project settings and
+  Plugins were cut.
+- The tasks, what a person comes to follow, were third-level rows under a page named Studio, two
+  lines each, with no Agent, time or state. A project was two letters on the rail.
+- The project was named four times (rail, "All projects", the project card, the breadcrumb), and a
+  57 px bar was spent on that breadcrumb, Commands and Connected.
+- Every page had its own skeleton. In a conversation's Studio the stage, the work itself, was the
+  narrowest region: about 900 px between 405 px of notes and the timeline and the 340 px Agent panel.
+
+### Changes
+
+- **The sidebar says where and what.** One 268 px column: Projects by name with a dot on each whose
+  Agent is working; Tasks, one line per session with its Agent's mark, title and how long ago it
+  moved, or that it works or needs a choice; then Sources. Agent, Plugins, Project settings and the
+  connection are at its foot. The rail, "All projects", the project card and the breadcrumb are gone.
+- **The places are tabs above the work.** Overview, Studio, Graph, Console, Notebook, Skills (and
+  Review while records exist) on every project page; a file or page opened from the sidebar is named
+  after them while it shows. Commands is the sidebar's search button and ⌘K.
+- **The work is one panel, with one panel beside it.** The sidebar and the tabs share a ground; the
+  work stands on it as a panel. The project notes moved out of Studio into the panel beside the work,
+  which holds the notes or the Agent's conversation, one at a time, from Notes and Agent at the end
+  of the tabs. The notes are reachable from every page; they no longer open by themselves.
+- Below 768 px the drawer holds the same sidebar with the places as rows.
+
+![After: projects, tasks and files; the places as tabs; the work; the Agent](figures/frame-studio.jpg)
+
+With the panel open the work has 1376 px at this size (1724 px with it closed), so the conversation's
+Studio keeps its two columns of views.
+
+![After: the Overview in the same frame](figures/frame-overview.jpg)
+
+### Verification
+
+- The same eleven screens before and after at 2000 × 1028, and the frame at 1440 × 900, 1024 × 768
+  and 390 × 844 with three projects listed: each screenshot read, no horizontal overflow, no page
+  errors.
+- The sources, agent-canvas, pages, agent-page and frontend acceptances passed with their locators
+  moved to the tabs and the sidebar. The pages acceptance first failed at 768 px on Project
+  settings, where the bar's controls pushed past the window; the tabs now give way first. With its
+  locators moved the same way the graph acceptance got past the navigation and failed at its figure
+  card as on `55d677c8`. That script is being rewritten by the Graph pass under way in another
+  session, so this change leaves it as it was: it still looks for Graph in the sidebar and for the
+  workspace's name in the bar, and needs the tab (`.place-tabs`) and the Studio bar's title.
+- The suite passed 344 of 348 with the debug Core, 3 skipped (Windows only). The one failure came
+  from where this pass was built, a worktree with no `../Rho-plugins` beside it;
+  `test/skills.test.mjs` passed 3 of 3 with that path present.
+
+### Left open
+
+- This is the builder's reading of screenshots. The user has not yet seen the result.
+- Tasks lists the open project's sessions only; a task of another project is two clicks away.
+- Choosing a task opens its Studio and its conversation. The Overview, Graph, Console and Notebook
+  still show the whole project, not that task.
+- The notes are no longer open beside a conversation's Studio until asked for; whether the task's
+  notes or its conversation should show first is not settled.
+- The clip in [Frontend](FRONTEND.md) and the website's demo show the earlier frame. The demo tour
+  was updated but not run; the ui, shell and interaction acceptances were not run.

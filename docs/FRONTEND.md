@@ -14,6 +14,38 @@ layout do the explaining.
 
 The clip runs for about 30 seconds: the projects list, the answer board with its figure and
 table, a script and a table opened, and panes moved and resized while the work stays in place.
+It was recorded before the frame below; the places and the work are the same.
+
+## The frame
+
+Every page of a project has the same three regions. The sidebar says where the person is and what
+is going on there: the projects, then the open project's tasks, then its files. The project's
+places are tabs above the work, which is one panel. One panel beside the work holds the Agent's
+conversation or the project's notes. Each can be switched with one click from any page, and
+switching never changes what is running ([record](SIMULATED-PROJECT-EPISODE.md#one-frame)).
+
+![The frame: projects, tasks and files; the places as tabs; the work; the Agent](figures/frame-studio.jpg)
+
+- **Projects** lists the eight most recently opened projects by name, in the service's order, the
+  one on screen marked and a dot on each one whose Agent is answering (from one bounded
+  `conversation.list` per project every five seconds while the page is visible; the open project's
+  own record also says when it needs a choice). Choosing one returns to where it was left in this
+  tab; `+` and Rho open the projects list, where a project chosen opens on its Overview.
+- **Tasks** lists the open project's recorded Agent sessions, newest first (eight, then All
+  sessions), each one line: its Agent's mark, its title (from its section of the project notes, else
+  the Agent's title, else its first message) and how long ago it last moved, or that it is working
+  or needs a choice. Choosing one opens its Studio with its conversation in the panel. `+` starts a
+  new conversation. The person's own workspaces follow, with New workspace.
+- **Sources** lists the project's files by kind, as described below.
+- At the foot: Agent (every session and the Agents themselves), Plugins, Project settings, and the
+  connection's state with Connection & access.
+- **The tabs** are the project's places: Overview, Studio, Graph, Console, Notebook, Skills, and
+  Review while the project has review records. A file, the settings or another page reached from
+  the sidebar is named after them while it shows. A bar without room keeps the icons and the name of
+  the place on screen. At the bar's end: what the Agent is doing while it works, then Notes and Agent,
+  which open the panel beside the work.
+- Below 768 CSS px the sidebar is a drawer that also lists the places, the bar names only where the
+  tab is, and the panel is a sheet over the page.
 
 ## The Agent's view of the sending tab
 
@@ -281,7 +313,7 @@ inspect what happened. The application gives those actions direct places:
 - **Files** opens documents, browses the project's folder and the source folders it
   works in, and filters the current folder. A source folder is named as the person
   named it and opens one level at a time, the same way any other folder does.
-- **Agent** (the sidebar row) has two tabs. Conversations lists every session in
+- **Agent** (at the sidebar's foot) has two tabs. Conversations lists every session in
   the project folder by day, searchable and by Agent: Rho's conversations, Claude
   Code and Codex sessions read from the Agents' own records, and observed Harness
   conversations. Each row names where the session started (Terminal, VS Code, Codex
@@ -312,22 +344,21 @@ inspect what happened. The application gives those actions direct places:
   is listed once. Notebook cells join its timeline by exact cell IDs in their receipts,
   not by assuming every call on one connection belongs to that conversation. The
   [external work episode](EXTERNAL-WORK-EPISODE.md) records the actual Harness check.
-- **Studio** shows how a conversation's work was done. The sidebar lists under Studio
-  each recorded Agent session, newest first (eight, then All sessions), and then the
-  person's own workspaces; the Studio bar names the one shown. A session is titled by its
-  section of the project notes, else by the Agent's title, else by its first message.
+- **Studio** shows how a conversation's work was done. The sidebar's Tasks list each
+  recorded Agent session and then the person's own workspaces; the Studio bar names the
+  one shown.
   The **project notes** (`project-notes.md` at the project root) are one Markdown file
-  shared by the person and every session, shown beside any Studio layout and hidden or
-  shown from the bar. Rho appends to each session's Agent instructions that it keep one
+  shared by the person and every session, shown in the panel beside the work from Notes
+  at the end of the tabs' bar, on any page of the project. The panel holds the notes or the
+  Agent's conversation, one at a time, so the work keeps the rest of the window. Rho appends to each session's Agent instructions that it keep one
   section there: a level-2 heading naming its task with a `<!-- rho:session <id> -->`
   marker below it, then Question, Data & method, Key results with a figure, and To do as
   a task list. The panel reads the file formatted, opens at the shown session's section,
   ticks to-dos in place, and edits it as Markdown with a formatting toolbar; the person's
   own edits are saved after a 1.5 s pause (`notesTiming`) with the buffer's write
-  conditions, and the Agent's edits arrive through the file. The notes are opened only
-  when the project has sessions or the panel is shown; below 768 px they replace the
-  stage, open only when asked, and a window that narrows closes them. The notes take no
-  place in a conversation's Studio layout. A conversation's Studio
+  conditions, and the Agent's edits arrive through the file. The notes are read only
+  when the project has sessions or the panel shows them; below 768 px they are a sheet
+  over the page. The notes take no place in a conversation's Studio layout. A conversation's Studio
   lays its files out by what each is to the work, as the answer board names them: the
   data it read above the script it wrote and a Commands view of what ran, with a Session
   view beside it once the Agent ran cells in a live session, figures above
@@ -434,8 +465,8 @@ inspect what happened. The application gives those actions direct places:
   undo for the focused view. Below 768 px nothing drags
   ([episode](AGENT-CANVAS-EPISODE.md#arranging-views-the-person-drags-the-agent-writes),
   [by hand](AGENT-CANVAS-EPISODE.md#the-persons-own-hands-on-the-layout)).
-  A stage narrower than 640 px, as when the notes and the Agent panel are open beside
-  it, shows a layout of several groups one view at a time with all its tabs, as a phone
+  A stage narrower than 640 px, as in a small window with the panel open beside it,
+  shows a layout of several groups one view at a time with all its tabs, as a phone
   does; the saved layout is unchanged. New workspace, under Studio in the sidebar and in
   the command palette, makes an empty page of the person's own (Workspace 2, 3, …). An
   empty page offers the Notebook, Variables, Plots, Data flow, Servers and the project's files by kind; Add view
@@ -453,11 +484,11 @@ inspect what happened. The application gives those actions direct places:
   down to room for the shown tab's name and every other tab's icon (168 px for one tab, 44 px
   more for each other); below that the controls take a row of their own, and a control that
   comes with a selection can then move the view. On the person's own page the Studio bar holds the
-  Agent's latest object, held updates and Activity beside Add view, Notes and Arrange views; as
+  Agent's latest object, held updates and Activity beside Add view and Arrange views; as
   it narrows, the object's state goes first, then the controls' names
   ([episode](SIMULATED-PROJECT-EPISODE.md#toolbars)).
-- **The Agent panel** opens beside any page from the Agent button at the right end
-  of the topbar, or from Continue on the Agent page. Its one header is the
+- **The Agent panel** opens beside any page from the Agent button at the end of the
+  tabs' bar, from a task in the sidebar, or from Continue on the Agent page. Its one header is the
   conversation's title, New conversation and Close; the title opens the recent
   conversations, the last entry leading to the Agent page's full list. A new
   conversation shows only what the Agent can do here. In a tab on this machine it holds conversations with
@@ -492,27 +523,13 @@ inspect what happened. The application gives those actions direct places:
   request is not sending it or receiving a reply. The [live activity
   episode](AGENT-UI-EPISODE.md) records the observations, checks and limits.
 
-The topbar names the way back — the projects list, then the project, then the open
-workspace, or Studio for a conversation's Studio, which its own bar names — and keeps only the
-current place below 768 CSS px. A rail at the far left
-belongs to the application: Rho opens the projects list, then the eight most recently
-opened projects as avatars in the service's order (where initials collide, by the part
-of the name that differs, such as 18 and 41), a dot on each one whose Agent is
-answering (from one bounded `conversation.list` per project every five seconds while
-the page is visible; the open project's own record also says when it needs a choice),
-and Open or create a project. Choosing a project there returns to where it was left in
-this tab; choosing one from the projects list opens its Overview. The projects list has
-no project sidebar. The project sidebar starts with All projects and the project (its
-menu switches to another open project), then Overview, Studio with its sessions and
-workspaces, Graph, Console, Notebook, and Agent (Working or
-Needs you while a turn runs), then Sources, with Project settings and Plugins at its
-foot. Connection & access, at the foot of the rail, opens a drawer: the focused document's Changes, then the connection (its state,
-when it was last read, Refresh or Reconnect, and why the service did not answer) and this
-tab (this machine or a link, its folder and expiry, what it can and cannot do, and for a
-link the way back to this machine's access), each as a card
-([episode](AGENT-PANEL-EPISODE.md#connection--access)). The sidebar and optional
-inspector adapt to available space; below 768 CSS px the navigation drawer holds the
-rail beside the project sidebar. Narrow screens show one workspace view at a time.
+Connection & access, at the sidebar's foot, opens a drawer: the focused document's Changes, then
+the connection (its state, when it was last read, Refresh or Reconnect, and why the service did not
+answer) and this tab (this machine or a link, its folder and expiry, what it can and cannot do, and
+for a link the way back to this machine's access), each as a card
+([episode](AGENT-PANEL-EPISODE.md#connection--access)). With the sidebar hidden, the bar says the
+connection's state. Between 768 and 1023 CSS px the sidebar folds away while a Studio layout is
+open and comes back with the Overview. Narrow screens show one workspace view at a time.
 Closing a panel does not cancel work.
 
 The [home and project episode](HOME-PROJECT-EPISODE.md) records the 2026-10-27 pass
@@ -529,7 +546,8 @@ registered owner views. `web/agents.tsx` handles the explicit external-Agent han
 `web/conversation.tsx` shows a conversation started in Rho. Its presentation comes
 from `src/conversation-presentation.ts` (text, action lines, folded runs, plan entry),
 and Agent prose is rendered by `src/agent-markdown.ts` with `web/markdown.tsx`.
-`web/project.tsx` draws the project sidebar; `web/sources.ts` walks the project folders
+`web/project-list.tsx` draws the sidebar's projects and `web/project.tsx` its tasks and
+sources; the places are `placeTabs` in `web/main.tsx`. `web/sources.ts` walks the project folders
 within its limits, names each file's kind and orders each kind's files for the sidebar,
 its page and `web/preview.tsx`, which shows one file in place. `web/agent-now.ts` reads the running
 turn's record (`conversation.read`, last turn) and maps its steps to project paths;

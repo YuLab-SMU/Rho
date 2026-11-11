@@ -1,0 +1,8 @@
+/* An Agent's or maker's mark, wherever a name stands beside it: the sidebar's tasks, the Agent panel, the Agent page. */
+.maker-mark { --mark: none; flex: none; display: block; background: center / contain no-repeat; }
+.maker-mark.ink { background: var(--color-ink); -webkit-mask: var(--mark) center / contain no-repeat; mask: var(--mark) center / contain no-repeat; }
+.provider-mark { --hue-bg: var(--color-hue-moss); --hue-ink: var(--color-hue-moss-ink); flex: none; display: inline-grid; place-items: center; border-radius: 5px; background: var(--hue-bg); color: var(--hue-ink); font-weight: 700; line-height: 1; }
+.provider-mark.hue-iris { --hue-bg: var(--color-hue-iris); --hue-ink: var(--color-hue-iris-ink); }
+.provider-mark.hue-sky { --hue-bg: var(--color-hue-sky); --hue-ink: var(--color-hue-sky-ink); }
+.provider-mark.hue-clay { --hue-bg: var(--color-hue-clay); --hue-ink: var(--color-hue-clay-ink); }
+.provider-mark.hue-rose { --hue-bg: var(--color-hue-rose); --hue-ink: var(--color-hue-rose-ink); }

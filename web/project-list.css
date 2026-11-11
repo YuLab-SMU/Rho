@@ -1,0 +1,6 @@
+/* The projects at the head of the sidebar: one row each, by name, the open one marked. */
+.nav-projects .nav-group { margin: 0; padding: 0; list-style: none; }
+.project-avatar.tiny { width: 20px; height: 20px; border-radius: 6px; font-size: 9.5px; font-weight: 700; letter-spacing: 0; }
+.nav-project .nav-row-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; overflow-wrap: normal; }
+.state-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--color-accent); }
+.state-dot.waiting { background: var(--color-amber); }

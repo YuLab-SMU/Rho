@@ -90,7 +90,7 @@ try {
   await page.goto(service.url);
   await page.locator('.project-row').first().click();
 
-  const nav = page.locator('.project-nav');
+  const nav = page.locator('.project-nav, .place-tabs');
   const counts = () => page.evaluate(() => Object.fromEntries([...document.querySelectorAll('.project-nav .nav-row')].map(row => [row.querySelector('.nav-row-name')?.textContent ?? '', row.querySelector('.nav-row-count')?.textContent ?? null])));
   await until(counts, c => c.Data === '1' && c.Code === '1' && c.Notes === '1' && c['Results & figures'] === '0', 'sidebar counts by kind');
   for (const name of ['Overview', 'Studio', 'Graph', 'Agent', 'Data', 'Code', 'Results & figures', 'Notes', 'Files']) await nav.getByRole('button', { name, exact: true }).waitFor();
@@ -103,15 +103,15 @@ try {
   await nav.getByRole('button', { name: 'Code', exact: true }).click();
   await nav.locator('.nav-file').filter({ hasText: 'analysis.R' }).click();
   await page.getByRole('button', { name: 'Open in Studio' }).click();
-  await page.locator('.location-name').filter({ hasText: 'Workspace' }).waitFor();
+  await page.locator('.studio-title').filter({ hasText: 'Workspace' }).waitFor();
   await page.getByRole('button', { name: 'Agent panel', exact: true }).click();
   await page.getByRole('textbox', { name: 'Start a conversation' }).fill('Fit ozone on temperature and draw it.');
   await page.getByRole('button', { name: 'Start', exact: true }).click();
   await page.locator('.agent-chip').waitFor();
-  await nav.locator('.nav-badge.working').waitFor();
+  await nav.locator('.nav-session .pulse-dot').waitFor();
   await page.locator('.follow-toggle[aria-pressed=false]').waitFor();
-  assert.equal(await page.locator('.location-name').textContent(), 'Workspace', 'the person stays in their own workspace');
-  passed('sending from the Agent panel keeps the person in their Studio workspace, with the Agent working in the topbar and sidebar');
+  assert.equal(await page.locator('.studio-title').textContent(), 'Workspace', 'the person stays in their own workspace');
+  passed('sending from the Agent panel keeps the person in their Studio workspace, with the Agent working in the top bar and on its task in the sidebar');
 
   await until(() => page.locator('[data-owner-view] .cm-content').first().innerText(), text => /fit <- lm/.test(text), 'the edited script showing the text on disk');
   await page.locator('.rho-doc-agent-line').first().waitFor();
@@ -148,12 +148,12 @@ try {
   // From Studio again, the next question; Follow opens the conversation's own Studio.
   await page.keyboard.press('Escape');
   await nav.getByRole('button', { name: 'Studio', exact: true }).click();
-  await page.locator('.location-name').filter({ hasText: 'Workspace' }).waitFor();
+  await page.locator('.studio-title').filter({ hasText: 'Workspace' }).waitFor();
   if (!await page.getByRole('textbox', { name: /Message|Reply/ }).count()) await page.getByRole('button', { name: 'Agent panel', exact: true }).click();
   await page.getByRole('textbox', { name: /Message|Reply/ }).fill('Now read the notes.');
   await page.getByRole('button', { name: 'Send', exact: true }).click();
   await page.locator('.follow-toggle[aria-pressed=false]').click();
-  await page.locator('.location-name').filter({ hasText: /^Studio$/ }).waitFor();
+  await page.locator('.place-tab[aria-current=page]').filter({ hasText: /^Studio$/ }).waitFor();
   await nav.locator('.nav-session[aria-current=page]').waitFor();
   await page.locator('.studio-title').waitFor();
   await until(tabs, list => ['airquality.csv', 'analysis.R', 'Commands', 'ozone.svg'].every(name => list.some(tab => tab.name === name)), 'the conversation\'s files and commands in its Studio');
@@ -204,7 +204,7 @@ try {
   passed('the answer board is led by the figure the first message made, and the next question follows it with its answer');
 
   await nav.getByRole('button', { name: 'Studio', exact: true }).click();
-  await page.locator('.location-name').filter({ hasText: /^Studio$/ }).waitFor();
+  await page.locator('.place-tab[aria-current=page]').filter({ hasText: /^Studio$/ }).waitFor();
   for (const width of [1024, 390]) {
     await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
     await page.waitForTimeout(400);

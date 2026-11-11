@@ -23,7 +23,7 @@ const shown = name => page.waitForFunction(n => document.querySelector('#preview
 const state = () => page.evaluate(() => ({
   title: document.querySelector('#preview-title')?.textContent ?? null, position: document.querySelector('.preview-position')?.textContent ?? null,
   current: document.querySelector('.project-nav .nav-file[aria-current=page]')?.textContent ?? null,
-  crumbs: [...document.querySelectorAll('.location .crumb, .location .location-name')].map(e => e.textContent),
+  kind: document.querySelector('.project-nav .nav-file[aria-current=page]')?.closest('.nav-source')?.querySelector('.nav-row-name')?.textContent ?? null, tab: document.querySelector('.place-tabs [aria-current=page]')?.textContent ?? null,
 }));
 try {
   const project = path.join(root, 'study');
@@ -62,7 +62,7 @@ try {
   let now = await state();
   assert.equal(now.position, '1 of 3');
   assert.equal(now.current, 'wind.svg');
-  assert.deepEqual(now.crumbs, ['Projects', 'study', 'Results & figures', 'wind.svg']);
+  assert.deepEqual([now.kind, now.tab], ['Results & figures', 'wind.svg'], 'the sidebar unfolds the kind and the bar names the file');
   assert.match(await page.locator('.preview-name small').textContent(), /^figures · 174 B$/);
   const snapshot = await admin.call('observation.snapshot', { projectId: opened.id });
   assert.deepEqual(snapshot.compositions, [], 'browsing writes no layout');
@@ -100,7 +100,7 @@ try {
   passed('a CSV shows in its table and a script in the editor, highlighted as R; arrow keys inside a view stay with that view');
 
   await page.getByRole('button', { name: 'Open in Studio' }).click();
-  await page.locator('.nav-sub-row[aria-current=page]').waitFor();
+  await page.locator('.nav-workspace[aria-current=page]').waitFor();
   await page.getByRole('tab', { name: 'analysis.R' }).waitFor();
   await page.locator('[data-owner-view] .cm-content').first().waitFor();
   await shot('05-studio');

@@ -1,18 +1,19 @@
-import { useEffect, useState, type RefObject } from 'react';
+import { useEffect, useState } from 'react';
 import type { BrowserClient, ProjectSummary } from '../src/browser.js';
 import { projectHue, projectName } from './home.js';
 import { Icon } from './icons.js';
-import './project-rail.css';
+import './project-list.css';
 
-// The rail names at most this many projects, the most recently opened, so it never scrolls.
-export const railLimits = { maxProjects: 8, readEveryMs: 5000 };
+// The sidebar names at most this many projects, the most recently opened, so the tasks and
+// files of the open one stay in sight under them.
+export const listLimits = { maxProjects: 8, readEveryMs: 5000 };
 export type ProjectState = 'working' | 'waiting';
 export function initials(project: ProjectSummary) {
   return projectName(project).split(/[\s_.-]+/).filter(Boolean).slice(0, 2).map(w => [...w][0]!.toUpperCase()).join('') || 'P';
 }
-// Each rail mark tells its project apart from the others shown: projects whose initials match
+// Each mark tells its project apart from the others shown: projects whose initials match
 // are marked by where their names differ, "swarm-bix18" and "swarm-bix41" as 18 and 41.
-export function railMarks(projects: ProjectSummary[]) {
+export function projectMarks(projects: ProjectSummary[]) {
   const marks = new Map(projects.map(p => [p.id, initials(p)]));
   for (const project of projects) {
     const same = projects.filter(other => other.id !== project.id && initials(other) === initials(project));
@@ -24,10 +25,10 @@ export function railMarks(projects: ProjectSummary[]) {
   }
   return marks;
 }
-// The projects the rail shows: the most recently opened, kept in the order the service lists
+// The projects the sidebar lists: the most recently opened, kept in the order the service lists
 // them so a project does not move under the pointer when another one is opened.
-export function railProjects(projects: ProjectSummary[]) {
-  const recent = new Set([...projects].sort((a, b) => b.openedAt.localeCompare(a.openedAt)).slice(0, railLimits.maxProjects).map(p => p.id));
+export function listedProjects(projects: ProjectSummary[]) {
+  const recent = new Set([...projects].sort((a, b) => b.openedAt.localeCompare(a.openedAt)).slice(0, listLimits.maxProjects).map(p => p.id));
   return projects.filter(p => recent.has(p.id));
 }
 // Whether each project's Agent is answering, from its conversations started in Rho: one bounded
@@ -48,30 +49,30 @@ export function useProjectStates(client: BrowserClient, projects: ProjectSummary
       if (live) setStates(next);
     };
     void read();
-    const timer = setInterval(() => void read(), railLimits.readEveryMs);
+    const timer = setInterval(() => void read(), listLimits.readEveryMs);
     return () => { live = false; controller.abort(); clearInterval(timer); };
   }, [client, ids, enabled]);
   return states;
 }
 
 const stateWords: Record<ProjectState, string> = { working: 'Agent working', waiting: 'Agent needs your choice' };
-// The application's own column: Rho's projects list, each recent project, and this tab's
-// connection. A project's own navigation sits beside it.
-export function ProjectRail({ projects, current, home, states, onHome, onProject, onAccess, accessOpen, accessTrigger }: {
-  projects: ProjectSummary[]; current: string | null; home: boolean; states: Record<string, ProjectState>;
-  onHome: () => void; onProject: (project: ProjectSummary) => void; onAccess: () => void; accessOpen: boolean; accessTrigger?: RefObject<HTMLButtonElement | null>;
+// The first thing in the sidebar: the projects, each by name, with the one on screen marked and
+// a dot on each whose Agent is working. One click goes to another project, where it was left.
+export function ProjectList({ projects, total, current, home, states, onHome, onProject }: {
+  projects: ProjectSummary[]; total: number; current: string | null; home: boolean; states: Record<string, ProjectState>;
+  onHome: () => void; onProject: (project: ProjectSummary) => void;
 }) {
-  const marks = railMarks(projects);
-  return <nav className="project-rail" aria-label="Projects">
-    <button className="rail-home" aria-label="All projects" data-tip="All projects" aria-current={home ? 'page' : undefined} onClick={onHome}><span className="brand-mark" aria-hidden="true">ρ</span></button>
-    <ul className="rail-projects">{projects.map(project => {
-      const state = states[project.id], label = projectName(project) + (state ? ' · ' + stateWords[state] : '');
-      return <li key={project.id}><button className={'rail-project' + (state ? ' ' + state : '')} aria-label={label} data-tip={label} aria-current={!home && current === project.id ? 'page' : undefined} onClick={() => onProject(project)}>
-        <span className={'project-avatar ' + projectHue(project.id + projectName(project))} aria-hidden="true">{marks.get(project.id)}</span>
-        {state && <span className="rail-state" aria-hidden="true" />}
+  const marks = projectMarks(projects);
+  return <nav className="nav-section nav-projects" aria-label="Projects">
+    <div className="nav-heading"><span className="section-label">Projects</span><button className="icon-button nav-add" aria-label="Open or create a project" title="Open or create a project" onClick={onHome}><Icon name="plus" size={15} /></button></div>
+    <ul className="nav-group">{projects.map(project => {
+      const state = states[project.id], name = projectName(project);
+      return <li key={project.id}><button className={'nav-row nav-project' + (state ? ' ' + state : '')} aria-label={name + (state ? ' · ' + stateWords[state] : '')} title={name + (state ? ' · ' + stateWords[state] : '')} aria-current={!home && current === project.id ? 'page' : undefined} onClick={() => onProject(project)}>
+        <span className={'project-avatar tiny ' + projectHue(project.id + name)} aria-hidden="true">{marks.get(project.id)}</span>
+        <span className="nav-row-name">{name}</span>
+        {state && <span className={state === 'waiting' ? 'state-dot waiting' : 'pulse-dot'} aria-hidden="true" />}
       </button></li>;
     })}</ul>
-    <button className="rail-add" aria-label="Open or create a project" data-tip="Open or create a project" onClick={onHome}><Icon name="plus" size={17} /></button>
-    <button ref={accessTrigger} className="rail-access" aria-label="Connection & access" data-tip="Connection & access" aria-expanded={accessOpen} onClick={onAccess}><Icon name="signal" size={18} /></button>
+    {total > projects.length && <button className="nav-more" onClick={onHome}>All {total} projects</button>}
   </nav>;
 }

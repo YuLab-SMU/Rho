@@ -88,7 +88,7 @@ writeLines(jsonlite::toJSON(list(schemaVersion=1L,complete=TRUE,artifacts=items)
   passed('project search, empty search and project overview use actual project records');
   const navigate = async name => {
     if (!await page.locator('.project-nav').isVisible()) await page.getByRole('button', { name: 'Open navigation', exact: true }).click();
-    await page.locator('.project-nav, dialog.drawer').getByRole('button', { name, exact: true }).click();
+    await page.locator('.project-nav, .place-tabs, dialog.drawer').getByRole('button', { name, exact: true }).click();
   };
   await navigate('Files');
   await page.getByRole('button', { name: 'analysis.R', exact: true }).last().waitFor();

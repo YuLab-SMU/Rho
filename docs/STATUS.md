@@ -84,7 +84,7 @@ side, figures above tables and reports on the other, each file's view naming the
 version it shows. A chip names the part of the work in progress, and a timeline runs
 beside the Agent panel. A moment chosen there replays the views, commands, part and
 conversation together. Arranging saves the layout as `conversation-<id>`. The person's
-own workspace still opens nothing by itself. After the user judged that Studio ugly, with many components and messy contents, a stage under 1100 px shows [two places](SIMULATED-PROJECT-EPISODE.md#fewer-things-at-once), results above the work, each file has one line above it, and tab names keep their extension; the builder's reading only, and the graph acceptance fails at its figure card on `55d677c8` too.
+own workspace still opens nothing by itself. After the user judged that Studio ugly, with many components and messy contents, a stage under 1100 px shows [two places](SIMULATED-PROJECT-EPISODE.md#fewer-things-at-once), results above the work, each file has one line above it, and tab names keep their extension; the builder's reading only, and the graph acceptance fails at its figure card on `55d677c8` too. After the user judged the layout itself one lump, every project page has [one frame](SIMULATED-PROJECT-EPISODE.md#one-frame): a sidebar of projects, tasks and sources, the places as tabs above the work, and one panel beside it for the Agent's conversation or the notes; source only, checked at four window sizes and by five browser acceptances, the builder's reading until the user has seen it, and tasks of other projects are not yet listed.
 
 The [project notes](SIMULATED-PROJECT-EPISODE.md#project-notes) pass lists the sessions
 under Studio in the sidebar, then the person's workspaces, and shares one set of notes
