@@ -36,6 +36,31 @@ The reply tells you the rest:
 `--json` prints the reply as JSON, in the same form as `--grant` below. If the folder is not a
 project, the name is missing or Rho is not running, the command says so and exits non-zero.
 
+## Call the tools from your shell (0.5.8 and later)
+
+Most clients load MCP servers only when a session starts, so the session that added Rho cannot
+call it. `rho tool` calls the same four tools from your shell, with the grant `rho connect`
+gives the same NAME:
+
+```sh
+rho tool index --as my-agent                                   # operations and a catalogRef
+rho tool resolve '{"catalogRef":"…","selected":["kernel.run"]}' --as my-agent
+rho tool call - --as my-agent < cell.json                      # {"operation":"kernel.run","contractRef":"…","input":{…}}
+rho tool read '{"ref":"…","path":"…"}' --as my-agent
+```
+
+Run it in the project folder or add `--project FOLDER`. The input is the MCP tool's input as JSON
+(`-` reads it from standard input, which avoids quoting); `rho tool list --as NAME` prints each
+tool's input schema. The reply is the tool's JSON reply, and the exit code is 1 when it is an
+error. What it does is recorded as your session, as through MCP, and the person sees it on the
+page. Do not call Rho's HTTP API with the state's `connection.json` instead: that is the person's
+own credential, and the work would not be recorded as yours.
+
+In **WorkBuddy**, use `rho tool` and leave `~/.workbuddy/mcp.json` alone: WorkBuddy runs a server
+an Agent writes there only after the person approves it under its connectors, again whenever its
+arguments change, and its tools appear only in a new conversation. Rho's WorkBuddy connector
+installs `rho` and a Skill that works this way.
+
 ## Grant one project (every version)
 
 The service must be running. `--project` is the folder's name relative to `--root`. Quote
@@ -58,6 +83,16 @@ The reply is one JSON line:
 ```
 
 Rho 0.5.6 and earlier return only `mcp` and `claude`. The same entries follow `rho connect`.
+
+The reply holds no credential bytes, but `connectionFile`, `mcp.args` and the ready entries name
+the credential file's path. Use them to configure; when you report, name the project and the
+server name rather than pasting the reply into a chat or an issue.
+
+Before adding an entry with your client's CLI, check that the CLI reads its own configuration:
+`claude mcp list` or `codex mcp list` should list servers, or say there are none, without an
+error. Codex's `failed to resolve CODEX_HOME` ("Could not find home directory") means your shell
+does not see the folder the person's app uses. Do not set `HOME` or `CODEX_HOME` for the whole
+system: give the person the `--grant … --agent codex` command to run in their own terminal.
 Whichever command you used, configure your client like this:
 
 - **Any MCP client:** register the returned `mcp.name`, `mcp.command` and `mcp.args`
