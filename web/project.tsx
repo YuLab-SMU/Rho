@@ -42,8 +42,10 @@ export function shortWhen(iso: string, now = new Date()) {
   return minutes < 1 ? 'now' : minutes < 60 ? minutes + 'm' : minutes < 24 * 60 ? Math.round(minutes / 60) + 'h' : minutes < 7 * 24 * 60 ? Math.round(minutes / 1440) + 'd'
     : at.toLocaleDateString('en-US', { month: 'short', day: 'numeric', ...(at.getFullYear() === now.getFullYear() ? {} : { year: '2-digit' }) });
 }
-export function ProjectNavigation({ project, snapshot, current, sources, partial, sessions, places, values, onLayout, onNewLayout, onNewTask, onSection, onSources, onFile, onValue, onAddSource, adding }: {
+export function ProjectNavigation({ project, snapshot, current, talking = null, sources, partial, sessions, places, values, onLayout, onNewLayout, onNewTask, onSection, onSources, onFile, onValue, onAddSource, adding }: {
   project: ProjectSummary; snapshot: WorkspaceSnapshot | null; current: string; sessions: SessionRow[];
+  // The task whose conversation the Agent panel shows beside the page, by its row's id.
+  talking?: string | null;
   // The project's places as rows, where they are not tabs above the work.
   places?: PlaceRow[];
   sources: Record<SourceRow, SourceItem[]> | null; partial: boolean; adding: boolean;
@@ -68,7 +70,7 @@ export function ProjectNavigation({ project, snapshot, current, sources, partial
   // were made: the first, then by number.
   const made = (id: string) => id === 'workspace' ? 1 : /^workspace-(\d+)$/.test(id) ? Number(id.slice('workspace-'.length)) : Infinity;
   const layouts = (snapshot?.compositions ?? []).filter(c => !processConversation(c.compositionId)).sort((a, b) => made(a.compositionId) - made(b.compositionId) || a.compositionId.localeCompare(b.compositionId));
-  const shownSessions = sessions.filter((s, i) => i < sessionRows || current === 'studio:' + s.id);
+  const shownSessions = sessions.filter((s, i) => i < sessionRows || current === 'studio:' + s.id || talking === s.id);
   // A row is named by its place; the count beside it is a glance, repeated in its tooltip.
   const count = (value: number | null | undefined, noun: string) => value === null || value === undefined ? undefined
     : { title: `${value}${partial && noun !== 'run' ? ' or more' : ''} ${noun}${value === 1 ? '' : 's'}`, node: <span className="nav-row-count" aria-hidden="true">{value}{partial && noun !== 'run' ? '+' : ''}</span> };
@@ -80,11 +82,11 @@ export function ProjectNavigation({ project, snapshot, current, sources, partial
     <section className="nav-section nav-tasks" aria-labelledby="nav-tasks">
       <div className="nav-heading"><span className="section-label" id="nav-tasks">Tasks</span><button className="icon-button nav-add" aria-label="New conversation" title="Ask the Agent in a new conversation" onClick={onNewTask}><Icon name="plus" size={15} /></button></div>
       {sessions.length > 0 ? <div role="group" aria-label="Sessions" className="nav-group">
-        {shownSessions.map(s => { const at = when(s.when); return <button key={s.id} className="nav-row nav-session" title={s.title + '\n' + s.agent + (at.full ? ' · ' + at.full : '')} aria-current={current === 'studio:' + s.id ? 'page' : undefined} onClick={() => onLayout(s.id)}>
+        {shownSessions.map(s => { const at = when(s.when); return <button key={s.id} className={'nav-row nav-session' + (talking === s.id ? ' talking' : '')} title={s.title + '\n' + s.agent + (at.full ? ' · ' + at.full : '') + (talking === s.id ? '\nIn the Agent panel' : '')} aria-current={current === 'studio:' + s.id ? 'page' : talking === s.id ? 'true' : undefined} onClick={() => onLayout(s.id)}>
           <ProviderMark name={s.agent} size={16} /><span className="nav-row-name">{s.title}</span>
           {s.waiting ? <span className="nav-badge waiting">Needs you</span> : s.running ? <span className="pulse-dot" aria-label="Working" /> : <span className="nav-when" aria-hidden="true">{shortWhen(s.when)}</span>}
         </button>; })}
-        {sessions.length > shownSessions.length && <button className="nav-more" onClick={() => onSection('agent')}>All {sessions.length} sessions</button>}
+        {sessions.length > shownSessions.length && <button className="nav-more" aria-label={'All ' + sessions.length + ' conversations'} title="Every conversation: search, usage and the trash" onClick={() => onSection('agent')}>All {sessions.length}<Icon name="chevron" size={11} stroke={2} /></button>}
       </div> : <p className="nav-files-note nav-none">No tasks yet</p>}
       {(layouts.length > 0 || onNewLayout) && <div role="group" aria-label="Workspaces" className="nav-group nav-workspaces">
         {layouts.map(c => <button key={c.compositionId} className="nav-row nav-workspace" aria-current={current === 'studio:' + c.compositionId ? 'page' : undefined} onClick={() => onLayout(c.compositionId)}><Icon name="layout" size={16} /><span className="nav-row-name">{compositionName(c.compositionId)}</span><span className="nav-row-count" title={views(c)}>{c.views.length}</span></button>)}

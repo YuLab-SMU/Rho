@@ -90,7 +90,7 @@ raise SystemExit(7)
     await page.goto(service.url); await page.locator('.project-row').filter({ hasText: producer + '-activity' }).click();
     const navigateActivity = async () => {
       if (!await page.locator('.project-nav').isVisible()) await page.getByRole('button', { name: 'Open navigation', exact: true }).click();
-      await page.locator('.project-nav, dialog.drawer').getByRole('button', { name: 'Agent', exact: true }).click();
+      await page.locator('.project-nav, dialog.drawer').getByRole('button', { name: 'Agents', exact: true }).click();
       // The project Host's activity is under the Agents tab, read only while its section is open.
       await page.getByRole('tab', { name: 'Agents', exact: true }).click();
       const outside = page.locator('details.outside-host');

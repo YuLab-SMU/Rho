@@ -31,14 +31,17 @@ switching never changes what is running ([record](SIMULATED-PROJECT-EPISODE.md#o
   `conversation.list` per project every five seconds while the page is visible; the open project's
   own record also says when it needs a choice). Choosing one returns to where it was left in this
   tab; `+` and Rho open the projects list, where a project chosen opens on its Overview.
-- **Tasks** lists the open project's recorded Agent sessions, newest first (eight, then All
-  sessions), each one line: its Agent's mark, its title (from its section of the project notes, else
-  the Agent's title, else its first message) and how long ago it last moved, or that it is working
-  or needs a choice. Choosing one opens its Studio with its conversation in the panel. `+` starts a
-  new conversation. The person's own workspaces follow, with New workspace.
+- **Tasks** is the one list of the open project's conversations, newest first (eight, then
+  "All N", which opens every conversation with its search, usage and trash), each one line: its
+  Agent's mark, its title (from its section of the project notes, else the Agent's title, else its
+  first message) and how long ago it last moved, or that it is working or needs a choice. Choosing
+  one opens its Studio with its conversation in the panel, whichever window its session began in.
+  The task whose conversation the panel shows is tinted, on any page. `+` starts a new
+  conversation, and is the one New while this list is on screen. The person's own workspaces
+  follow, with New workspace.
 - **Sources** lists the project's files by kind, as described below.
-- At the foot: Agent (every session and the Agents themselves), Plugins, Project settings, and the
-  connection's state with Connection & access.
+- At the foot, what the project is set up with: Agents (the Agents that work here), Plugins,
+  Project settings, and the connection's state with Connection & access.
 - **The tabs** are the project's places: Overview, Studio, Graph, Console, Notebook, Skills, and
   Review while the project has review records. A file, the settings or another page reached from
   the sidebar is named after them while it shows. A bar without room keeps the icons and the name of
@@ -313,7 +316,10 @@ inspect what happened. The application gives those actions direct places:
 - **Files** opens documents, browses the project's folder and the source folders it
   works in, and filters the current folder. A source folder is named as the person
   named it and opens one level at a time, the same way any other folder does.
-- **Agent** (at the sidebar's foot) has two tabs. Conversations lists every session in
+- **The Agent page** has two lists, each with its own way in: Conversations from "All N" under
+  Tasks and from the panel's title, Agents from the sidebar's foot; its tabs switch between them.
+  The bar above the work names the list on show.
+  Conversations lists every session in
   the project folder by day, searchable and by Agent: Rho's conversations, Claude
   Code and Codex sessions read from the Agents' own records, and observed Harness
   conversations. Each row names where the session started (Terminal, VS Code, Codex
@@ -495,8 +501,10 @@ inspect what happened. The application gives those actions direct places:
   ([episode](SIMULATED-PROJECT-EPISODE.md#toolbars)).
 - **The Agent panel** opens beside any page from the Agent button at the end of the
   tabs' bar, from a task in the sidebar, or from Continue on the Agent page. Its one header is the
-  conversation's title, New conversation and Close; the title opens the recent
-  conversations, the last entry leading to the Agent page's full list. A new
+  conversation's title and Close; New conversation joins them while the sidebar's Tasks, which
+  has its own, is not on screen. The title opens the project's conversations, the same ones Tasks
+  lists, to change the conversation without leaving the page; its last entry leads to the Agent
+  page's full list. A new
   conversation shows only what the Agent can do here. In a tab on this machine it holds conversations with
   Claude Code or Codex started in Rho: follow a streaming reply and its actions, reply,
   stop a turn and return to it after a reload

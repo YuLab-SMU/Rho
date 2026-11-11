@@ -74,7 +74,7 @@ try {
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, permissions: ['clipboard-read', 'clipboard-write'] });
   const page = await context.newPage(); page.setDefaultTimeout(20000); page.on('pageerror', e => report.browserErrors.push(e.message));
   await page.goto(service.url + '/#project=' + project.id);
-  await page.locator('.project-nav').getByRole('button', { name: 'Agent', exact: true }).click();
+  await page.locator('.project-nav').getByRole('button', { name: 'Agents', exact: true }).click(); await page.getByRole('tab', { name: /^Conversations/ }).click();
   const list = page.locator('section.conversations');
   await list.locator('.native-row').filter({ hasText: row.title }).waitFor();
   await page.waitForTimeout(400);
@@ -144,7 +144,7 @@ try {
   const second = await terminal('terminal-3', ['--', 'Remember this other code word: osprey-7. Reply with just OK.']);
   release = await hold(second.session_id);
   const held = await wait(() => listed(second.session_id), s => s.open?.where === 'Terminal', 'the second session to be seen open', 30000);
-  await page.locator('.project-nav').getByRole('button', { name: 'Agent', exact: true }).click();
+  await page.locator('.project-nav').getByRole('button', { name: 'Agents', exact: true }).click(); await page.getByRole('tab', { name: /^Conversations/ }).click();
   const heldRow = list.locator('.native-row').filter({ hasText: held.title });
   await heldRow.getByText('Open in Terminal', { exact: false }).waitFor();
   await page.screenshot({ path: path.join(evidence, 'list-held.png') });
@@ -173,7 +173,7 @@ try {
 
   // 6. The list and the Agents tab, at every width, with the Agent panel closed.
   await page.getByRole('button', { name: 'Close Agent' }).first().click();
-  await page.locator('.project-nav').getByRole('button', { name: 'Agent', exact: true }).click();
+  await page.locator('.project-nav').getByRole('button', { name: 'Agents', exact: true }).click(); await page.getByRole('tab', { name: /^Conversations/ }).click();
   await list.waitFor();
   await inspectResponsive(page, { name: 'conversations', evidence, report, settle: () => page.waitForTimeout(300) });
   await page.getByRole('tab', { name: 'Agents', exact: true }).click();

@@ -156,6 +156,10 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .project-avatar.clay { background: var(--color-hue-clay-ink); } .project-avatar.rose { background: var(--color-hue-rose-ink); }
 /* A task is one line: its Agent's mark, its title, and when it last moved or that it is working. */
 .nav-session > :is(.maker-mark, .provider-mark) { margin: 0 .5px; }
+/* The task whose conversation the panel beside the page shows: tied to it by the panel's own tint,
+   quieter than the page the person is on. */
+.nav-session.talking:not([aria-current=page]) { background: var(--color-accent-soft); color: var(--color-ink); }
+.nav-session.talking:not([aria-current=page]):hover { background: var(--color-selected); }
 /* The person's own workspaces follow the tasks. */
 .nav-workspaces { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--color-hairline); }
 .nav-none { margin: 0; padding: 4px 8px; }
@@ -186,6 +190,7 @@ dd { margin: 0; overflow-wrap: anywhere; }
 div.nav-files-note > .nav-more { display: block; margin: 4px 0 0 -8px; }
 .nav-values .nav-files-note.nav-values-none { display: block; margin: 0; }
 .nav-more { min-height: 28px; margin: 2px 0 2px; padding: 3px 8px; border: 0; background: transparent; color: var(--color-accent-strong); font-size: 12px; font-weight: 500; }
+.nav-more > svg { margin-left: 3px; vertical-align: -1px; }
 .pulse-dot { display: inline-block; flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--color-verified); box-shadow: 0 0 0 0 #32836166; animation: pulse 1.6s ease-out infinite; }
 .pulse-dot.large { width: 12px; height: 12px; }
 @keyframes pulse { 70% { box-shadow: 0 0 0 6px #32836100; } 100% { box-shadow: 0 0 0 0 #32836100; } }
@@ -619,7 +624,7 @@ body[data-resizing=col] { cursor: col-resize; user-select: none; }
 .conversation-title[aria-expanded=true] .conversation-title-chevron { transform: rotate(-90deg); }
 .menu-pop.history-pop { top: calc(100% + 4px); bottom: auto; width: min(340px, calc(100cqw - 16px)); max-height: min(60vh, 440px); }
 .history-list { display: flex; flex-direction: column; gap: 1px; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
-.history-row { display: flex; align-items: flex-start; gap: 10px; width: 100%; min-height: 0; padding: 8px 10px; border: 0; border-radius: 8px; background: transparent; color: var(--color-ink); font-weight: 400; text-align: left; }
+.history-row { display: flex; flex: none; align-items: flex-start; gap: 10px; width: 100%; min-height: 0; padding: 8px 10px; border: 0; border-radius: 8px; background: transparent; color: var(--color-ink); font-weight: 400; text-align: left; }
 .history-row:hover, .history-row:focus-visible { background: var(--color-hover); outline: none; }
 .history-row > svg, .history-mark { flex: none; margin-top: 2px; }
 .history-mark { width: 14px; height: 14px; border-radius: 4px; background: var(--color-well); }

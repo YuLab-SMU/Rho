@@ -181,7 +181,7 @@ service and reports confirmation separately. Existing Hosts keep their owner.
 
 ### Connect your own Agent
 
-The project's **Agent → Agents** tab offers one prompt for any Agent
+The project's **Agents** page, at the sidebar's foot, offers one prompt for any Agent
 that can configure and run a local stdio MCP server. The prompt names the project
 and gives one command:
 

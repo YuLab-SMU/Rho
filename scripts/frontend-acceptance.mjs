@@ -216,7 +216,7 @@ writeLines(jsonlite::toJSON(list(schemaVersion=1L,complete=TRUE,artifacts=items)
   assert.equal(Math.round((await side.boundingBox()).width), Math.round(wideWidth));
   await page.getByRole('button', { name: 'Close Agent' }).click();
   passed('the Agent panel widens from its edge and keeps that width after reload');
-  await navigate('Agent');
+  await navigate('Agents');
   await page.locator('.activity-row').filter({ hasText: 'air-quality-fit' }).click();
   await page.getByRole('dialog', { name: 'air-quality-fit' }).waitFor();
   await page.screenshot({ path: path.join(evidence, 'run-1440.png') });

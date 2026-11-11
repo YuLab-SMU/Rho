@@ -1709,3 +1709,71 @@ looked at while something runs. Their screenshot showed `p_compare` open beside 
   (9 ms beside a 4 GB matrix) but not run through a long cell that rewrites it.
 - The user's own Rho was running through this and keeps its earlier build and R session until it is
   restarted.
+
+## One list of conversations
+
+2026-11-11, after the user had the frame in their own project, which holds twelve Claude Code
+sessions started in a terminal. On one screen, the Notebook with the Agent panel open, they marked
+four regions and said that the layout of the Agent's controls alone was a tangle: the Tasks list,
+the Agent row at the sidebar's foot, the Agent button at the end of the tabs, and the panel.
+
+### What the screen showed
+
+The screen was reproduced with the build of `7bb72178` on a throwaway project with twelve fabricated
+terminal sessions, one of them held open by a live process.
+
+![Before: Tasks, "All 12 sessions", "Agent 12" and a second New in the panel](figures/agent-controls-before.jpg)
+
+- The conversations had three ways in on one screen: Tasks, "All 12 sessions" under it, and the foot
+  row "Agent 12", which opened the same list. Three words named them: tasks, sessions and Agent.
+- New conversation was offered twice at once, by `+` beside Tasks and by `+` in the panel's header.
+- Nothing tied the panel to the list. With the first task's conversation in the panel beside the
+  Notebook, no task was marked.
+- The panel's title listed only conversations started in Rho. In this project it was disabled, so
+  the panel offered no way to another conversation without leaving the page; and a task whose
+  session began in a terminal opened its Studio without its conversation.
+
+### Changes
+
+- **Tasks is the one list.** Under its eight rows "All 12" opens every conversation. The foot row is
+  Agents, the Agents that work on the project, with no count, beside Plugins and Project settings:
+  what the project is set up with. It opens the Agent page on its Agents; "All 12" and the panel's
+  title open it on its conversations. The bar above the work names the list on show, and the page's
+  two tabs stand where its "Agent" title was.
+- **The task in the panel is marked.** The task whose conversation the panel shows carries the
+  panel's tint on every page, and is listed even when it is not among the newest eight.
+- **One New.** While Tasks is on screen its `+` is the only one; the panel's header is the title and
+  Close. With the sidebar hidden, on the plugin pages and below 768 px the header has its `+` again.
+- **The panel's title lists what Tasks lists**, every conversation whichever window its session began
+  in, so the conversation can be changed without leaving the page; and a task opens with its
+  conversation in every case. With all twelve listed the rows shrank into one another; they keep
+  their height now and the list scrolls.
+
+![After: one list with the panel's task marked, Agents at the foot, one New](figures/agent-controls-after.jpg)
+
+### Verification
+
+- The same screen before and after at 2000 × 1028 on the same throwaway project, then the path through
+  it in a real browser: the panel's title to a conversation beside the Notebook, a task from the
+  sidebar, "All 12", the foot's Agents, and the sidebar hidden. Each screenshot was read; no page
+  errors. At 1440 × 900, 1024 × 768 and 390 × 844 nothing overflowed sideways, and the header's New
+  showed only at 390, where the sidebar is a drawer.
+- The agent-canvas, agent-page, pages and frontend acceptances passed with their locators moved to
+  the Agents row. The frontend acceptance works in a tab opened from a narrower link, which has no
+  conversations of its own: there the Agents row shows the runs and the sessions with access, as
+  before. The same locator was moved in the continuity acceptance and the session-continuity,
+  agent-activity and agent-connect episodes, which were not run. The ui acceptance was left as it was.
+- The suite passed 351 of 354 with the debug Core, 3 skipped (Windows only).
+
+### Left open
+
+- This is the builder's reading of screenshots. The user has not yet seen the result.
+- The Agent button at the end of the tabs and the foot's Agents row differ by one letter. Whether the
+  Agents belong under Project settings instead is not settled.
+- The list is headed Tasks, while the page it opens and the panel say conversations.
+- The Agent page still holds both lists behind its two tabs. With eight conversations or fewer the
+  full list is reached from the panel's title or from that page's tab.
+- Inside the panel nothing was changed. On the user's screen a terminal session's `/model` command
+  showed as a message with "Outcome unknown", a pasted block showed its markup, a table drawn with
+  box characters wrapped, and the notice that a session is open in a terminal was said twice, above
+  the box and inside it.

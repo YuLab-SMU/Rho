@@ -130,7 +130,7 @@ try {
   // The Agent page's Agents tab names the Agent session with access, what it may do and when
   // it last acted.
   await page.locator('.project-nav').getByRole('button', { name: 'Back to project', exact: true }).click();
-  await page.locator('.project-nav').getByRole('button', { name: /^Agent(,|$)/ }).click();
+  await page.locator('.project-nav').getByRole('button', { name: 'Agents', exact: true }).click();
   await page.getByRole('tab', { name: 'Agents', exact: true }).click();
   const session = page.locator('[data-rho-agent-session="granted"]').filter({ hasText: 'pages-agent' });
   await session.waitFor();

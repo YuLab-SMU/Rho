@@ -12,6 +12,7 @@ import { walkLimits, type ProjectFiles, type SourceItem } from './sources.js';
 import { RunView } from './shell/facts.js';
 import { AgentActivity } from './agent-activity.js';
 import { AgentPage } from './agent-manage.js';
+import type { AgentTab } from './agent-tab.js';
 import { AgentAccess } from './agents.js';
 import { SharedNotes, TouchedFiles, useProjectWork, WorkSessions } from './work-progress.js';
 import { NotebookWorkSection, useNotebookWork } from '@rho-workspace/plugin-kernel/ui';
@@ -87,11 +88,11 @@ interface Props {
   onLayout: (id: string, view?: string) => void; onProjectChanged: (project: ProjectSummary) => void; onOpened: (id: string, view?: string) => void;
   category?: SourceRow; files?: ProjectFiles; sources?: Record<SourceRow, SourceItem[]> | null; onFile?: (row: SourceRow, item: SourceItem) => void;
   // The Agent page: a tab opened from a narrower link has no conversations here, only its handoff.
-  linked?: boolean; onPath?: (path: string) => void; onNewConversation?: () => void;
+  linked?: boolean; onPath?: (path: string) => void; onNewConversation?: () => void; agentTab?: AgentTab; onAgentTab?: (tab: AgentTab) => void;
   // The Console, at one message's commands.
   onConsole?: (turn?: string) => void;
 }
-export function ProjectOverview({ project, snapshot, client, section, notesText = '', workspace, onExplore, onSection, onAgent, onLayout, onProjectChanged, onOpened, category, files, sources, onFile, linked = false, onPath, onNewConversation, onConsole }: Props) {
+export function ProjectOverview({ project, snapshot, client, section, notesText = '', workspace, onExplore, onSection, onAgent, onLayout, onProjectChanged, onOpened, category, files, sources, onFile, linked = false, onPath, onNewConversation, agentTab, onAgentTab, onConsole }: Props) {
   // A linked tab's Agent sessions with access are read only while their section is open.
   const [outsideOpen, setOutsideOpen] = useState(false);
   const { runs, problem: runsProblem, readAgain } = useRuns(client, project.id, snapshot.cursor);
@@ -202,9 +203,9 @@ export function ProjectOverview({ project, snapshot, client, section, notesText 
   })}</ul>;
   const visible = folder?.entries.filter(e => !query || e.name.toLocaleLowerCase().includes(query.toLocaleLowerCase())) ?? [];
   const sourceTitle = sourceLabels[category ?? 'data'];
-  const title = isFiles ? 'Files' : section === 'agent' ? 'Agent' : section === 'settings' ? 'Project settings' : section === 'sources' ? sourceTitle : projectName(project);
+  const title = isFiles ? 'Files' : section === 'agent' ? (linked || agentTab === 'agents' ? 'Agents' : 'Conversations') : section === 'settings' ? 'Project settings' : section === 'sources' ? sourceTitle : projectName(project);
   return <section className={'project-page overview' + (isFiles ? ' files-page' : '')} aria-labelledby="overview-title">
-    <header className="page-heading">
+    <header className={'page-heading' + (section === 'agent' && !linked ? ' visually-hidden' : '')}>
       <div><h1 id="overview-title">{title}</h1>{section === 'overview' && <p title={where.full}>{where.text}</p>}</div>
       {isFiles && <button onClick={() => void listFolder(folder?.path)} disabled={reading}><Icon name="refresh" size={15} />Refresh</button>}
       {section === 'sources' && files && <button onClick={files.refresh} disabled={files.reading}><Icon name="refresh" size={15} />Refresh</button>}
@@ -274,7 +275,7 @@ export function ProjectOverview({ project, snapshot, client, section, notesText 
         {outsideOpen && <><AgentAccess snapshot={snapshot} /><AgentActivity client={client} projectId={project.id} root={project.root} onOpened={onOpened} /></>}
       </details>}
       </>;
-      return linked ? extra : <AgentPage client={client} snapshot={snapshot} exists={path => !!files?.files.some(file => file.path === path)} onContinue={id => onAgent(id)} onPath={path => onPath?.(path)} onNew={() => onNewConversation?.()} onOpened={onOpened} extra={extra} />;
+      return linked ? extra : <AgentPage client={client} snapshot={snapshot} exists={path => !!files?.files.some(file => file.path === path)} onContinue={id => onAgent(id)} onPath={path => onPath?.(path)} onNew={() => onNewConversation?.()} onOpened={onOpened} extra={extra} tab={agentTab} onTab={onAgentTab} />;
     })()}
     {section === 'settings' && <div className="settings-sections"><section className="project-section"><h2>Source folders</h2><SourceFolders folders={project.sources ?? [{ id: project.id, root: project.root, name: projectName(project) }]} busy={adding} onAdd={() => void add()} />{error(sourceError, () => void add())}</section>
       <section className="project-section"><div className="section-heading"><h2>Project health</h2><button disabled={diagnosing} onClick={() => void diagnose()}>{diagnosing ? 'Checking…' : 'Check project'}</button></div>{doctor ? <ul className="health-list">{doctor.map(c => <li key={c.id}><span className={'state ' + c.state}>{c.state === 'ok' ? 'Ready' : c.state === 'fail' ? 'Blocked' : 'Check'}</span><div><p>{c.detail}</p>{c.remedy && <small>{c.remedy}</small>}</div></li>)}</ul> : <p className="muted">Check the tools and capabilities available to this project.</p>}{error(doctorError, () => void diagnose())}</section></div>}

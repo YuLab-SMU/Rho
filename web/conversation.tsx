@@ -285,17 +285,20 @@ function SessionStrip({ observation, agent, spend, describing, onDescribing }: {
 
 type Summary = NonNullable<WorkspaceSnapshot['conversations']>[number];
 
-// The panel's title opens the recent conversations: the way back to one without leaving the
-// page beside it. The whole list, with its search, usage and trash, is the Agent page's.
+// One conversation as the panel's title lists it: its Agent's mark, its name and when it last moved.
+type Listed = { id: string; title: string; mark: string; lastAt: string; meta: string };
+// The panel's title opens the project's conversations, the same ones the sidebar lists as tasks:
+// the way to another one without leaving the page beside it. The whole list, with its search,
+// usage and trash, is the Agent page's.
 function ConversationSwitcher({ list, openId, title, mark, onOpen, onAll }: {
-  list: Summary[]; openId: string | null; title: string; mark: string | null; onOpen: (id: string) => void; onAll?: () => void;
+  list: Listed[]; openId: string | null; title: string; mark: string | null; onOpen: (id: string) => void; onAll?: () => void;
 }) {
   const [open, setOpen] = useState(false), [query, setQuery] = useState('');
   const root = useRef<HTMLDivElement>(null), trigger = useRef<HTMLButtonElement>(null), menu = useRef<HTMLDivElement>(null);
   useOutside(open, root, () => setOpen(false));
   const recent = [...list].sort((a, b) => b.lastAt.localeCompare(a.lastAt));
   const words = query.trim().toLocaleLowerCase();
-  const shown = recent.filter(c => !words || (c.agentTitle || c.title).toLocaleLowerCase().includes(words));
+  const shown = recent.filter(c => !words || c.title.toLocaleLowerCase().includes(words));
   useLayoutEffect(() => {
     const box = menu.current;
     if (open && box) (box.querySelector<HTMLElement>('input') ?? box.querySelector<HTMLElement>('[data-item][aria-current="true"]') ?? box.querySelector<HTMLElement>('[data-item]'))?.focus({ preventScroll: true });
@@ -305,7 +308,6 @@ function ConversationSwitcher({ list, openId, title, mark, onOpen, onAll }: {
     if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); show(false); }
     else if ((event.key === 'ArrowDown' || event.key === 'ArrowUp') && menu.current) { event.preventDefault(); stepFocus(menu.current, document.activeElement, event.key === 'ArrowDown' ? 1 : -1); }
   }
-  const meta = (c: Summary) => [c.state === 'running' ? 'Answering now' : c.state === 'unknown' ? 'Outcome unknown' : day(c.lastAt), c.turns + ' ' + (c.turns === 1 ? 'message' : 'messages')].join(' · ');
   return <div ref={root} className="conversation-switch">
     <button ref={trigger} className="conversation-title" aria-haspopup="dialog" aria-expanded={open} disabled={!list.length}
       aria-label={title + (list.length ? ', recent conversations' : '')} title={list.length ? 'Recent conversations' : undefined} onClick={() => show(!open)}>
@@ -314,14 +316,11 @@ function ConversationSwitcher({ list, openId, title, mark, onOpen, onAll }: {
     {open && <div ref={menu} className="menu-pop history-pop" role="dialog" aria-label="Recent conversations" onKeyDown={key}>
       {recent.length > 6 && <div className="model-search"><Icon name="search" size={14} /><input aria-label="Search conversations" placeholder="Search conversations" value={query} spellCheck={false} autoComplete="off" onChange={event => setQuery(event.target.value)} /></div>}
       <div className="history-list">
-        {shown.map(c => {
-          const mark = c.client === 'acp' ? c.adapter?.name || 'ACP Agent' : clientName(c.client);
-          return <button key={c.conversationId} data-item className="history-row" aria-current={c.conversationId === openId ? 'true' : undefined} onClick={() => { show(false); onOpen(c.conversationId); }}>
-            {mark ? <ProviderMark name={mark} size={14} /> : <span className="history-mark" aria-hidden="true" />}
-            <span className="history-text"><strong>{c.agentTitle || c.title}</strong><span>{meta(c)}</span></span>
-            {c.conversationId === openId && <span className="history-check"><Icon name="check" size={14} /></span>}
-          </button>;
-        })}
+        {shown.map(c => <button key={c.id} data-item className="history-row" aria-current={c.id === openId ? 'true' : undefined} onClick={() => { show(false); onOpen(c.id); }}>
+          {c.mark ? <ProviderMark name={c.mark} size={14} /> : <span className="history-mark" aria-hidden="true" />}
+          <span className="history-text"><strong>{c.title}</strong><span>{c.meta}</span></span>
+          {c.id === openId && <span className="history-check"><Icon name="check" size={14} /></span>}
+        </button>)}
         {!shown.length && <p className="model-none">No conversation matches “{query.trim()}”.</p>}
       </div>
       {onAll && <><div className="menu-divider" role="separator" />
@@ -339,8 +338,11 @@ function figureNote(brief: any) {
   const where = brief.plot !== undefined ? `plot ${brief.plot}${brief.cell ? ' of cell ' + brief.cell : ''}` : `${brief.path ?? 'a saved figure'}${brief.cell ? ', saved by cell ' + brief.cell : ''}`;
   return <small className="turn-place">{brief.unavailable ? 'A figure selection that could not be read' : `${brief.count} selected mark${brief.count === 1 ? '' : 's'} · ${where}`}</small>;
 }
-export function AgentConversation({ snapshot, client, uiContext, attachment, onDetach, selectedId, onSelected, onOpen, onSent, onStarted, onClose, onAll, replayOf, replayAt: replaying = null, onNow, sessions, onPath }: {
-  snapshot: WorkspaceSnapshot; client: BrowserClient; selectedId?: string | null; onSelected?: () => void; onOpen?: (id: string | null) => void; onSent?: () => void; onStarted?: (conversationId: string) => void; onClose?: () => void; onAll?: () => void;
+export function AgentConversation({ snapshot, client, uiContext, attachment, onDetach, selectedId, onSelected, onOpen, onSent, onStarted, onClose, onAll, onShown, tasksBeside = false, replayOf, replayAt: replaying = null, onNow, sessions, onPath }: {
+  snapshot: WorkspaceSnapshot; client: BrowserClient; selectedId?: string | null; onSelected?: () => void; onOpen?: (id: string | null) => void;
+  // The conversation on show, said whenever it changes and null when the panel goes; and whether the
+  // conversations are listed beside this panel with their own New, which the header then leaves out.
+  onShown?: (id: string | null) => void; tasksBeside?: boolean; onSent?: () => void; onStarted?: (conversationId: string) => void; onClose?: () => void; onAll?: () => void;
   replayOf?: string | null; replayAt?: number | null; onNow?: () => void;
   // Every Agent session in the project folder (agent.sessions.list), and opening a file it names.
   sessions?: ExternalSummary[]; onPath?: (path: string) => void;
@@ -359,6 +361,13 @@ export function AgentConversation({ snapshot, client, uiContext, attachment, onD
   const [following, setFollowing] = useState(true), [unseen, setUnseen] = useState(false);
   const replayAt = replaying !== null && openId === replayOf ? replaying : null;
   const list = snapshot.conversations ?? [];
+  // Every conversation here, whichever window its session began in: Rho's own, then the sessions
+  // of the project folder that no conversation here continues yet.
+  const when = (state: string, lastAt: string) => state === 'running' ? 'Answering now' : state === 'unknown' ? 'Outcome unknown' : day(lastAt);
+  const listed: Listed[] = [
+    ...list.filter(c => !c.trashedAt).map(c => ({ id: c.conversationId, title: c.agentTitle || c.title, mark: c.client === 'acp' ? c.adapter?.name || 'ACP Agent' : clientName(c.client), lastAt: c.lastAt, meta: when(c.state, c.lastAt) + ' · ' + c.turns + ' ' + (c.turns === 1 ? 'message' : 'messages') })),
+    ...(sessions ?? []).filter(s => !s.conversationId).map(s => ({ id: s.id, title: s.title, mark: sessionAgent(s), lastAt: s.lastAt, meta: when(s.state, s.lastAt) })),
+  ];
   const summary = list.find(c => c.conversationId === openId);
   const openClient = summary?.client ?? read?.conversation.client;
   const openBackend = backendOf(openClient, summary?.backend ?? read?.conversation.backend);
@@ -417,6 +426,7 @@ export function AgentConversation({ snapshot, client, uiContext, attachment, onD
     } else if (seen.current !== version) setUnseen(true);
   }, [read?.conversation.version, openId, following, replayAt]);
   function open(id: string | null) { setOpenId(id); store(openKey, id); onOpen?.(id); setProblem(''); setFollowing(true); setUnseen(false); }
+  useEffect(() => { onShown?.(openId); return () => onShown?.(null); }, [openId]);
   function edit(text: string) { setDraft(text); if (!store(draftKey, text)) setProblem('This draft could not be stored. Send or copy it before closing this panel.'); }
   function askAgain(text: string) { setFollowing(true); edit(text); input.current?.focus(); }
   const last = read?.turns.at(-1), answering = !!openId && (last?.state === 'running' || summary?.state === 'running');
@@ -498,8 +508,8 @@ export function AgentConversation({ snapshot, client, uiContext, attachment, onD
   const canSend = !busy && !waiting && !!draft.trim() && !blocked;
   return <section className="conversation" aria-label={openId ? 'Conversation' : 'New conversation'}>
     <header className="conversation-head">
-      <ConversationSwitcher list={list} openId={openId} title={openId ? title : 'New conversation'} mark={openId ? mark : null} onOpen={open} onAll={onAll} />
-      {openId && <button className="icon-button" aria-label="New conversation" title="New conversation" onClick={() => { open(null); setTimeout(() => input.current?.focus()); }}><Icon name="plus" size={16} /></button>}
+      <ConversationSwitcher list={listed} openId={openId} title={openId ? title : 'New conversation'} mark={openId ? mark : null} onOpen={open} onAll={onAll} />
+      {openId && !tasksBeside && <button className="icon-button" aria-label="New conversation" title="New conversation" onClick={() => { open(null); setTimeout(() => input.current?.focus()); }}><Icon name="plus" size={16} /></button>}
       {onClose && <button className="icon-button" aria-label="Close Agent" title="Close" onClick={onClose}><Icon name="close" size={16} /></button>}
     </header>
     {openId && replayAt !== null && <p className="conversation-replay" role="status"><Icon name="restore" size={13} />Replaying · <strong>{clockAt(replayAt, true)}</strong>{onNow && <button className="small-button" onClick={onNow}>Back to now</button>}</p>}

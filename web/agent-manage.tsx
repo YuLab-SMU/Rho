@@ -1,3 +1,4 @@
+import { storeAgentTab, storedAgentTab, type AgentTab } from './agent-tab.js';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { BrowserClient, WorkspaceSnapshot } from '../src/browser.js';
 import type { RhoOutput } from '../src/contract.generated.js';
@@ -15,9 +16,8 @@ import { SessionRow, useExternalConversations, type ExternalSummary } from './ex
 // conversations use and the setup that lets an Agent you run elsewhere use this project.
 type Summary = NonNullable<WorkspaceSnapshot['conversations']>[number];
 type Listed = RhoOutput<'conversation.list'>['conversations'][number];
-type Tab = 'conversations' | 'agents';
+type Tab = AgentTab;
 
-const tabKey = 'rho.agent.tab.v1';
 type AgentKey = 'claude-code' | 'codex' | 'other';
 const agentKeys: AgentKey[] = ['claude-code', 'codex', 'other'];
 const agentNames: Record<AgentKey, string> = { 'claude-code': 'Claude Code', codex: 'Codex', other: 'Other Agents' };
@@ -54,15 +54,17 @@ function names(summary: Summary | Listed, settings: AgentSettingsState) {
   return { model: split(modelName).name, modelFull: modelName, effort: effort && effortValue !== null ? valueName(effort, effortValue) : '' };
 }
 
-export function AgentPage({ client, snapshot, exists, onContinue, onPath, onNew, onOpened, extra }: { client: BrowserClient; snapshot: WorkspaceSnapshot; exists: (path: string) => boolean; onContinue: (id: string) => void; onPath: (path: string) => void; onNew: () => void; onOpened: (compositionId: string, viewId?: string) => void; extra?: ReactNode }) {
+export function AgentPage({ client, snapshot, exists, onContinue, onPath, onNew, onOpened, extra, tab: shownTab, onTab }: { tab?: AgentTab; onTab?: (tab: AgentTab) => void; client: BrowserClient; snapshot: WorkspaceSnapshot; exists: (path: string) => boolean; onContinue: (id: string) => void; onPath: (path: string) => void; onNew: () => void; onOpened: (compositionId: string, viewId?: string) => void; extra?: ReactNode }) {
   const settings = useAgentSettings(client, snapshot.project.id);
   useEffect(() => refreshAgentSettings(client, snapshot.project.id), [client, snapshot.project.id]);
   // A conversation's first session tells Rho what its Agent offers: while a row's Agent has no
   // names here, they are read again each time that conversation changes.
   const unnamed = (snapshot.conversations ?? []).filter(c => { const backend = backendOf(c); return backend && !settings.offered(backend); }).map(c => c.conversationId + '@' + c.version).join();
   useEffect(() => { if (unnamed) refreshAgentSettings(client, snapshot.project.id); }, [client, snapshot.project.id, unnamed]);
-  const [tab, setTab] = useState<Tab>(() => { try { return /^(agents|outside)$/.test(sessionStorage.getItem(tabKey) ?? '') ? 'agents' : 'conversations'; } catch { return 'conversations'; } });
-  const choose = (next: Tab) => { setTab(next); try { sessionStorage.setItem(tabKey, next); } catch { /* The tab is remembered only while storage works. */ } };
+  // The sidebar has a row for each tab, so the application holds which one shows; alone, the page holds it.
+  const [ownTab, setOwnTab] = useState<Tab>(storedAgentTab);
+  const tab = shownTab ?? ownTab;
+  const choose = (next: Tab) => { setOwnTab(next); storeAgentTab(next); onTab?.(next); };
   const external = useExternalConversations(client, snapshot.project.id);
   const count = (snapshot.conversations?.length ?? 0) + external.sessions.filter(s => !s.conversationId).length;
   return <div className="agent-page">
