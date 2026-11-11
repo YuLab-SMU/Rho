@@ -1198,7 +1198,7 @@ export class RhoService {
       if (method === 'kernel.stop') requireThat(principal.id === localBrowserId, 'unauthorized', 'Only the person at this machine ends a live session. Open Rho in a browser on this machine.');
       await capabilities.assertAvailable(method, principal);
       const host = this.kernelFor(p);
-      if (method === 'kernel.run') return host.run({ language: b.language, code: b.code, purpose: b.purpose, changeId: b.changeId, by: principal.id, waitMs: b.waitMs, place: b.place, interpreter: b.interpreter });
+      if (method === 'kernel.run') return host.run({ language: b.language, code: b.code, purpose: b.purpose, notebook: b.notebook, changeId: b.changeId, by: principal.id, waitMs: b.waitMs, place: b.place, interpreter: b.interpreter });
       if (method === 'kernel.read') return host.read(b.limit, b.cellId);
       if (method === 'kernel.events') return host.events(b.limit);
       if (method === 'kernel.inspect') return host.inspect({ language: b.language, name: b.name, path: b.path, offset: b.offset, limit: b.limit, sort: b.sort, picture: b.picture });

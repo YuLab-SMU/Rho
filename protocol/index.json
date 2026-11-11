@@ -539,8 +539,8 @@
     "kernel.interrupt": {
       "summary": "Interrupt one cell: a running cell stops and its session and values stay; a waiting cell is not run. A cell that has ended is returned unchanged.",
       "path": "operations/kernel.interrupt.json",
-      "bytes": 9955,
-      "sha256": "3e03293fe6aaaf8e73d653e16cecf6f4f5b57d787631714f5baa93f7c6c6ac35"
+      "bytes": 10082,
+      "sha256": "182eba0e080d7c958e44d7dec31ac31872ff1aba61d62198763e9080efb15f70"
     },
     "kernel.place.check": {
       "summary": "Connect to a place on a server and report its system, machine, the folder after its setup lines, and R and Python there. Runs the place's setup lines; starts no session.",
@@ -581,14 +581,14 @@
     "kernel.read": {
       "summary": "The live sessions and their cells, oldest cell first: code, purpose, who ran it, what it printed, its plots and how it ended, and each session's variables. Reading never starts a session.",
       "path": "operations/kernel.read.json",
-      "bytes": 17135,
-      "sha256": "944cc4dd59cce979338173b1c6f13c8d28dca5889cd28f4d28f5250f1a9fa141"
+      "bytes": 17270,
+      "sha256": "59459bbc4b020d94f876abd937103c89271c121f7b3ea436cf8a2f7d97815c8a"
     },
     "kernel.run": {
       "summary": "Run a cell of R or Python in the project's live session of that language, which the Agent and the person share: what one cell defines stays for the next. Starts the session when none is live, on this machine or at a place on one of the person's servers (place, or where kernel.places says that language runs next). interpreter names the program a session on this machine starts with, in a folder of the project such as .venv/bin/python; the project keeps it for that language's later sessions, and each cell records the program and version that ran it. The same changeId from the same caller returns the same cell and never runs it twice. waitMs waits for the cell to end.",
       "path": "operations/kernel.run.json",
-      "bytes": 16757,
-      "sha256": "728230e62d3b4b2c279f626cb734dec203b4f2043d00e4bae8144080ba7978df"
+      "bytes": 16995,
+      "sha256": "7083cf7033fcc053f34187daa53b7252e28b68c5bffa023446a0def648ac00fa"
     },
     "kernel.server.skill": {
       "summary": "One skill bound to a server, as its file reads now: how that server is used. Read it before naming a place there or running work on it.",

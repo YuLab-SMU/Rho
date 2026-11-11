@@ -27,6 +27,10 @@
           "python"
         ]
       },
+      "notebook": {
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+        "type": "string"
+      },
       "place": {
         "pattern": "^[a-z][a-z0-9-]{0,31}$",
         "type": "string"
@@ -152,6 +156,10 @@
               "r",
               "python"
             ]
+          },
+          "notebook": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+            "type": "string"
           },
           "number": {
             "minimum": 1,

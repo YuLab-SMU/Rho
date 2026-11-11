@@ -17,7 +17,7 @@ import { useAgentNow, type AgentNow } from './agent-now.js';
 import { NotesPanel, useProjectNotes } from './project-notes.js';
 import { compositionName, defaultWorkspace, fileKey, openInWorkspace, processComposition, processConversation } from './canvas.js';
 import { Icon, type IconName } from './icons.js';
-import { addNotebook, addObject, addSessionView, addTool, canExplore, createWorkspace, loadTable, notebookOn, scriptLanguage, scriptPrepared, sessionTitles, sessionViewOn, toolOn, type Language, type SessionView, type Tool } from './explore.js';
+import { addNewNotebook, addNotebook, addObject, addSessionView, addTool, canExplore, createWorkspace, loadTable, notebookOn, scriptLanguage, scriptPrepared, sessionTitles, sessionViewOn, toolOn, type Language, type SessionView, type Tool } from './explore.js';
 import { PageAdd } from './page-add.js';
 import { StudioToolsContext, type StudioTools } from './studio-tools.js';
 import type { ResourceTarget } from './canvas.js';
@@ -334,6 +334,11 @@ function App() {
     if (!snapshot) return;
     addNotebook(client!, snapshot.project.id, page, null, into).then(id => layout(page, id), error => setNotice('The Notebook could not be added. ' + (error instanceof Error ? error.message : '')));
   }
+  // Another notebook on a page that has one: its own cells, in the same sessions.
+  function newNotebookOnPage(page: string, into?: string) {
+    if (!snapshot) return;
+    addNewNotebook(client!, snapshot.project.id, page, into).then(id => layout(page, id), error => setNotice('The notebook could not be added. ' + (error instanceof Error ? error.message : '')));
+  }
   // The sessions' variables or plots on a page of the person's own, or brought forward.
   function sessionViewOnPage(page: string, kind: SessionView, into?: string) {
     if (!snapshot) return;
@@ -581,7 +586,7 @@ function App() {
     variables={!sessions ? 'unavailable' : sessionViewOn('variables', composition?.views) ? 'present' : 'absent'} plots={!sessions ? 'unavailable' : sessionViewOn('plots', composition?.views) ? 'present' : 'absent'} flow={!sessions ? 'unavailable' : sessionViewOn('flow', composition?.views) ? 'present' : 'absent'}
     servers={!sessions ? 'unavailable' : sessionViewOn('servers', composition?.views) ? 'present' : 'absent'}
     console={toolOn('console', composition?.views) ? 'present' : 'absent'} files={toolOn('files', composition?.views) ? 'present' : 'absent'} onTool={tool => toolOnPage(shownId, tool, into)}
-    onNotebook={() => notebookOnPage(shownId, into)} onSessionView={kind => sessionViewOnPage(shownId, kind, into)} onFile={path => openIn(shownId, path, into)} onAll={row => toolOnPage(shownId, `kind:${row}`, into)} /> : null;
+    onNotebook={() => notebookOn(composition?.views) ? newNotebookOnPage(shownId, into) : notebookOnPage(shownId, into)} onSessionView={kind => sessionViewOnPage(shownId, kind, into)} onFile={path => openIn(shownId, path, into)} onAll={row => toolOnPage(shownId, `kind:${row}`, into)} /> : null;
   const pageAdd = addMenu();
   // The projects list has the application's own sidebar even while a project stays chosen.
   const inProject = !!project && screen !== 'home';

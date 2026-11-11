@@ -159,7 +159,14 @@ inspect what happened. The application gives those actions direct places:
   Agent may read them ([episode](SIMULATED-PROJECT-EPISODE.md#second-pass)).
 - **Notebook** is a view of a Studio workspace, from Add view, the command palette, Skills or
   the Overview (offered while the Notebook plugin is selected). It shows the project's live R
-  and Python sessions, which the person shares with the Agent. Cells read in the order
+  and Python sessions, which the person shares with the Agent. A workspace can hold several
+  ([episode](SIMULATED-PROJECT-EPISODE.md#several-notebooks)): the first is the project's
+  notebook, which lists every cell of the sessions; once a page has it, Add view offers New
+  notebook, a notebook of its own (Notebook 2, 3, …, renamed from its tab's menu) that lists the
+  cells run in it. They share the sessions, so a value made in one is there in the others, and
+  the project's notebook names the notebook each such cell was run in. A script's line, a table
+  to explore and an expression from a value's view go to the notebook the person last worked
+  in. Cells read in the order
   they ran: language and number in the gutter, who ran it (the Agent's name opens its
   conversation) and its purpose, how long it took or how it ended, the code highlighted,
   then what it printed, streamed while it runs, with messages, warnings and errors in

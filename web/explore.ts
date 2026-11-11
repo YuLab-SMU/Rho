@@ -18,27 +18,37 @@ export function scriptPrepared(path: string, language: Language, dirty: boolean)
 // named for what it loads; it runs in the shared session as any cell they run there. A session on
 // a server reads the server's files: a copy from that server loads from where it was copied, and
 // a file only on this machine is not sent there; the person is told where each is.
-export async function loadTable(client: BrowserClient, projectId: string, path: string, language: Language) {
+export async function loadTable(client: BrowserClient, projectId: string, path: string, language: Language, notebook?: string | null) {
+  const where = notebook ? { notebook } : {};
   const read = await client.call('kernel.read', { projectId, limit: 1 });
   const live = read.sessions.find(s => s.language === language && s.state !== 'ended');
   const taken = new Set(live?.variables.map(v => v.name) ?? []);
   const name = valueName(path, language, taken), file = path.split('/').at(-1)!;
   const places = live?.place ? null : await client.call('kernel.places', { projectId }).catch(() => null);
   const placeId = live ? live.place?.placeId ?? null : places && places.use[language] !== 'local' ? places.use[language] : null;
-  if (!placeId) return client.call('kernel.run', { projectId, language, code: loadCode(path, language, name), purpose: `Load ${file} as ${name}`, changeId: 'explore-' + crypto.randomUUID() });
+  if (!placeId) return client.call('kernel.run', { projectId, language, code: loadCode(path, language, name), purpose: `Load ${file} as ${name}`, changeId: 'explore-' + crypto.randomUUID(), ...where });
   const known = places ?? await client.call('kernel.places', { projectId });
   const label = live?.place?.label ?? known.places.find(p => p.placeId === placeId)?.label ?? placeId;
   const copy = known.copies.find(c => c.placeId === placeId && c.to === path);
   if (!copy) throw new Error(`${languageNames[language]} runs on ${label}, and ${file} is on this machine only. Choose This machine beside the language in the Notebook to load it here, or put the file in the folder on ${label}.`);
-  return client.call('kernel.run', { projectId, language, code: loadCode(copy.path, language, name), purpose: `Load ${file} on ${label} as ${name}`, changeId: 'explore-' + crypto.randomUUID() });
+  return client.call('kernel.run', { projectId, language, code: loadCode(copy.path, language, name), purpose: `Load ${file} on ${label} as ${name}`, changeId: 'explore-' + crypto.randomUUID(), ...where });
 }
 
-// The Notebook as a view of a Studio page: one per page, showing the live sessions.
+// The Notebook as a view of a Studio page. The first on a page is the project's notebook: every
+// cell of the live sessions. Each one added after it is a notebook of its own over the same
+// sessions, with an identity its view keeps and its cells carry, and a name the person gives it.
 export const notebookComponent = 'rho.notebook';
 export const notebookView = (id = 'notebook', form?: 'notebook' | 'console'): LayoutNode & { component: string; version: string; props: { title: string; form?: string }; bindings: Record<string, never> } =>
   ({ id, kind: 'view', component: notebookComponent, version: '1', props: { title: 'Notebook', ...(form ? { form } : {}) }, bindings: {} });
 export const notebookOn = (nodes: unknown[] | undefined) => (nodes as LayoutNode[] | undefined)?.find(n => n.kind !== 'group' && n.component === notebookComponent)?.id ?? null;
 const newId = (kind: string) => `${kind}-${crypto.randomUUID().slice(0, 8)}`;
+type NotebookNode = LayoutNode & { props?: { title?: string; notebook?: string } };
+const notebookNodes = (nodes: unknown[] | undefined) => ((nodes as NotebookNode[] | undefined) ?? []).filter(n => n.kind !== 'group' && n.component === notebookComponent);
+// The identity a Notebook view's cells carry; none for the project's notebook.
+export const notebookOf = (view: { props?: Record<string, unknown> } | undefined) => typeof view?.props?.notebook === 'string' && view.props.notebook ? view.props.notebook : null;
+// Each notebook's name by its identity, across the project's pages, so a cell can say where it was run.
+export const notebookNames = (pages: ReadonlyArray<{ views: ReadonlyArray<{ component: string; props: Record<string, unknown> }> }>) =>
+  Object.fromEntries(pages.flatMap(page => page.views).filter(v => v.component === notebookComponent && notebookOf(v)).map(v => [notebookOf(v)!, String(v.props.title ?? 'Notebook')]));
 // The page with the Notebook in a pane of its own beside a view, or as its one view.
 export function withNotebook(tree: LayoutTree | null, beside: string | null, id?: string): LayoutTree | null {
   const view = notebookView(id);
@@ -96,6 +106,20 @@ const intoGroup = (view: LayoutNode, into: string) => (tree: LayoutTree | null):
 // The Notebook beside a view, or in the group the person chose, unless the page has one.
 export const addNotebook = (client: BrowserClient, projectId: string, compositionId: string, beside: string | null, into?: string) =>
   addToPage(client, projectId, compositionId, notebookOn, into ? intoGroup(notebookView(), into) : tree => withNotebook(tree, beside), 'notebook');
+// Another notebook on the page: a tab beside the page's notebooks, or in the group the person
+// chose. Its name counts on from the notebooks already there.
+export function addNewNotebook(client: BrowserClient, projectId: string, compositionId: string, into?: string): Promise<string> {
+  const key = crypto.randomUUID().slice(0, 8), id = 'notebook-' + key;
+  return addToPage(client, projectId, compositionId, nodes => (nodes as LayoutNode[] | undefined)?.some(n => n.id === id) ? id : null, tree => {
+    const there = notebookNodes(tree?.nodes), names = new Set(there.map(n => n.props?.title));
+    let number = there.length + 1;
+    while (names.has('Notebook ' + number)) number++;
+    const view = { ...notebookView(id), props: { title: 'Notebook ' + number, notebook: 'nb-' + key } };
+    if (into || !tree) return intoGroup(view, into ?? '')(tree);
+    const last = there.at(-1), holder = last && tree.nodes.find(n => n.kind === 'group' && n.children?.includes(last.id) && (n.presentation as { mode?: string } | undefined)?.mode !== 'split');
+    return holder ? addInto(tree, view as never, holder.id, newId) : addBeside(tree, view as never, null, 'right', newId);
+  }, 'notebook');
+}
 
 // The sessions' variables, plots and data flow, and the servers they can run on, as views of
 // their own, one of each per page. Added to a page, the first takes a column along the page's

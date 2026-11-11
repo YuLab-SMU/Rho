@@ -13,6 +13,9 @@ export interface WorkspaceViews {
   taken(): void;
   setProps?(viewId: string, props: Record<string, unknown>): void;
   has(component: string): boolean;
+  // The notebook that takes what another view sends, and each named notebook of the project.
+  notebookTarget?: string | null;
+  notebookNames?: Readonly<Record<string, string>>;
   scope?: SessionScope;
   openConversation?(conversationId: string): void;
 }

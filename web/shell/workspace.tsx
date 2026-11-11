@@ -14,7 +14,7 @@ import { CommandPane } from '../console.js';
 import { ConsoleView, FilesView, KindView } from '../studio-tools.js';
 import type { SourceRow } from '../sources.js';
 import { showOnServer, type Prepared, type SessionScope } from '@rho-workspace/plugin-kernel/ui';
-import { addNotebook, addObject, addSessionView, canExplore, explorableTable, languageNames, loadTable, notebookComponent, notebookView, projectPath, scriptLanguage, scriptPrepared, sessionComponents, type Language } from '../explore.js';
+import { addNotebook, addObject, addSessionView, canExplore, explorableTable, languageNames, loadTable, notebookComponent, notebookNames, notebookOf, notebookView, projectPath, scriptLanguage, scriptPrepared, sessionComponents, type Language } from '../explore.js';
 import { ExploreIn } from '../explore-in.js';
 import { useProcess } from '../process-context.js';
 import { ProcessFrame } from './process-views.js';
@@ -144,13 +144,19 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
   // the person's workspace instead, through onExplore, the way it does from the Overview.
   // Code waiting for the Notebook's line is the application's when it keeps it across pages.
   const [kept, setKept] = useState<Prepared | null>(null), [exploring, setExploring] = useState(false);
+  // A page can hold several notebooks. What another view sends (a script's line, a table to load,
+  // an expression to build on) goes to the one the person last had the keyboard in, else the first.
+  const notebooks = layout.views.filter(v => v.component === notebookComponent);
+  const [lastNotebook, setLastNotebook] = useState<string | null>(null);
+  useEffect(() => { if (notebooks.some(v => v.id === focused)) setLastNotebook(focused); }, [focused]);
+  const target = notebooks.find(v => v.id === lastNotebook) ?? notebooks[0];
   const prepared = onPrepare ? given ?? null : kept, setPrepared = onPrepare ?? setKept;
   const exploreOn = canExplore(snapshot) && (process ? !!onExplore : !!tree);
   async function explore(viewId: string, path: string, language: Language, script: { dirty: boolean } | null) {
     if (process) { onExplore?.(path, language); return; }
     setLayoutProblem(''); setExploring(true);
     try {
-      let notebook = layout.views.find(v => v.component === notebookComponent)?.id;
+      let notebook = target?.id;
       if (!notebook) {
         const view = byId.get(viewId), now = treeNow(), id = 'notebook';
         const ready = view && now && placeView(now, view, newId), next = ready && addBeside(ready, notebookView(id) as never, viewId, 'right', newId);
@@ -159,7 +165,7 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
         notebook = id;
       }
       if (script) setPrepared(scriptPrepared(path, language, script.dirty));
-      else await loadTable(client, snapshot.project.id, path, language);
+      else await loadTable(client, snapshot.project.id, path, language, notebookOf(target));
       onPersonMoved?.(); show(notebook);
     } catch (error) { refusal(error); }
     finally { setExploring(false); }
@@ -189,7 +195,7 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
   const runFromScript = useRef<NonNullable<ShellServices['runCode']>>(async () => {});
   runFromScript.current = async ({ viewId, language, code, purpose }) => {
     setLayoutProblem('');
-    const notebook = layout.views.find(v => v.component === notebookComponent)?.id;
+    const notebook = target?.id, own = notebookOf(target);
     if (!notebook) {
       const view = byId.get(viewId), now = treeNow(), ready = view && now && placeView(now, view, newId);
       const next = ready && addBeside(ready, notebookView('notebook', 'console') as never, viewId, 'bottom', newId);
@@ -198,7 +204,7 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
       const group = groupOf(root, notebook);
       if (group && group.id !== groupOf(root, viewId)?.id) setSelected(s => ({ ...s, [group.id]: notebook }));
     }
-    const sent = runs.current.then(() => client.call('kernel.run', { projectId: snapshot.project.id, language, code, purpose, changeId: 'script-' + crypto.randomUUID() }));
+    const sent = runs.current.then(() => client.call('kernel.run', { projectId: snapshot.project.id, language, code, purpose, changeId: 'script-' + crypto.randomUUID(), ...(own ? { notebook: own } : {}) }));
     runs.current = sent.catch(() => {});
     await sent.catch(refusal);
   };
@@ -212,8 +218,7 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
   // What reaches a value waits in the Notebook's line, for the person to build on and run.
   function useInNotebook(language: Language, expression: string, name: string) {
     setPrepared({ key: crypto.randomUUID(), language, code: expression, note: `From the ${name} view. Build on it, then press Run.` });
-    const notebook = layout.views.find(v => v.component === notebookComponent)?.id;
-    if (notebook) { show(notebook); return; }
+    if (target) { show(target.id); return; }
     if (!process) addNotebook(client, snapshot.project.id, layout.compositionId, null).then(id => show(id), refusal);
   }
   // In a conversation's Studio the live sessions show that conversation's share: the cells its
@@ -221,9 +226,11 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
   const principal = process ? snapshot.conversations?.find(c => c.conversationId === process.conversationId)?.principal ?? null : null;
   const starts = process ? process.whole.turns.filter(t => t.conversationId === process.conversationId).map(t => t.start) : [];
   const scope: SessionScope | undefined = process ? { principal, since: starts.length ? Math.min(...starts) : null, at: process.at, cellIds: process.kernelCells } : undefined;
+  const names = useMemo(() => notebookNames(snapshot.compositions), [snapshot.compositions]);
   const views: WorkspaceViews = {
     openValue: openObject, openRemote, toNotebook: (language, code, from) => useInNotebook(language, code, from),
     prepared, taken: () => setPrepared(null), setProps: saveProps, has: component => layout.views.some(v => v.component === component),
+    notebookTarget: target?.id ?? null, notebookNames: names,
     scope, openConversation: onConversation,
   };
   // A divider is written back once the person stops moving it.
@@ -291,6 +298,10 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
     const view = byId.get(id), now = treeNow(), group = groupOf(root, id);
     if (!view || !now || !group) return [];
     const ready = placeView(now, view, newId), items: MenuItem[] = [{ id: 'close', label: 'Close', icon: 'close', keys: 'Del', run: () => closeTab(id) }];
+    if (notebookOf(view) && allowed('composition.apply')) items.unshift({ id: 'rename', label: 'Rename', icon: 'pencil', run: () => {
+      const name = window.prompt('Name this notebook', title(view))?.trim().slice(0, 60);
+      if (name && name !== title(view)) saveProps(id, { title: name });
+    } });
     const others = group.views.filter(other => other !== id);
     if (others.length) items.push({ id: 'close-others', label: others.length === 1 ? 'Close the other tab' : `Close the ${others.length} other tabs`, icon: 'close', run: () => void closeViews(others, others.length === 1 ? title(byId.get(others[0])!) : `${others.length} views`) });
     const split = (axis: 'horizontal' | 'vertical') => { const t = treeNow(), r = t && placeView(t, view, newId), next = r && splitView(r, id, axis, newId); if (next) { onPersonMoved?.(); show(id); void writeLayout(next); } };

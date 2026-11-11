@@ -1851,3 +1851,61 @@ The "after" picture of the previous section is this section's "before".
   rename, move or delete.
 - Below 640 px of stage a list and the file chosen from it are not on screen together.
 - The Variables row opens the existing Variables view, which is not yet an object viewer.
+
+## Several notebooks
+
+2026-11-11, the next part of the same request: one Notebook for a whole project will not do; a
+workspace should hold several, made there.
+
+### What there was
+
+A project had one list of cells, and every Notebook view showed all of it. A page could hold one
+Notebook (its view was always `notebook`), and a cell carried no word of where it was run. A live
+session belongs to the project and a language, one R and one Python.
+
+### Changes
+
+- **A cell keeps its notebook** (Rho-plugins, Notebook 0.5.16). `kernel.run` takes an optional
+  `notebook`, an identity the cell keeps and `kernel.read` returns. Rho passes it on and its copy
+  of the `kernel.run`, `kernel.read` and `kernel.interrupt` contracts carries it.
+- **The first Notebook on a page is the project's**; it lists every cell, as before. With one on
+  the page, Add view offers New notebook instead: a tab beside it named Notebook 2, 3, …, with an
+  identity kept in the view (`props.notebook`). It lists the cells run in it and runs its own
+  there. Rename, in its tab's menu, gives it the person's name.
+- **The sessions are shared.** A value made in one notebook is there in the others, as in
+  RStudio, where several notebooks run in one R session. The project's notebook marks a cell run
+  elsewhere with that notebook's name. Sessions, Variables, Plots and Data flow stay one per
+  language.
+- **What another view sends goes to the notebook last worked in**, else the page's first: a
+  script's line, a table to explore, an expression from a value's view.
+- An Agent's cells name no notebook and read in the project's notebook. It can pass the identity
+  it reads on a cell to add one to that notebook.
+
+![The project's notebook lists both cells and names the one run in QC; QC lists its own](figures/several-notebooks.jpg)
+
+### Verification
+
+- A throwaway copy of the PA14 example in a real browser at 2000 × 1028, each screenshot read:
+  the project's Notebook with 44 earlier cells; `x <- 1:10` run there; New notebook from Add
+  view gave an empty Notebook 2 that said so; `y <- x * 2; mean(y)` printed 11 there, from the
+  same session; renamed to QC; beside each other, the project's notebook listed 45 cells with the
+  last marked QC, and QC listed one. After a reload both were as left. A statement run from a
+  script went to QC when the keyboard had last been there, and to the project's notebook when it
+  had been there.
+- Rho-plugins: the kernel tests passed 22 of 23 (one Windows only), with a new one for notebooks
+  that share a session, keep their identity across a restart and refuse a malformed one.
+- Rho: the suite passed 352 of 355 with the debug Core, 3 skipped (Windows only), with a new test
+  through the service. The pages, sources and frontend acceptances passed.
+
+### Left open
+
+- This is the builder's reading. The user has not seen it; on their own running Rho a new
+  notebook cannot run a cell until the service is built and started again.
+- Whether notebooks should share the sessions or each have its own R and Python is the user's to
+  say. Sharing was the smaller step, and each notebook's own process could follow from it.
+- Whether a workspace's first Notebook should also be its own, rather than the project's.
+- A cell is numbered in its session, so a notebook's first cell can be "R cell 2". Each notebook
+  beside another repeats the sessions and variables at its side.
+- A notebook's cells are found among the 300 newest of the project's 500; a closed notebook's
+  cells stay in the project's notebook under "Another notebook".
+- A notebook is not a file: it cannot be saved as `.Rmd` or `.ipynb`, reordered or edited in place.

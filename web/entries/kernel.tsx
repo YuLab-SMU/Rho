@@ -21,8 +21,9 @@ function Notebook({ viewId, view, client, snapshot, headerTarget, shell }: UiVie
   return <>
     {headerTarget && createPortal(<FormSwitch form={form} onForm={choose} />, headerTarget, 'form-' + viewId)}
     <SessionPane client={client} snapshot={snapshot} form={form} shell={shell} scope={page?.scope}
+      notebook={typeof view.props.notebook === 'string' && view.props.notebook ? view.props.notebook : undefined} notebooks={page?.notebookNames}
       beside={{ variables: !!page?.has('rho.variables'), plots: !!page?.has('rho.plots') }}
-      prepared={page?.prepared} onTaken={page?.taken} onConversation={page?.openConversation} onObject={page?.openValue} />
+      prepared={!page || page.notebookTarget == null || page.notebookTarget === viewId ? page?.prepared : null} onTaken={page?.taken} onConversation={page?.openConversation} onObject={page?.openValue} />
   </>;
 }
 function Variables({ client, snapshot }: UiViewProps) {
@@ -42,7 +43,7 @@ function Value({ view, client, snapshot }: UiViewProps) {
   return <ObjectView client={client} snapshot={snapshot} language={language} name={name} onUse={expression => page?.toNotebook?.(language, expression, name)} />;
 }
 
-export const notebook = contribution('rho.notebook', Notebook, { type: 'object', properties: { title: { type: 'string' }, form: { enum: ['notebook', 'console'] } } });
+export const notebook = contribution('rho.notebook', Notebook, { type: 'object', properties: { title: { type: 'string' }, form: { enum: ['notebook', 'console'] }, notebook: { type: 'string' } } });
 export const variables = contribution('rho.variables', Variables);
 export const plots = contribution('rho.plots', Plots);
 export const flow = contribution('rho.flow', Flow);

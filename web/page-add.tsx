@@ -21,7 +21,7 @@ export function PageAdd({ sources, notebook, variables = 'unavailable', plots = 
   const chose = (run: () => void) => (event: MouseEvent<HTMLButtonElement>) => { event.currentTarget.closest('details')?.removeAttribute('open'); run(); };
   return <div className="page-add">
     {notebook !== 'unavailable' && <button className="page-add-notebook" onClick={chose(onNotebook)}>
-      <Icon name="code" size={17} /><span><strong>Notebook</strong><small>{notebook === 'present' ? 'On this page' : 'Live R and Python sessions you share with the Agent'}</small></span>
+      <Icon name="code" size={17} /><span><strong>{notebook === 'present' ? 'New notebook' : 'Notebook'}</strong><small>{notebook === 'present' ? 'Its own cells, in the same R and Python sessions' : 'Live R and Python sessions you share with the Agent'}</small></span>
     </button>}
     {commands !== 'unavailable' && onTool && <button className="page-add-notebook" onClick={chose(() => onTool('console'))}>
       <Icon name="prompt" size={17} /><span><strong>Console</strong><small>{commands === 'present' ? 'On this page' : 'The commands the Agent ran, and a line to run your own'}</small></span>

@@ -9468,6 +9468,7 @@ export interface KernelInterruptOutput {
     } | null;
     kept: number;
     language: 'r' | 'python';
+    notebook?: string;
     number: number;
     outputs: {
       figure?: {
@@ -9720,6 +9721,7 @@ export interface KernelReadOutput {
     } | null;
     kept: number;
     language: 'r' | 'python';
+    notebook?: string;
     number: number;
     outputs: {
       figure?: {
@@ -9808,6 +9810,7 @@ export interface KernelRunInput {
   code: string;
   interpreter?: string;
   language: 'r' | 'python';
+  notebook?: string;
   place?: string;
   purpose?: string;
   waitMs?: number;
@@ -9833,6 +9836,7 @@ export interface KernelRunOutput {
     } | null;
     kept: number;
     language: 'r' | 'python';
+    notebook?: string;
     number: number;
     outputs: {
       figure?: {

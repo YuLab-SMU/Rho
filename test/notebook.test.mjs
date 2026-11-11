@@ -68,3 +68,15 @@ test('the person and their Agent share a live session; only the person ends it',
   assert.equal(read.sessions[0].ending, 'stopped');
   assert.equal(read.cells.length, 3);
 });
+
+test('a cell run in a named notebook keeps that notebook, in the session the project shares', async t => {
+  const { call } = await setup(t);
+  const first = await call('kernel.run', { language: 'python', code: 'base = 6', changeId: 'n1', waitMs: 30000 });
+  const second = await call('kernel.run', { language: 'python', code: 'base * 7', notebook: 'nb-1a2b3c4d', changeId: 'n2', waitMs: 30000 });
+  assert.equal(second.cell.state, 'done');
+  assert.equal(second.cell.sessionId, first.cell.sessionId);
+  assert.equal(second.cell.outputs.map(o => o.text ?? '').join(''), '42\n');
+  assert.deepEqual((await call('kernel.read')).cells.map(c => c.notebook ?? null), [null, 'nb-1a2b3c4d']);
+  // The identity is a short token, not a name: the contract refuses anything else.
+  await assert.rejects(call('kernel.run', { language: 'python', code: '1', notebook: 'my notebook', changeId: 'n3' }), error => error.error.kind === 'invalid');
+});

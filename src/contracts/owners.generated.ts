@@ -20419,6 +20419,10 @@ export const ownerContracts: OwnerContractSnapshot = {
                       "python"
                     ]
                   },
+                  "notebook": {
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+                    "type": "string"
+                  },
                   "number": {
                     "minimum": 1,
                     "type": "integer"
@@ -21800,6 +21804,10 @@ export const ownerContracts: OwnerContractSnapshot = {
                         "python"
                       ]
                     },
+                    "notebook": {
+                      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+                      "type": "string"
+                    },
                     "number": {
                       "minimum": 1,
                       "type": "integer"
@@ -22346,6 +22354,10 @@ export const ownerContracts: OwnerContractSnapshot = {
                   "python"
                 ]
               },
+              "notebook": {
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+                "type": "string"
+              },
               "place": {
                 "pattern": "^[a-z][a-z0-9-]{0,31}$",
                 "type": "string"
@@ -22470,6 +22482,10 @@ export const ownerContracts: OwnerContractSnapshot = {
                       "r",
                       "python"
                     ]
+                  },
+                  "notebook": {
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+                    "type": "string"
                   },
                   "number": {
                     "minimum": 1,
@@ -26209,9 +26225,9 @@ export const ownerContracts: OwnerContractSnapshot = {
       "packageVersion": "0.5.15",
       "entry": "./operations",
       "entryPath": "@rho-workspace/plugin-kernel/dist/operations.js",
-      "entrySha256": "0f41eda742de47755100643b1655e1f881c04cc79e3dbbfb14fda4b13dafa274",
+      "entrySha256": "0a7acb3c2d0900e8fe03d4acceaf16e11e3af7ad1b4d4f452acdbd7c69e83707",
       "exports": {
-        "operationContracts": "0526dfbed44be3584fd7c86ddac8b1a2a953b0b218cc2a6f3317e7c6871743ad"
+        "operationContracts": "9b331a536845223a9009b6fd0e013d228e08209e0e3ef552e1ec1f673b3dd7bd"
       }
     },
     "figures": {
