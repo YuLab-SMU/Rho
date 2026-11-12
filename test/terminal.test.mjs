@@ -42,7 +42,7 @@ test('the person has a terminal in the project folder, and an Agent may read its
   // An Agent's grant carries the terminal, except its raw output and its size, which are the page's.
   const grant = path.join(root, 'agent.json');
   const connection = await service.agentConnection(p.id, 'terminal', grant);
-  assert.deepEqual(connection.methods.filter(method => method.startsWith('console.terminal.')).sort(), ['console.terminal.close', 'console.terminal.commands', 'console.terminal.list', 'console.terminal.open', 'console.terminal.screen', 'console.terminal.write']);
+  assert.deepEqual(connection.methods.filter(method => method.startsWith('console.terminal.')).sort(), ['console.terminal.close', 'console.terminal.commands', 'console.terminal.list', 'console.terminal.open', 'console.terminal.output', 'console.terminal.screen', 'console.terminal.write']);
   for (const method of ['console.terminal.read', 'console.terminal.resize'])
     await assert.rejects(service.agentConnection(p.id, 'terminal-' + method, path.join(root, method + '.json'), [method]), /operator-only|Unknown/);
   const agent = new RhoClient(JSON.parse(await fs.readFile(grant, 'utf8'))), as = (method, body = {}) => agent.call(method, { projectId: p.id, ...body });
@@ -93,6 +93,15 @@ test('commands typed in a terminal are recorded with who typed them, for the per
   assert.match(commands[0].by[0], /^agent:/); assert.notEqual(commands[0].exit, 0); assert.match(commands[0].output, /no-such-file/);
   assert.equal(commands[1].output, 'mine');
   assert.deepEqual((await call('console.terminal.commands')).commands.map(c => c.commandId), commands.map(c => c.commandId), 'the person reads the same record');
+  assert.deepEqual((await as('console.terminal.commands', { limit: 1, offset: 1 })).commands.map(c => c.command), ['echo mine']);
+  // What one printed past the start its record holds is read in pages.
+  await typed(as, 'seq 1 5000\r');
+  const [long] = (await as('console.terminal.commands', { limit: 1 })).commands;
+  assert.equal(long.command, 'seq 1 5000'); assert.equal(long.stored, true); assert.ok(long.outputBytes > Buffer.byteLength(long.output));
+  const page = await as('console.terminal.output', { commandId: long.commandId, maxChars: 1000 });
+  assert.ok(page.text.startsWith('1\n2\n') && page.more && page.text.length === 1000);
+  const rest = await call('console.terminal.output', { commandId: long.commandId, offset: page.nextOffset, maxChars: 65536 });
+  assert.ok((page.text + rest.text).trimEnd().endsWith('4999\n5000'));
   for (const end = Date.now() + 3000; (await admin.call('observation.snapshot', { projectId: p.id })).cursor === cursor;) {
     assert.ok(Date.now() < end, 'a recorded command moves the page\'s cursor'); await new Promise(r => setTimeout(r, 100));
   }

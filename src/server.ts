@@ -118,7 +118,7 @@ export const runContextLimits = { errorExcerptBytes: 8192 };
 // The methods one layered Agent grant may hold. The Agent pages through them (20 a page, at
 // most 64 KiB), so this bounds the grant rather than the Agent's context. A default business
 // grant that would exceed it is refused, never silently cut.
-export const layeredGrantLimits = { maxMethods: 96 };
+export const layeredGrantLimits = { maxMethods: 128 };
 async function runContext(project: Project, requests: Requests, principal: Principal, operationId: string): Promise<RunContext> {
   const run = await requests.lookup(principal, operationId, true), facts = await runFacts(project, run);
   // The stored count can trail what Core has retained since it was recorded. When Core's reply
@@ -1212,7 +1212,8 @@ export class RhoService {
       if (method === 'console.terminal.open') return host.open({ cols: b.cols, rows: b.rows, cwd: b.cwd, by: principal.id });
       if (method === 'console.terminal.list') return host.list();
       if (method === 'console.terminal.screen') return host.screen(b.terminalId, { after: b.after, waitMs: b.waitMs, lines: b.lines });
-      if (method === 'console.terminal.commands') return host.commandList(b.limit);
+      if (method === 'console.terminal.commands') return host.commandList(b.limit, b.offset);
+      if (method === 'console.terminal.output') return host.commandOutput(b.commandId, b.offset, b.maxChars);
       if (method === 'console.terminal.read') return host.read(b.terminalId, b.after, b.waitMs, b.maxBytes);
       if (method === 'console.terminal.write') return host.write(b.terminalId, b.data, principal.id);
       if (method === 'console.terminal.resize') return host.resize(b.terminalId, b.cols, b.rows);

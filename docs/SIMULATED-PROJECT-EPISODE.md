@@ -2260,3 +2260,104 @@ terminal is left for later.
   program are counted as typing the next command.
 - What a full-screen program drew, and output past 16 KiB, are not kept with the command.
 - Commands typed in the terminal are not in the Graph.
+
+## Every shell's commands, whole, and in the Graph
+
+2026-11-12, the user's answer to what [the last pass](#each-workspace-notebook-its-own-and-the-terminals-commands)
+left open: record the commands of fish and sh-like shells, keep what a full-screen program drew
+and output past 16 KiB, and put the terminal's commands in the Graph.
+
+### What there was
+
+- Only zsh and bash marked their commands. In any other shell the terminal recorded nothing.
+- A command's record held the first 16 KiB of what it printed and nothing more. What `less`,
+  `top` or an editor showed was not kept at all.
+- The Graph and its timeline drew messages to Agents and the plugins' events. A command typed in
+  a terminal was in Commands only.
+
+### Changes
+
+- **fish has hooks too, and sh, dash and ksh93 have marks in their prompt** (Console 0.3.5,
+  `shell-marks.ts`). fish sources Rho's file after its configuration and keeps its history under
+  its own name, `rho_<project hash>`. sh, dash and ksh93 have no hooks. `ENV` names a file that
+  reads the login files and the person's own, then puts marks around the person's prompt: the
+  last status where it starts, the folder where it ends, and a mark after the continuation
+  prompt. The command is the line typed after the prompt, read from the screen when its line
+  feed arrives, plus the lines after each continuation prompt. `/bin/sh` that is bash gets bash's
+  hooks.
+- **The line shown is checked against the lines typed** (`terminal-commands.ts`). dash has no
+  line editor of its own. A line typed while a command runs is shown then, and the shell reads it
+  later without showing it again. So the line after the prompt was that command's output, not the
+  command. Rho now keeps the lines typed, as the terminal edits them (backspace, Ctrl+U, Ctrl+C
+  drops what was not read yet). A line shown after the prompt as it was typed is the command.
+  Otherwise the oldest line typed before the prompt appeared is what ran, and what is shown is
+  its output. A command that ran without a line feed (a `cd` typed ahead) is recorded at the
+  next prompt. The echo of a line typed while a command ran is not counted as its output.
+- **mksh and pdksh are not marked.** On Debian `ksh` was mksh, which scrolls a long line sideways
+  as it is typed (`…wider-than-forty-cols end <`), so the screen never shows the line whole.
+  Recording it would record wrong commands. mksh keeps Rho's history and `recording` stays false.
+- **All that was printed, and the full screens.** Output is read from the terminal emulator line
+  by line as each line feed completes one, so nothing depends on the scrollback. Past the
+  record's 16 KiB, a file beside it keeps the first 512 KiB and the last 64 KiB, with the bytes
+  between counted, and the last 4 screens a full-screen program showed as it left. The files
+  stay under 64 MiB per project; past that the oldest are let go, and their records say so.
+  `console.terminal.output` reads one in pages of up to 64 Ki characters, for the person and the
+  Agent. A record shows "Show all it printed · 341 KB" or "Show the full screen it drew".
+- **Terminal commands are in the Graph** (`src/terminal-work.ts`). A command an Agent entered
+  while answering a message of its conversation in Rho is a step of that message. Every other
+  command is a step of "Typed in the terminal" by whoever entered it: You, or an Agent working
+  from outside Rho. Commands with no pause over 30 minutes are one group. A command spans from
+  its start to its end. A file that changed while it ran is drawn as changed by it (observed),
+  and a change between commands is not the terminal's. The groups are not messages, so they are
+  not "Asked" or "Answered", the page counts them apart ("5 recorded steps, all typed in a
+  terminal"), and the person's typing is in their own lane. A step says "In the terminal · typed
+  by You" and reads all its output.
+- **One command per change in Commands.** A file's change was shown under every command within a
+  second of it, so `clear` showed the `high.csv` that the next command wrote. A change inside one
+  command's start and end is now that command's alone.
+- **The Agent's grant limit is 128.** With `console.terminal.output` the default Agent grant
+  held 97 methods, one over the limit of 96, and Rho refused to grant it. As at 64, the smallest
+  step was taken: `layeredGrantLimits.maxMethods` is 128, and a larger grant is still refused.
+
+![The Graph with a terminal command selected: Rscript clean.R, typed by You, ran clean.R and changed high.csv while it ran](figures/graph-terminal-command.jpg)
+
+![Commands with the full screen less left and the start of seq's 341 KB, which Show all reads whole](figures/commands-full-output.jpg)
+
+### Verification
+
+- Rho-plugins on macOS: bash, zsh, `/bin/sh` (bash), dash and ksh93. Each records a person's and
+  an Agent's commands, a line both typed, a forged mark, `printf "a\nb"; false` as Exit 1, a
+  loop typed over three lines with its output, and four lines typed in one write while the first
+  ran. The first full run of the shell tests on Debian 12 arm64 failed fish (its escape kept the
+  newline `string replace` adds), `/bin/sh` (dash keeps no history file) and `ksh` (mksh, above).
+  The earlier screen test then failed once: it typed before dash's prompt. After the changes
+  above, bash, fish 3.6, sh (dash), dash, ksh93u+m and mksh (not marked) passed. A command's
+  output past its record (`seq 1 20000` under small limits) came back whole in pages: the gap's
+  place and size, the last lines, a printf full screen, and the oldest file let go past the
+  budget. Console tests: 17 of 17 on macOS, 19 of 19 twice on Debian.
+- A throwaway project in a real browser at 1600 × 940 with the person's own zsh, each
+  screenshot read. The person typed `Rscript clean.R && ls data`, `seq 1 60000` and
+  `less data/ozone.csv` (then `q`), and the Agent typed `wc -l data/*.csv`. All five were
+  recorded with who typed them. `seq` kept 348,894 bytes, read back in 64 Ki pages, all within
+  the kept start. The `less` screen was first shown blank: less paints a short file from the
+  bottom, under 33 blank rows. The view now leaves out the blank rows above and below. In the
+  Graph the first reading showed "Typed in the terminal … Answered", "Asked 2" and
+  "2 messages". Now the line reads Terminal · 4 steps · 1 file made, the Rscript step ran
+  `clean.R` and changed `high.csv`, the Agent's command is "Claude Code in the terminal", and the
+  Overview reads "What you and the Agent did". The figures were taken at 1440 × 740.
+- Rho: tests for the merge and grouping of terminal commands and for the Graph (a change between
+  two commands is neither's, no "Answered", the step's words), and for an Agent paging a
+  command's output through the service. The full suite passed 357 of 360 with the debug Core, 3
+  skipped (Windows only). The frontend, plugin-dx, sources, graph and agent-canvas acceptances
+  passed. Rho-plugins passed 225 of 228, 2 skipped. The one failure was a kernel test that counts
+  fork folders in the shared temporary folder while other tests run; it passed alone 2 of 2.
+
+### Left open
+
+- This is the builder's reading. The user has not seen it.
+- tcsh and csh are not recorded, nor mksh or pdksh. A prompt the person sets in an sh-like shell
+  replaces the marks, and their commands are then not recorded.
+- A line rewritten after its line feed, as a progress display does, is kept as it first stood.
+- An Agent outside Rho is not tied to its own session's messages. Its commands form a line of
+  their own beside the session, which may show the same work as tool calls.
+- A file that changed again later shows only its last change, as for an Agent's commands.

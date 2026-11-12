@@ -11,6 +11,10 @@
         "maximum": 200,
         "minimum": 1,
         "type": "integer"
+      },
+      "offset": {
+        "minimum": 0,
+        "type": "integer"
       }
     },
     "required": [
@@ -57,6 +61,10 @@
                 }
               ]
             },
+            "enteredBy": {
+              "minLength": 1,
+              "type": "string"
+            },
             "exit": {
               "anyOf": [
                 {
@@ -70,6 +78,10 @@
             "output": {
               "type": "string"
             },
+            "outputBytes": {
+              "minimum": 0,
+              "type": "integer"
+            },
             "problem": {
               "anyOf": [
                 {
@@ -79,6 +91,10 @@
                   "type": "null"
                 }
               ]
+            },
+            "screens": {
+              "minimum": 0,
+              "type": "integer"
             },
             "startedAt": {
               "minLength": 1,
@@ -91,6 +107,13 @@
                 "unknown"
               ]
             },
+            "stored": {
+              "type": "boolean"
+            },
+            "storedBytes": {
+              "minimum": 0,
+              "type": "integer"
+            },
             "terminalId": {
               "pattern": "^t-[a-f0-9]{16}$",
               "type": "string"
@@ -102,11 +125,16 @@
             "command",
             "cwd",
             "by",
+            "enteredBy",
             "startedAt",
             "endedAt",
             "state",
             "exit",
             "output",
+            "outputBytes",
+            "stored",
+            "storedBytes",
+            "screens",
             "cut",
             "problem"
           ],
@@ -125,5 +153,5 @@
     ],
     "type": "object"
   },
-  "description": "The commands run in the project's terminals, newest first, as a zsh or bash shell marked them: who typed each (the person, an Agent or both), the folder, the exit status and the start of what it printed. Kept across restarts of Rho."
+  "description": "The commands run in the project's terminals, newest first from offset, as their shell (zsh, bash, fish, sh, dash or ksh93) marked them: who typed each (the person, an Agent or both), the folder, the exit status and the start of what it printed. Kept across restarts of Rho."
 }

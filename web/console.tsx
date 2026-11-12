@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { BrowserClient, WorkspaceSnapshot } from '../src/browser.js';
+import { terminalName } from './terminal-turns.js';
 import { CommandLine, CommandRecord, TerminalCommandRecord, useCommandLine, useCommands, useTerminalCommands, type ConsoleCommand, type TerminalCommand } from '@rho-workspace/plugin-console/ui';
-import { agentDisplayName } from './brand-marks.js';
 import { buildWorkGraph, type GraphNode, type WorkGraph } from '../src/work-graph.js';
 import { briefOf, durationText, inProject, several } from '../src/conversation-presentation.js';
 import { executionWord, type RunFacts } from '../src/execution-facts.js';
@@ -43,7 +43,15 @@ function QuietRun({ runs, root, onPath, onRunAgain }: { runs: GraphNode[]; root:
 }
 type Item = { at: number; key: string; agent?: GraphNode; changed?: GraphNode[]; quiet?: GraphNode[]; mine?: ConsoleCommand; typed?: TerminalCommand };
 // Who typed a terminal command: the person at this machine is You; an Agent goes by its name.
-const typist = (snapshot: WorkspaceSnapshot) => (principal: string) => principal === 'browser:local' ? 'You' : agentDisplayName(snapshot.agents?.find(a => a.principal === principal)?.label ?? 'An Agent');
+const typist = terminalName;
+// What changed on disk between a command's start and end: seen, not claimed. A change within one
+// command's start and end is that command's alone; one within a second around its start or end
+// (a clock's or a file system's rounding) is its when no other command ran then.
+type Ran = { startedAt: string; endedAt: string | null };
+function heldBy(all: Ran[], r: Ran, at: number) {
+  const within = (x: Ran, slack: number) => at >= Date.parse(x.startedAt) - slack && at <= (x.endedAt ? Date.parse(x.endedAt) : Date.now()) + slack;
+  return within(r, 0) || (within(r, 1000) && !all.some(o => o !== r && within(o, 0)));
+}
 // A message's commands in the order they ran; those in a row that changed no file and ended
 // cleanly go together.
 function commandItems(graph: WorkGraph, runs: GraphNode[]): Item[] {
@@ -134,10 +142,7 @@ export function ConsolePage({ client, snapshot, files, focusTurn, onPath, onConv
   const finished = [...mine ?? [], ...typed ?? []].filter(r => r.state !== 'running').length;
   useEffect(() => { if (mine || typed) files.refresh(); }, [finished]);
   // What changed on disk between a command's start and end: seen, not claimed.
-  const changedDuring = (r: { startedAt: string; endedAt: string | null }) => {
-    const from = Date.parse(r.startedAt), to = r.endedAt ? Date.parse(r.endedAt) + 1000 : Date.now();
-    return files.files.filter(f => f.category && f.modifiedAt && Date.parse(f.modifiedAt) >= from - 1000 && Date.parse(f.modifiedAt) <= to).slice(0, 8);
-  };
+  const changedDuring = (r: Ran) => files.files.filter(f => f.category && f.modifiedAt && heldBy([...mine ?? [], ...typed ?? []], r, Date.parse(f.modifiedAt))).slice(0, 8);
   const messages = [...graph.turns].sort((a, b) => b.start - a.start).filter(t => graph.nodes.some(n => n.kind === 'run' && n.turn === t.id));
   // One story, newest first: each message's commands, and the commands the person ran and the
   // commands typed in the terminals between them.
@@ -164,7 +169,7 @@ export function ConsolePage({ client, snapshot, files, focusTurn, onPath, onConv
       ? <Message key={block.turn.id} graph={graph} turn={block.turn} root={snapshot.project.root} onPath={onPath} onConversation={onConversation} focused={focusTurn === block.turn.id} onRunAgain={off ? undefined : line.prepare} />
       : block.kind === 'terminal' ? <section key={block.typed[0]!.commandId} className="console-message terminal" aria-label="In the terminal">
           <header><strong>In the terminal</strong><small>{day(block.typed.at(-1)!.startedAt)} · {block.typed.length} {block.typed.length === 1 ? 'command' : 'commands'}{typedBy(block.typed, who)}{block.typed.some(c => c.state === 'running') ? ' · running' : ''}</small></header>
-          <ol className="console-list">{block.typed.map(command => <Typed key={command.commandId} command={command} who={who} changed={changedDuring(command)} onPath={onPath} />)}</ol>
+          <ol className="console-list">{block.typed.map(command => <Typed key={command.commandId} command={command} who={who} changed={changedDuring(command)} onPath={onPath} client={client} projectId={projectId} />)}</ol>
         </section>
       : <section key={block.records[0]!.commandId} className="console-message mine" aria-label="Your commands">
           <header><strong>You ran</strong><small>{day(block.records.at(-1)!.startedAt)} · {block.records.length} {block.records.length === 1 ? 'command' : 'commands'}{block.records.some(r => r.state === 'running') ? ' · running' : ''}</small></header>
@@ -199,8 +204,8 @@ function typedBy(commands: TerminalCommand[], who: (principal: string) => string
   return names.length === 1 && names[0] === 'You' ? '' : ' · ' + (names.length > 1 ? names.slice(0, -1).join(', ') + ' and ' + names.at(-1) : 'by ' + names[0]);
 }
 // A command typed in a terminal, from the Console plugin, with the files that changed while it ran.
-function Typed({ command, who, changed, onPath }: { command: TerminalCommand; who: (principal: string) => string; changed: Array<{ path: string; name: string }>; onPath: (path: string) => void }) {
-  return <TerminalCommandRecord command={command} who={who} made={changed.length > 0} after={<Changed files={changed} onPath={onPath} />} />;
+function Typed({ command, who, changed, onPath, client, projectId }: { command: TerminalCommand; who: (principal: string) => string; changed: Array<{ path: string; name: string }>; onPath: (path: string) => void; client: BrowserClient; projectId: string }) {
+  return <TerminalCommandRecord command={command} who={who} made={changed.length > 0} after={<Changed files={changed} onPath={onPath} />} client={client} projectId={projectId} />;
 }
 // A command the person ran, from the Console plugin, with the files that changed while it ran.
 function Mine({ record, client, projectId, changed, onPath, line }: { record: ConsoleCommand; client: BrowserClient; projectId: string; changed: Array<{ path: string; name: string }>; onPath: (path: string) => void; line: ReturnType<typeof useCommandLine> }) {
@@ -234,15 +239,12 @@ export function CommandPane({ client, snapshot }: { client: BrowserClient; snaps
   const finished = (mine ?? []).filter(r => r.state !== 'running').length;
   useEffect(() => { if (mine) void read(); }, [finished]);
   const showPath = (path: string) => process?.showPath(path);
-  const changedDuring = (r: { startedAt: string; endedAt: string | null }) => {
-    const from = Date.parse(r.startedAt), to = r.endedAt ? Date.parse(r.endedAt) + 1000 : Date.now();
-    return (process?.files ?? []).filter(f => f.versions.some(v => v.at >= from - 1000 && v.at <= to)).map(f => ({ path: f.path, name: f.title }));
-  };
+  const changedDuring = (r: Ran) => (process?.files ?? []).filter(f => f.versions.some(v => heldBy([...mine ?? [], ...typed ?? []], r, v.at))).map(f => ({ path: f.path, name: f.title }));
   if (!process) return <p className="console-note">Commands show in a conversation's Studio.</p>;
   return <div className="command-pane">
     <ol ref={list} className="console-list command-pane-list" onScroll={event => { const e = event.currentTarget; atEnd.current = e.scrollHeight - e.scrollTop - e.clientHeight < 24; }}>
       {!items.length && <li className="console-note">No commands yet. The commands the Agent runs in this conversation appear here, and you can run your own below.</li>}
-      {items.map(item => item.typed ? <Typed key={item.key} command={item.typed} who={who} changed={changedDuring(item.typed)} onPath={showPath} />
+      {items.map(item => item.typed ? <Typed key={item.key} command={item.typed} who={who} changed={changedDuring(item.typed)} onPath={showPath} client={client} projectId={projectId} />
         : !item.mine ? <ItemRow key={item.key} item={item} root={snapshot.project.root} onPath={showPath} onRunAgain={at === null && !off ? line.prepare : undefined} />
         : <Mine key={item.key} record={item.mine!} client={client} projectId={projectId} changed={changedDuring(item.mine!)} onPath={showPath} line={line} />)}
     </ol>

@@ -243,10 +243,10 @@
       "sha256": "141beab5dfd7c89ff302d8c94b40894117dba1bef449a44268a436911f5789e8"
     },
     "console.terminal.commands": {
-      "summary": "The commands run in the project's terminals, newest first, as a zsh or bash shell marked them: who typed each (the person, an Agent or both), the folder, the exit status and the start of what it printed. Kept across restarts of Rho.",
+      "summary": "The commands run in the project's terminals, newest first from offset, as their shell (zsh, bash, fish, sh, dash or ksh93) marked them: who typed each (the person, an Agent or both), the folder, the exit status and the start of what it printed. Kept across restarts of Rho.",
       "path": "operations/console.terminal.commands.json",
-      "bytes": 3051,
-      "sha256": "d8e006db5765011b3c9af37c5f8d17d3c6fcd8fdf12b33e2924f79c8f287e3ec"
+      "bytes": 3773,
+      "sha256": "44004fab91ed263d99fa3137ca533fc78a83020f94ceaa9abfcbe4580bdfaa40"
     },
     "console.terminal.list": {
       "summary": "The open terminals in this project, with who opened each, who else last typed there, each one's size, how much it has printed and whether its shell has ended.",
@@ -259,6 +259,12 @@
       "path": "operations/console.terminal.open.json",
       "bytes": 4333,
       "sha256": "8d48197a75f1d10a77dd3c3c83bd587abaee01dabc442f1a8ea887bae6afef00"
+    },
+    "console.terminal.output": {
+      "summary": "All a terminal command printed that is kept, in pages from a character offset: its start and its end, with a gap where the middle was not kept, and the last full screens a program drew in it.",
+      "path": "operations/console.terminal.output.json",
+      "bytes": 2657,
+      "sha256": "795d0c1ca3258316f7256565b7ff7af1e63c7944f4605ef441014597480b2dd9"
     },
     "console.terminal.read": {
       "summary": "Person at this machine only, for the page that draws it: the bytes a terminal printed after an offset, in base64, waiting up to waitMs when there is nothing new. Bytes older than the kept scrollback are counted in dropped.",
@@ -827,8 +833,8 @@
     "session.grant": {
       "summary": "session.grant",
       "path": "operations/session.grant.json",
-      "bytes": 5522,
-      "sha256": "9e989cb7b233e7e1595b7f151d7c7359f0bc14c1865fe63199021850643d33de"
+      "bytes": 5561,
+      "sha256": "aafbf3a479049a08ae27fef459b474c6adc6c12a3c5e47f172763385d58c38b5"
     },
     "session.instructions": {
       "summary": "Person at this machine or operator only: read a prompt for the person's own MCP client to connect itself to this existing project. Returns local launcher paths, never credential contents. Reading or copying grants no access, edits no client configuration and starts no runtime.",

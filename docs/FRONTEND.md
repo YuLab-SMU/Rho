@@ -152,9 +152,12 @@ inspect what happened. The application gives those actions direct places:
   a new one, and a project keeps four at once. An Agent may use it too
   ([episode](SIMULATED-PROJECT-EPISODE.md#the-agent-in-the-terminal)): it reads what the screen
   shows as text and types there, and the view says who last did and when; a terminal an Agent
-  opened of its own is offered here to show, and the person's own is offered back. A zsh or bash
-  terminal [records its commands](SIMULATED-PROJECT-EPISODE.md#each-workspace-notebook-its-own-and-the-terminals-commands)
-  with who typed each, and keeps a shell history of its own, apart from the machine's. Only the
+  opened of its own is offered here to show, and the person's own is offered back. A terminal
+  [records its commands](SIMULATED-PROJECT-EPISODE.md#each-workspace-notebook-its-own-and-the-terminals-commands)
+  with who typed each (zsh, bash, fish, sh, dash and ksh93; [not mksh or tcsh](SIMULATED-PROJECT-EPISODE.md#every-shells-commands-whole-and-in-the-graph)),
+  and keeps a shell history of its own, apart from the machine's. A terminal command's row shows
+  the start of what it printed and reads all that is kept, and the full screen a program such as
+  `less` left, when asked. Only the
   person at this machine draws one; a tab opened from a link shows Commands. It needs `python3`
   on macOS or Linux; on Windows the view says so and offers Commands. Commands is the record
   the Console page showed, also opened by the board's command count.
@@ -483,6 +486,11 @@ inspect what happened. The application gives those actions direct places:
   reported it, a command named it or a change was seen on disk, and it is drawn on the
   deepest open node that stands for the step it was recorded on. Nothing is left out
   for size: what is drawn is what is open, and Close all returns to the lines.
+  Commands typed in a terminal are steps too
+  ([episode](SIMULATED-PROJECT-EPISODE.md#every-shells-commands-whole-and-in-the-graph)): an
+  Agent's within the message it was answering, the rest under Typed in the terminal by whoever
+  entered them, which is not a message and is not answered; a file is a command's when it
+  changed while that command ran.
   Choosing a finding or choice lights the files it rests on and the work behind them,
   names how many recorded steps that is, and offers the step that wrote it, traced by
   the first kept version of the notes that holds it. Choosing a file shows the version

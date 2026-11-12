@@ -1,0 +1,127 @@
+{
+  "method": "console.terminal.output",
+  "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "projectId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "commandId": {
+        "pattern": "^tc-[a-f0-9]{16}$",
+        "type": "string"
+      },
+      "maxChars": {
+        "maximum": 65536,
+        "minimum": 1,
+        "type": "integer"
+      },
+      "offset": {
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "projectId",
+      "commandId"
+    ],
+    "type": "object"
+  },
+  "outputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "commandId": {
+        "type": "string"
+      },
+      "gap": {
+        "anyOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "at": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "bytes": {
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "at",
+              "bytes"
+            ],
+            "type": "object"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "more": {
+        "type": "boolean"
+      },
+      "nextOffset": {
+        "minimum": 0,
+        "type": "integer"
+      },
+      "offset": {
+        "minimum": 0,
+        "type": "integer"
+      },
+      "problem": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "screens": {
+        "items": {
+          "additionalProperties": false,
+          "properties": {
+            "at": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "lines": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "at",
+            "lines"
+          ],
+          "type": "object"
+        },
+        "type": "array"
+      },
+      "text": {
+        "type": "string"
+      },
+      "total": {
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "commandId",
+      "text",
+      "offset",
+      "nextOffset",
+      "more",
+      "total",
+      "gap",
+      "screens",
+      "problem"
+    ],
+    "type": "object"
+  },
+  "description": "All a terminal command printed that is kept, in pages from a character offset: its start and its end, with a gap where the middle was not kept, and the last full screens a program drew in it."
+}

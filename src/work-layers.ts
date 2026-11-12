@@ -32,6 +32,8 @@ export interface WorkNode {
   // A line of work: its section of the notes when it has one, its conversations, and whether it
   // changed any project file or says anything.
   section?: SessionMeaning; conversations?: string[]; agents?: string[]; quiet?: boolean;
+  // An ask that is commands typed in a terminal, not a message; a line of only such asks.
+  terminal?: boolean;
   // An ask: the message as the Graph names it (conversation/message), and its answer.
   turn?: string; conversationId?: string; agent?: string; state?: string; text?: string; answer?: string;
   // An activity.
@@ -164,6 +166,8 @@ function activityTitle(kind: ActivityKind, steps: Raw[], first: boolean) {
   return steps.some(s => s.tool) ? 'Looked at the project' : 'Said something';
 }
 
+const people = (all: string[]) => all.length > 1 ? all.slice(0, -1).join(', ') + ' and ' + all.at(-1) : all[0] ?? 'someone';
+
 export function buildWorkLayers(input: LayersInput): WorkLayers {
   const { graph, project } = input, meanings = input.meanings ?? [], traces = input.traces ?? new Map<Statement, Trace>();
   const nodes = new Map<string, WorkNode>(), touches: Touch[] = [], artifacts = new Map<string, Artifact>();
@@ -206,12 +210,12 @@ export function buildWorkLayers(input: LayersInput): WorkLayers {
   const asks: WorkNode[] = [], toolStep = new Map<string, string>(), notesSteps = new Map<string, Array<{ id: string; at: number }>>();
   // The conversations that have written in the notes, and what each message's record says happened to a file on disk.
   const begun = new Set<string>(), changes = new Map<string, 'added' | 'modified' | 'removed'>();
-  for (const { conversationId, conversationTitle, agent, turn: message, observation } of ordered) {
+  for (const { conversationId, conversationTitle, agent, turn: message, observation, terminal } of ordered) {
     const turn = conversationId + '/' + message.id, question = byId.get('q:' + turn);
     const sent = time(message.sentAt) ?? input.now, start = time(message.startedAt) ?? sent, running = message.state === 'running';
     const end = time(message.endedAt) ?? (running ? input.now : start);
     const ask: WorkNode = { id: askId(turn), level: 'ask', parent: null, children: [], title: firstLine(askedAbout(message.text).question) || 'A message', said: conversationTitle,
-      start: sent, end: Math.max(end, sent), running, steps: 0, failed: 0, turn, conversationId, agent, state: message.state, text: message.text, ...(question?.answer ? { answer: question.answer } : {}) };
+      start: sent, end: Math.max(end, sent), running, steps: 0, failed: 0, turn, conversationId, agent, state: message.state, text: message.text, ...(question?.answer ? { answer: question.answer } : {}), ...(terminal ? { terminal: true } : {}) };
     nodes.set(ask.id, ask); asks.push(ask);
     for (const file of message.files?.changed ?? []) changes.set(ask.id + '\n' + file.path, file.change);
     const raws: Raw[] = [];
@@ -242,7 +246,7 @@ export function buildWorkLayers(input: LayersInput): WorkLayers {
         const a = s.activity, cell = s.step.operation === 'kernel.run';
         const title = !s.tool ? (s.error ? 'Error: ' : '') + sentence(s.text ?? '', 200) : cell ? (a!.outcome === 'requested' ? 'Running a cell' : 'Ran a cell') : [a!.verb, a!.target].filter(Boolean).join(' ');
         const failed = s.tool ? a!.outcome !== 'returned' && a!.outcome !== 'requested' : !!s.error;
-        const step: WorkNode = { id: s.id, level: 'step', parent: activity.id, children: [], title: title || 'A step', ...(s.step.purpose ? { said: s.step.purpose } : {}), start: s.from, end: s.at, running: false, steps: 1, failed: failed ? 1 : 0,
+        const step: WorkNode = { id: s.id, level: 'step', parent: activity.id, children: [], title: title || 'A step', ...(s.step.purpose ? { said: s.step.purpose } : s.step.terminal ? { said: 'In the terminal · typed by ' + people(s.step.terminal.by) } : {}), start: s.from, end: s.at, running: false, steps: 1, failed: failed ? 1 : 0,
           key: s.key, action: s.tool ? a!.action : s.error ? 'error' : 'say', outcome: s.tool ? a!.outcome : s.error ? 'error' : 'said', record: s.step, ...(a ? { activity: a } : {}), ...(runs.has(s.id) ? { run: runs.get(s.id)! } : {}), turn, conversationId, agent };
         nodes.set(step.id, step); activity.children.push(step.id);
       }
@@ -321,6 +325,7 @@ export function buildWorkLayers(input: LayersInput): WorkLayers {
   sum(root);
   for (const node of lines.values()) {
     node.quiet = !claimed.has(node.id) && !node.children.some(id => madeBy.get(id)?.size);
+    if (node.children.length && node.children.every(id => nodes.get(id)?.terminal)) node.terminal = true;
     if (!Number.isFinite(node.start)) { const at = claims.filter(c => c.line === node.id).map(c => c.trace?.written?.at ?? 0).filter(Boolean); node.start = at.length ? Math.min(...at) : 0; node.end = at.length ? Math.max(...at) : 0; }
   }
   if (!Number.isFinite(root.start)) root.start = 0;

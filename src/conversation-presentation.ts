@@ -12,7 +12,9 @@ export function agentTurnLimit(turn: { state: string; problem?: string | null; r
 // the row's disclosure; nothing here starts or reads an owner.
 export type ConversationRead = RhoOutput<'conversation.read'>;
 type WireTurn = ConversationRead['turns'][number];
-export type ConversationStep = WireTurn['steps'][number] & { failed?: boolean; outcomeAt?: string };
+// A command typed in a project terminal (terminal-work.ts): who typed it, by name, and what the terminal kept.
+export interface TerminalStep { commandId: string; terminalId: string; cwd: string; by: string[]; enteredBy: string; stored: boolean; screens: number; problem: string | null }
+export type ConversationStep = WireTurn['steps'][number] & { failed?: boolean; outcomeAt?: string; terminal?: TerminalStep };
 export type ConversationTurn = Omit<WireTurn, 'steps'> & { steps: ConversationStep[] };
 export type SessionObservation = NonNullable<ConversationRead['observation']>;
 // A command that ran and exited with a failing code failed; the Agent may report it as refused.

@@ -2,6 +2,8 @@ import { useContext, useCallback, useEffect, useLayoutEffect, useMemo, useRef, u
 import { ShellContext } from './shell-services.js';
 import { Snapshot } from './snapshot.js';
 import type { BrowserClient, WorkspaceSnapshot } from '../src/browser.js';
+import { useTerminalTurns } from './terminal-turns.js';
+import { personPrincipal } from '../src/terminal-work.js';
 import { buildWorkGraph, foldVersions, type FileKind, type GraphEvent, type GraphNode, type GraphTurn, type WorkGraph as Graph } from '../src/work-graph.js';
 import { ancestors, buildWorkLayers, flows, isNotes, lineFiles, shownAs, support, trajectory, type Claim, type WorkLayers, type WorkNode } from '../src/work-layers.js';
 import { layoutLayers, type Item, type Scene, type Wire } from '../src/layers-layout.js';
@@ -13,6 +15,7 @@ import { Icon, type IconName } from './icons.js';
 import { BrandMark, brandOf } from './brand-marks.js';
 import { size } from './project.js';
 import { AgentMarkdown } from './markdown.js';
+import { TerminalOutput } from '@rho-workspace/plugin-console/ui';
 import { readPreview, type Preview } from './previews.js';
 import { useTurns } from './work-turns.js';
 import { clock, failed, kindOfAction, span, stretchSizes, timelineKinds, type TimelineKind } from './timeline-kinds.js';
@@ -35,11 +38,13 @@ const levelLabel: Record<WorkNode['level'], string> = { workspace: 'Workspace', 
 const activityIcon: Record<string, IconName> = { look: 'search', cells: 'braces', build: 'code', notes: 'document', answer: 'chat' };
 const stepIcon = (node: WorkNode): IconName => node.action === 'say' ? 'chat' : node.action === 'error' ? 'info' : node.action === 'read' ? 'eye' : node.action === 'edit' || node.action === 'write' ? 'pencil'
   : node.action === 'execute' ? 'run' : node.action === 'search' ? 'search' : node.record?.operation === 'kernel.run' ? 'braces' : 'tool';
-const workIcon = (node: WorkNode): IconName => node.level === 'line' ? 'workflow' : node.level === 'ask' ? 'question' : node.level === 'activity' ? activityIcon[node.kind ?? ''] ?? 'tool' : stepIcon(node);
+const workIcon = (node: WorkNode): IconName => node.level === 'line' ? 'workflow' : node.level === 'ask' ? (node.terminal ? 'monitor' : 'question') : node.level === 'activity' ? activityIcon[node.kind ?? ''] ?? 'tool' : stepIcon(node);
 const fileIcon = (category: FileKind): IconName => category === 'figures' ? 'image' : category === 'code' ? 'code' : category === 'notes' ? 'document' : category ? 'table' : 'file';
 const fileLabel = (category: FileKind) => ({ data: 'Data', code: 'Script', results: 'Result', figures: 'Figure', notes: 'Note' } as Record<string, string>)[category ?? ''] ?? 'File';
 const isPicture = (path: string) => /\.(png|jpe?g|svg)$/i.test(path);
 const ended: Record<string, string> = { completed: 'Answered', failed: 'Failed', stopped: 'Stopped', running: 'Working', unknown: 'Outcome unknown' };
+// How an ask ended; commands typed in a terminal were not answered.
+const askEnd = (node: WorkNode) => node.terminal ? (node.state === 'running' ? 'Running' : '') : ended[node.state ?? ''] ?? node.state;
 const outcomes: Record<string, string> = { returned: 'Returned', requested: 'Running', failed: 'Failed', rejected: 'Refused', unknown: 'Outcome unknown' };
 const grounds: Record<Claim['ground'], string> = { made: '', named: 'No recorded step made the files it names', none: 'Names no file' };
 // A command's output opens at its end, where its result or error is.
@@ -91,7 +96,9 @@ export function WorkGraph({ initialResource, client, snapshot, files, agentNow, 
   onFollow: () => void; onStopFollowing: () => void; onStudio: (compositionId: string, viewId?: string) => void; workspace: () => string;
   onAbout: (pluginId: string) => void; onAgent: (conversationId?: string) => void;
 }) {
-  const { turns, sessions, read, problem, loading, omitted } = useTurns(client, snapshot, undefined, true);
+  const { turns: messages, sessions, read, problem, loading, omitted } = useTurns(client, snapshot, undefined, true);
+  // With what was typed in the project's terminals.
+  const turns = useTerminalTurns(client, snapshot, messages);
   const { marks } = useEventMarks(client, snapshot, turns);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => { if (!agentNow?.running) return; const timer = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer); }, [agentNow?.running]);
@@ -342,7 +349,8 @@ export function WorkGraph({ initialResource, client, snapshot, files, agentNow, 
 
   const near = view.k >= 0.56;
   const dim = (id: string) => !!((focus && !focus.has(id)) || (found && !found.shown.has(id)));
-  const counts = { lines: lines.filter(l => !l.quiet).length, asks: [...layers.nodes.values()].filter(n => n.level === 'ask').length, steps: layers.nodes.get(layers.root)!.steps, claims: layers.claims.length };
+  const counts = { lines: lines.filter(l => !l.quiet).length, asks: [...layers.nodes.values()].filter(n => n.level === 'ask' && !n.terminal).length, steps: layers.nodes.get(layers.root)!.steps, claims: layers.claims.length,
+    typed: [...layers.nodes.values()].filter(n => n.level === 'step' && n.record?.terminal).length };
   const wireOn = (w: Wire) => !!focus && focus.has(w.from) && focus.has(w.to) && (target?.kind !== 'file' || w.from === selected || w.to === selected || items.get(w.from)?.ref === target.path || items.get(w.to)?.ref === target.path);
   const flag = (id: string) => liveItem === id && live ? (agentNow?.agent ?? 'Agent') + ' · ' + live.label : null;
   const holds = (path: string) => meaning.holds(path);
@@ -382,7 +390,7 @@ export function WorkGraph({ initialResource, client, snapshot, files, agentNow, 
               return <WorkRow {...common} node={node} current={!!current && eventWork(current) !== null && shownAs(layers, eventWork(current)!, open) === item.id} flag={flag(item.id)} waiting={!!waitingWork && shownAs(layers, waitingWork, open) === item.id} onToggle={() => toggle(item.id)} />;
             })}
           </div>
-          {focus && target && <div className="graph-overlay"><span>{target.kind === 'claim' ? 'What this statement rests on, and the work that made it' : target.kind === 'file' ? <>The work that touched <strong>{target.path.split('/').at(-1)}</strong> and what is concluded from it</> : target.node.level === 'step' ? 'The files in this step' : 'What this ' + levelLabel[target.node.level].toLowerCase() + ' used and made'}</span><button className="small-button" onClick={() => setSelected(null)}>Show everything</button></div>}
+          {focus && target && <div className="graph-overlay"><span>{target.kind === 'claim' ? 'What this statement rests on, and the work that made it' : target.kind === 'file' ? <>The work that touched <strong>{target.path.split('/').at(-1)}</strong> and what is concluded from it</> : target.node.level === 'step' ? 'The files in this step' : target.node.terminal ? 'What these commands used and made' : 'What this ' + levelLabel[target.node.level].toLowerCase() + ' used and made'}</span><button className="small-button" onClick={() => setSelected(null)}>Show everything</button></div>}
           {current && <div className="graph-caption" role="status" aria-live="polite"><time>{clock(current.at, true)}</time><span>{caption(current, processNodes)}</span></div>}
           <div className="graph-nav">
           <MiniMap scene={scene} view={view} canvas={canvas} dim={dim} live={liveItem} moves={moves} onMove={setView} />
@@ -413,9 +421,9 @@ export function WorkGraph({ initialResource, client, snapshot, files, agentNow, 
   </section>;
 }
 
-function GraphHead({ counts, omitted = 0, reading, children }: { counts: { lines: number; asks: number; steps: number; claims: number } | null; omitted?: number; reading?: { read: number; of: number } | null; children?: ReactNode }) {
+function GraphHead({ counts, omitted = 0, reading, children }: { counts: { lines: number; asks: number; steps: number; claims: number; typed: number } | null; omitted?: number; reading?: { read: number; of: number } | null; children?: ReactNode }) {
   return <header className="graph-head">
-    <div className="graph-heading"><h1 id="graph-title">Graph</h1><p>{counts ? `What was done here: ${plural(counts.lines, 'line', 'lines')} of work, ${plural(counts.asks, 'message')}, ${plural(counts.steps, 'recorded step')}.` : 'What was done in this project, from its lines of work down to each recorded step.'}
+    <div className="graph-heading"><h1 id="graph-title">Graph</h1><p>{counts ? `What was done here: ${plural(counts.lines, 'line', 'lines')} of work, ${counts.asks ? plural(counts.asks, 'message') + ', ' : ''}${plural(counts.steps, 'recorded step')}${counts.typed ? counts.typed === counts.steps ? ', all typed in a terminal' : `, ${counts.typed} of them typed in a terminal` : ''}.` : 'What was done in this project, from its lines of work down to each recorded step.'}
       {counts && counts.claims > 0 && ` The notes conclude ${plural(counts.claims, 'thing')} from it.`}{reading && ` Reading session ${reading.read + 1} of ${reading.of}…`}{omitted > 0 && ` ${plural(omitted, 'earlier message')} could not be read.`}</p></div>
     {children && <div className="graph-tools">{children}</div>}
   </header>;
@@ -437,7 +445,8 @@ const Flag = ({ text, waiting }: { text: string; waiting: boolean }) => <span cl
 function lineFacts(layers: WorkLayers, node: WorkNode) {
   const claims = layers.claims.filter(c => c.line === node.id), findings = claims.filter(c => c.kind === 'finding').length, choices = claims.length - findings;
   const made = lineFiles(layers, node.id).made.length, failedAsks = node.children.filter(id => layers.nodes.get(id)!.state === 'failed').length;
-  return [plural(node.children.length, 'message'), plural(node.steps, 'step'), made ? plural(made, 'file') + ' made' : '', findings ? plural(findings, 'finding') : '', choices ? plural(choices, 'choice') : '', failedAsks ? failedAsks + ' failed' : ''].filter(Boolean);
+  const asks = node.children.filter(id => !layers.nodes.get(id)!.terminal).length;
+  return [asks ? plural(asks, 'message') : '', plural(node.steps, 'step'), made ? plural(made, 'file') + ' made' : '', findings ? plural(findings, 'finding') : '', choices ? plural(choices, 'choice') : '', failedAsks ? failedAsks + ' failed' : ''].filter(Boolean);
 }
 
 function LineCard({ item, node, layers, figure, client, snapshot, near, selected, dimmed, later, flag, waiting, onSelect, onToggle }: CardProps & { node: WorkNode; layers: WorkLayers; figure?: GraphNode; client: BrowserClient; snapshot: WorkspaceSnapshot; near: boolean; flag: string | null; waiting: boolean; onToggle: () => void }) {
@@ -471,7 +480,7 @@ function Frame({ item, node, layers, selected, dimmed, onSelect, onToggle }: { i
 function WorkRow({ item, node, selected, dimmed, later, current, flag, waiting, onSelect, onToggle }: CardProps & { node: WorkNode; current: boolean; flag: string | null; waiting: boolean; onToggle: () => void }) {
   const can = node.level !== 'step' && node.children.length > 0;
   const bad = node.level === 'step' ? node.failed > 0 : node.level === 'ask' && node.state === 'failed';
-  const meta = node.level === 'ask' ? [node.agent, plural(node.steps, 'step'), took(node), ended[node.state ?? ''] ?? node.state].filter(Boolean).join(' · ')
+  const meta = node.level === 'ask' ? [node.agent, plural(node.steps, 'step'), took(node), askEnd(node)].filter(Boolean).join(' · ')
     : node.level === 'activity' ? [plural(node.steps, 'step'), node.rounds && node.rounds > 1 ? node.rounds + ' rounds' : '', node.failed ? node.failed + ' failed' : ''].filter(Boolean).join(' · ')
     : [node.outcome && node.outcome !== 'returned' && node.outcome !== 'said' ? (outcomes[node.outcome] ?? node.outcome) : '', clock(node.end, true)].filter(Boolean).join(' · ');
   return <div className={'graph-node lg-row level-' + node.level + (item.open ? ' open' : '') + (node.kind ? ' kind-' + node.kind : '') + (node.action ? ' action-' + node.action : '')} data-node={item.id} data-kind={node.level} style={place(item)}
@@ -605,8 +614,8 @@ function Inspector({ target, layers, process, turns, holds, newest, waiting, cli
   const fileLink = (path: string, note?: string) => link((lineId ?? '') + '|' + path, fileIcon(layers.artifacts.get(path)?.category ?? kindOf(path)), path, note);
   // Where a node sits: the line, message and activity above it.
   const above = node ? ancestors(layers, node.id).slice(1).filter(id => id !== layers.root).reverse() : [];
-  const title = node ? (node.level === 'step' && node.run ? 'Ran a command' : node.level === 'ask' ? 'You asked' : node.title) : claim ? line?.title ?? 'In the notes' : target.kind === 'file' ? target.path.split('/').at(-1)! : '';
-  const kind = node ? (node.level === 'line' && node.quiet ? 'Conversation' : levelLabel[node.level]) : claim ? (claim.kind === 'finding' ? 'Finding' : 'Choice') + ' · in the notes' : fileLabel(category);
+  const title = node ? (node.level === 'step' && node.run ? 'Ran a command' : node.level === 'ask' ? (node.terminal ? node.title : 'You asked') : node.title) : claim ? line?.title ?? 'In the notes' : target.kind === 'file' ? target.path.split('/').at(-1)! : '';
+  const kind = node ? (node.terminal ? (node.level === 'ask' ? 'Terminal' : 'Line of work · in a terminal') : node.level === 'line' && node.quiet ? 'Conversation' : levelLabel[node.level]) : claim ? (claim.kind === 'finding' ? 'Finding' : 'Choice') + ' · in the notes' : fileLabel(category);
   const icon = node ? workIcon(node) : claim ? (claim.kind === 'finding' ? 'check' : 'updown') : fileIcon(category);
 
   return <aside className="graph-inspector" aria-label={kind + ' ' + title}>
@@ -620,9 +629,9 @@ function Inspector({ target, layers, process, turns, holds, newest, waiting, cli
       {waiting && <Choice key={waiting.permission} waiting={waiting} client={client} projectId={snapshot.project.id} />}
       {node?.level === 'line' && <LineSaid node={node} layers={layers} onSelect={onSelect} onOpenAll={onOpenAll} onAgent={onAgent} link={link} />}
       {node?.level === 'ask' && <section className="graph-said"><p className="graph-question">{node.text}</p>
-        <p className="graph-facts">{[node.agent, ended[node.state ?? ''] ?? node.state, took(node) && 'took ' + took(node), plural(node.steps, 'recorded step')].filter(Boolean).join(' · ')}</p>
+        <p className="graph-facts">{[node.agent, askEnd(node), took(node) && 'took ' + took(node), plural(node.steps, 'recorded step')].filter(Boolean).join(' · ')}</p>
         {node.answer && <div className="graph-answer"><AgentMarkdown text={node.answer} streaming={node.state === 'running'} /></div>}
-        <div className="graph-actions"><button onClick={() => onAgent(node.conversationId)}><Icon name="prompt" size={15} />Show the conversation</button>{node.steps > 0 && <button onClick={() => onOpenAll(node.id)}><Icon name="list" size={15} />Show every step</button>}</div>
+        <div className="graph-actions">{!node.terminal && <button onClick={() => onAgent(node.conversationId)}><Icon name="prompt" size={15} />Show the conversation</button>}{node.steps > 0 && <button onClick={() => onOpenAll(node.id)}><Icon name="list" size={15} />Show every step</button>}</div>
         {node.children.length > 0 && <><h3 className="caption">What it did</h3><ol className="graph-relations">{node.children.map(id => link(id, workIcon(work(id)!), work(id)!.title, plural(work(id)!.steps, 'step')))}</ol></>}</section>}
       {node?.level === 'activity' && <section className="graph-said">
         {node.said && <blockquote className="lg-quote">{node.said}<cite>{node.agent ?? 'The Agent'}, before it began</cite></blockquote>}
@@ -652,13 +661,13 @@ function LineSaid({ node, layers, onSelect, onOpenAll, onAgent, link }: { node: 
   return <section className="graph-said">
     {node.said && <p className="graph-question">{node.said}</p>}
     <p className="graph-facts">{[...lineFacts(layers, node), node.agents?.join(', '), todos.length ? `${todos.filter(t => t.done).length} of ${todos.length} to-dos done` : ''].filter(Boolean).join(' · ')}</p>
-    <div className="graph-actions">{node.steps > 0 && <button onClick={() => onOpenAll(node.id)}><Icon name="list" size={15} />Show every step</button>}{node.conversations?.[0] && <button onClick={() => onAgent(node.conversations![0])}><Icon name="prompt" size={15} />Show the conversation</button>}</div>
+    <div className="graph-actions">{node.steps > 0 && <button onClick={() => onOpenAll(node.id)}><Icon name="list" size={15} />Show every step</button>}{node.conversations?.find(c => !c.startsWith('terminal:')) && <button onClick={() => onAgent(node.conversations!.find(c => !c.startsWith('terminal:')))}><Icon name="prompt" size={15} />Show the conversation</button>}</div>
     {!node.section && !node.quiet && <p className="muted">The notes have no section for this work, so nothing says what was concluded from it.</p>}
     {claims.length > 0 && <><h3 className="caption">Concluded in the notes</h3><ul className="graph-relations lg-claims">{claims.map(c => link(c.id, c.kind === 'finding' ? 'check' : 'updown', c.text, grounds[c.ground] || undefined))}</ul></>}
     {files.made.length > 0 && <><h3 className="caption">Made</h3><ul className="graph-relations">{files.made.map(f => link(node.id + '|' + f.path, fileIcon(layers.artifacts.get(f.path)?.category ?? null), f.path, f.existing ? 'was here before' : undefined))}</ul></>}
     {into.length > 0 && <><h3 className="caption">Builds on</h3><ul className="graph-relations">{into.map(f => link(f.from, 'workflow', layers.nodes.get(f.from)!.title, plural(f.paths.length, 'file')))}</ul></>}
     {out.length > 0 && <><h3 className="caption">Built on by</h3><ul className="graph-relations">{out.map(f => link(f.to, 'workflow', layers.nodes.get(f.to)!.title, plural(f.paths.length, 'file')))}</ul></>}
-    <h3 className="caption">Messages</h3><ol className="graph-relations">{node.children.map(id => { const ask = layers.nodes.get(id)!; return link(id, 'question', ask.title, [plural(ask.steps, 'step'), ended[ask.state ?? ''] ?? ask.state].join(' · ')); })}</ol>
+    <h3 className="caption">{node.terminal ? 'Typed in a terminal' : 'Messages'}</h3><ol className="graph-relations">{node.children.map(id => { const ask = layers.nodes.get(id)!; return link(id, 'question', ask.terminal ? clock(ask.start, true) + ' · ' + ask.title : ask.title, [plural(ask.steps, 'step'), askEnd(ask)].filter(Boolean).join(' · ')); })}</ol>
   </section>;
 }
 
@@ -669,7 +678,8 @@ function StepSaid({ node, turns, layers, client, snapshot, cursor, fileLink }: {
   const evidence = turns.find(t => t.conversationId + '/' + t.turn.id === node.turn)?.turn.evidence;
   const kept = step.id ? evidence?.records.filter(r => r.phase.split(':')[1] === step.id).flatMap(r => r.snapshots.map(s => ({ path: r.path, ...s }))).filter(s => cursor === null || Date.parse(s.observedAt) <= cursor) ?? [] : [];
   const output = run?.output ?? (step.output ? { text: step.output.text, lines: step.output.lines, cut: step.output.cut } : undefined);
-  const facts = [node.action === 'say' ? node.agent ?? 'The Agent' : step.tool, step.operation, node.outcome && node.outcome !== 'said' ? (run?.end ?? outcomes[node.outcome] ?? node.outcome) : '', run?.durationMs ? 'took ' + durationText(run.durationMs) : '', clock(node.end, true)].filter(Boolean).join(' · ');
+  const terminal = step.terminal;
+  const facts = [node.action === 'say' ? node.agent ?? 'The Agent' : terminal ? 'Terminal' : step.tool, terminal ? (terminal.cwd ? 'in ' + terminal.cwd + '/' : 'in the project folder') : '', step.operation, node.outcome && node.outcome !== 'said' ? (run?.end ?? outcomes[node.outcome] ?? node.outcome) : '', run?.durationMs ? 'took ' + durationText(run.durationMs) : '', clock(node.end, true)].filter(Boolean).join(' · ');
   return <section className="graph-said">
     {node.said && <p className="lg-purpose">{node.said}</p>}
     {node.action === 'say' || node.action === 'error' ? <div className="graph-answer"><AgentMarkdown text={step.text ?? ''} streaming={false} /></div>
@@ -677,7 +687,9 @@ function StepSaid({ node, turns, layers, client, snapshot, cursor, fileLink }: {
       : step.detail ? <pre className="graph-command">{step.detail}</pre> : null}
     <p className="graph-facts">{facts}</p>
     {run?.ran && run.ran !== run.command && <p className="graph-facts">As run: <code>{run.ran}</code></p>}
-    {output && <><h3 className="caption">{output.text ? output.cut ? `Printed · last ${output.text.split('\n').length} of ${output.lines} lines` : 'Printed' : 'Printed nothing'}</h3>{output.text && <pre className="graph-output" ref={atEnd}>{output.text}</pre>}</>}
+    {terminal ? <><h3 className="caption">Printed</h3><div className="graph-terminal-output"><TerminalOutput client={client} projectId={snapshot.project.id}
+        command={{ commandId: terminal.commandId, output: step.output?.text ?? '', outputBytes: step.output?.bytes ?? 0, stored: terminal.stored, screens: terminal.screens, state: node.outcome === 'requested' ? 'running' : 'exited', problem: terminal.problem }} /></div></>
+      : output && <><h3 className="caption">{output.text ? output.cut ? `Printed · last ${output.text.split('\n').length} of ${output.lines} lines` : 'Printed' : 'Printed nothing'}</h3>{output.text && <pre className="graph-output" ref={atEnd}>{output.text}</pre>}</>}
     {touched.length > 0 && <><h3 className="caption">Files in this step</h3><ul className="graph-relations">{[...new Set(touched.map(t => t.path))].map(path => fileLink(path, touched.filter(t => t.path === path).map(t => t.verb).join(' · ')))}</ul></>}
     {kept.map(s => <div key={s.path + s.resource.version} className="lg-kept"><h3 className="caption">{s.path} as kept after this step</h3><Snapshot client={client} projectId={snapshot.project.id} resource={s.resource} path={s.path} /></div>)}
     {node.action !== 'say' && node.action !== 'error' && !run && !step.detail && !output && !kept.length && <p className="muted">The record keeps no more of this step than that it happened and how it ended.</p>}
@@ -791,7 +803,8 @@ function Timeline({ graph, marks = [], cursor, playing, running, speed, onSpeed,
     const out: Array<{ id: string; title: string; agent: string; who: Who; start: number; turns: typeof graph.turns }> = [];
     for (const t of [...graph.turns].sort((a, b) => a.start - b.start)) {
       const lane = out.find(l => l.id === t.conversationId);
-      if (lane) lane.turns.push(t); else out.push({ id: t.conversationId, title: t.title, agent: t.agent, who: 'conversation', start: t.start, turns: [t] });
+      // The person's own typing in a terminal is in their lane.
+      if (lane) lane.turns.push(t); else out.push({ id: t.conversationId, title: t.title, agent: t.agent, who: t.terminal && t.conversationId === 'terminal:' + personPrincipal ? 'person' : 'conversation', start: t.start, turns: [t] });
     }
     for (const m of marks) if (!out.some(l => l.id === m.lane)) out.push({ id: m.lane, title: m.laneTitle, agent: m.agent ?? '', who: m.who, start: m.at, turns: [] });
     const rank = (who: Who) => who === 'person' ? 0 : who === 'conversation' ? 1 : 2;
@@ -853,7 +866,7 @@ function Timeline({ graph, marks = [], cursor, playing, running, speed, onSpeed,
   const head = cursor === null ? width : toX(cursor);
   const duration = graph.turns.reduce((sum, t) => sum + (t.end - t.start), 0);
   const counts = timelineKinds.map(k => ({ ...k, count: blocks.filter(b => b.kind === k.key).length })).filter(k => k.count > 0);
-  const refused = blocks.filter(b => b.failed).length, conversations = lanes.filter(l => l.who === 'conversation').length, yours = marks.filter(m => m.who === 'person').length;
+  const refused = blocks.filter(b => b.failed).length, conversations = lanes.filter(l => l.who === 'conversation' && !l.turns.every(t => t.terminal)).length, yours = marks.filter(m => m.who === 'person').length;
   // Each stretch's ticks, at the shortest step that leaves 72 px between labels; a label nearer the
   // one before it than 60 px, in another stretch too, or one that would start past the end, is left out.
   const ticks: Array<{ at: number; x: number; first: boolean; label: string }> = [];
@@ -866,7 +879,8 @@ function Timeline({ graph, marks = [], cursor, playing, running, speed, onSpeed,
   const pauses = stretches.slice(1).map((s, i) => ({ x: offsets[i + 1] - gap, length: s.start - stretches[i].end }));
   const nodes = useMemo(() => new Map(graph.nodes.map(n => [n.id, n])), [graph.nodes]);
   const Frame = compact ? 'div' : 'footer';
-  const summary = [graph.turns.length ? `${graph.turns.length} ${graph.turns.length === 1 ? 'message' : 'messages'} · ${span(duration)}` : '', conversations > 1 ? `${conversations} conversations` : '', yours ? `${yours} by you` : ''].filter(Boolean).join(' · ');
+  const asked = graph.turns.filter(t => !t.terminal).length;
+  const summary = [asked ? `${asked} ${asked === 1 ? 'message' : 'messages'}` : '', graph.turns.length ? span(duration) : '', conversations > 1 ? `${conversations} conversations` : '', yours ? `${yours} by you` : ''].filter(Boolean).join(' · ');
   return <Frame className={'graph-timeline' + (compact ? ' compact' : '') + (only ? ' only-' + only : '')} aria-label="Timeline">
     <div className="tl-head">
       {!compact && <button className="graph-play" aria-label={playing ? 'Pause' : 'Play the work from the start'} onClick={onPlay}><Icon name={playing ? 'pause' : 'run'} size={16} /></button>}
@@ -921,7 +935,8 @@ function Timeline({ graph, marks = [], cursor, playing, running, speed, onSpeed,
 // The Overview's glance at the same record: the timeline without its controls, and the way to
 // the Graph. It reads the conversations as the Graph does, and shows nothing until they are read.
 export function WorkStrip({ client, snapshot, files, onOpen, onConversations }: { initialResource?: {id:string;version:string}|null; client: BrowserClient; snapshot: WorkspaceSnapshot; files: ProjectFiles; onOpen: () => void; onConversations: () => void }) {
-  const { turns, loading } = useTurns(client, snapshot);
+  const { turns: messages, loading } = useTurns(client, snapshot);
+  const turns = useTerminalTurns(client, snapshot, messages);
   const { marks } = useEventMarks(client, snapshot, turns);
   const graph = useMemo(() => buildWorkGraph({ turns, files: files.files.map(f => ({ path: f.path, bytes: f.bytes, modifiedAt: f.modifiedAt, category: f.category })), project: snapshot.project, kindOf, now: Date.now() }),
     [turns, files.files, snapshot.project]);
@@ -929,7 +944,7 @@ export function WorkStrip({ client, snapshot, files, onOpen, onConversations }: 
   const files_ = graph.nodes.filter(n => n.kind === 'file' && n.events.some(e => e.action === 'edit' || e.action === 'write' || e.action === 'changed')).length;
   const last = Math.max(graph.events.at(-1)?.at ?? 0, marks.at(-1)?.at ?? 0), days = Math.round((new Date().setHours(0, 0, 0, 0) - new Date(last).setHours(0, 0, 0, 0)) / 864e5);
   const lastWords = (days === 0 ? 'today' : days === 1 ? 'yesterday' : new Date(last).toLocaleDateString()) + ' at ' + clock(last);
-  const conversations = new Set(turns.map(t => t.conversationId)).size, yours = marks.some(m => m.who === 'person');
+  const conversations = new Set(turns.filter(t => !t.terminal).map(t => t.conversationId)).size, yours = marks.some(m => m.who === 'person') || turns.some(t => t.terminal && t.turn.by === personPrincipal);
   const title = !graph.events.length ? 'What you did' : yours ? 'What you and the Agent did' : 'What the Agent did';
   return <section className="project-section work-strip" aria-labelledby="work-strip-title">
     {/* Questions and commands are counted by the kinds under the heading; the line keeps the rest. */}

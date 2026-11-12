@@ -155,7 +155,8 @@ export function layoutLayers(layers: WorkLayers, open: ReadonlySet<string>, opti
   if (quiet.length) {
     // Conversations that changed no project file stand below the work, each still opening the same way.
     const top = height + (main.length ? 56 : 0);
-    items.push({ id: 'label|quiet', kind: 'label', ref: main.length ? 'Asked without changing a file' : 'Asked', line: '', x: 0, y: top, width: 320, height: S.label });
+    const typed = quiet.every(l => l.terminal), noneTyped = quiet.every(l => !l.terminal);
+    items.push({ id: 'label|quiet', kind: 'label', ref: (typed ? 'Typed in a terminal' : noneTyped ? 'Asked' : 'Asked or typed') + (main.length ? ' without changing a file' : ''), line: '', x: 0, y: top, width: 320, height: S.label });
     const asked = row(quiet, top + S.label + 4, 16, 16);
     width = Math.max(width, asked.width); height = asked.bottom;
   }

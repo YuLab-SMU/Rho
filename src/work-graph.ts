@@ -1,4 +1,4 @@
-import { commandEnd, conversationBlocks, displayCommand, segments, stepDuration, type ActivityOutcome, type ConversationTurn, type SessionObservation } from './conversation-presentation.js';
+import { commandEnd, conversationBlocks, displayCommand, segments, stepDuration, type ActivityOutcome, type ConversationStep, type ConversationTurn, type SessionObservation } from './conversation-presentation.js';
 import { askedAbout } from './asking.js';
 import type { Statement, Trace } from './notes-meaning.js';
 import type { Holds } from './file-describer.js';
@@ -64,8 +64,9 @@ export function ranFiles(command: string, project: PathScope) {
 
 export type FileKind = 'data' | 'code' | 'figures' | 'notes' | 'results' | null;
 export interface GraphFile { path: string; bytes: number; modifiedAt?: string; category: FileKind }
+// `terminal`: commands typed in a project terminal, not a message to an Agent (terminal-work.ts).
 export interface GraphTurn { conversationId: string; conversationTitle: string; agent: string; turn: ConversationTurn; observation?: SessionObservation | null;
-  external?: boolean; kernelCells?: string[]; reportedResults?: Array<{ path: string; at: string; resource?: { id: string; version: string } }> }
+  external?: boolean; terminal?: boolean; kernelCells?: string[]; reportedResults?: Array<{ path: string; at: string; resource?: { id: string; version: string } }> }
 export interface GraphInput {
   turns: GraphTurn[]; files: GraphFile[]; project: PathScope;
   // The kind of a file the last walk did not see, from its name.
@@ -91,6 +92,8 @@ export interface GraphNode {
   // for, how it ended (its exit code when the Agent reported one), how long it ran and the
   // last lines it printed.
   command?: string; ran?: string; purpose?: string; outcome?: ActivityOutcome; end?: string | null; durationMs?: number | null; output?: { text: string; lines: number; cut: boolean };
+  // A command typed in a project terminal: who typed it and what the terminal kept of it.
+  terminal?: ConversationStep['terminal'];
   // A native permission request for this step that waits for the person.
   waiting?: { conversationId: string; turn: string; permission: string; title: string; options: Array<{ id: string; name: string; kind: string }> };
   // The events that touched this node, oldest first.
@@ -99,7 +102,7 @@ export interface GraphNode {
 // The message an edge was recorded in: a file one message made and a later one read is drawn
 // with that later message.
 export interface GraphEdge { id: string; from: string; to: string; label: string; basis: Basis; at: number; turn: string }
-export interface GraphTurnSpan { id: string; conversationId: string; title: string; agent: string; start: number; end: number; running: boolean }
+export interface GraphTurnSpan { id: string; conversationId: string; title: string; agent: string; start: number; end: number; running: boolean; terminal?: boolean }
 export interface WorkGraph { nodes: GraphNode[]; edges: GraphEdge[]; events: GraphEvent[]; turns: GraphTurnSpan[]; live: { node: string; label: string; waiting?: boolean } | null }
 
 // Nothing is left out of the graph for its size: every message that was read is in it. What a page
@@ -139,7 +142,7 @@ export function buildWorkGraph(input: GraphInput): WorkGraph {
   };
   const note = (node: GraphNode, event: Omit<GraphEvent, 'node'>) => { const full = { ...event, node: node.id }; node.events.push(full); events.push(full); node.at = Math.min(node.at, event.at); };
 
-  ordered.forEach(({ conversationId, conversationTitle, agent, turn: message, observation, external, reportedResults }, position) => {
+  ordered.forEach(({ conversationId, conversationTitle, agent, turn: message, observation, external, terminal, reportedResults }, position) => {
     // Message identities are per conversation; the graph names each by both.
     const turn = { ...message, id: conversationId + '/' + message.id };
     inTurn = turn.id; evidence = turn.evidence;
@@ -150,8 +153,9 @@ export function buildWorkGraph(input: GraphInput): WorkGraph {
     const next = position + 1 < ordered.length ? time(ordered[position + 1].turn.sentAt) ?? Infinity : Infinity;
     const q: GraphNode = { id: 'q:' + turn.id, kind: 'question', title: firstLine(askedAbout(turn.text).question) || 'A message', text: turn.text, at: sent, turn: turn.id, conversationId, agent, state: turn.state, model: turn.model ?? null, events: [] };
     nodes.set(q.id, q);
-    note(q, { key: turn.id + ':ask', at: sent, turn: turn.id, action: 'ask', label: 'Asked' });
-    spans.push({ id: turn.id, conversationId, title: conversationTitle, agent, start: sent, end: Math.max(end, sent), running });
+    // Typing in a terminal asks nothing.
+    if (!terminal) note(q, { key: turn.id + ':ask', at: sent, turn: turn.id, action: 'ask', label: 'Asked' });
+    spans.push({ id: turn.id, conversationId, title: conversationTitle, agent, start: sent, end: Math.max(end, sent), running, ...(terminal ? { terminal: true } : {}) });
 
     const blocks = conversationBlocks(turn, observation ?? null, input.project.root);
     const activities = blocks.flatMap(block => block.kind === 'activity' ? block.activities : []);
@@ -162,7 +166,9 @@ export function buildWorkGraph(input: GraphInput): WorkGraph {
       // once it has. A finished step ran from the step before it until then.
       const at = time(activity.step.at) ?? start;
       const before = index ? time(activities[index - 1].step.at) ?? start : start;
-      const window = external ? { from: at, to: at } : activity.outcome === 'requested' ? { from: at, to: end } : { from: Math.min(before, at), to: at };
+      // A terminal recorded when its command started and ended.
+      const window = activity.step.terminal ? { from: time(activity.step.startedAt) ?? at, to: activity.outcome === 'requested' ? end : at }
+        : external ? { from: at, to: at } : activity.outcome === 'requested' ? { from: at, to: end } : { from: Math.min(before, at), to: at };
       // A refused step did nothing; a command that ran and failed did, and stays.
       if (activity.outcome === 'rejected') return;
       const isLive = running && index === activities.length - 1 && activity.outcome === 'requested';
@@ -170,7 +176,7 @@ export function buildWorkGraph(input: GraphInput): WorkGraph {
         // A command is drawn from the start of its window, so what it made follows it in a replay.
         const command = activity.step.detail ?? activity.target ?? 'a command', from = window.from, step = activity.step;
         const run: GraphNode = { id: 'r:' + turn.id + ':' + index, kind: 'run', title: shortCommand(displayCommand(command)), command: displayCommand(command), ran: command, ...(step.purpose ? { purpose: step.purpose } : {}), at: from, turn: turn.id, outcome: activity.outcome,
-          end: commandEnd(step), durationMs: stepDuration(step), ...(step.output ? { output: { text: step.output.text, lines: step.output.lines, cut: step.output.cut } } : {}), events: [] };
+          end: commandEnd(step), durationMs: stepDuration(step), ...(step.output ? { output: { text: step.output.text, lines: step.output.lines, cut: step.output.cut } } : {}), ...(step.terminal ? { terminal: step.terminal } : {}), events: [] };
         nodes.set(run.id, run);
         if (activity.step.id) byStep.set(activity.step.id, run.id);
         note(run, { key: activity.key, at: from, turn: turn.id, action: 'run', label: activity.outcome === 'requested' ? 'Running' : 'Ran', outcome: activity.outcome });
@@ -220,6 +226,8 @@ export function buildWorkGraph(input: GraphInput): WorkGraph {
     for (const { path, at: modified, removed } of seen) {
       if (modified === null || changed.has(path)) continue;
       const during = removed ? undefined : [...runs].reverse().find(run => modified >= run.from && modified <= run.to + settleMs);
+      // Typing in a terminal is not a message: only what changed while one of its commands ran is its.
+      if (terminal && !during) continue;
       const node = fileNode(path, modified), verb = removed ? 'Removed' : 'Changed';
       note(node, { key: turn.id + ':changed:' + path, at: modified, turn: turn.id, action: 'changed', label: during ? verb + ' while ' + during.node.title + ' ran' : removed ? 'Removed' : 'Changed on disk' });
       if (during) { edges.delete(node.id + '>' + during.node.id + ':named'); edge(during.node.id, node.id, 'changed while it ran', 'observed', modified); }
@@ -242,7 +250,7 @@ export function buildWorkGraph(input: GraphInput): WorkGraph {
       note(node, { key: turn.id + ':result:' + path, at, turn: turn.id, action: 'report', label: 'Reported result' });
       edge(q.id, node.id, 'reported result', 'reported', at);
     }
-    if (!running && time(turn.endedAt) !== null) note(q, { key: turn.id + ':answer', at: end, turn: turn.id, action: 'answer', label: turn.state === 'completed' ? 'Answered' : turn.state === 'failed' ? 'Failed' : turn.state === 'stopped' ? 'Stopped' : 'Ended' });
+    if (!running && !terminal && time(turn.endedAt) !== null) note(q, { key: turn.id + ':answer', at: end, turn: turn.id, action: 'answer', label: turn.state === 'completed' ? 'Answered' : turn.state === 'failed' ? 'Failed' : turn.state === 'stopped' ? 'Stopped' : 'Ended' });
     if (running && !live) live = { node: q.id, label: 'Working' };
     // A step that waits for the person's choice says so where it is drawn.
     const pending = running ? turn.permissions?.find(p => p.state === 'pending') : undefined;

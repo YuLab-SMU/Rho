@@ -864,7 +864,7 @@ The selected Agent source candidate is 0.4.3; Documents/Tables/Annotations keep
 `agentConnection(..., pluginFilter, profile)` explicitly chooses
 `layered-business` or `layered-presentation`. Existing descriptors without a
 profile retain compatibility behavior. A layered descriptor has at most
-`layeredGrantLimits.maxMethods` methods (96 since the Notebook; 64 before), and a
+`layeredGrantLimits.maxMethods` methods (128 since terminal command output; 96 since the Notebook; 64 before), and a
 default business grant that would exceed this is refused, never cut. The Agent pages
 through its methods 20 at a time, so the limit bounds the grant rather than the Agent's
 context. In the current composition the default business grant has 68. Its authenticated principal retains the profile and plugin filter;

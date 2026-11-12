@@ -19905,6 +19905,10 @@ export const ownerContracts: OwnerContractSnapshot = {
                 "maximum": 200,
                 "minimum": 1,
                 "type": "integer"
+              },
+              "offset": {
+                "minimum": 0,
+                "type": "integer"
               }
             },
             "required": [],
@@ -19949,6 +19953,10 @@ export const ownerContracts: OwnerContractSnapshot = {
                         }
                       ]
                     },
+                    "enteredBy": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
                     "exit": {
                       "anyOf": [
                         {
@@ -19962,6 +19970,10 @@ export const ownerContracts: OwnerContractSnapshot = {
                     "output": {
                       "type": "string"
                     },
+                    "outputBytes": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
                     "problem": {
                       "anyOf": [
                         {
@@ -19971,6 +19983,10 @@ export const ownerContracts: OwnerContractSnapshot = {
                           "type": "null"
                         }
                       ]
+                    },
+                    "screens": {
+                      "minimum": 0,
+                      "type": "integer"
                     },
                     "startedAt": {
                       "minLength": 1,
@@ -19983,6 +19999,13 @@ export const ownerContracts: OwnerContractSnapshot = {
                         "unknown"
                       ]
                     },
+                    "stored": {
+                      "type": "boolean"
+                    },
+                    "storedBytes": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
                     "terminalId": {
                       "pattern": "^t-[a-f0-9]{16}$",
                       "type": "string"
@@ -19994,11 +20017,16 @@ export const ownerContracts: OwnerContractSnapshot = {
                     "command",
                     "cwd",
                     "by",
+                    "enteredBy",
                     "startedAt",
                     "endedAt",
                     "state",
                     "exit",
                     "output",
+                    "outputBytes",
+                    "stored",
+                    "storedBytes",
+                    "screens",
                     "cut",
                     "problem"
                   ],
@@ -20359,6 +20387,128 @@ export const ownerContracts: OwnerContractSnapshot = {
             },
             "required": [
               "terminal"
+            ],
+            "type": "object"
+          },
+          "requires": []
+        },
+        "console.terminal.output": {
+          "effect": "read",
+          "inputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "commandId": {
+                "pattern": "^tc-[a-f0-9]{16}$",
+                "type": "string"
+              },
+              "maxChars": {
+                "maximum": 65536,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "offset": {
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "commandId"
+            ],
+            "type": "object"
+          },
+          "outputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "commandId": {
+                "type": "string"
+              },
+              "gap": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "at": {
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "bytes": {
+                        "minimum": 0,
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "at",
+                      "bytes"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "more": {
+                "type": "boolean"
+              },
+              "nextOffset": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "offset": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "problem": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "screens": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "at": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "lines": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "at",
+                    "lines"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "text": {
+                "type": "string"
+              },
+              "total": {
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "commandId",
+              "text",
+              "offset",
+              "nextOffset",
+              "more",
+              "total",
+              "gap",
+              "screens",
+              "problem"
             ],
             "type": "object"
           },
@@ -27803,12 +27953,12 @@ export const ownerContracts: OwnerContractSnapshot = {
     },
     "console": {
       "package": "@rho-workspace/plugin-console",
-      "packageVersion": "0.3.4",
+      "packageVersion": "0.3.5",
       "entry": "./operations",
       "entryPath": "@rho-workspace/plugin-console/dist/operations.js",
-      "entrySha256": "db4e2441959206815eb7ced7cc8b6329a6eb7ca0773e10997097790b5e08a7b9",
+      "entrySha256": "a74dbb5005a0160a0e474fa4009ba2d061759dead8adc0fa8be3a482161a2abc",
       "exports": {
-        "operationContracts": "02e2b6a785c546ec0df3fc31947308feaa3415c48b272e5c3742dc26e6b7d048"
+        "operationContracts": "863982da784d0762b2e351c731dca436bdf07b274c8701300d7c642fb6f24934"
       }
     },
     "kernel": {

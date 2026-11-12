@@ -58,6 +58,7 @@
             "console.terminal.commands",
             "console.terminal.list",
             "console.terminal.open",
+            "console.terminal.output",
             "console.terminal.read",
             "console.terminal.resize",
             "console.terminal.screen",
