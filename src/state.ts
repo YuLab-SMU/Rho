@@ -278,6 +278,15 @@ export class State {
       if (await fs.readFile(note, 'utf8').catch(() => '') !== rhoFolderNote) await fs.writeFile(note, rhoFolderNote).catch(() => {});
     }
   }
+  // A listed project's record, to take it off the list. Its folder is not read, so a project
+  // whose folder is gone from disk can still be removed.
+  listed(id: string, principal: Principal) {
+    requireThat(!principal.projectId || principal.projectId === id, 'scope', 'Credential belongs to a different project.');
+    const project = this.projects.find(p => p.id === id);
+    requireThat(project, 'not_found', 'Project is not registered.');
+    requireThat(this.visible(project, principal), 'scope', 'Project is outside this credential’s selected folders.');
+    return project;
+  }
   async project(id: string, principal: Principal) {
     requireThat(!principal.projectId || principal.projectId === id, 'scope', 'Credential belongs to a different project.');
     const project = this.projects.find(p => p.id === id);

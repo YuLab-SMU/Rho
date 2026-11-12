@@ -39,6 +39,10 @@
         "maxLength": 200,
         "type": "string"
       },
+      "replaces": {
+        "pattern": "^k-[a-f0-9]{16}$",
+        "type": "string"
+      },
       "waitMs": {
         "maximum": 600000,
         "minimum": 0,
@@ -283,6 +287,10 @@
               "type": "string"
             },
             "type": "array"
+          },
+          "replaces": {
+            "pattern": "^k-[a-f0-9]{16}$",
+            "type": "string"
           },
           "saved": {
             "items": {
@@ -674,5 +682,5 @@
     ],
     "type": "object"
   },
-  "description": "Run a cell of R or Python in a live session of that language: the project's own, where an Agent's cells run, unless notebook names a notebook, whose sessions are its own (each Notebook on a person's workspace has one). What one cell defines stays for the next in that session. Starts the session when none is live, on this machine or at a place on one of the person's servers (place, or where kernel.places says that language runs next). interpreter names the program a session on this machine starts with, in a folder of the project such as .venv/bin/python; the project keeps it for that language's later sessions, and each cell records the program and version that ran it. The same changeId from the same caller returns the same cell and never runs it twice. waitMs waits for the cell to end."
+  "description": "Run a cell of R or Python in a live session of that language: the project's own, where an Agent's cells run, unless notebook names a notebook, whose sessions are its own (each Notebook on a person's workspace has one). What one cell defines stays for the next in that session. Starts the session when none is live, on this machine or at a place on one of the person's servers (place, or where kernel.places says that language runs next). interpreter names the program a session on this machine starts with, in a folder of the project such as .venv/bin/python; the project keeps it for that language's later sessions, and each cell records the program and version that ran it. replaces names an ended cell of the same notebook and language: the new cell is run in its place, where a notebook shows it, and the earlier run stays in the record. The same changeId from the same caller returns the same cell and never runs it twice. waitMs waits for the cell to end."
 }

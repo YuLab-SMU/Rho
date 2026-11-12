@@ -21178,6 +21178,115 @@ export const ownerContracts: OwnerContractSnapshot = {
     },
     "kernel": {
       "operationContracts": {
+        "kernel.complete": {
+          "effect": "read",
+          "inputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "language": {
+                "enum": [
+                  "r",
+                  "python"
+                ]
+              },
+              "line": {
+                "maxLength": 4096,
+                "type": "string"
+              },
+              "notebook": {
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "language",
+              "line"
+            ],
+            "type": "object"
+          },
+          "outputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "from": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "items": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "label": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "type": {
+                      "enum": [
+                        "variable",
+                        "function",
+                        "property",
+                        "argument",
+                        "keyword",
+                        "file",
+                        "name"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "label",
+                    "type"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "omitted": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "problem": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "sessionId": {
+                "anyOf": [
+                  {
+                    "pattern": "^s-[a-f0-9]{16}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "state": {
+                "enum": [
+                  "shown",
+                  "busy",
+                  "none",
+                  "timeout",
+                  "failed",
+                  "ended"
+                ]
+              }
+            },
+            "required": [
+              "state",
+              "sessionId",
+              "from",
+              "items",
+              "omitted",
+              "problem"
+            ],
+            "type": "object"
+          },
+          "requires": []
+        },
         "kernel.events": {
           "effect": "read",
           "inputSchema": {
@@ -21996,6 +22105,10 @@ export const ownerContracts: OwnerContractSnapshot = {
                       "type": "string"
                     },
                     "type": "array"
+                  },
+                  "replaces": {
+                    "pattern": "^k-[a-f0-9]{16}$",
+                    "type": "string"
                   },
                   "saved": {
                     "items": {
@@ -23382,6 +23495,10 @@ export const ownerContracts: OwnerContractSnapshot = {
                       },
                       "type": "array"
                     },
+                    "replaces": {
+                      "pattern": "^k-[a-f0-9]{16}$",
+                      "type": "string"
+                    },
                     "saved": {
                       "items": {
                         "additionalProperties": false,
@@ -23821,6 +23938,10 @@ export const ownerContracts: OwnerContractSnapshot = {
                 "maxLength": 200,
                 "type": "string"
               },
+              "replaces": {
+                "pattern": "^k-[a-f0-9]{16}$",
+                "type": "string"
+              },
               "waitMs": {
                 "maximum": 600000,
                 "minimum": 0,
@@ -24064,6 +24185,10 @@ export const ownerContracts: OwnerContractSnapshot = {
                       "type": "string"
                     },
                     "type": "array"
+                  },
+                  "replaces": {
+                    "pattern": "^k-[a-f0-9]{16}$",
+                    "type": "string"
                   },
                   "saved": {
                     "items": {
@@ -27963,12 +28088,12 @@ export const ownerContracts: OwnerContractSnapshot = {
     },
     "kernel": {
       "package": "@rho-workspace/plugin-kernel",
-      "packageVersion": "0.5.20",
+      "packageVersion": "0.5.21",
       "entry": "./operations",
       "entryPath": "@rho-workspace/plugin-kernel/dist/operations.js",
-      "entrySha256": "7c744c6aec112fe116bfc4ce55cdd80c728cd726c69a18dcf28a666e75897e17",
+      "entrySha256": "9f626696719aaa5afe1994da1a11548b327c388b9dddd8efe6534f03edbab15d",
       "exports": {
-        "operationContracts": "64ffa8b94dffb3ba0455c55cd15d416048320838b60b52a29b0036e90fb5f1f2"
+        "operationContracts": "cb0212800a7aeebdfe4b2769b7965dc61dc1086381cc07703702892df4f13343"
       }
     },
     "figures": {

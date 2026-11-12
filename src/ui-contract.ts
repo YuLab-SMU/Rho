@@ -92,6 +92,20 @@ export interface ShellServices {
   languageExtensions?(path: string): Promise<unknown[]>;
   // Code highlighted as the named language, as text and spans; null for a language Rho lacks.
   highlight?(code: string, language: string): Promise<DocumentFragment | null>;
+  // A box to write code in, made in `parent` with Rho's editor: the language's colours, matching
+  // and closing brackets, indentation, undo, and the names `complete` offers for the line up to
+  // the cursor (`from` is where the name being typed starts in that line). Shift+Enter, or Enter
+  // with Ctrl or Cmd, calls onRun; Escape calls onCancel when the view gives one, and otherwise
+  // lets the next Tab leave the box. Tab indents, or offers names after one being typed.
+  codeBox?(parent: HTMLElement, options: {
+    language: string; value: string; label: string; placeholder?: string; wrap?: boolean;
+    onChange(value: string): void; onRun?(): void; onCancel?(): void;
+    complete?(line: string): Promise<{ from: number; items: ReadonlyArray<{ label: string; type: string }> } | null>;
+  }): Promise<{
+    setValue(value: string): void; update(now: { language?: string; label?: string; placeholder?: string }): void;
+    // Takes the keyboard, at the end of the code or at a point of the page.
+    focus(at?: { x: number; y: number }): void; destroy(): void;
+  }>;
   // Markdown read as the Agent panel reads it: prose, lists and code, with no raw HTML.
   markdown?(text: string): ReactNode;
   // Runs code from a view (a script's line) as the person's cell in the live session of its

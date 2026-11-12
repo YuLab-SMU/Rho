@@ -38,6 +38,8 @@ on the same folder: files, figures, tables, a live R and Python Notebook and not
 Open a folder in Rho, in the browser, starting Rho in the background when it is not running
 (the current folder without FOLDER; rho open --help for its options):
   rho open [FOLDER]
+Take a folder off Rho's list of projects; the folder and its files stay as they are (rho remove --help):
+  rho remove [FOLDER]
 Say whether Rho runs for a state folder (~/Rho/state without --state-dir), at which address, how
 the last one ended, and which others run on this machine:
   rho --status [--state-dir SERVICE_STATE]
@@ -112,6 +114,8 @@ if (process.argv[2] === 'plugin') {
   process.exitCode = await (await import('./connect-cli.js')).connectCli(process.argv.slice(3));
 } else if (process.argv[2] === 'open') {
   process.exitCode = await (await import('./open-cli.js')).openCli(process.argv.slice(3));
+} else if (process.argv[2] === 'remove') {
+  process.exitCode = await (await import('./open-cli.js')).removeCli(process.argv.slice(3));
 } else if (process.argv[2] === 'tool') {
   process.exitCode = await (await import('./open-cli.js')).toolCli(process.argv.slice(3));
 } else {

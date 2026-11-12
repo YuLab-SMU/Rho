@@ -22,6 +22,15 @@ it), started in the background when it is not running: with ~/Rho/projects as it
 unless --root is given, and with START_OPTIONS such as --agent-backend codex-acp or --rscript PATH.
 The reply says what to tell the person and how an Agent works in the project.
 `;
+export const removeUsage = `Take a folder off Rho's list of projects. The folder, its files and the records Rho keeps in it
+stay as they are, and rho open FOLDER lists it again as it was:
+  rho remove [FOLDER] [--stop] [--state-dir SERVICE_STATE] [--json]
+FOLDER is the project's own folder (the current folder without it); one that is no longer on disk
+is named by the path it had. Work Rho runs in the project (an Agent answering, live sessions,
+terminals, running commands) is counted first, and then nothing is stopped or removed; --stop
+stops each as the person's and removes the project once all have ended. This is the person's
+command: an Agent runs it only when the person asked for that project to be removed.
+`;
 export const toolUsage = `Call Rho's four Agent tools from a shell, for an Agent whose client cannot load Rho's MCP server
 in this session (most load MCP servers only when a session starts):
   rho tool index|resolve|call|read [INPUT_JSON | -] --as NAME [--project FOLDER] [--state-dir SERVICE_STATE]
@@ -107,6 +116,53 @@ export async function openCli(args: string[]): Promise<number> {
     `- ${rhoCommand} tool index --as NAME --project ${quoted(project.root)}: Rho's tools from your shell, now. NAME is a short, stable name for you.`,
     `- ${rhoCommand} connect ${quoted(project.root)} --as NAME: adds them to your client as an MCP server, which a new session loads.`,
     'Do the analysis in Rho\'s Notebook (the tools\' kernel.run) rather than a separate Rscript or python, so the person sees each step, figure and value on the page.',
+  ].join('\n') + '\n');
+  return 0;
+}
+
+// `rho remove` is the cross on a project's row, from a shell: the same operation, as the person
+// at this machine. Only the project whose own folder is named is removed, never the one a folder
+// lies in, and a folder that is gone from disk still names its project.
+export async function removeCli(args: string[]): Promise<number> {
+  let parsed;
+  try { parsed = parseArgs({ args, allowPositionals: true, options: { 'state-dir': { type: 'string' }, stop: { type: 'boolean' }, json: { type: 'boolean' }, help: { type: 'boolean' } } }); }
+  catch (error) { return fail(2, messageOf(error) + '\n\n' + removeUsage); }
+  const { values, positionals } = parsed;
+  if (values.help) { process.stdout.write(removeUsage); return 0; }
+  if (positionals.length > 1) return fail(2, 'Give one folder; quote it if it has spaces.\n\n' + removeUsage);
+  // A folder that is gone is named by the path it had, under the folder that still holds its place.
+  const real = (place: string): Promise<string> => fs.realpath(place).catch(async () => { const parent = path.dirname(path.resolve(place)); return parent === path.resolve(place) ? parent : path.join(await real(parent), path.basename(place)); });
+  const asked = path.resolve(positionals[0] ?? process.cwd()), folder = await real(asked);
+  const search = await findProject(folder, values['state-dir'] ? path.resolve(values['state-dir']) : null);
+  let hit: { client: RhoClient; state: string; project: { id: string; root: string } } | null = null;
+  if (search.found) {
+    if (await real(search.found.project.root) !== folder) return fail(1, `${folder} lies in the project ${search.found.project.root}. Name that folder to take the project off Rho's list.`);
+    hit = search.found;
+  } else {
+    if (!search.running.length) return fail(1, /^No Rho has run/.test(search.message) ? search.message : `Rho is not running, and its list of projects changes only while it runs. Start it (${rhoCommand}), then run this again.`);
+    for (const up of search.running) {
+      const projects = await up.client.call('project.list', {}).catch(() => []);
+      for (const project of projects) if (await real(project.root) === folder) { hit = { ...up, project }; break; }
+      if (hit) break;
+    }
+    if (!hit) return fail(1, `${folder} is not one of Rho's projects.`);
+  }
+  const words = (n: Record<string, number>) => [[n.conversations, 'Agent answering', 'Agents answering'], [n.sessions, 'live session', 'live sessions'], [n.terminals, 'terminal', 'terminals'], [n.commands, 'running command', 'running commands']]
+    .filter(([count]) => count).map(([count, one, many]) => `${count} ${count === 1 ? one : many}`).join(', ');
+  let reply;
+  try { reply = await hit.client.call('project.remove', { projectId: hit.project.id, ...(values.stop ? { stop: true } : {}) }); }
+  catch (error) {
+    const e = (error as { error?: { kind?: string; message?: string; details?: { running?: Record<string, number> } } }).error;
+    if (values.json) { process.stdout.write(JSON.stringify({ refused: { kind: e?.kind ?? 'failed', message: messageOf(error), ...(e?.details?.running ? { running: e.details.running } : {}) } }) + '\n'); return 1; }
+    if (e?.message === 'Unknown API operation.') return fail(1, `The Rho running for ${hit.state} is an earlier version, which does not remove projects. Stop it (${rhoCommand} --stop --state-dir ${quoted(hit.state)}), start this version, then run this again.`);
+    if (e?.kind === 'conflict' && e.details?.running && !values.stop) return fail(1, `Rho is running work in ${hit.project.root}: ${words(e.details.running)}.\nNothing was stopped or removed. To stop each as the person's and remove the project: ${rhoCommand} remove ${quoted(hit.project.root)} --stop`);
+    return fail(1, messageOf(error));
+  }
+  if (values.json) { process.stdout.write(JSON.stringify({ removed: { projectId: reply.project.id, folder: reply.project.root, state: hit.state, stopped: reply.stopped } }) + '\n'); return 0; }
+  process.stdout.write([
+    `${JSON.stringify(reply.project.name ?? path.basename(reply.project.root))} is off Rho's list of projects${words(reply.stopped) ? `, with ${words(reply.stopped)} stopped first` : ''}.`,
+    `Its folder and files are as they were: ${reply.project.root}`,
+    `List it again as it was: ${rhoCommand} open ${quoted(reply.project.root)}`,
   ].join('\n') + '\n');
   return 0;
 }

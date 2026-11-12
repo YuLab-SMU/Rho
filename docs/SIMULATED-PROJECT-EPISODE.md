@@ -2446,13 +2446,82 @@ printing a table) and two R cells (a summary and a plot), at 1440, 1000 and 900 
 
 - This is the builder's reading. The user has not seen it.
 - A cell is still a record of one run: Edit and run puts its code in the new cell, and the run
-  is a new cell at the end. Editing a cell in place is not built.
+  is a new cell at the end. Editing a cell in place is not built. (Built the same day:
+  [editing in place](#editing-in-place-and-names).)
 - A notebook of both languages counts each language's cells apart, so two cells may both read
   `[1]`, told apart by the language at the end of their lines.
 - The new cell is a text box with colours under it: no completion, bracket matching or multiple
-  cursors. A composition in progress (an input method) shows without its underline.
+  cursors. (It is Rho's editor since [the next pass](#editing-in-place-and-names).) A composition in progress (an input method) shows without its underline.
 - The console form and the Notebook in a conversation's Studio were looked at for breakage only.
-- The Plugins page's picture of the Notebook is the earlier drawing.
+- The Plugins page's picture of the Notebook is the earlier drawing. (Captured again with the
+  next pass, with every other view's picture.)
+
+### Editing in place and names
+
+2026-11-12, later the same day. The user had the first pass and asked for what it left open, in
+order: a cell edited in place, then completion and bracket matching in the cell being written.
+
+- **A cell run where it stands** (Notebook 0.5.21). `kernel.run` takes `replaces`, an ended
+  cell of the same notebook and language. The run is a new cell that names it; nothing of
+  the earlier cell is changed. The Notebook shows a cell at the place of the first run
+  there, the newest run on top with its own count, and "1 earlier run" opens the others
+  under it, each whole. The console form stays the transcript: every run in turn.
+- **Editing.** Pressing a cell's code, or Edit over its corner, makes it a box to type in,
+  in the same place and size, with the caret where it was pressed. Shift+Enter runs it
+  there; Esc leaves it as it was; code left unchanged is a cell again once the keyboard
+  leaves it. Run again runs in place too. A press that selects text does not start an edit.
+- **The box** is Rho's editor without a file behind it (`codeBox` in the shell's services,
+  `web/code-box.ts`): the language's colours, matching and closing brackets, indentation,
+  undo. The new cell uses it too. A page without it keeps a plain text box with colours
+  under it.
+- **Names.** `kernel.complete` asks the live session what may follow the line up to the
+  cursor. R answers with its console's own completion (values, attached packages' names,
+  `$` and `@` parts, `pkg::`, a call's arguments, files in quotes), and two cases the
+  console lacks: a table's columns inside the quotes of a subscript and installed packages
+  inside `library()`. Python answers with its names, attributes after a dot (a property is
+  named, not read) and a dict's keys or a table's columns in a subscript's quotes. A call
+  is never run. The list opens once a name is three letters long, at once after `$`, `@`,
+  `::`, a dot in Python or an open quote in a subscript, and on Tab.
+- An Agent is told of `replaces` in the Notebook's skill: a corrected version of an earlier
+  cell goes in its place.
+
+![A cell being edited where it stands; above it a cell run in place, with its earlier run a click away](figures/notebook-edit-in-place.jpg)
+
+![The names a session offers after de$, in the new cell](figures/notebook-names.jpg)
+
+#### What the run showed
+
+A throwaway project in a real browser, each screenshot read.
+
+- The box took the code's place without moving it (0 px), and a character typed after a
+  press landed where the code was pressed, on a first and a last line. At first it landed at
+  the start: the keyboard was taken while the box was still folded away. It is taken once
+  the box stands in place.
+- Escape pressed just after typing did nothing, since a list of names was still being
+  asked for. Escape now closes an open list and otherwise leaves the box.
+- R's completion marks a file by a field it never sets; files are told by being inside quotes.
+- A page newer than its service (this page from source before the person's running Rho):
+  the service refuses `replaces` as a field it does not know, and the code then runs as a new
+  cell at the end, as it did there; without `kernel.complete` the session's listed values
+  are offered. Both were run with the two requests refused in the browser.
+
+#### Verification
+
+Plugins tests for the run in place (three refusals, the same identity, nothing started) and
+for completion in both languages (no call run, nothing printed, no cell added, busy while a
+cell runs, the limit counted); Rho's Notebook test calls both as the person. Counts are in
+[Status](STATUS.md#verification).
+
+#### Left open
+
+- This is the builder's reading. The user has not seen it.
+- A cell run in place of one from an ended session stands above that session's end, though
+  it ran after it; its time and count say when.
+- Python offers no argument names or module names after `import`; neither language offers
+  names while a cell runs beyond the values listed last.
+- Enter takes the chosen name when the list is open, as editors do; a person who wants a
+  new line there presses Esc first.
+- The Notebook in a conversation's Studio and on a server were not run with these changes.
 
 ## Removing a project
 
@@ -2516,8 +2585,47 @@ session counted, refused, then stopped as the person's with `stop`.
   build and has no `project.remove` until it is restarted.
 - Work that starts between the count and the removal is not seen by the count.
 - A terminal, a running command and an answering Agent are stopped by the same path as a
-  session, but only a session was run in the browser.
+  session, but only a session was run in the browser. (All four were run
+  [the same day](#every-kind-of-work-a-command-a-folder-that-is-gone).)
 - The service keeps its lease on a removed folder until it closes, so a second Rho service
   cannot open that folder before then.
 - No command removes a project (`rho` has none yet); the operator's client can call the operation.
+  (`rho remove` since the next pass.)
 - Projects past the sidebar's eight are removed from the projects list only.
+
+### Every kind of work, a command, a folder that is gone
+
+2026-11-12, later the same day, from the same request: what the first pass left open here.
+
+- **Each kind of work in one removal.** A service test and a browser run remove a project
+  with an Agent answering, a terminal open, a command running and a live session. The Agent
+  is a stand-in that speaks the Agent protocol and answers nothing until told to stop; the
+  terminal, the command and the session are real processes. The refusal counts one of each
+  and stops none. Stop and remove tells the Agent to stop, closes the terminal, stops the
+  command and the session, and the project leaves once all have ended.
+- **An idle Agent.** After the removal the Agent's process was still running: a connection
+  is kept for five minutes after an answer ends. A removal now ends the project's idle
+  connections (`Conversations.release`).
+- **`rho remove [FOLDER] [--stop]`** is the same operation from a shell. It names a project
+  by its own folder, never the project a folder lies in. With work running it prints the
+  counts, stops nothing and exits 1; `--stop` stops each.
+- **A folder that is gone.** Removing a project whose folder had been deleted answered
+  "Nothing exists at …", since reaching a project reads its folder. The removal now reads
+  the record alone, so such a project leaves the list from its row or by the path it had.
+
+![The dialog with one of each kind of work running](figures/project-remove-all.jpg)
+
+#### Verification
+
+`test/project-remove.test.mjs`, four tests: the two above, the four kinds counted and
+stopped with each process seen to end, and `rho remove` (a folder inside a project, an
+unlisted folder, the refusal and `--stop`, a folder that is gone, the same identity on
+opening again). In the browser the dialog read "1 Agent answering, 1 live session, 1
+terminal, 1 running command", and after Stop and remove no process of the four was alive.
+
+#### Left open
+
+- The Agent in both runs is a protocol stand-in; no removal was run while Claude Code or
+  Codex itself answered.
+- Work that starts between the count and the removal is still not seen by the count.
+- The service keeps its lease on a removed folder until it closes.

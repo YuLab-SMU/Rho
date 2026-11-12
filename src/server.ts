@@ -943,7 +943,7 @@ export class RhoService {
         if (project.sources) this.plugins.sourceFolders.set(project.id, project.sources);
         return project;
       });
-      const p = await this.state.project(b.projectId, principal);
+      const p = this.state.listed(b.projectId, principal);
       const found = await this.runningIn(p, limits.commandsRead), stopped = { conversations: found.conversations.length, sessions: found.sessions.length, terminals: found.terminals.length, commands: found.commands.length };
       const said = (n: typeof stopped) => [[n.conversations, 'Agent answering', 'Agents answering'], [n.sessions, 'live session', 'live sessions'], [n.terminals, 'terminal', 'terminals'], [n.commands, 'command', 'commands']]
         .filter(([count]) => count).map(([count, one, many]) => `${count} ${count === 1 ? one : many}`).join(', ');
@@ -961,6 +961,8 @@ export class RhoService {
         while (said(count(left)) && Date.now() < until) { await new Promise(resolve => setTimeout(resolve, 100)); left = await this.runningIn(p, limits.commandsRead); }
         requireThat(!said(count(left)), 'conflict', `${name} was not removed: ${said(count(left))} had not ended ${Math.round(limits.stopWaitMs / 1000)} s after being stopped. It is still listed; remove it again once they have ended.`, { running: count(left) });
       }
+      // An Agent that has answered keeps its connection for a while; it ends with the removal.
+      await this.conversations.release(p.id);
       return this.serial('projects', async () => {
         await this.state.remove(p, limits.kept);
         this.plugins.sourceFolders.delete(p.id);
@@ -1295,10 +1297,11 @@ export class RhoService {
       if (method === 'kernel.start') requireThat(principal.id === localBrowserId, 'unauthorized', 'Only the person at this machine starts a session without a cell. Run a cell to start one.');
       await capabilities.assertAvailable(method, principal);
       const host = this.kernelFor(p);
-      if (method === 'kernel.run') return host.run({ language: b.language, code: b.code, purpose: b.purpose, notebook: b.notebook, changeId: b.changeId, by: principal.id, waitMs: b.waitMs, place: b.place, interpreter: b.interpreter });
+      if (method === 'kernel.run') return host.run({ language: b.language, code: b.code, purpose: b.purpose, notebook: b.notebook, replaces: b.replaces, changeId: b.changeId, by: principal.id, waitMs: b.waitMs, place: b.place, interpreter: b.interpreter });
       if (method === 'kernel.read') return host.read(b.limit, b.cellId);
       if (method === 'kernel.events') return host.events(b.limit);
       if (method === 'kernel.inspect') return host.inspect({ language: b.language, notebook: b.notebook, name: b.name, path: b.path, offset: b.offset, limit: b.limit, sort: b.sort, picture: b.picture });
+      if (method === 'kernel.complete') return host.complete({ language: b.language, notebook: b.notebook, line: b.line });
       if (method === 'kernel.plot') return host.plot(b.cellId, b.plot);
       if (method === 'kernel.interrupt') return host.interrupt(b.cellId, principal.id);
       if (method === 'kernel.start') return host.start({ language: b.language, place: b.place, notebook: b.notebook }, principal.id);

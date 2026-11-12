@@ -358,7 +358,16 @@ the person's, and the project is removed once all have ended; if one has not end
 after `projectRemoval.stopWaitMs` (15 s) the project stays listed and the reply
 names what is left. `project.restore` lists a removed project again as it was. The
 last `projectRemoval.kept` (64) removals are kept across restarts, the oldest
-forgotten first; a forgotten one is listed again by opening its folder.
+forgotten first; a forgotten one is listed again by opening its folder. The removal
+reads no file of the project, so one whose folder is gone from disk is removed too, and
+an Agent's idle connection to a removed project ends with it.
+
+`rho remove [FOLDER] [--stop] [--state-dir SERVICE_STATE] [--json]` is the same
+operation from a shell, as the person at this machine. It names a project by its own
+folder (the current one without FOLDER; a folder that is gone by the path it had),
+never the project a folder lies in. With work running it prints the counts, stops
+nothing and exits 1; `--stop` stops each and removes the project. `rho open FOLDER`
+lists it again as it was.
 
 Source entries have stable IDs and canonical roots. Files resolves references
 `@<sourceId>/<relative-path>` inside the chosen folders; Documents uses that port
@@ -1170,6 +1179,19 @@ ends with an error and its waiting cells are not run. Agent grants receive run, 
 inspect, plot and interrupt; `kernel.stop` accepts only the local browser principal. These
 operations do not wait in the project's request queue (only their activity record
 does), so a run waiting for a long cell holds no read and no interrupt.
+
+`kernel.run` with `replaces` runs a cell in the place of an ended cell of the same
+notebook and language: a new cell that names the earlier one, which stays in the
+record. A notebook shows the newest run where the first stood; a transcript lists
+both. `kernel.complete` gives the names a live session offers after a line being
+typed (`line`, up to the cursor): its values and attached packages' names, a value's
+parts after `$`, `@` or a dot, a table's columns or a dict's keys inside the quotes of
+a subscript, a call's arguments and files in R, installed packages inside `library()`.
+`from` is where the name being completed starts. A value named before `$` or a dot is
+read, as R's console completion reads it; a call is never run and a Python property is
+not read. It starts no session and waits for no cell (`busy` while one runs or waits),
+gives at most `completeItems` (200) names with a count of the rest, and a session that
+has not answered after `completeTimeoutMs` (2 s) is interrupted.
 
 A cell keeps its `changeId` per caller: the same identity returns the same cell and
 never runs it twice. Cells run one at a time per session, in the order they came,

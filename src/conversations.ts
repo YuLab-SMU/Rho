@@ -344,6 +344,11 @@ export class Conversations {
     const timer = setTimeout(() => { this.flushes.delete(key); void this.serial(project.id, () => this.write(project, c)).catch(() => {}); }, 250);
     timer.unref(); this.flushes.set(key, timer);
   }
+  // A project taken off Rho's list keeps no connection to an Agent: each idle one ends, as it
+  // would by itself after idleMs. One still answering is stopped first, by its own stop.
+  async release(projectId: string) {
+    for (const key of [...this.drivers.keys()]) if (key.startsWith(projectId + '/')) await this.serial('driver-pool', () => this.retire(key)).catch(() => {});
+  }
   // The messages being answered in a project now, by this service.
   answering(projectId: string) { return [...this.live.values()].filter(l => l.project.id === projectId).map(l => ({ conversationId: l.conversation.id, turnId: l.turn.id })); }
   private liveTurn(project: Project, c: Conversation, turn: Turn) { const live = this.live.get(project.id + '/' + c.id + '/' + turn.id); return live?.turn === turn ? live : undefined; }

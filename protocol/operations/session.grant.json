@@ -95,6 +95,7 @@
             "figure.select",
             "interaction.selection.read",
             "interaction.selection.set",
+            "kernel.complete",
             "kernel.events",
             "kernel.inspect",
             "kernel.interrupt",

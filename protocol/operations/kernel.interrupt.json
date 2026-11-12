@@ -249,6 +249,10 @@
             },
             "type": "array"
           },
+          "replaces": {
+            "pattern": "^k-[a-f0-9]{16}$",
+            "type": "string"
+          },
           "saved": {
             "items": {
               "additionalProperties": false,

@@ -3,6 +3,7 @@ import type { BrowserClient, WorkspaceSnapshot } from '../src/browser.js';
 import type { ShellServices } from '../src/ui-contract.js';
 import type { Entry } from './project.js';
 import { highlight, languageExtensions } from './languages.js';
+import { codeBox } from './code-box.js';
 import { readFile, readImage } from './previews.js';
 import { AgentMarkdown } from './markdown.js';
 import { SemanticFigure, type FigureAsk } from '@rho-workspace/plugin-figures/ui';
@@ -31,6 +32,7 @@ export function shellServices(client: BrowserClient, current: () => { snapshot: 
     pageFrame: '/frame.html',
     languageExtensions,
     highlight,
+    codeBox,
     markdown: text => createElement(AgentMarkdown, { text, streaming: false }),
   };
 }

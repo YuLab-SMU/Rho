@@ -35,7 +35,9 @@ switching never changes what is running ([record](SIMULATED-PROJECT-EPISODE.md#o
   list and leaves the folder and its files as they are (`project.remove`), with Undo for fifteen
   seconds (`project.restore`). While an Agent answers in it, or a session, terminal or command
   of the person's runs in it, the service refuses with their counts and the page asks before
-  each is stopped ([record](SIMULATED-PROJECT-EPISODE.md#removing-a-project)).
+  each is stopped ([record](SIMULATED-PROJECT-EPISODE.md#removing-a-project)). A project
+  whose folder is gone from disk is removed the same way, and `rho remove [FOLDER]` does it
+  from a shell.
 - **Agent** holds the project's Agents and their conversations in one place. The row opens the
   Agents that work here and says when one is working or needs a choice; `+` starts a new
   conversation, and is the one New while this list is on screen. Under it are the open project's
@@ -204,10 +206,21 @@ inspect what happened. The application gives those actions direct places:
   streamed while it runs, with messages, warnings and errors in their place and its plots.
   A cell names its language only in a notebook that holds cells of both. Long code and
   output show their first lines. Where a session started or ended the list says so, and
-  that values from before an end are gone. Edit and run and Run again are two icons over
-  the corner of a cell's code, shown with the pointer or the focus. The new cell stays at
-  the foot, drawn as a cell: its code, coloured as it is typed, with a hint from what the
-  session holds; under the code R or Python, and Run (Shift+Enter or ⌘/Ctrl+Enter).
+  that values from before an end are gone. A cell is edited where it stands
+  ([record](SIMULATED-PROJECT-EPISODE.md#editing-in-place-and-names)): pressing its code,
+  or Edit over its corner, makes it a box to type in with the caret where it was pressed;
+  Shift+Enter (or ⌘/Ctrl+Enter) runs it there, Esc leaves it as it was, and code left
+  unchanged is a cell again once the keyboard leaves it. Run again, the other icon, runs it
+  there too. The run is a new cell in the same place (`kernel.run` with `replaces`), with
+  its own count; the runs it took the place of stay in the record and open under it from
+  "1 earlier run". The new cell stays at the foot, drawn as a cell, with a hint from what
+  the session holds; under the code R or Python, and Run. Both boxes are Rho's editor
+  (`codeBox`): the language's colours, matching and closing brackets, indentation, undo, and
+  the names the live session offers (`kernel.complete`) once a name is three letters long,
+  at once after `$`, `@`, `::`, a dot in Python or an open quote in a subscript, and on
+  Tab: its values, a table's columns, a call's arguments, files, installed packages. Esc
+  closes the list; in the new cell Esc then Tab moves on from the box. With no session to
+  ask, or one running a cell, the values it listed last are offered.
   On the person's own page the Notebook is the cells and that line, and leaves the rest to
   the other views of the sessions ([one set of views](SIMULATED-PROJECT-EPISODE.md#one-set-of-session-views)):
   a plot of a live session is a picture in its cell, numbered as Plots counts it, that brings

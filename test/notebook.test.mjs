@@ -47,6 +47,13 @@ test('the person and their Agent share a live session; only the person ends it',
   assert.equal((await agent.call('kernel.inspect', { projectId: p.id, language: 'python', name: 'shared' })).object.kind, 'value');
   const again = await agent.call('kernel.run', { projectId: p.id, language: 'python', code: 'shared = 41', purpose: 'Define a value', changeId: 'a1' });
   assert.equal(again.cell.cellId, made.cell.cellId, 'a repeated request names the same cell');
+  // The person writes a cell with the names its session offers, and runs it where an earlier one
+  // stands: a new cell that names the one it took the place of.
+  const offered = await call('kernel.complete', { language: 'python', line: 'x = sha' });
+  assert.deepEqual([offered.state, offered.from, offered.items], ['shown', 4, [{ label: 'shared', type: 'variable' }]]);
+  const inPlace = await call('kernel.run', { language: 'python', code: 'shared + 2', changeId: 'p1b', replaces: mine.cell.cellId, waitMs: 30000 });
+  assert.deepEqual([inPlace.cell.replaces, inPlace.cell.outputs[0].text], [mine.cell.cellId, '43\n']);
+  assert.equal((await call('kernel.read')).cells.length, 3, 'the earlier run stays in the record');
 
   // A run that waits for a long cell holds nothing else of the project: reads answer and the
   // person can interrupt it.
@@ -67,7 +74,7 @@ test('the person and their Agent share a live session; only the person ends it',
   let read;
   for (let i = 0; i < 200; i++) { read = await call('kernel.read'); if (read.sessions[0].state === 'ended') break; await new Promise(r => setTimeout(r, 20)); }
   assert.equal(read.sessions[0].ending, 'stopped');
-  assert.equal(read.cells.length, 3);
+  assert.equal(read.cells.length, 4);
   // Only the person starts a session without a cell; an Agent's first cell starts one.
   await assert.rejects(agent.call('kernel.start', { projectId: p.id, language: 'python' }), e => e.error?.kind === 'unauthorized');
   await assert.rejects(admin.call('kernel.start', { projectId: p.id, language: 'python' }), e => e.error?.kind === 'unauthorized');

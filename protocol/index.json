@@ -578,6 +578,12 @@
       "bytes": 8788,
       "sha256": "eb10497e17d14eca90237d20bde0eaad9296a7c50a39f285b899c06878d73ebc"
     },
+    "kernel.complete": {
+      "summary": "The names a live session offers after a line being typed (the project's own session unless notebook names a notebook): its values and the names of its packages, the parts of a value after $ or a dot, a table's columns in quotes, a call's arguments, files. line is the line up to the cursor; from is where the name being completed starts in it. A value named before $ or a dot is read; a call is never run. Never starts a session or waits for a cell: while a cell runs or waits the answer is busy. One that takes too long is interrupted.",
+      "path": "operations/kernel.complete.json",
+      "bytes": 2693,
+      "sha256": "9b518f0eac21bcf053a81752668824dc02609015b5ecca592c26523a4afa8ec0"
+    },
     "kernel.events": {
       "summary": "Who ran each cell of the live sessions and when, newest first, for the timeline: its language and place, how it ended and its purpose or first line. No code or output.",
       "path": "operations/kernel.events.json",
@@ -593,8 +599,8 @@
     "kernel.interrupt": {
       "summary": "Interrupt one cell: a running cell stops and its session and values stay; a waiting cell is not run. A cell that has ended is returned unchanged.",
       "path": "operations/kernel.interrupt.json",
-      "bytes": 10082,
-      "sha256": "182eba0e080d7c958e44d7dec31ac31872ff1aba61d62198763e9080efb15f70"
+      "bytes": 10191,
+      "sha256": "b6741e2ba234f0553ff0e995c5f136fa8f3b6c8187ea8a6a98a02d418a739652"
     },
     "kernel.place.check": {
       "summary": "Connect to a place on a server and report its system, machine, the folder after its setup lines, and R and Python there. Runs the place's setup lines; starts no session.",
@@ -635,14 +641,14 @@
     "kernel.read": {
       "summary": "The live sessions and their cells, oldest cell first: code, purpose, who ran it, what it printed, its plots and how it ended, and each session's variables. Reading never starts a session.",
       "path": "operations/kernel.read.json",
-      "bytes": 17405,
-      "sha256": "3951dc407906924f6f46800c30a1bfd027fb076f0369ca6a6fa97396a9548b81"
+      "bytes": 17522,
+      "sha256": "f6e73348eeffa68448c2483d0ff942792bef34050874c3999bd26e93436af41a"
     },
     "kernel.run": {
-      "summary": "Run a cell of R or Python in a live session of that language: the project's own, where an Agent's cells run, unless notebook names a notebook, whose sessions are its own (each Notebook on a person's workspace has one). What one cell defines stays for the next in that session. Starts the session when none is live, on this machine or at a place on one of the person's servers (place, or where kernel.places says that language runs next). interpreter names the program a session on this machine starts with, in a folder of the project such as .venv/bin/python; the project keeps it for that language's later sessions, and each cell records the program and version that ran it. The same changeId from the same caller returns the same cell and never runs it twice. waitMs waits for the cell to end.",
+      "summary": "Run a cell of R or Python in a live session of that language: the project's own, where an Agent's cells run, unless notebook names a notebook, whose sessions are its own (each Notebook on a person's workspace has one). What one cell defines stays for the next in that session. Starts the session when none is live, on this machine or at a place on one of the person's servers (place, or where kernel.places says that language runs next). interpreter names the program a session on this machine starts with, in a folder of the project such as .venv/bin/python; the project keeps it for that language's later sessions, and each cell records the program and version that ran it. replaces names an ended cell of the same notebook and language: the new cell is run in its place, where a notebook shows it, and the earlier run stays in the record. The same changeId from the same caller returns the same cell and never runs it twice. waitMs waits for the cell to end.",
       "path": "operations/kernel.run.json",
-      "bytes": 17245,
-      "sha256": "85decf8d4e64acdf135344316267d9acda13a239ffc47d51a04d08c4436463ff"
+      "bytes": 17613,
+      "sha256": "851b6389abe9e77993c8b08864fe3aea6cfdbe9222cc67917a00a68c1c6dcdc6"
     },
     "kernel.server.skill": {
       "summary": "One skill bound to a server, as its file reads now: how that server is used. Read it before naming a place there or running work on it.",
@@ -735,10 +741,10 @@
       "sha256": "116b87b79819c1212d674b2c403b2ac870da23c1995438e6c4a134a2d0f4f0ea"
     },
     "project.remove": {
-      "summary": "Person at this machine or operator only: take a project off Rho's list. Its folder, its files and the records Rho keeps in it are not touched, and opening the folder again lists it as it was. Rho leaves nothing of its own running in a folder it no longer lists: while an Agent answers there, or a live session, terminal or command of the person runs there, the request is refused with their counts, and with stop: true each is stopped by its owner's own stop, as the person's, before the project is removed. Managed runs belong to Core and are not stopped.",
+      "summary": "Person at this machine or operator only: take a project off Rho's list. Its folder, its files and the records Rho keeps in it are not touched, and opening the folder again lists it as it was. Rho leaves nothing of its own running in a folder it no longer lists: while an Agent answers there, or a live session, terminal or command of the person runs there, the request is refused with their counts, and with stop: true each is stopped by its owner's own stop, as the person's, before the project is removed; an Agent's idle connection to the project ends with it. No file of the project is read, so one whose folder is gone from disk is removed too. Managed runs belong to Core and are not stopped.",
       "path": "operations/project.remove.json",
-      "bytes": 3183,
-      "sha256": "034a8a5010dc179886b222dbc1a78978951d0e26a44bc252864eb4c8ae4fcaf3"
+      "bytes": 3325,
+      "sha256": "93ffe44338fa5be0cb2564964fb9eab19fbdb0c27ebabd870072068d8b33900d"
     },
     "project.restore": {
       "summary": "Person at this machine or operator only: list a project removed during this run of the service again, as it was, with the access each tab had to it. It starts nothing; what was stopped stays stopped.",
@@ -845,8 +851,8 @@
     "session.grant": {
       "summary": "session.grant",
       "path": "operations/session.grant.json",
-      "bytes": 5561,
-      "sha256": "aafbf3a479049a08ae27fef459b474c6adc6c12a3c5e47f172763385d58c38b5"
+      "bytes": 5592,
+      "sha256": "93b1126376fdd178a5488a5ac9a85c8b71bf38721fbc1dd3fd0258e2f10101fd"
     },
     "session.instructions": {
       "summary": "Person at this machine or operator only: read a prompt for the person's own MCP client to connect itself to this existing project. Returns local launcher paths, never credential contents. Reading or copying grants no access, edits no client configuration and starts no runtime.",
