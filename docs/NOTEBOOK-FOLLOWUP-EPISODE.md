@@ -79,6 +79,14 @@ while Plugins removed its old declarations; the sequential build and full Rho su
 
 ## Delivery scope
 
+The first batch, Rho `91a1f6cf`, passed 17 jobs in
+[CI 43295635254](https://github.com/YuLab-SMU/Rho/actions/runs/43295635254): macOS and Linux
+tests, all figure jobs and all six offline installations. Windows ran 367 tests, skipped six
+and failed one: `native-collaboration` could not unlink a blob in its disposable folder after
+the Host-loss check (`EBUSY`). That test's cleanup lacked the bounded `fs.rm` retry already used
+by the next test. It now uses the same ten retries at 200 ms. This changes test cleanup, not
+Host or application execution. No release tag was created for the failed batch.
+
 Version 0.5.10 is selected for the existing [unsigned npm workflow](RELEASE.md#ci-and-npm-publication):
 publish the Plugins source first, select that immutable commit, publish Rho once, wait for its
 CI tests and offline installations, and promote that retained candidate with `v0.5.10` without

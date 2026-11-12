@@ -58,7 +58,7 @@ test('explicit r.execute retains one dispatch after close, lost acknowledgement 
     // This test owns both the Host and its process group; it does not touch a
     // user's Host/R session. Clean up only that retained native process.
     if (rPid) { await end(rPid); rPid = undefined; }
-  } finally { if (rPid) await end(rPid); await service.close(); await fs.rm(root, { recursive: true, force: true }); }
+  } finally { if (rPid) await end(rPid); await service.close(); await fs.rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }); }
 });
 
 // On Windows cmd.exe starts the Host, so a project path with characters cmd treats specially
