@@ -27953,7 +27953,7 @@ export const ownerContracts: OwnerContractSnapshot = {
     },
     "console": {
       "package": "@rho-workspace/plugin-console",
-      "packageVersion": "0.3.6",
+      "packageVersion": "0.3.7",
       "entry": "./operations",
       "entryPath": "@rho-workspace/plugin-console/dist/operations.js",
       "entrySha256": "a74dbb5005a0160a0e474fa4009ba2d061759dead8adc0fa8be3a482161a2abc",

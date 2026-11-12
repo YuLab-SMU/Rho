@@ -6,7 +6,8 @@ record of a terminal's commands, reading an R session while a cell runs, telling
 connection from another window, and the tests that ran only on Unix with a real Agent never run
 through Rho. The user asked for the issue to be resolved. This episode, against Rho `8180920d` and
 Plugins `884766c`, probes each part on Windows, changes what the probes showed in its owner, and
-runs the same checks again; Plugins changes are Console 0.3.6, Agent 0.4.35 and Notebook 0.5.20.
+runs the same checks again; Plugins changes are Console 0.3.6 and 0.3.7, Agent 0.4.35 and
+Notebook 0.5.20.
 
 ## Setup
 
@@ -178,12 +179,25 @@ Signing in is the person's to do.
   (an Agent client stand-in's 0.4 s limit, a log still open when its folder was removed) were fixed.
 - The startup files and arguments bash, sh, zsh and fish get on macOS and Linux are byte for byte
   those of `884766c`. macOS and Linux run in CI after the push.
+- CI on the first push (Rho `c471caed`, Plugins `68d7ed3`, [run 43265395942](https://github.com/YuLab-SMU/Rho/actions/runs/43265395942))
+  failed in three places, none seen here. On every system the ledger test: joining Status's
+  verification lines into one made the baseline's count the first on the line that cites the
+  ledger; the sentence citing it starts its own line again. On macOS a ksh record took the echo of
+  its command as output: the wake that ends a Windows reader's wait for the first prompt also
+  ended a Unix reader's wait for quiet, so the test typed before ksh had drawn its whole prompt;
+  Console 0.3.7 wakes only on Windows, as `884766c` did elsewhere. On the Windows Server 2022
+  runner (console host build 20348) the two tests that expected a full-screen program to be seen
+  as one: its command ran to its end with the right output but no screen, as that host draws the
+  program's screen as the main one and passes no switch on. The tests now expect a screen where the
+  switch reaches the terminal and say when it does not.
 
 ## Limits
 
 - The console host's command line is Windows' internal contract with it; a later Windows may change it.
 - Mark order rests on a 50 ms wait; under heavy load a command's last lines can fall outside its record.
 - cmd.exe's commands are not recorded. Ctrl+Break cannot be typed in the page.
+- On Windows Server 2022's console host (build 20348) a full-screen program is not seen as one and
+  keeps no screen; Windows 10 and Windows 11 before 26100 were not checked.
 - The first prompt of a shell with a slow profile is waited for only for marked shells.
 - PowerShell from an MSIX package started through its alias was checked here; one installed by MSI was not.
 - Codex was not run in Rho on Windows; real Claude Code only from the SDK's 2.1.310; one person, no
