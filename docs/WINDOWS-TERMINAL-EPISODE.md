@@ -190,6 +190,12 @@ Signing in is the person's to do.
   as one: its command ran to its end with the right output but no screen, as that host draws the
   program's screen as the main one and passes no switch on. The tests now expect a screen where the
   switch reaches the terminal and say when it does not.
+- CI on the fix (Rho `14992760`, Plugins `543166d`, [run 43271375926](https://github.com/YuLab-SMU/Rho/actions/runs/43271375926))
+  passed every job: Rho 357/361 on macOS and Linux and 356/361 on Windows (4 and 5 skipped), the
+  Plugins' terminal and Agent-start tests 22/26, 20/24 and 21/24 (the other system's terminal tests
+  skipped), the four Cores, the figure describers, the candidate and its six installations. On
+  Windows both full-screen tests said that console host passed no switch on. No macOS runner took
+  the first attempt's macOS job, which GitHub cancelled; its re-run passed.
 
 ## Limits
 
