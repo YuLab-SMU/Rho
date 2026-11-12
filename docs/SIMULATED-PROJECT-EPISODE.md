@@ -1965,6 +1965,7 @@ no colours, no full-screen programs. Its output was read again every 700 ms.
 - This is the builder's reading. The user has not seen it; their own running Rho has no terminal
   until it is built and started again.
 - Windows has no terminal yet (it needs ConPTY), and a machine without `python3` is told so.
+  Windows has one since 2026-11-13 ([episode](WINDOWS-TERMINAL-EPISODE.md)).
 - A terminal ends with Rho. Nothing of it is kept across a restart but what the shell itself keeps.
 - The prompt's symbols need a Nerd Font installed; the view names the common ones before the
   machine's monospace face. Headless Chrome drew boxes for them.
@@ -2171,7 +2172,7 @@ put in an Agent's grant. What was typed there left no record in Rho.
 - The Agent is named by its grant's label.
 - An Agent that types before its own shell's prompt has drawn gets the shell's partial-line mark;
   the skill tells it to wait.
-- Windows still has no terminal.
+- Windows still has no terminal. It has one since 2026-11-13 ([episode](WINDOWS-TERMINAL-EPISODE.md)).
 
 ## Each workspace notebook its own, and the terminal's commands
 
@@ -2390,7 +2391,7 @@ and is said once, in the notebook's bar. The gutter holds the execution count. A
 followed by how it ran and then by its output. What can be done to a cell shows when the cell is
 pointed at. The cell being written is a cell like the others.
 
-- **Gutter** (Notebook 0.5.20). The count alone, beside the first line of the code: `[3]`, `[*]`
+- **Gutter** (Notebook 0.5.21). The count alone, beside the first line of the code: `[3]`, `[*]`
   while it runs, empty while it waits, red when it failed. The gutter no longer names the
   language.
 - **Who and why.** A line above the code for an Agent's cell or a cell with a purpose. The
@@ -2461,7 +2462,7 @@ printing a table) and two R cells (a summary and a plot), at 1440, 1000 and 900 
 2026-11-12, later the same day. The user had the first pass and asked for what it left open, in
 order: a cell edited in place, then completion and bracket matching in the cell being written.
 
-- **A cell run where it stands** (Notebook 0.5.21). `kernel.run` takes `replaces`, an ended
+- **A cell run where it stands** (Notebook 0.5.22). `kernel.run` takes `replaces`, an ended
   cell of the same notebook and language. The run is a new cell that names it; nothing of
   the earlier cell is changed. The Notebook shows a cell at the place of the first run
   there, the newest run on top with its own count, and "1 earlier run" opens the others

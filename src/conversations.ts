@@ -276,6 +276,22 @@ export function earlierQuestions(turns: Turn[], limits: { maxTextBytes: number }
   return 'This message continues a conversation in this project. The Agent session that ran it has ended, so this is a new session; what was said before is kept by Rho and given here'
     + (cutAt ? ' (the earliest exchanges are left out for length)' : '') + ':\n\n' + text + '\n';
 }
+// The processes a Windows process descends from, up to four generations, each read with its start
+// time: a process whose id its child names but that started after the child is another process
+// that took the id, and the walk ends there. An unreadable process ends it too.
+async function windowsAncestors(pid: number) {
+  const script = `$p = ${Math.trunc(pid)}; $child = $null
+for ($i = 0; $i -lt 5; $i++) {
+  $x = Get-CimInstance Win32_Process -Filter "ProcessId=$p" -ErrorAction SilentlyContinue
+  if (-not $x -or ($child -and $x.CreationDate -gt $child.CreationDate)) { break }
+  if ($child) { [string]$x.ProcessId }
+  $child = $x; $p = $x.ParentProcessId
+}`;
+  const { execFile } = await import('node:child_process');
+  const powershell = path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+  return new Promise<number[]>(resolve => execFile(powershell, ['-NoLogo', '-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')], { timeout: 5000, windowsHide: true },
+    (error, out) => resolve(error ? [] : String(out).split(/\s+/).filter(Boolean).map(Number).filter(Number.isSafeInteger))));
+}
 
 export class Conversations {
   limits: typeof conversationLimits;
@@ -284,6 +300,8 @@ export class Conversations {
   private flushes = new Map<string, ReturnType<typeof setTimeout>>();
   private closing = false;
   private drivers = new Map<string, { driver: AgentConversation; project: Project; conversation: Conversation; timer?: ReturnType<typeof setTimeout> }>();
+  // Windows: the holding processes found to be each kept connection's own (owns()).
+  private ownedHolders = new WeakMap<object, Set<number>>();
   private permissions = new Map<string, { permission: Permission; resolve(choice: string | null): void }>();
   private checks = new Map<Backend, Promise<void>>();
   // Agents being added, by command: a second request for the same command waits for the first.
@@ -519,12 +537,24 @@ export class Conversations {
   }
   /** Whether a process holding a session open is Rho's own connection to this conversation: the
    * Agent its adapter started. Codex names no holding process, but it lets one writer open a
-   * thread at a time; while this conversation's own connection is open, that writer is Rho's. */
+   * thread at a time; while this conversation's own connection is open, that writer is Rho's.
+   * On Windows the holder's parents are read with their start times from Win32_Process in one
+   * call of at most 5 s (Windows soon gives a process id to another process: a parent that started
+   * after its child is not its parent, and ends the walk). A holder found to be the adapter's is
+   * remembered for as long as that adapter's connection is kept. */
   async owns(project: Project, conversationId: string, pid: number | undefined, producer?: string) {
     const driver = this.drivers.get(project.id + '/' + conversationId)?.driver as { pid?: number | null; connected?: boolean } | undefined, adapter = driver?.pid;
     if (!adapter) return false;
     if (!pid && producer === 'codex') return !!driver.connected;
-    if (!pid || process.platform === 'win32') return false;
+    if (!pid) return false;
+    if (process.platform === 'win32') {
+      const known = this.ownedHolders.get(driver);
+      if (known?.has(pid)) return true;
+      const ancestors = await windowsAncestors(pid);
+      if (!ancestors.includes(adapter)) return false;
+      this.ownedHolders.set(driver, (known ?? new Set()).add(pid));
+      return true;
+    }
     const { execFile } = await import('node:child_process');
     let current = pid;
     for (let depth = 0; depth < 4 && current > 1; depth++) {

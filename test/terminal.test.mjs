@@ -1,21 +1,28 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
+import fsSync from 'node:fs';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { RhoService } from '../dist/server.js';
 import { BrowserClient } from '../dist/browser.js';
 import { RhoClient } from '../dist/client.js';
 // A Unix Host's socket lies under its project, within the socket path limit; Windows Hosts use pipes.
-const shortTemp = process.platform === 'win32' ? tmpdir() : '/tmp';
+const windows = process.platform === 'win32', shortTemp = windows ? tmpdir() : '/tmp';
+// On Windows the terminal's shells are named: cmd.exe, plain whatever the person's own prints, and
+// Git Bash, where bash is wanted. A shell closed with the service may still be ending as its folder
+// is removed, which Windows then refuses for a moment.
+const cmdExe = path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'cmd.exe');
+const gitBash = path.join(process.env.ProgramFiles ?? 'C:\\Program Files', 'Git', 'bin', 'bash.exe');
+const removed = root => fs.rm(root, { recursive: true, force: true, maxRetries: windows ? 50 : 0, retryDelay: 100 });
 
-test('the person has a terminal in the project folder, and an Agent may read its screen, type in it and open its own, recorded as its activity', { skip: process.platform === 'win32' && 'Rho does not open a pseudo-terminal on Windows yet' }, async t => {
+test('the person has a terminal in the project folder, and an Agent may read its screen, type in it and open its own, recorded as its activity', async t => {
   const root = await fs.mkdtemp(path.join(shortTemp, 'rho-terminal-'));
   await fs.mkdir(path.join(root, 'project'));
   // A plain shell, whatever the person's own is set up to print.
   const shell = process.env.SHELL; process.env.SHELL = '/bin/sh';
-  const service = await new RhoService({ root, stateDir: path.join(root, '.service'), rscript: '/missing' }).start();
-  t.after(async () => { await service.close(); if (shell === undefined) delete process.env.SHELL; else process.env.SHELL = shell; await fs.rm(root, { recursive: true, force: true }); });
+  const service = await new RhoService({ root, stateDir: path.join(root, '.service'), rscript: '/missing', ...(windows ? { terminalShell: cmdExe } : {}) }).start();
+  t.after(async () => { await service.close(); if (shell === undefined) delete process.env.SHELL; else process.env.SHELL = shell; await removed(root); });
   const admin = new RhoClient({ url: service.url, token: service.adminToken }), p = await admin.call('project.open', { path: 'project' });
   const person = new BrowserClient({ url: service.url }), call = (method, body = {}) => person.call(method, { projectId: p.id, ...body });
 
@@ -29,8 +36,24 @@ test('the person has a terminal in the project folder, and an Agent may read its
       assert.ok(Date.now() < end, 'the terminal printed ' + JSON.stringify(text.slice(-200)));
     }
   };
-  await call('console.terminal.write', { terminalId: terminal.terminalId, data: 'stty size && pwd && echo "answer=$((6 * 7))"\n' });
-  await until(/20 90\r\n.*rho-terminal-.*project\r\nanswer=42\r\n/s);
+  // The console host's bytes carry its own cursor moves: on Windows what the terminal shows is read.
+  const shows = async pattern => {
+    for (const end = Date.now() + 20000; ;) {
+      const screen = await call('console.terminal.screen', { terminalId: terminal.terminalId, lines: 100 });
+      at = screen.offset;
+      if (pattern.test(screen.lines.join('\n'))) return screen;
+      assert.ok(Date.now() < end, 'the terminal shows ' + JSON.stringify(screen.lines.slice(-8)));
+      await new Promise(r => setTimeout(r, 100));
+    }
+  };
+  if (windows) {
+    await shows(/>$/m);
+    await call('console.terminal.write', { terminalId: terminal.terminalId, data: 'mode con | findstr "Lines Columns" & cd & set /a 6*7\r' });
+    await shows(/Lines:\s+20\n\s*Columns:\s+90\n.*rho-terminal-.*project\n42/);
+  } else {
+    await call('console.terminal.write', { terminalId: terminal.terminalId, data: 'stty size && pwd && echo "answer=$((6 * 7))"\n' });
+    await until(/20 90\r\n.*rho-terminal-.*project\r\nanswer=42\r\n/s);
+  }
   assert.equal((await call('console.terminal.resize', { terminalId: terminal.terminalId, cols: 120, rows: 40 })).terminal.cols, 120);
   assert.deepEqual((await call('console.terminal.list')).terminals.map(each => [each.terminalId, each.by, each.endedAt]), [[terminal.terminalId, 'browser:local', null]]);
   // A read that waits holds nothing else of the project.
@@ -48,7 +71,7 @@ test('the person has a terminal in the project folder, and an Agent may read its
   const agent = new RhoClient(JSON.parse(await fs.readFile(grant, 'utf8'))), as = (method, body = {}) => agent.call(method, { projectId: p.id, ...body });
   await assert.rejects(as('console.terminal.read', { terminalId: terminal.terminalId }), error => ['unauthorized', 'scope'].includes(error.error.kind));
   // It types a command into the person's terminal and reads the screen once the output settles.
-  const sent = await as('console.terminal.write', { terminalId: terminal.terminalId, data: 'echo "from the Agent $((40 + 2))"\r' });
+  const sent = await as('console.terminal.write', { terminalId: terminal.terminalId, data: windows ? 'echo from the Agent 42\r' : 'echo "from the Agent $((40 + 2))"\r' });
   const screen = await as('console.terminal.screen', { terminalId: terminal.terminalId, after: sent.offset, waitMs: 10000 });
   assert.equal(screen.quiet, true);
   assert.ok(screen.lines.includes('from the Agent 42'), JSON.stringify(screen.lines));
@@ -69,21 +92,21 @@ test('the person has a terminal in the project folder, and an Agent may read its
   await assert.rejects(call('console.terminal.read', { terminalId: terminal.terminalId }), error => error.error.kind === 'not_found');
 });
 
-test('commands typed in a terminal are recorded with who typed them, for the person and the Agent, apart from the machine\'s shell history', { skip: process.platform === 'win32' && 'Rho does not open a pseudo-terminal on Windows yet' }, async t => {
+test('commands typed in a terminal are recorded with who typed them, for the person and the Agent, apart from the machine\'s shell history', { skip: windows && !fsSync.existsSync(gitBash) && 'Git Bash is not installed' }, async t => {
   const root = await fs.mkdtemp(path.join(shortTemp, 'rho-terminal-'));
   await fs.mkdir(path.join(root, 'project')); await fs.mkdir(path.join(root, 'home'));
   // bash, with a home of its own so the machine's startup files and history stay out of it.
   const saved = { SHELL: process.env.SHELL, HOME: process.env.HOME, HISTFILE: process.env.HISTFILE };
   Object.assign(process.env, { SHELL: '/bin/bash', HOME: path.join(root, 'home'), HISTFILE: path.join(root, 'home', 'machine_history') });
-  const service = await new RhoService({ root, stateDir: path.join(root, '.service'), rscript: '/missing' }).start();
-  t.after(async () => { await service.close(); for (const [key, value] of Object.entries(saved)) if (value === undefined) delete process.env[key]; else process.env[key] = value; await fs.rm(root, { recursive: true, force: true }); });
+  const service = await new RhoService({ root, stateDir: path.join(root, '.service'), rscript: '/missing', ...(windows ? { terminalShell: gitBash } : {}) }).start();
+  t.after(async () => { await service.close(); for (const [key, value] of Object.entries(saved)) if (value === undefined) delete process.env[key]; else process.env[key] = value; await removed(root); });
   const admin = new RhoClient({ url: service.url, token: service.adminToken }), p = await admin.call('project.open', { path: 'project' });
   const person = new BrowserClient({ url: service.url }), call = (method, body = {}) => person.call(method, { projectId: p.id, ...body });
   const grant = path.join(root, 'agent.json'), connection = await service.agentConnection(p.id, 'terminal', grant);
   const agent = new RhoClient(JSON.parse(await fs.readFile(grant, 'utf8'))), as = (method, body = {}) => agent.call(method, { projectId: p.id, ...body });
 
   const { terminal } = await call('console.terminal.open', { cols: 80, rows: 20 }), terminalId = terminal.terminalId;
-  await as('console.terminal.screen', { terminalId, after: 0, waitMs: 8000 });
+  await as('console.terminal.screen', { terminalId, after: 0, waitMs: windows ? 25000 : 8000 });
   const cursor = (await admin.call('observation.snapshot', { projectId: p.id })).cursor;
   const typed = async (who, data) => who('console.terminal.screen', { terminalId, after: (await who('console.terminal.write', { terminalId, data })).offset, waitMs: 8000 });
   await typed(call, 'echo mine\r');

@@ -5,7 +5,7 @@
     "package": "@rho-workspace/plugin-markdown",
     "packageVersion": "0.2.0",
     "shows": "project-notes.md",
-    "capturedAt": "2026-11-12T18:40:57.812Z",
+    "capturedAt": "2026-11-12T19:06:24.086Z",
     "image": "markdown.reader.png"
   },
   {
@@ -14,16 +14,16 @@
     "package": "@rho-workspace/plugin-documents",
     "packageVersion": "0.4.11",
     "shows": "analysis/rnaseq_differential_expression.R",
-    "capturedAt": "2026-11-12T18:40:55.089Z",
+    "capturedAt": "2026-11-12T19:06:21.387Z",
     "image": "rho.editor.png"
   },
   {
     "component": "rho.flow",
     "version": "1",
     "package": "@rho-workspace/plugin-kernel",
-    "packageVersion": "0.5.20",
+    "packageVersion": "0.5.22",
     "shows": "this project",
-    "capturedAt": "2026-11-12T18:44:16.198Z",
+    "capturedAt": "2026-11-12T19:09:42.208Z",
     "image": "rho.flow.png"
   },
   {
@@ -32,34 +32,34 @@
     "package": "@rho-workspace/plugin-media",
     "packageVersion": "0.4.0",
     "shows": "results/rnaseq_differential_expression.png",
-    "capturedAt": "2026-11-12T18:41:27.515Z",
+    "capturedAt": "2026-11-12T19:06:53.724Z",
     "image": "rho.media.png"
   },
   {
     "component": "rho.notebook",
     "version": "1",
     "package": "@rho-workspace/plugin-kernel",
-    "packageVersion": "0.5.20",
+    "packageVersion": "0.5.22",
     "shows": "this project",
-    "capturedAt": "2026-11-12T18:42:41.279Z",
+    "capturedAt": "2026-11-12T19:08:07.325Z",
     "image": "rho.notebook.png"
   },
   {
     "component": "rho.object",
     "version": "1",
     "package": "@rho-workspace/plugin-kernel",
-    "packageVersion": "0.5.20",
+    "packageVersion": "0.5.22",
     "shows": "sw in R",
-    "capturedAt": "2026-11-12T18:44:41.550Z",
+    "capturedAt": "2026-11-12T19:10:07.543Z",
     "image": "rho.object.png"
   },
   {
     "component": "rho.plots",
     "version": "1",
     "package": "@rho-workspace/plugin-kernel",
-    "packageVersion": "0.5.20",
+    "packageVersion": "0.5.22",
     "shows": "this project",
-    "capturedAt": "2026-11-12T18:43:53.569Z",
+    "capturedAt": "2026-11-12T19:09:19.579Z",
     "image": "rho.plots.png"
   },
   {
@@ -68,25 +68,25 @@
     "package": "@rho-workspace/plugin-charts",
     "packageVersion": "0.4.0",
     "shows": "data/swarming/single_cultures.csv, circularity against area",
-    "capturedAt": "2026-11-12T18:41:32.907Z",
+    "capturedAt": "2026-11-12T19:06:59.130Z",
     "image": "rho.scatter.png"
   },
   {
     "component": "rho.servers",
     "version": "1",
     "package": "@rho-workspace/plugin-kernel",
-    "packageVersion": "0.5.20",
+    "packageVersion": "0.5.22",
     "shows": "this project",
-    "capturedAt": "2026-11-12T18:44:38.873Z",
+    "capturedAt": "2026-11-12T19:10:04.868Z",
     "image": "rho.servers.png"
   },
   {
     "component": "rho.sessions",
     "version": "1",
     "package": "@rho-workspace/plugin-kernel",
-    "packageVersion": "0.5.20",
+    "packageVersion": "0.5.22",
     "shows": "this project",
-    "capturedAt": "2026-11-12T18:43:03.920Z",
+    "capturedAt": "2026-11-12T19:08:29.965Z",
     "image": "rho.sessions.png"
   },
   {
@@ -95,16 +95,16 @@
     "package": "@rho-workspace/plugin-tables",
     "packageVersion": "0.5.2",
     "shows": "results/rnaseq_de_summary.csv",
-    "capturedAt": "2026-11-12T18:41:24.712Z",
+    "capturedAt": "2026-11-12T19:06:50.932Z",
     "image": "rho.table.png"
   },
   {
     "component": "rho.variables",
     "version": "1",
     "package": "@rho-workspace/plugin-kernel",
-    "packageVersion": "0.5.20",
+    "packageVersion": "0.5.22",
     "shows": "this project",
-    "capturedAt": "2026-11-12T18:43:30.873Z",
+    "capturedAt": "2026-11-12T19:08:56.922Z",
     "image": "rho.variables.png"
   }
 ]

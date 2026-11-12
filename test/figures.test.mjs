@@ -7,12 +7,13 @@ import { spawnSync } from 'node:child_process';
 import { RhoService, layeredGrantLimits } from '../dist/server.js';
 import { CheckedClient as RhoClient } from './checked-client.mjs';
 import { BrowserClient } from '../dist/browser.js';
+import { standIn } from './support/stand-in.mjs';
 
 // A real R session draws a real ggplot; the figure it is kept as is what the person selects in
 // and what the Agent reads. Without R and the describer's packages this is skipped, not passed.
 const rscript = process.env.RHO_RSCRIPT ?? 'Rscript';
 const probe = spawnSync(rscript, ['-e', 'cat(all(vapply(c("ggplot2","svglite","xml2","jsonlite"), requireNamespace, TRUE, quietly = TRUE)))'], { encoding: 'utf8' });
-const skip = probe.stdout?.trim() === 'TRUE' ? (process.platform === 'win32' && 'the stand-in Agent is a script') : 'R with ggplot2, svglite, xml2 and jsonlite is not available';
+const skip = probe.stdout?.trim() === 'TRUE' ? false : 'R with ggplot2, svglite, xml2 and jsonlite is not available';
 // A stand-in Claude Code CLI that keeps the message it was given and answers it.
 const stub = log => `#!/usr/bin/env node
 import fs from 'node:fs';
@@ -30,9 +31,10 @@ process.stdin.on('end', () => {
 
 test('a plot drawn in the Notebook is a figure the person selects in, asks about, and the Agent reads and points back into', { skip, timeout: 240000 }, async t => {
   const root = await fs.mkdtemp(path.join(process.platform === 'win32' ? tmpdir() : '/tmp', 'rho-figures-'));
-  const log = path.join(root, 'claude.jsonl'), claude = path.join(root, 'claude-stub.mjs');
+  const log = path.join(root, 'claude.jsonl');
   await fs.mkdir(path.join(root, 'work'));
-  await fs.writeFile(claude, stub(log), { mode: 0o755 });
+  // The Claude CLI's system prompt is over several lines: on Windows an .exe stands in, not a batch file.
+  const claude = await standIn(path.join(root, 'claude-stub.mjs'), stub(log), { exe: true });
   const service = await new RhoService({ root, stateDir: path.join(root, '.service'), rscript, claude, agentBackend: 'claude-cli' }).start();
   t.after(async () => { await service.close(); await fs.rm(root, { recursive: true, force: true }); });
   const operator = new RhoClient({ url: service.url, token: service.adminToken });

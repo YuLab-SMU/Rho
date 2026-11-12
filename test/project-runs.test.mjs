@@ -7,28 +7,28 @@ import { RhoService } from '../dist/server.js';
 import { CheckedClient as RhoClient } from './checked-client.mjs';
 import { BrowserClient } from '../dist/browser.js';
 import { digest } from '@rho-workspace/plugin-contracts';
+import { standIn } from './support/stand-in.mjs';
 
 // A person owns the project, so they may see what it is running. What they see is a
 // summary: enough to tell waiting from finished, never the submitted code.
-// Windows starts a script only through a shell, so the Core stand-in cannot be its Core there.
-const stand = { skip: process.platform === 'win32' && 'the Core stand-in is a script' };
+const stand = {};
 async function fixture() {
   const root = await fs.mkdtemp(path.join(tmpdir(), 'rho-runs-'));
   const state = path.join(root, '.service'), project = path.join(root, 'work');
   await fs.mkdir(project);
   const marker = path.join(root, 'host-ready'), answers = path.join(root, 'lookup.json');
   await fs.writeFile(answers, JSON.stringify({ ok: true, value: { status: { Finished: { exit: { Code: 0 } } }, terminal: true, held: false, stdout: {}, stderr: {} } }));
-  const core = path.join(root, 'core-stub.mjs');
-  await fs.writeFile(core, `#!/usr/bin/env node
+  // A Host started on Windows stops when its stop file appears.
+  const core = await standIn(path.join(root, 'core-stub.mjs'), `#!/usr/bin/env node
 import fs from 'node:fs';
 const args = process.argv.slice(2), method = args[0], marker = ${JSON.stringify(marker)}, project = ${JSON.stringify(project)};
 const value = (json, code = 0) => { process.stdout.write(JSON.stringify(json) + '\\n'); process.exit(code); };
-if (method === 'serve') { fs.writeFileSync(marker, 'ready'); process.stdout.write(JSON.stringify({ ready: {} }) + '\\n'); setInterval(() => {}, 1000); }
+if (method === 'serve') { fs.writeFileSync(marker, 'ready'); process.stdout.write(JSON.stringify({ ready: {} }) + '\\n'); setInterval(() => { if (process.env.RHO_CORE_STOP_FILE && fs.existsSync(process.env.RHO_CORE_STOP_FILE)) process.exit(0); }, 100); }
 if (method === 'capability') { if (!fs.existsSync(marker)) value({ ok: false, error: { kind: 'host_unavailable', message: 'no host' } }, 3); value({ ok: true, value: { project_root: project, executors: [{ name: 'r', program: 'Rscript', args: ['--vanilla'] }] } }); }
 if (method === 'submit') value({ ok: true, value: { accepted_at: '2026-10-23T00:00:00.000Z', request_id: 'x', held: true, terminal: false, status: { Running: { pid: 1 } }, stdout: {}, stderr: {} } });
 if (method === 'lookup') value(JSON.parse(fs.readFileSync(${JSON.stringify(answers)}, 'utf8')));
 value({ ok: false, error: { kind: 'usage', message: 'unsupported' } }, 1);
-`, { mode: 0o755 });
+`);
   const service = await new RhoService({ root, stateDir: state, coreBinary: core, rscript: 'Rscript' }).start();
   const operator = new RhoClient({ url: service.url, token: service.adminToken });
   const p = await operator.call('project.open', { path: 'work' });

@@ -7,6 +7,8 @@ import { RhoService } from '../dist/server.js';
 import { CheckedClient } from './checked-client.mjs';
 import { BrowserClient } from '../dist/browser.js';
 import { observeDshSession } from '@rho-workspace/plugin-agent/dsh-session';
+import { pathToFileURL } from 'node:url';
+import { standIn } from './support/stand-in.mjs';
 // A Unix Host's socket lies under its project, within the socket path limit; Windows Hosts use pipes.
 const shortTemp = process.platform === 'win32' ? tmpdir() : '/tmp';
 
@@ -173,15 +175,17 @@ test('an ACP Agent added in Rho is checked once, offered for new conversations a
       assert.equal(read.turns[1].state, 'completed');
     } finally { await g.service.close(); }
 
-    // An Agent Rho knows is listed when its program is on PATH, with the command it starts as.
-    if (process.platform !== 'win32') {
+    // An Agent Rho knows is listed when its program is on PATH, with the command it starts as: on
+    // Windows the file PATHEXT finds, as npm installs it (hermes.cmd).
+    {
       const bin = path.join(root, 'bin'); await fs.mkdir(bin);
-      await fs.writeFile(path.join(bin, 'hermes'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+      const hermes = await standIn(path.join(bin, 'hermes'), 'process.exit(0);\n');
       process.env.PATH = bin + path.delimiter + saved.path;
       const h = await setup(root);
       try {
         const listed = (await h.call('conversation.settings.read')).installed.find(a => a.id === 'hermes');
-        assert.deepEqual(listed, { id: 'hermes', name: 'Hermes Agent', command: [path.join(bin, 'hermes'), 'acp'] });
+        assert.equal(listed.name, 'Hermes Agent');
+        assert.deepEqual(listed.command.map(part => part.toLowerCase()), [hermes.toLowerCase(), 'acp']);
       } finally { await h.service.close(); }
     }
   } finally {
@@ -193,7 +197,7 @@ test('an ACP Agent added in Rho is checked once, offered for new conversations a
 
 // A Harness session in the project folder continues in Rho only through Harness's own ACP
 // command: added in Rho, or named when Rho started. Another ACP command does not continue it.
-test('a DeepSeek Harness session continues with an added Harness, never with another ACP Agent', { skip: process.platform === 'win32' && 'a POSIX launcher stands in for dsh' }, async () => {
+test('a DeepSeek Harness session continues with an added Harness, never with another ACP Agent', async () => {
   const root = await fs.mkdtemp(path.join(shortTemp, 'rho-agent-harness-')), f = await setup(root);
   const saved = process.env.RHO_ACP_TEST_LOG;
   process.env.RHO_ACP_TEST_LOG = path.join(root, 'calls.jsonl');
@@ -203,10 +207,10 @@ test('a DeepSeek Harness session continues with an added Harness, never with ano
     observeDshSession(project.root, { version: 4, id: 'harness-conversation', cwd: project.root, createdAt: 1000 }, events);
     const harness = async () => (await f.call('agent.sessions.list')).sessions.find(s => s.sessionId === 'harness-conversation');
     assert.equal((await harness()).continueWith, null);
-    // A stand-in for Harness's launcher, answering ACP as `dsh acp`.
+    // A stand-in for Harness's launcher, answering ACP as `dsh acp` (on Windows dsh.cmd, as npm installs it).
     const bin = path.join(root, 'bin'); await fs.mkdir(bin);
-    await fs.writeFile(path.join(bin, 'dsh'), `#!/bin/sh\nexec "${process.execPath}" "${path.join(root, 'peer.mjs')}"\n`, { mode: 0o755 });
-    const settings = await f.call('conversation.agents.add', { command: [path.join(bin, 'dsh'), 'acp'] });
+    const dsh = await standIn(path.join(bin, 'dsh'), `import(${JSON.stringify(pathToFileURL(path.join(root, 'peer.mjs')).href)});\n`);
+    const settings = await f.call('conversation.agents.add', { command: [dsh, 'acp'] });
     assert.deepEqual(settings.added.map(a => [a.backend, a.name]), [['acp:dsh', 'DeepSeek Harness']]);
     assert.equal((await harness()).continueWith, 'acp:dsh');
     await f.call('conversation.agents.remove', { backend: 'acp:dsh' });

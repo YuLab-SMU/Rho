@@ -173,6 +173,13 @@ jobs:
           # Generated contracts and type checks are the same on every system; Linux runs them.
           if [ "$RUNNER_OS" = Linux ]; then npm run check:contracts; fi
           npm test
+      # The selected Plugins' terminals and the Agent clients they start, on each system: the
+      # pseudo-terminal and its shells (on Windows the console host, PowerShell and Git Bash), and
+      # npm's batch-file shims.
+      - name: Test the Plugins' terminals and Agent starts
+        if: ${{ !cancelled() }}
+        working-directory: Rho-plugins
+        run: node --test --test-timeout=300000 test/console.test.mjs test/agent-describe.test.mjs
       # What Rho's R dependency probe sees when the suite fails, and on Windows again with Rtools' MSYS
       # tools first on PATH, where every R run was once refused.
       - name: Show the R dependency probe

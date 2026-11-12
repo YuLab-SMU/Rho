@@ -9,6 +9,7 @@ import { RhoClient } from '../dist/client.js';
 import { fileFacts, describedFiles, holdsOf, figureContext } from '../dist/file-describer.js';
 import http from 'node:http';
 import { createHash } from 'node:crypto';
+import { standIn } from './support/stand-in.mjs';
 // A Unix Host's socket lies under its project, within the socket path limit; Windows Hosts use pipes.
 const shortTemp = process.platform === 'win32' ? tmpdir() : '/tmp';
 
@@ -58,15 +59,15 @@ const catalog = { local: { models: {
   'reading-model': { id: 'reading-model', modalities: { input: ['text'] }, cost: { input: 1, output: 2 } },
   'liar-model': { id: 'liar-model', modalities: { input: ['text', 'image'] }, cost: { input: 1, output: 2 } } } } };
 
-// Windows starts a script only through a shell, so a stand-in client cannot be started there.
-const stand = { skip: process.platform === 'win32' && 'the stand-in client is a script' };
+const stand = {};
 test('while a message runs, its files get facts at once and a sentence: a figure as an image to a model that takes images, else from what made it', stand, async () => {
   const root = await fs.mkdtemp(path.join(shortTemp, 'rho-describe-turn-')); let service;
   const listing = http.createServer((_, res) => res.end(JSON.stringify(catalog)));
   await new Promise(r => listing.listen(0, '127.0.0.1', r));
   try {
-    const log = path.join(root, 'describe.log'), claude = path.join(root, 'claude');
-    await fs.writeFile(path.join(root, 'peer.mjs'), peer); await fs.writeFile(claude, describer(log), { mode: 0o755 }); await fs.mkdir(path.join(root, 'project'));
+    const log = path.join(root, 'describe.log');
+    await fs.writeFile(path.join(root, 'peer.mjs'), peer); await fs.mkdir(path.join(root, 'project'));
+    const claude = await standIn(path.join(root, 'claude'), describer(log));
     await fs.writeFile(path.join(root, 'project', 'plot.py'), "import matplotlib.pyplot as plt\nplt.bar(ratios, area)\nplt.title('Mean area by ratio')\nplt.savefig('results/plot.png')\n");
     const options = { root, stateDir: path.join(root, '.service'), rscript: '/missing', claude, modelsDev: { url: `http://127.0.0.1:${listing.address().port}/api.json` },
       describe: { everyMs: 200, settleMs: 100 }, claudeAcp: { command: { file: process.execPath, args: [path.join(root, 'peer.mjs')] }, env: { RHO_TEST_COUNTER: path.join(root, 'sessions'), RHO_TEST_MODELS: JSON.stringify(['seeing-model', 'reading-model', 'liar-model', 'seeing-model']) } } };

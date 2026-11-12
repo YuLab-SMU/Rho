@@ -7,10 +7,25 @@ import { execFile, spawn } from 'node:child_process';
 import { once } from 'node:events';
 import fs from 'node:fs/promises';
 import http from 'node:http';
+import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 
-const run = promisify(execFile), cli = path.resolve('dist/cli.js');
+const run = promisify(execFile), cli = path.resolve('dist/cli.js'), windows = process.platform === 'win32';
+// The person ends it from its terminal: Ctrl+C, which Node takes as SIGINT. On Windows a signal
+// sent to another process ends it at once; there the page runs on a console of its own, and
+// Ctrl+Break is raised on that console, as the person would press it (Ctrl+C may be turned off for
+// a program started in the background). The service it started shares that console.
+const ctrlBreak = pid => run(path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'), ['-NoLogo', '-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(`Add-Type -Namespace RhoTest -Name ConsoleEvent -MemberDefinition @'
+public delegate bool Handler(uint ctrl);
+static readonly Handler Keep = ctrl => true;
+[DllImport("kernel32.dll")] static extern bool FreeConsole();
+[DllImport("kernel32.dll")] static extern bool AttachConsole(uint pid);
+[DllImport("kernel32.dll")] static extern bool SetConsoleCtrlHandler(Handler handler, bool add);
+[DllImport("kernel32.dll")] static extern bool GenerateConsoleCtrlEvent(uint ctrl, uint group);
+public static bool Break(uint pid) { FreeConsole(); if (!AttachConsole(pid)) return false; SetConsoleCtrlHandler(Keep, true); bool raised = GenerateConsoleCtrlEvent(1, 0); System.Threading.Thread.Sleep(100); FreeConsole(); return raised; }
+'@
+if (-not [RhoTest.ConsoleEvent]::Break(${pid})) { exit 1 }`, 'utf16le').toString('base64')], { windowsHide: true });
 const status = async state => JSON.parse((await run(process.execPath, [cli, '--status', '--state-dir', state])).stdout).status;
 // A request with the headers a browser would put on it, which fetch does not let a caller set.
 const post = (url, headers) => new Promise((resolve, reject) => {
@@ -20,7 +35,7 @@ const post = (url, headers) => new Promise((resolve, reject) => {
   request.on('error', reject); request.end('{}');
 });
 async function dev(folders) {
-  const child = spawn(process.execPath, ['scripts/dev.mjs', ...folders, '--port', '0'], { stdio: ['ignore', 'pipe', 'pipe'] });
+  const child = spawn(process.execPath, ['scripts/dev.mjs', ...folders, '--port', '0'], { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
   let printed = '';
   for (const stream of [child.stdout, child.stderr]) stream.on('data', chunk => { printed += chunk; });
   const url = await new Promise((resolve, reject) => {
@@ -28,11 +43,15 @@ async function dev(folders) {
     child.stdout.on('data', () => { const found = /^Rho from source: (http:\/\/127\.0\.0\.1:\d+)$/m.exec(printed); if (found) { clearTimeout(timer); resolve(found[1]); } });
     child.once('exit', code => { clearTimeout(timer); reject(new Error(`npm run dev ended with ${code}: ${printed}`)); });
   });
-  return { child, url, printed: () => printed, async end() { child.kill('SIGINT'); const [code] = child.exitCode === null ? await once(child, 'exit') : [child.exitCode]; return code; } };
+  return { child, url, printed: () => printed, async end() {
+    const exited = child.exitCode === null ? once(child, 'exit') : Promise.resolve([child.exitCode]);
+    if (windows) await ctrlBreak(child.pid); else child.kill('SIGINT');
+    const [code] = await exited; return code;
+  } };
 }
 
-test('the page from source reaches its service, another site does not, and only a service it started ends with it', { skip: process.platform === 'win32' && 'needs an interrupt a child process can take in order', timeout: 180000 }, async () => {
-  const root = await fs.realpath(await fs.mkdtemp('/tmp/rho-dev-')), state = path.join(root, 'state'), folders = ['--root', path.join(root, 'projects'), '--state-dir', state, '--example', 'off'];
+test('the page from source reaches its service, another site does not, and only a service it started ends with it', { timeout: 180000 }, async () => {
+  const root = await fs.realpath(await fs.mkdtemp(path.join(windows ? os.tmpdir() : '/tmp', 'rho-dev-'))), state = path.join(root, 'state'), folders = ['--root', path.join(root, 'projects'), '--state-dir', state, '--example', 'off'];
   await fs.mkdir(path.join(root, 'projects'));
   let page;
   try {
@@ -62,6 +81,7 @@ test('the page from source reaches its service, another site does not, and only 
   } finally {
     if (page?.child.exitCode === null) page.child.kill('SIGKILL');
     await run(process.execPath, [cli, '--stop', '--state-dir', state]).catch(() => {});
-    await fs.rm(root, { recursive: true, force: true });
+    // On Windows the stopped service's log stays open a moment after it has stopped.
+    await fs.rm(root, { recursive: true, force: true, maxRetries: windows ? 50 : 0, retryDelay: 100 });
   }
 });

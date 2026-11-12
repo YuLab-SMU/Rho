@@ -15,7 +15,7 @@ import './terminal.css';
 // request; the page keeps this many lines of scrollback (the service keeps the last megabyte).
 export const terminalViewLimits = { waitMs: 20000, typeBatchMs: 4, scrollbackLines: 10000, resizeMs: 80, retryMs: 1500 };
 
-interface TerminalFacts { terminalId: string; by: string; typedBy?: { by: string; at: string } | null; shell: string; cwd: string; cols: number; rows: number; endedAt: string | null; exit: { code: number | null; signal: string | null } | null; bytes: number; kept: number; problem: string | null }
+interface TerminalFacts { terminalId: string; by: string; typedBy?: { by: string; at: string } | null; shell: string; cwd: string; cols: number; rows: number; endedAt: string | null; exit: { code: number | null; signal: string | null } | null; bytes: number; kept: number; problem: string | null; windowsPty?: { backend: 'conpty'; buildNumber: number } | null }
 type State = { kind: 'starting' } | { kind: 'live' } | { kind: 'ended'; how: string } | { kind: 'refused'; why: string; others: TerminalFacts[] } | { kind: 'lost' };
 
 // The machine's own monospace face; a prompt drawn with a Nerd Font finds its symbols when one
@@ -36,6 +36,8 @@ function theme(element: HTMLElement) {
   };
 }
 const ending = (facts: TerminalFacts) => facts.problem ?? (facts.exit?.signal ? `The shell was ended (${facts.exit.signal}).` : facts.exit?.code ? `The shell ended with exit code ${facts.exit.code}.` : 'The shell ended.');
+// A shell's name from its path, a Windows path too.
+const shellName = (shell: string) => shell.split(/[\\/]/).at(-1) ?? '';
 
 const clock = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 export function TerminalPane({ client, projectId, terminalId, onTerminal, onCommands, cursor, who }: {
@@ -101,7 +103,9 @@ export function TerminalPane({ client, projectId, terminalId, onTerminal, onComm
           fresh.current = false; wanted.current = facts.terminalId; saved.current(facts.terminalId);
         } else if (!facts.endedAt && (facts.cols !== term.cols || facts.rows !== term.rows)) void call('console.terminal.resize', { terminalId: facts.terminalId, cols: Math.max(2, term.cols), rows: Math.max(1, term.rows) }).catch(() => {});
         id = facts.terminalId; live = !facts.endedAt; setCurrent(id);
-        setShell(facts.shell.split('/').at(-1) ?? ''); setState(live ? { kind: 'live' } : { kind: 'ended', how: ending(facts) });
+        // On Windows the console host draws the screen and repaints it when the size changes.
+        if (facts.windowsPty) term.options.windowsPty = facts.windowsPty;
+        setShell(shellName(facts.shell)); setState(live ? { kind: 'live' } : { kind: 'ended', how: ending(facts) });
         term.focus();
         // Everything it printed that is still kept, then what it prints from now on.
         for (let after = 0; !stop.signal.aborted;) {
@@ -147,7 +151,7 @@ export function TerminalPane({ client, projectId, terminalId, onTerminal, onComm
     {state.kind === 'refused' && <div className="terminal-refused" role="alert">
       <p>{state.why}</p>
       {state.others.length > 0 && <ul>{state.others.map(other => <li key={other.terminalId}>
-        <span>{other.shell.split('/').at(-1)}{other.cwd ? ' in ' + other.cwd : ''} · {other.endedAt ? 'ended' : 'open'}</span>
+        <span>{shellName(other.shell)}{other.cwd ? ' in ' + other.cwd : ''} · {other.endedAt ? 'ended' : 'open'}</span>
         <button className="text-button" onClick={() => attach(other.terminalId)}>Show it here</button>
         <button className="text-button" onClick={() => close(other.terminalId)}>Close it</button>
       </li>)}</ul>}

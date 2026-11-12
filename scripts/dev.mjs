@@ -94,18 +94,22 @@ process.stdout.write(`Rho from source: ${page}\n`
   + `  service  ${target}, ${started ? 'started here and stopped when this ends' : 'already running and left running when this ends'}${stateDirectory ? ' (state ' + stateDirectory + ')' : ''}\n`);
 if (values.open) server.openBrowser();
 
-// Ending this ends the page server, then the service only if this run started it, in order.
+// Ending this ends the page server, then the service only if this run started it, in order. On
+// Windows a signal sent to another process ends it at once, so the service is asked as rho --stop
+// asks it (its stop request in its state folder); Ctrl+Break there ends this as Ctrl+C does.
 let ending = false;
 async function end(code) {
   if (ending) return; ending = true;
   await server.close().catch(() => {});
   if (started && started.exitCode === null && started.signalCode === null) {
-    started.kill('SIGINT');
+    const exited = once(started, 'exit').catch(() => {});
+    if (process.platform === 'win32' && stateDirectory) await fs.writeFile(path.join(stateDirectory, 'service.stop'), '').catch(() => started.kill('SIGINT'));
+    else started.kill('SIGINT');
     const forced = setTimeout(() => started.kill('SIGKILL'), 15000);
-    await once(started, 'exit').catch(() => {}); clearTimeout(forced);
+    await exited; clearTimeout(forced);
   }
   process.exit(code);
 }
-for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => void end(0));
+for (const signal of ['SIGINT', 'SIGTERM', ...(process.platform === 'win32' ? ['SIGBREAK'] : [])]) process.on(signal, () => void end(0));
 // A service that ends first leaves the page nothing to read.
 started?.once('exit', () => { if (!ending) { process.stderr.write('The Rho service ended; the page from source ends with it.\n'); void end(1); } });

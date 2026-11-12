@@ -1,10 +1,10 @@
-import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Fault } from '@rho-workspace/plugin-contracts';
 import { announced } from './running.js';
+import { endProgram, spawnProgram } from './programs.js';
 
 // Adding Rho to an Agent that runs outside Rho: the project-scoped MCP server it starts, under
 // a name that says which project, written by the Agent's own `mcp add` so its configuration
@@ -89,11 +89,11 @@ export async function connectionInstructions(project: { id: string; root: string
 
 function run(binary: string, args: string[], cwd: string, limits: typeof connectLimits) {
   return new Promise<{ code: number | null; output: string }>((resolve, reject) => {
-    const child = spawn(binary, args, { cwd, env: process.env, stdio: ['ignore', 'pipe', 'pipe'] });
+    const child = spawnProgram(binary, args, { cwd, env: process.env, stdio: ['ignore', 'pipe', 'pipe'] });
     let output = '', stopped = '';
     const keep = (chunk: Buffer) => { if (output.length < limits.outputBytes) output = (output + chunk.toString('utf8')).slice(0, limits.outputBytes); };
-    child.stdout.on('data', keep); child.stderr.on('data', keep);
-    const timer = setTimeout(() => { stopped = 'timeout'; child.kill('SIGKILL'); }, limits.timeoutMs);
+    child.stdout!.on('data', keep); child.stderr!.on('data', keep);
+    const timer = setTimeout(() => { stopped = 'timeout'; endProgram(child); }, limits.timeoutMs);
     child.on('error', error => { clearTimeout(timer); reject(error); });
     child.on('close', code => { clearTimeout(timer); if (stopped) reject(new Fault('limit', `It did not finish within ${limits.timeoutMs / 1000} s. ${output.trim()}`.trim())); else resolve({ code, output }); });
   });

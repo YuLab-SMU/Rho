@@ -7,6 +7,7 @@ import http from 'node:http';
 import { RhoService } from '../dist/server.js';
 import { CheckedClient } from './checked-client.mjs';
 import { BrowserClient } from '../dist/browser.js';
+import { standIn, removeStandIn } from './support/stand-in.mjs';
 
 // Stand-ins for the `claude` and `codex` CLIs: they record each `mcp` command and where it ran.
 const cli = `#!/usr/bin/env node
@@ -16,8 +17,7 @@ if (process.env.RHO_CONNECT_FAIL && process.argv[3] !== 'remove' && process.argv
 `;
 async function setup(extra = {}) {
   const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'rho-connect-')));
-  const log = path.join(root, 'calls.jsonl'), claude = path.join(root, 'claude'), codex = path.join(root, 'codex');
-  for (const file of [claude, codex]) { await fs.writeFile(file, cli); await fs.chmod(file, 0o755); }
+  const log = path.join(root, 'calls.jsonl'), claude = await standIn(path.join(root, 'claude'), cli), codex = await standIn(path.join(root, 'codex'), cli);
   process.env.RHO_CONNECT_LOG = log;
   await fs.mkdir(path.join(root, 'ozone study'), { recursive: true });
   const service = await new RhoService({ root, stateDir: path.join(root, '.service'), coreBinary: path.join(root, 'absent-core'), rscript: 'Rscript', claude, codex, ...extra }).start();
@@ -27,8 +27,7 @@ async function setup(extra = {}) {
   return { root, service, operator, person, project, calls, call: (method, body = {}) => person.call(method, { projectId: project.id, ...body }) };
 }
 
-// Windows starts a script only through a shell, so a stand-in client cannot be started there.
-const stand = { skip: process.platform === 'win32' && 'the stand-in client is a script' };
+const stand = {};
 test('the person adds Rho to their own Claude Code and Codex with each Agent\'s mcp add, and the grant is kept', stand, async () => {
   const s = await setup();
   try {
@@ -108,16 +107,18 @@ test('a restart keeps the address an Agent was given, and when that port is take
 });
 
 test('an Agent that refuses, is missing or does not finish says so and leaves nothing marked added', stand, async () => {
-  const s = await setup({ connect: { timeoutMs: 400 } });
+  // Long enough for a stand-in that answers to start, through cmd.exe on Windows, on a busy machine;
+  // the one that does not finish waits longer.
+  const s = await setup({ connect: { timeoutMs: 3000 } });
   try {
     process.env.RHO_CONNECT_FAIL = '1';
     await assert.rejects(s.call('session.connect', { agent: 'claude-code' }), error => error.error.kind === 'unavailable' && /Claude Code could not add Rho: config is locked/.test(error.error.message));
     delete process.env.RHO_CONNECT_FAIL;
     assert.equal((await s.call('observation.snapshot')).agents.some(a => a.label === 'Claude Code'), false, 'a new grant the Agent refused is removed');
-    await fs.rm(path.join(s.root, 'codex'));
+    await removeStandIn(path.join(s.root, 'codex'));
     await assert.rejects(s.call('session.connect', { agent: 'codex' }), error => error.error.kind === 'unavailable' && /Codex was not found on this machine/.test(error.error.message));
-    await fs.writeFile(path.join(s.root, 'codex'), '#!/bin/sh\nsleep 5\n'); await fs.chmod(path.join(s.root, 'codex'), 0o755);
-    await assert.rejects(s.call('session.connect', { agent: 'codex' }), error => error.error.kind === 'limit' && /within 0.4 s/.test(error.error.message));
+    await standIn(path.join(s.root, 'codex'), 'setTimeout(() => {}, 10000);\n');
+    await assert.rejects(s.call('session.connect', { agent: 'codex' }), error => error.error.kind === 'limit' && /within 3 s/.test(error.error.message));
   } finally { delete process.env.RHO_CONNECT_FAIL; await s.service.close(); }
 });
 
