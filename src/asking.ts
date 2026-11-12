@@ -16,3 +16,6 @@ export function askedAbout(text: string): { about: string | null; quote: string 
   const file = /^About (.+?)(?: as this message left it \(resource [^)\n]+\))?:$/.exec(head);
   return file ? { about: file[1]!, quote: null, question } : { about: null, quote: null, question: text.trim() };
 }
+// A message as a person would read it aloud: the tags a pasted passage arrives in are not part
+// of what was asked. The passage itself stays.
+export const plainAsk = (text: string) => text.replace(/<\/?pasted_content\b[^>]*>/g, '\n');

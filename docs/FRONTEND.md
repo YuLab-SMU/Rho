@@ -96,8 +96,8 @@ inspect what happened. The application gives those actions direct places:
   kept, and the board names results it does not cover and files changed since.
   Earlier answers are chosen from a menu. Below the board come a count for each kind
   of step (asked, read, edited, ran, changed on disk, answered), which is also the
-  legend and filter of the Graph's timeline below it: one lane per conversation, the
-  person's own lane above them and one for callers outside Rho below
+  legend and filter of the Graph's timeline below it, in at most three rows: each conversation
+  a named piece, with the person's own work and callers outside Rho among them
   ([timeline events](TIMELINE-EVENTS-EPISODE.md)). A project where only the person has
   worked shows the same strip as What you did.
   Without conversations, the results show as pictures, newest first: the newest at
@@ -477,8 +477,11 @@ inspect what happened. The application gives those actions direct places:
   work in the order they began: a section of the notes with its conversation, or a
   conversation the notes do not cover. A card carries the question, the newest figure
   and counts, and an arrow says that one line builds on files another made.
-  Conversations that changed no file stand below. Past eight lines of work the closed
-  cards are names and counts, so that all of them read at once.
+  Conversations that changed no file stand below. A line that several conversations
+  worked on lists them on its card, and open it heads each one's messages with its
+  title; a conversation chosen there or in the timeline shows its messages and the
+  files it changed. Past eight lines of work the closed cards are names and counts, so
+  that all of them read at once.
   An open line reads left to right: the files it used, the work, the files the work
   made, and what the notes conclude from them. The work opens in place, a message into
   its activities (looking around, cells, a script written and run in rounds, the notes,
@@ -500,19 +503,25 @@ inspect what happened. The application gives those actions direct places:
   others; Use this instead drafts a message the person edits and sends. Search covers
   every level and opens what it finds. Arrow keys open and close a node and move along
   its column.
-  The timeline below gives each conversation a lane and each step a block coloured by
-  kind (asked, read, edited, ran, changed on disk, answered), lanes with the same title
-  carrying their start time. Past six lanes it keeps its height and scrolls, opening on
-  the newest. What the plugins record joins it: each plugin may name a read of who did
-  what and when (Notebook cells, Console commands), and each event goes to the lane of
-  whoever did it: You, or the conversation whose Agent did it, wherever that
-  conversation was started. An Agent the person connected from its own window (Claude
-  Code in a terminal, WorkBuddy) has a lane under its name for what no session's record
-  names; the `rho` command and callers whose access is gone have the two lanes left. Every
-  stretch of time is wide enough for its steps before the rest is shared by duration,
-  so a minute of cells beside days of messages stays readable. The legend counts and
-  filters them, refused or unknown steps are marked, pauses fold to a short gap, and
-  the work replays at 1×, 2× or 4×; replay hides what came later than its cursor.
+  The timeline below draws time where work happened
+  ([many conversations](GRAPH-LAYERS-EPISODE.md#many-conversations)). A conversation is
+  a named piece from its first message to its last, and pieces that do not overlap share
+  a row, so sixteen conversations held over five days are four rows and all in sight.
+  A message is a band and its steps are columns stacked by kind (read, edited, ran,
+  changed on disk, versions kept), taller where more happened, with a dot under a column
+  that holds a failed, refused or unknown step. What the plugins record joins it: each
+  plugin may name a read of who did what and when (Notebook cells, Console commands),
+  and each event goes to the piece of whoever did it: You, or the conversation whose
+  Agent did it, wherever that conversation was started. An Agent the person connected
+  from its own window (Claude Code in a terminal, WorkBuddy) has a piece under its name
+  for what no session's record names; the `rho` command and callers whose access is gone
+  have the two left. Every stretch of time is wide enough for its steps before the rest
+  is shared by duration, pauses fold to a short gap, and the axis names each day. The
+  timeline zooms and scrolls; hovering names the conversation, the message and the steps
+  under the pointer; a message or a conversation's name chosen there is chosen in the
+  graph, and what is chosen in the graph is marked there. The legend counts and filters
+  the steps, and the work replays at 1×, 2× or 4× from the axis; replay hides what came
+  later than its cursor.
   While the Agent works the Graph stays and follows it: its line and message open and
   its flag sits on the node that stands for the step it is on. A step waiting for the
   person's choice turns amber and is answered there. The map of the whole shows while
@@ -658,9 +667,9 @@ the statements of the notes with the step that wrote each, and the reads over th
 (`trajectory`, `links`, `shownAs`, `lineFiles`, `flows`, `support`). `src/layers-layout.ts` places
 what is open (`layoutLayers`; `sizes.roomy` is the count of lines past which closed cards are
 brief). `web/work-turns.ts` reads every session for the Graph, `turnLimits.sessionsAtOnce` at a
-time and each in pages of `turnLimits.pageTurns` messages. `web/graph.tsx` draws the levels, the
-inspector, the timeline (`timelineLimits.lanes`) and the
-Overview's `WorkStrip`. `web/timeline-events.ts` reads each plugin's `timeline` read named in
+time and each in pages of `turnLimits.pageTurns` messages. `web/graph.tsx` draws the levels and
+the inspector; `web/timeline.tsx` draws the timeline, also the Overview's `WorkStrip`, as
+`src/timeline-layout.ts` places it without a DOM (`layoutTimeline`, `timelineSizes`). `web/timeline-events.ts` reads each plugin's `timeline` read named in
 the catalog, and `src/timeline-events.ts` places its events in lanes by principal. `src/answer-board.ts` derives the Overview's answer board from
 the same graph: `answerBoard` gives each file and command of a message a role,
 `boardThreads` keeps a later question that made no results with the answer it asks

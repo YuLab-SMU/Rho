@@ -26,13 +26,17 @@ export interface Item {
 export interface Wire { id: string; from: string; to: string; kind: 'uses' | 'makes' | 'rests' | 'flow'; basis: Basis; label: string; n: number; paths?: string[] }
 export interface Scene { items: Item[]; wires: Wire[]; width: number; height: number }
 export const sizes = {
-  line: { width: 340, height: 178, figure: 132 }, quiet: { width: 300, height: 74 },
+  // A closed line of work: its name and what it comes to, then what it asked when it is one
+  // conversation, or its conversations by name when it is several, then the newest figure it made.
+  line: { width: 340, height: 78, said: 44, talks: 13, talk: 28, figure: 132 }, quiet: { width: 300, height: 58 },
   // The protected resource is one look at the whole project. Up to this many lines of work, a
   // closed line carries its question and newest figure; past it, every closed line is its name
   // and counts, so that all of them still read at once. Each opens the same way.
-  roomy: 8, brief: { width: 340, height: 98 },
+  roomy: 8, brief: { width: 340, height: 78 },
   // A row of lines of work wraps past this width; the room between lines carries what one builds on.
   wrap: 1760, between: { x: 124, y: 72 },
+  // The room above the first row for a line that builds on one further along, drawn over those between.
+  arc: 60,
   head: 64, pad: 20, label: 26, gap: 8, column: 68, indent: 16,
   work: 400, ask: 88, askOpen: 60, activity: 46, step: 28, stepGap: 2,
   file: { width: 216, height: 48, figure: 156 }, claim: { width: 304, finding: 86, choice: 64 },
@@ -62,8 +66,17 @@ function lineFrame(layers: WorkLayers, line: WorkNode, open: ReadonlySet<string>
     items.push({ id: node.id, kind, ref: node.id, line: line.id, x: workX + depth * S.indent, y, width: S.work - depth * S.indent, height, depth, open: isOpen, column: 'work' });
     y += height + gap;
   };
+  // In a line held in several conversations, each run of messages from one conversation is under its name.
+  const several = (line.conversations?.length ?? 0) > 1;
+  let talk: string | undefined;
   for (const askId of line.children) {
     const ask = layers.nodes.get(askId)!, askOpen = open.has(ask.id) && ask.children.length > 0;
+    if (several && ask.conversationId !== talk) {
+      talk = ask.conversationId;
+      if (y > top) y += S.gap;
+      items.push({ id: line.id + '|talk|' + ask.id, kind: 'label', ref: ask.said || ask.title, line: line.id, x: workX, y, width: S.work, height: S.label, column: 'work' });
+      y += S.label;
+    }
     row(ask, 'ask', 0, askOpen ? S.askOpen : S.ask, askOpen);
     if (askOpen) for (const activityId of ask.children) {
       const activity = layers.nodes.get(activityId)!, activityOpen = open.has(activity.id);
@@ -129,7 +142,9 @@ export function layoutLayers(layers: WorkLayers, open: ReadonlySet<string>, opti
   // A closed line shows the newest figure it made.
   const figureOf = (line: WorkNode) => lineFiles(layers, line.id).made.map(f => f.path).reverse().find(p => options.figure?.(p)) ?? null;
   const brief = main.length > S.roomy;
-  const size = (line: WorkNode) => { const frame = frames.get(line.id); return frame ? { width: frame.width, height: frame.height } : line.quiet ? { ...S.quiet } : brief ? { ...S.brief } : { width: S.line.width, height: S.line.height + (figureOf(line) ? S.line.figure : 0) }; };
+  const talks = (line: WorkNode) => line.conversations?.length ?? 0;
+  const size = (line: WorkNode) => { const frame = frames.get(line.id); return frame ? { width: frame.width, height: frame.height } : line.quiet ? { ...S.quiet } : brief ? { ...S.brief }
+    : { width: S.line.width, height: S.line.height + (talks(line) > 1 ? S.line.talks + talks(line) * S.line.talk : line.said && line.said !== line.title ? S.line.said : 0) + (figureOf(line) ? S.line.figure : 0) }; };
   const items: Item[] = [], wires: Wire[] = [];
   const place = (line: WorkNode, x: number, y: number) => {
     const frame = frames.get(line.id), box = size(line);
@@ -151,6 +166,10 @@ export function layoutLayers(layers: WorkLayers, open: ReadonlySet<string>, opti
   const work = row(main, 0, S.between.x, S.between.y);
   for (const flow of flows(layers)) if (main.some(l => l.id === flow.from) && main.some(l => l.id === flow.to))
     wires.push({ id: flow.from + '>' + flow.to, from: flow.from, to: flow.to, kind: 'flow', basis: 'reported', label: flow.paths.length === 1 ? 'builds on 1 file' : 'builds on ' + flow.paths.length + ' files', n: flow.paths.length, paths: flow.paths });
+  // A line that builds on one further along its row is drawn over the lines between; the first row leaves room for that.
+  const cards = items.filter(i => i.kind === 'line' || i.kind === 'frame'), card = (id: string) => cards.find(i => i.id === id);
+  const over = wires.some(w => { const a = w.kind === 'flow' ? card(w.from) : undefined, b = a && card(w.to); return !!a && !!b && a.y === 0 && b.y === 0 && cards.some(i => i.y === 0 && i.x > Math.min(a.x, b.x) && i.x < Math.max(a.x, b.x)); });
+  if (over) { for (const item of items) item.y += S.arc; work.bottom += S.arc; }
   let width = work.width, height = work.bottom;
   if (quiet.length) {
     // Conversations that changed no project file stand below the work, each still opening the same way.

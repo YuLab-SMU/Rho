@@ -12,7 +12,6 @@
 .graph-timeline.compact { gap: 14px; padding: 0; border: 0; background: transparent; }
 .graph-timeline.compact .tl-head { display: block; }
 .graph-timeline.compact .graph-timeline-text { display: none; }
-.graph-timeline.compact .tl-names { width: 150px; }
 /* A bare strip split by dividers; each cell draws the line on its left, and the strip clips the
    line of every cell that starts a row. */
 .graph-timeline.compact .tl-legend { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 12px 0; margin-left: -16px; overflow: hidden; }
@@ -122,7 +121,6 @@
 }
 @media (max-width: 767px) {
   .work-strip { padding: 14px 14px 10px; }
-  .graph-timeline.compact .tl-names { width: 96px; }
   .figure-grid, .figure-grid.featured { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
   .figure-thumb, .figure-grid.featured .figure-thumb { height: 108px; }
   /* Six fill three even rows; three lead with the newest across the width. */

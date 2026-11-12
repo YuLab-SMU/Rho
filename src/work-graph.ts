@@ -1,5 +1,5 @@
 import { commandEnd, conversationBlocks, displayCommand, segments, stepDuration, type ActivityOutcome, type ConversationStep, type ConversationTurn, type SessionObservation } from './conversation-presentation.js';
-import { askedAbout } from './asking.js';
+import { askedAbout, plainAsk } from './asking.js';
 import type { Statement, Trace } from './notes-meaning.js';
 import type { Holds } from './file-describer.js';
 
@@ -151,7 +151,7 @@ export function buildWorkGraph(input: GraphInput): WorkGraph {
     const end = time(turn.endedAt) ?? (running ? input.now : start);
     // A change on disk belongs to this message until the next one is sent.
     const next = position + 1 < ordered.length ? time(ordered[position + 1].turn.sentAt) ?? Infinity : Infinity;
-    const q: GraphNode = { id: 'q:' + turn.id, kind: 'question', title: firstLine(askedAbout(turn.text).question) || 'A message', text: turn.text, at: sent, turn: turn.id, conversationId, agent, state: turn.state, model: turn.model ?? null, events: [] };
+    const q: GraphNode = { id: 'q:' + turn.id, kind: 'question', title: firstLine(plainAsk(askedAbout(turn.text).question)) || 'A message', text: turn.text, at: sent, turn: turn.id, conversationId, agent, state: turn.state, model: turn.model ?? null, events: [] };
     nodes.set(q.id, q);
     // Typing in a terminal asks nothing.
     if (!terminal) note(q, { key: turn.id + ':ask', at: sent, turn: turn.id, action: 'ask', label: 'Asked' });

@@ -5,7 +5,7 @@ import type { BrowserClient, WorkspaceSnapshot } from '../src/browser.js';
 import { useTerminalTurns } from './terminal-turns.js';
 import { personPrincipal } from '../src/terminal-work.js';
 import { buildWorkGraph, foldVersions, type FileKind, type GraphEvent, type GraphNode, type GraphTurn, type WorkGraph as Graph } from '../src/work-graph.js';
-import { ancestors, buildWorkLayers, flows, isNotes, lineFiles, shownAs, support, trajectory, type Claim, type WorkLayers, type WorkNode } from '../src/work-layers.js';
+import { ancestors, buildWorkLayers, flows, isNotes, lineFiles, shownAs, support, talksOf, type Claim, type Talk, type WorkLayers, type WorkNode } from '../src/work-layers.js';
 import { layoutLayers, type Item, type Scene, type Wire } from '../src/layers-layout.js';
 import { durationText } from '../src/conversation-presentation.js';
 import type { AgentNow } from './agent-now.js';
@@ -18,8 +18,8 @@ import { AgentMarkdown } from './markdown.js';
 import { TerminalOutput } from '@rho-workspace/plugin-console/ui';
 import { readPreview, type Preview } from './previews.js';
 import { useTurns } from './work-turns.js';
-import { clock, failed, kindOfAction, span, stretchSizes, timelineKinds, type TimelineKind } from './timeline-kinds.js';
-import { markCaption, type EventMark, type Who } from '../src/timeline-events.js';
+import { clock, span } from './timeline-kinds.js';
+import { Timeline, stepCaption, plainTitle, type TimelineChosen, type TimelinePick } from './timeline.js';
 import { useEventMarks } from './timeline-events.js';
 import { useMeaning } from './meaning.js';
 import { ChoiceOptions } from './choices.js';
@@ -52,14 +52,21 @@ const atEnd = (element: HTMLElement | null) => { if (element) element.scrollTop 
 // The Agent's answer in a sentence or two, as plain text.
 const gist = (markdown?: string) => markdown ? markdown.replace(/```[\s\S]*?```/g, ' ').replace(/[#>*_`|]+/g, ' ').replace(/\[([^\]]+)\]\([^)]*\)/g, '$1').replace(/\s+/g, ' ').trim().slice(0, 220) : '';
 const took = (node: WorkNode) => node.end > node.start ? span(node.end - node.start) : '';
+const dayOf = (at: number) => new Date(at).toLocaleDateString([], { month: 'short', day: 'numeric' });
+const daysOf = (start: number, end: number) => !start ? '' : dayOf(start) === dayOf(end) ? dayOf(start) : dayOf(start) + ' – ' + (new Date(start).getMonth() === new Date(end).getMonth() && new Date(start).getFullYear() === new Date(end).getFullYear() ? new Date(end).getDate() : dayOf(end));
+// A line of work by name. One the notes do not name, held in several conversations, is named
+// after the first of them and says how many more there are.
+const lineName = (node: WorkNode) => node.level === 'line' && !node.section && (node.conversations?.length ?? 0) > 1 ? `${node.title} and ${node.conversations!.length - 1} more` : node.title;
 
-// What is chosen: a piece of work at any level, a file as one line of work stands to it, or a
-// statement of the notes.
-type Target = { kind: 'work'; node: WorkNode } | { kind: 'claim'; claim: Claim } | { kind: 'file'; path: string; line: string };
+// What is chosen: a piece of work at any level, one conversation of a line of work, a file as one
+// line of work stands to it, or a statement of the notes.
+type Target = { kind: 'work'; node: WorkNode } | { kind: 'talk'; talk: Talk } | { kind: 'claim'; claim: Claim } | { kind: 'file'; path: string; line: string };
+const talkId = (conversationId: string) => 't:' + conversationId;
 function targetOf(layers: WorkLayers, id: string | null): Target | null {
   if (!id) return null;
   const node = layers.nodes.get(id);
   if (node) return { kind: 'work', node };
+  if (id.startsWith('t:')) { for (const line of layers.nodes.get(layers.root)!.children) { const talk = talksOf(layers, line).find(t => talkId(t.id) === id); if (talk) return { kind: 'talk', talk }; } return null; }
   const claim = layers.claims.find(c => c.id === id);
   if (claim) return { kind: 'claim', claim };
   const cut = id.indexOf('|');
@@ -86,6 +93,8 @@ interface View { x: number; y: number; k: number }
 const zoomLimits = { min: 0.2, max: 2 };
 // Below this zoom a card's text is too small to read; the graph opens no smaller than this.
 const readable = 0.76;
+// A graph too tall for one screen opens across the page from its top down to this zoom.
+const pageAt = 0.66;
 // The whole graph is shown at once down to this zoom, where a card is still its name.
 const wholeAt = 0.3;
 
@@ -133,6 +142,9 @@ export function WorkGraph({ initialResource, client, snapshot, files, agentNow, 
       const behind = support(layers, target.claim.paths);
       on.add(target.claim.id); for (const p of behind.paths) paths.add(p); for (const w of behind.work) work.add(w);
       if (target.claim.written) work.add(target.claim.written);
+    } else if (target.kind === 'talk') {
+      on.add(target.talk.line);
+      for (const ask of target.talk.asks) { work.add(ask.id); for (const t of layers.touches) if (ancestors(layers, t.work).includes(ask.id)) paths.add(t.path); }
     } else if (target.kind === 'file') {
       paths.add(target.path);
       for (const t of layers.touches) if (t.path === target.path) work.add(t.work);
@@ -150,6 +162,18 @@ export function WorkGraph({ initialResource, client, snapshot, files, agentNow, 
     for (const c of layers.claims) if (on.has(c.id) && !open.has(c.line)) on.add(c.line);
     return on;
   }, [target, layers, scene, open]);
+  // The same choice on the timeline: the messages it stands for, and when, for an activity or a step.
+  const chosen = useMemo((): TimelineChosen | null => {
+    if (!target) return null;
+    const turns = new Set<string>(), add = (work: string) => { const ask = ancestors(layers, work).map(id => layers.nodes.get(id)!).find(n => n.level === 'ask'); if (ask?.turn) turns.add(ask.turn); };
+    if (target.kind === 'talk') for (const ask of target.talk.asks) add(ask.id);
+    else if (target.kind === 'file') { for (const t of layers.touches) if (t.path === target.path) add(t.work); }
+    else if (target.kind === 'claim') { for (const w of support(layers, target.claim.paths).work) add(w); if (target.claim.written) add(target.claim.written); }
+    else if (target.node.level === 'line') for (const id of target.node.children) add(id);
+    else if (target.node.level !== 'workspace') add(target.node.id);
+    const node = target.kind === 'work' ? target.node : null;
+    return { turns, span: node && (node.level === 'activity' || node.level === 'step') ? { start: node.start, end: node.end } : null };
+  }, [target, layers]);
   const [query, setQuery] = useState('');
   const found = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -218,15 +242,19 @@ export function WorkGraph({ initialResource, client, snapshot, files, agentNow, 
     const next = { k, x: wide ? (box.width - p.width * k) / 2 - p.x * k : 40 - p.x * k, y: tall ? Math.max(64, (box.height - p.height * k) / 2) - p.y * k : 64 - p.y * k };
     if (animate) glide(next); else setView(next);
   };
-  // The page opens on the whole graph: every line of work at once, as names when there are many.
-  // Past that, on the first line at a readable size. Until the person moves, opens or chooses
-  // something, sessions that are read later bring the whole into view again.
+  // The page opens on the whole graph when that leaves it readable. A graph that is too tall for
+  // that but fits across the page, or nearly, opens across it from the top instead, like a page:
+  // its names can be read, and the rest is a scroll away. Only one too wide for that as well opens
+  // small, as names. Until the person moves, opens or chooses something, sessions that are read
+  // later bring it into view again.
   const shape = scene.items.filter(i => i.kind === 'line' || i.kind === 'frame').map(i => i.id).join('|');
   useLayoutEffect(() => {
     if (touched.current || !scene.items.length || loading) return;
     const box = canvas.current?.getBoundingClientRect();
     if (!box) return;
     const whole = Math.min(1, (box.width - 96) / scene.width, (box.height - 132) / scene.height);
+    const across = Math.min(1, (box.width - 96) / scene.width);
+    if (whole < 0.9 && across >= pageAt) { setView({ k: across, x: (box.width - scene.width * across) / 2, y: 40 }); return; }
     // Too much for one screen at a size that reads: its full width from the top, like a page.
     if (whole >= wholeAt) fit(false); else { const k = Math.max(wholeAt, Math.min(1, (box.width - 96) / scene.width)); setView({ k, x: Math.max(40, (box.width - scene.width * k) / 2), y: 56 }); }
   }, [shape, loading]);
@@ -261,6 +289,7 @@ export function WorkGraph({ initialResource, client, snapshot, files, agentNow, 
   // Shows a node however deep it is: everything above it opens, and it is chosen and brought into view.
   const [seeking, setSeeking] = useState<string | null>(null);
   function reveal(id: string) {
+    if (id.startsWith('t:')) { touched.current = true; setSelected(id); return; }
     const claim = layers.claims.find(c => c.id === id), cut = id.indexOf('|');
     const above = claim ? [claim.line] : layers.nodes.has(id) ? ancestors(layers, id).slice(1).filter(a => a !== layers.root) : cut > 0 ? [id.slice(0, cut)] : [];
     stored.current = true; touched.current = true;
@@ -349,10 +378,19 @@ export function WorkGraph({ initialResource, client, snapshot, files, agentNow, 
 
   const near = view.k >= 0.56;
   const dim = (id: string) => !!((focus && !focus.has(id)) || (found && !found.shown.has(id)));
-  const counts = { lines: lines.filter(l => !l.quiet).length, asks: [...layers.nodes.values()].filter(n => n.level === 'ask' && !n.terminal).length, steps: layers.nodes.get(layers.root)!.steps, claims: layers.claims.length,
+  const counts = { lines: lines.filter(l => !l.quiet).length, talks: new Set(lines.flatMap(l => l.conversations?.filter(c => !c.startsWith('terminal:')) ?? [])).size, asks: [...layers.nodes.values()].filter(n => n.level === 'ask' && !n.terminal).length, steps: layers.nodes.get(layers.root)!.steps, claims: layers.claims.length,
     typed: [...layers.nodes.values()].filter(n => n.level === 'step' && n.record?.terminal).length };
   const wireOn = (w: Wire) => !!focus && focus.has(w.from) && focus.has(w.to) && (target?.kind !== 'file' || w.from === selected || w.to === selected || items.get(w.from)?.ref === target.path || items.get(w.to)?.ref === target.path);
   const flag = (id: string) => liveItem === id && live ? (agentNow?.agent ?? 'Agent') + ' · ' + live.label : null;
+  // A message or a conversation pressed on the timeline is chosen here as it stands: its line of
+  // work lights up and its details open, and nothing on the canvas opens or moves.
+  const pick = (picked: TimelinePick) => {
+    const id = picked.turn && layers.nodes.has('a:' + picked.turn) ? 'a:' + picked.turn : picked.conversation ? talkId(picked.conversation) : null;
+    if (id && targetOf(layers, id)) { touched.current = true; setSelected(selected === id ? null : id); }
+  };
+  // The conversation chosen or worked in now, for the line of work that lists it.
+  const talkOf = (id: string | null | undefined) => id ? layers.nodes.get(id)?.conversationId ?? null : null;
+  const chosenTalk = target?.kind === 'talk' ? target.talk.id : target?.kind === 'work' ? target.node.conversationId ?? null : null, liveTalk = talkOf(live?.work);
   const holds = (path: string) => meaning.holds(path);
 
   if (!loading && !scene.items.length && !marks.length) return <section className="graph-page"><GraphHead counts={null} /><div className="studio-empty"><span className="empty-symbol"><Icon name="graph" size={26} stroke={1.5} /></span><h2>{problem ? 'Work could not be read' : 'Nothing to draw yet'}</h2>
@@ -378,20 +416,20 @@ export function WorkGraph({ initialResource, client, snapshot, files, agentNow, 
               onSelect={() => setSelected(selected === item.id ? null : item.id)} onToggle={() => toggle(item.id)} />)}
             <Wires scene={scene} items={items} on={wireOn} focusing={!!focus} labels={near} dim={dim} later={w => { const a = items.get(w.from), b = items.get(w.to); return !!a && !!b && (later(a) || later(b)); }} live={liveItem} />
             {scene.items.filter(i => i.kind !== 'frame').map(item => {
-              const common = { key: item.id, item, selected: selected === item.id, dimmed: dim(item.id), later: later(item), onSelect: () => setSelected(selected === item.id ? null : item.id) };
+              const common = { item, selected: selected === item.id, dimmed: dim(item.id), later: later(item), onSelect: () => setSelected(selected === item.id ? null : item.id) };
               if (item.kind === 'label') return <span key={item.id} className="lg-label" style={{ left: item.x, top: item.y, width: item.width }}>{item.ref}</span>;
-              if (item.kind === 'file') return <FileCard {...common} artifact={newest(item.ref)} category={layers.artifacts.get(item.ref)?.category ?? kindOf(item.ref)} holds={holds(item.ref)} from={item.from ? layers.nodes.get(item.from)?.title : undefined} client={client} snapshot={snapshot} near={near} />;
+              if (item.kind === 'file') return <FileCard key={item.id} {...common} artifact={newest(item.ref)} category={layers.artifacts.get(item.ref)?.category ?? kindOf(item.ref)} holds={holds(item.ref)} from={item.from ? lineName(layers.nodes.get(item.from)!) : undefined} client={client} snapshot={snapshot} near={near} />;
               if (item.kind === 'bundle') return <button key={item.id} className="graph-node lg-file lg-bundle" data-node={item.id} data-kind="bundle" style={place(item)} aria-label={`${item.paths!.length} files from ${layers.nodes.get(item.ref)?.title}: ${item.paths!.join(', ')}. Go there`} title={item.paths!.join('\n')}
                 data-dimmed={dim(item.id) || undefined} data-later={later(item) || undefined} onClick={() => setSelected(item.ref)}>
-                <span className="graph-node-icon"><Icon name="workflow" size={14} stroke={1.8} /></span><span className="lg-text"><strong className="lg-title">{item.paths!.length} files</strong><span className="lg-note">From {layers.nodes.get(item.ref)?.title}</span></span></button>;
-              if (item.kind === 'claim') return <ClaimCard {...common} claim={layers.claims.find(c => c.id === item.ref)!} />;
+                <span className="graph-node-icon"><Icon name="workflow" size={14} stroke={1.8} /></span><span className="lg-text"><strong className="lg-title">{item.paths!.length} files</strong><span className="lg-note">From {lineName(layers.nodes.get(item.ref)!)}</span></span></button>;
+              if (item.kind === 'claim') return <ClaimCard key={item.id} {...common} claim={layers.claims.find(c => c.id === item.ref)!} />;
               const node = layers.nodes.get(item.ref)!;
-              if (item.kind === 'line') return <LineCard {...common} node={node} layers={layers} figure={item.figure ? newest(lineFiles(layers, node.id).made.map(f => f.path).reverse().find(p => isPicture(p) && newest(p)?.resource) ?? '') : undefined} client={client} snapshot={snapshot} near={near} flag={flag(item.id)} waiting={!!waitingWork && liveItem === item.id} onToggle={() => toggle(item.id)} />;
-              return <WorkRow {...common} node={node} current={!!current && eventWork(current) !== null && shownAs(layers, eventWork(current)!, open) === item.id} flag={flag(item.id)} waiting={!!waitingWork && shownAs(layers, waitingWork, open) === item.id} onToggle={() => toggle(item.id)} />;
+              if (item.kind === 'line') return <LineCard key={item.id} {...common} node={node} layers={layers} chosenTalk={chosenTalk} liveTalk={liveTalk} onTalk={id => { touched.current = true; setSelected(selected === talkId(id) ? null : talkId(id)); }} figure={item.figure ? newest(lineFiles(layers, node.id).made.map(f => f.path).reverse().find(p => isPicture(p) && newest(p)?.resource) ?? '') : undefined} client={client} snapshot={snapshot} near={near} flag={flag(item.id)} waiting={!!waitingWork && liveItem === item.id} onToggle={() => toggle(item.id)} />;
+              return <WorkRow key={item.id} {...common} node={node} current={!!current && eventWork(current) !== null && shownAs(layers, eventWork(current)!, open) === item.id} flag={flag(item.id)} waiting={!!waitingWork && shownAs(layers, waitingWork, open) === item.id} onToggle={() => toggle(item.id)} />;
             })}
           </div>
-          {focus && target && <div className="graph-overlay"><span>{target.kind === 'claim' ? 'What this statement rests on, and the work that made it' : target.kind === 'file' ? <>The work that touched <strong>{target.path.split('/').at(-1)}</strong> and what is concluded from it</> : target.node.level === 'step' ? 'The files in this step' : target.node.terminal ? 'What these commands used and made' : 'What this ' + levelLabel[target.node.level].toLowerCase() + ' used and made'}</span><button className="small-button" onClick={() => setSelected(null)}>Show everything</button></div>}
-          {current && <div className="graph-caption" role="status" aria-live="polite"><time>{clock(current.at, true)}</time><span>{caption(current, processNodes)}</span></div>}
+          {focus && target && <div className="graph-overlay"><span>{target.kind === 'claim' ? 'What this statement rests on, and the work that made it' : target.kind === 'talk' ? 'What this conversation used and made' : target.kind === 'file' ? <>The work that touched <strong>{target.path.split('/').at(-1)}</strong> and what is concluded from it</> : target.node.level === 'step' ? 'The files in this step' : target.node.terminal ? 'What these commands used and made' : 'What this ' + levelLabel[target.node.level].toLowerCase() + ' used and made'}</span><button className="small-button" onClick={() => setSelected(null)}>Show everything</button></div>}
+          {current && <div className="graph-caption" role="status" aria-live="polite"><time>{clock(current.at, true)}</time><span>{stepCaption(current, processNodes)}</span></div>}
           <div className="graph-nav">
           <MiniMap scene={scene} view={view} canvas={canvas} dim={dim} live={liveItem} moves={moves} onMove={setView} />
           <div className="graph-zoom" role="group" aria-label="Zoom">
@@ -417,25 +455,16 @@ export function WorkGraph({ initialResource, client, snapshot, files, agentNow, 
         cursor={cursor} agentOf={agentOf} onStudio={onStudio} onAgent={onAgent} onSelect={reveal} onOpenAll={openAll} onClose={() => setSelected(null)} />}
     </div>
     {(process.events.length > 0 || marks.length > 0) && <Timeline graph={process} marks={marks} cursor={cursor} playing={playing} running={!!agentNow?.running} speed={speed} onSpeed={setSpeed}
-      onCursor={at => { setPlaying(false); setCursor(at); }} onPlay={() => { if (playing) setPlaying(false); else { if (cursor !== null && cursor >= times.at(-1)!) setCursor(null); setPlaying(true); } }} />}
+      chosen={chosen} onPick={pick} onCursor={at => { setPlaying(false); setCursor(at); }} onPlay={() => { if (playing) setPlaying(false); else { if (cursor !== null && cursor >= times.at(-1)!) setCursor(null); setPlaying(true); } }} />}
   </section>;
 }
 
-function GraphHead({ counts, omitted = 0, reading, children }: { counts: { lines: number; asks: number; steps: number; claims: number; typed: number } | null; omitted?: number; reading?: { read: number; of: number } | null; children?: ReactNode }) {
+function GraphHead({ counts, omitted = 0, reading, children }: { counts: { lines: number; talks: number; asks: number; steps: number; claims: number; typed: number } | null; omitted?: number; reading?: { read: number; of: number } | null; children?: ReactNode }) {
   return <header className="graph-head">
-    <div className="graph-heading"><h1 id="graph-title">Graph</h1><p>{counts ? `What was done here: ${plural(counts.lines, 'line', 'lines')} of work, ${counts.asks ? plural(counts.asks, 'message') + ', ' : ''}${plural(counts.steps, 'recorded step')}${counts.typed ? counts.typed === counts.steps ? ', all typed in a terminal' : `, ${counts.typed} of them typed in a terminal` : ''}.` : 'What was done in this project, from its lines of work down to each recorded step.'}
+    <div className="graph-heading"><h1 id="graph-title">Graph</h1><p>{counts ? `${plural(counts.lines, 'line', 'lines')} of work${counts.talks > counts.lines ? ' in ' + plural(counts.talks, 'conversation') : ''}, ${counts.asks ? plural(counts.asks, 'message') + ', ' : ''}${plural(counts.steps, 'recorded step')}${counts.typed ? counts.typed === counts.steps ? ', all typed in a terminal' : `, ${counts.typed} of them typed in a terminal` : ''}.` : 'What was done in this project, from its lines of work down to each recorded step.'}
       {counts && counts.claims > 0 && ` The notes conclude ${plural(counts.claims, 'thing')} from it.`}{reading && ` Reading session ${reading.read + 1} of ${reading.of}…`}{omitted > 0 && ` ${plural(omitted, 'earlier message')} could not be read.`}</p></div>
     {children && <div className="graph-tools">{children}</div>}
   </header>;
-}
-
-function caption(event: GraphEvent, byId: Map<string, GraphNode>) {
-  const node = byId.get(event.node);
-  if (!node) return event.label;
-  if (event.action === 'ask') return 'Asked: ' + node.title;
-  if (event.action === 'answer') return event.label;
-  if (event.action === 'changed') return node.title + ' · ' + event.label.charAt(0).toLowerCase() + event.label.slice(1);
-  return event.label + ' ' + (node.kind === 'run' ? node.title : node.path ?? node.title);
 }
 
 const place = (item: Item): CSSProperties => ({ left: item.x, top: item.y, width: item.width, height: item.height });
@@ -449,28 +478,35 @@ function lineFacts(layers: WorkLayers, node: WorkNode) {
   return [asks ? plural(asks, 'message') : '', plural(node.steps, 'step'), made ? plural(made, 'file') + ' made' : '', findings ? plural(findings, 'finding') : '', choices ? plural(choices, 'choice') : '', failedAsks ? failedAsks + ' failed' : ''].filter(Boolean);
 }
 
-function LineCard({ item, node, layers, figure, client, snapshot, near, selected, dimmed, later, flag, waiting, onSelect, onToggle }: CardProps & { node: WorkNode; layers: WorkLayers; figure?: GraphNode; client: BrowserClient; snapshot: WorkspaceSnapshot; near: boolean; flag: string | null; waiting: boolean; onToggle: () => void }) {
-  const facts = lineFacts(layers, node), brand = node.agents?.[0] ? brandOf(node.agents[0]) : null;
-  const when = node.start ? new Date(node.start).toLocaleDateString([], { month: 'short', day: 'numeric' }) : '';
-  return <div className={'graph-node lg-line' + (node.quiet ? ' quiet' : '') + (item.brief ? ' brief' : '')} data-node={item.id} data-kind="line" style={place(item)} data-selected={selected || undefined} data-dimmed={dimmed || undefined} data-later={later || undefined} data-live={flag ? '' : undefined}>
-    {flag && <Flag text={flag} waiting={waiting} />}
-    <button className="lg-main" aria-pressed={selected} aria-label={`Line of work: ${node.title}. ${facts.join(', ')}`} onClick={onSelect} onDoubleClick={onToggle}>
-      <span className="graph-node-head"><span className="graph-node-icon"><Icon name={node.quiet ? 'chat' : 'workflow'} size={15} stroke={1.8} /></span><span className="graph-node-kind">{node.quiet ? 'Conversation' : 'Line of work'}{when && <span className="graph-node-folder"> · {when}</span>}</span>{brand && <BrandMark brand={brand} size={13} />}</span>
-      <strong className="graph-node-title" title={node.title}>{node.title}</strong>
-      {!node.quiet && !item.brief && node.said && <span className="lg-said">{node.said}</span>}
+function LineCard({ item, node, layers, figure, client, snapshot, near, selected, dimmed, later, flag, waiting, chosenTalk, liveTalk, onSelect, onToggle, onTalk }: CardProps & { node: WorkNode; layers: WorkLayers; figure?: GraphNode; client: BrowserClient; snapshot: WorkspaceSnapshot; near: boolean; flag: string | null; waiting: boolean;
+  chosenTalk: string | null; liveTalk: string | null; onToggle: () => void; onTalk: (conversationId: string) => void }) {
+  const facts = lineFacts(layers, node), talks = talksOf(layers, node.id), several = talks.length > 1 && !item.brief && !node.quiet, brand = node.agents?.length === 1 ? brandOf(node.agents[0]!) : null;
+  // The card says what the line comes to; how many steps that took is in its details.
+  const meta = [daysOf(node.start, node.end), talks.length > 1 && (item.brief || !!node.section) ? plural(talks.length, 'conversation') : '', ...facts.filter(f => node.quiet || !/ steps?$/.test(f))].filter(Boolean);
+  // Whose conversation each is, when they are not all one Agent's.
+  const name = lineName(node), mixed = new Set(talks.map(t => t.terminal ? 'terminal' : t.agent)).size > 1;
+  return <div className={'graph-node lg-line' + (node.quiet ? ' quiet' : '') + (item.brief ? ' brief' : '')} data-node={item.id} data-kind="line" style={{ left: item.x, top: item.y, width: item.width, minHeight: item.height }} data-selected={selected || undefined} data-dimmed={dimmed || undefined} data-later={later || undefined} data-live={flag ? '' : undefined}>
+    <button className="lg-main" aria-pressed={selected} aria-label={`${node.quiet ? 'Conversation' : 'Line of work'}: ${name}. ${facts.join(', ')}`} onClick={onSelect} onDoubleClick={onToggle}>
+      <span className="lg-line-head">{brand && <BrandMark brand={brand} size={14} />}<strong className="graph-node-title" title={name}>{name}</strong></span>
+      <span className="lg-line-meta">{meta.map(f => <span key={f} className={/failed/.test(f) ? 'bad' : ''}>{f}</span>)}</span>
+      {flag && <span className={'lg-live' + (waiting ? ' waiting' : '')}><span className="pulse-dot" aria-hidden="true" />{waiting ? 'Needs your choice' : flag}</span>}
+      {!several && !node.quiet && !item.brief && node.said && node.said !== node.title && <span className="lg-said">{node.said}</span>}
       {figure && <CardPreview client={client} snapshot={snapshot} node={figure} shown={near && !later} />}
-      <span className="lg-facts">{(node.quiet ? facts.slice(0, 2).concat(facts.filter(f => /failed/.test(f))) : facts).map(f => <span key={f} className={/failed/.test(f) ? 'bad' : ''}>{f}</span>)}</span>
     </button>
-    <button className="lg-toggle" aria-expanded={false} aria-label={'Open ' + node.title} title="Open" onClick={onToggle}><Icon name="chevron" size={14} /></button>
+    {several && <ul className="lg-talks" aria-label="Its conversations">{talks.map(t => { const mark = t.agent ? brandOf(t.agent) : null; return <li key={t.id}>
+      <button className="lg-talk" aria-pressed={chosenTalk === t.id} data-live={liveTalk === t.id || undefined} title={t.title} onClick={() => onTalk(t.id)} onDoubleClick={onToggle}>
+        {mixed && (mark ? <BrandMark brand={mark} size={12} /> : <Icon name={t.terminal ? 'monitor' : 'chat'} size={12} />)}<span>{t.title}</span>
+        <small>{liveTalk === t.id && <span className="pulse-dot" aria-hidden="true" />}{dayOf(t.start)} · {plural(t.asks.length, t.terminal ? 'command' : 'message')}</small></button></li>; })}</ul>}
+    <button className="lg-toggle" aria-expanded={false} aria-label={'Open ' + name} title="Open" onClick={onToggle}><Icon name="chevron" size={14} /></button>
   </div>;
 }
 
 function Frame({ item, node, layers, selected, dimmed, onSelect, onToggle }: { item: Item; node: WorkNode; layers: WorkLayers; selected: boolean; dimmed: boolean; flag: string | null; onSelect: () => void; onToggle: () => void }) {
   return <div className="lg-frame" data-node={item.id} data-kind="frame" style={place(item)} data-selected={selected || undefined} data-dimmed={dimmed || undefined}>
     <div className="lg-frame-head">
-      <button className="lg-toggle open" aria-expanded aria-label={'Close ' + node.title} title="Close" onClick={onToggle}><Icon name="chevron" size={14} /></button>
-      <button className="lg-main" aria-pressed={selected} aria-label={`Line of work: ${node.title}`} onClick={onSelect} onDoubleClick={onToggle}>
-        <strong title={node.title}>{node.title}</strong><span className="lg-facts">{lineFacts(layers, node).map(f => <span key={f} className={/failed/.test(f) ? 'bad' : ''}>{f}</span>)}</span>
+      <button className="lg-toggle open" aria-expanded aria-label={'Close ' + lineName(node)} title="Close" onClick={onToggle}><Icon name="chevron" size={14} /></button>
+      <button className="lg-main" aria-pressed={selected} aria-label={`Line of work: ${lineName(node)}`} onClick={onSelect} onDoubleClick={onToggle}>
+        <strong title={lineName(node)}>{lineName(node)}</strong><span className="lg-facts">{lineFacts(layers, node).map(f => <span key={f} className={/failed/.test(f) ? 'bad' : ''}>{f}</span>)}</span>
       </button>
     </div>
   </div>;
@@ -533,17 +569,21 @@ function Wires({ scene, items, on, focusing, labels, dim, later, live }: { scene
       // One line of work to one in a lower row leaves its foot and enters the other's head.
       const below = w.kind === 'flow' && b.y >= a.y + a.height;
       const forward = !below && a.x + a.width <= b.x, back = !below && b.x + b.width <= a.x;
-      // One line of work to a later one in the same row, over the lines between them.
-      const over = w.kind === 'flow' && forward && scene.items.some(i => (i.kind === 'line' || i.kind === 'frame') && i !== a && i !== b && i.x > a.x && i.x < b.x && i.y < Math.max(a.y + a.height, b.y + b.height) && i.y + i.height > Math.min(a.y, b.y));
+      // One line of work to another in the same row with lines between them: over those, the
+      // way back higher than the way forward.
+      const left = Math.min(a.x, b.x), right = Math.max(a.x, b.x);
+      const over = w.kind === 'flow' && (forward || back) && scene.items.some(i => (i.kind === 'line' || i.kind === 'frame') && i !== a && i !== b && i.x > left && i.x < right && i.y < Math.max(a.y + a.height, b.y + b.height) && i.y + i.height > Math.min(a.y, b.y));
       if (over) {
-        const top = Math.min(a.y, b.y), xa = a.x + a.width - 46, xb = b.x + 46, lit = on(w), off = (focusing && !lit) || dim(w.from) || dim(w.to);
+        const top = Math.min(a.y, b.y), lift = forward ? 44 : 70, xa = forward ? a.x + a.width - 46 : a.x + 70, xb = forward ? b.x + 46 : b.x + b.width - 70, lit = on(w), off = (focusing && !lit) || dim(w.from) || dim(w.to);
         return <g key={w.id} data-label={w.label} data-kind={w.kind} className={'graph-edge ' + w.basis + ' wire-' + w.kind + (lit ? ' on' : '') + (off ? ' off' : '')}>
-          <path d={`M${xa} ${a.y} C${xa} ${top - 58} ${xb} ${top - 58} ${xb} ${b.y - 2}`} markerEnd={lit ? 'url(#graph-arrow-on)' : 'url(#graph-arrow)'} />
-          {labels && !off && <text x={(xa + xb) / 2} y={top - 50} textAnchor="middle">{w.label}</text>}
+          <path d={`M${xa} ${a.y} C${xa} ${top - lift} ${xb} ${top - lift} ${xb} ${b.y - 2}`} markerEnd={lit ? 'url(#graph-arrow-on)' : 'url(#graph-arrow)'} />
+          {labels && !off && <text x={(xa + xb) / 2} y={top - lift * 0.75 - 6} textAnchor="middle">{w.label}</text>}
         </g>;
       }
-      const x1 = forward ? a.x + a.width : back ? a.x : a.x + a.width / 2, y1 = forward || back ? a.y + a.height / 2 : a.y + a.height;
-      const x2 = forward ? b.x : back ? b.x + b.width : b.x + b.width / 2, y2 = forward || back ? b.y + b.height / 2 : b.y;
+      // Between lines of work a wire runs at the height of their names: the later line's below the earlier's.
+      const level = (i: Item) => w.kind === 'flow' ? i.y + Math.min(i.height / 2, back ? 56 : 32) : i.y + i.height / 2;
+      const x1 = forward ? a.x + a.width : back ? a.x : a.x + a.width / 2, y1 = forward || back ? level(a) : a.y + a.height;
+      const x2 = forward ? b.x : back ? b.x + b.width : b.x + b.width / 2, y2 = forward || back ? level(b) : b.y;
       const bend = Math.max(30, Math.abs(x2 - x1) / 2) * (back ? -1 : 1);
       const d = forward || back ? `M${x1} ${y1} C${x1 + bend} ${y1} ${x2 - bend} ${y2} ${x2 + (back ? 2 : -2)} ${y2}` : `M${x1} ${y1} C${x1} ${y1 + Math.min(60, (y2 - y1) * 0.8)} ${x2} ${y2 - Math.min(60, (y2 - y1) * 0.8)} ${x2} ${y2 - 2}`;
       const lit = on(w), off = (focusing && !lit) || dim(w.from) || dim(w.to);
@@ -604,19 +644,19 @@ function Inspector({ target, layers, process, turns, holds, newest, waiting, cli
     catch (error) { setProblem(error instanceof Error ? error.message : 'It could not be opened in the workspace.'); }
     finally { setPlacing(false); }
   }
-  const node = target.kind === 'work' ? target.node : null, claim = target.kind === 'claim' ? target.claim : null;
+  const node = target.kind === 'work' ? target.node : null, claim = target.kind === 'claim' ? target.claim : null, talk = target.kind === 'talk' ? target.talk : null;
   const artifact = target.kind === 'file' ? layers.artifacts.get(target.path) : undefined;
   const category = target.kind === 'file' ? artifact?.category ?? kindOf(target.path) : null;
-  const lineId = target.kind === 'file' ? target.line : claim ? claim.line : node ? ancestors(layers, node.id).find(id => layers.nodes.get(id)!.level === 'line') : undefined;
+  const lineId = target.kind === 'file' ? target.line : claim ? claim.line : talk ? talk.line : node ? ancestors(layers, node.id).find(id => layers.nodes.get(id)!.level === 'line') : undefined;
   const line = lineId ? layers.nodes.get(lineId) : undefined;
   const work = (id: string) => layers.nodes.get(id);
   const link = (id: string, icon: IconName, text: string, note?: string) => <li key={id}><button className="graph-link" onClick={() => onSelect(id)}><Icon name={icon} size={14} /><span>{text}</span></button>{note && <small>{note}</small>}</li>;
   const fileLink = (path: string, note?: string) => link((lineId ?? '') + '|' + path, fileIcon(layers.artifacts.get(path)?.category ?? kindOf(path)), path, note);
   // Where a node sits: the line, message and activity above it.
-  const above = node ? ancestors(layers, node.id).slice(1).filter(id => id !== layers.root).reverse() : [];
-  const title = node ? (node.level === 'step' && node.run ? 'Ran a command' : node.level === 'ask' ? (node.terminal ? node.title : 'You asked') : node.title) : claim ? line?.title ?? 'In the notes' : target.kind === 'file' ? target.path.split('/').at(-1)! : '';
-  const kind = node ? (node.terminal ? (node.level === 'ask' ? 'Terminal' : 'Line of work · in a terminal') : node.level === 'line' && node.quiet ? 'Conversation' : levelLabel[node.level]) : claim ? (claim.kind === 'finding' ? 'Finding' : 'Choice') + ' · in the notes' : fileLabel(category);
-  const icon = node ? workIcon(node) : claim ? (claim.kind === 'finding' ? 'check' : 'updown') : fileIcon(category);
+  const above = node ? ancestors(layers, node.id).slice(1).filter(id => id !== layers.root).reverse() : talk && line && (line.conversations?.length ?? 0) > 1 ? [line.id] : [];
+  const title = node ? (node.level === 'step' && node.run ? 'Ran a command' : node.level === 'ask' ? (node.terminal ? node.title : 'You asked') : lineName(node)) : talk ? talk.title : claim ? (line ? lineName(line) : 'In the notes') : target.kind === 'file' ? target.path.split('/').at(-1)! : '';
+  const kind = node ? (node.terminal ? (node.level === 'ask' ? 'Terminal' : 'Line of work · in a terminal') : node.level === 'line' && node.quiet ? 'Conversation' : levelLabel[node.level]) : talk ? (talk.terminal ? 'Terminal' : 'Conversation') : claim ? (claim.kind === 'finding' ? 'Finding' : 'Choice') + ' · in the notes' : fileLabel(category);
+  const icon = node ? workIcon(node) : talk ? (talk.terminal ? 'monitor' : 'chat') : claim ? (claim.kind === 'finding' ? 'check' : 'updown') : fileIcon(category);
 
   return <aside className="graph-inspector" aria-label={kind + ' ' + title}>
     <header className="graph-inspector-head">
@@ -625,8 +665,9 @@ function Inspector({ target, layers, process, turns, holds, newest, waiting, cli
       <button className="icon-button" aria-label="Close" onClick={onClose}><Icon name="close" size={17} /></button>
     </header>
     <div className="graph-inspector-body">
-      {above.length > 0 && <nav className="lg-above" aria-label="Where this is">{above.map(id => <button key={id} className="graph-link" onClick={() => onSelect(id)}><span>{work(id)!.title}</span></button>)}</nav>}
+      {above.length > 0 && <nav className="lg-above" aria-label="Where this is">{above.map(id => <button key={id} className="graph-link" onClick={() => onSelect(id)}><span>{lineName(work(id)!)}</span></button>)}</nav>}
       {waiting && <Choice key={waiting.permission} waiting={waiting} client={client} projectId={snapshot.project.id} />}
+      {talk && <TalkSaid talk={talk} layers={layers} onAgent={onAgent} link={link} fileLink={fileLink} />}
       {node?.level === 'line' && <LineSaid node={node} layers={layers} onSelect={onSelect} onOpenAll={onOpenAll} onAgent={onAgent} link={link} />}
       {node?.level === 'ask' && <section className="graph-said"><p className="graph-question">{node.text}</p>
         <p className="graph-facts">{[node.agent, askEnd(node), took(node) && 'took ' + took(node), plural(node.steps, 'recorded step')].filter(Boolean).join(' · ')}</p>
@@ -656,7 +697,7 @@ function Touched({ layers, under, fileLink }: { layers: WorkLayers; under: strin
 
 function LineSaid({ node, layers, onSelect, onOpenAll, onAgent, link }: { node: WorkNode; layers: WorkLayers; onSelect: (id: string) => void; onOpenAll: (id: string) => void; onAgent: (conversationId?: string) => void; link: (id: string, icon: IconName, text: string, note?: string) => ReactNode }) {
   const claims = layers.claims.filter(c => c.line === node.id), files = lineFiles(layers, node.id), todos = node.section?.statements.filter(s => s.kind === 'todo') ?? [];
-  const into = flows(layers).filter(f => f.to === node.id), out = flows(layers).filter(f => f.from === node.id);
+  const into = flows(layers).filter(f => f.to === node.id), out = flows(layers).filter(f => f.from === node.id), talks = talksOf(layers, node.id);
   void onSelect;
   return <section className="graph-said">
     {node.said && <p className="graph-question">{node.said}</p>}
@@ -665,9 +706,22 @@ function LineSaid({ node, layers, onSelect, onOpenAll, onAgent, link }: { node: 
     {!node.section && !node.quiet && <p className="muted">The notes have no section for this work, so nothing says what was concluded from it.</p>}
     {claims.length > 0 && <><h3 className="caption">Concluded in the notes</h3><ul className="graph-relations lg-claims">{claims.map(c => link(c.id, c.kind === 'finding' ? 'check' : 'updown', c.text, grounds[c.ground] || undefined))}</ul></>}
     {files.made.length > 0 && <><h3 className="caption">Made</h3><ul className="graph-relations">{files.made.map(f => link(node.id + '|' + f.path, fileIcon(layers.artifacts.get(f.path)?.category ?? null), f.path, f.existing ? 'was here before' : undefined))}</ul></>}
-    {into.length > 0 && <><h3 className="caption">Builds on</h3><ul className="graph-relations">{into.map(f => link(f.from, 'workflow', layers.nodes.get(f.from)!.title, plural(f.paths.length, 'file')))}</ul></>}
-    {out.length > 0 && <><h3 className="caption">Built on by</h3><ul className="graph-relations">{out.map(f => link(f.to, 'workflow', layers.nodes.get(f.to)!.title, plural(f.paths.length, 'file')))}</ul></>}
-    <h3 className="caption">{node.terminal ? 'Typed in a terminal' : 'Messages'}</h3><ol className="graph-relations">{node.children.map(id => { const ask = layers.nodes.get(id)!; return link(id, 'question', ask.terminal ? clock(ask.start, true) + ' · ' + ask.title : ask.title, [plural(ask.steps, 'step'), askEnd(ask)].filter(Boolean).join(' · ')); })}</ol>
+    {into.length > 0 && <><h3 className="caption">Builds on</h3><ul className="graph-relations">{into.map(f => link(f.from, 'workflow', lineName(layers.nodes.get(f.from)!), plural(f.paths.length, 'file')))}</ul></>}
+    {out.length > 0 && <><h3 className="caption">Built on by</h3><ul className="graph-relations">{out.map(f => link(f.to, 'workflow', lineName(layers.nodes.get(f.to)!), plural(f.paths.length, 'file')))}</ul></>}
+    {talks.length > 1 ? <><h3 className="caption">Conversations</h3><ol className="graph-relations">{talks.map(t => link(talkId(t.id), t.terminal ? 'monitor' : 'chat', t.title, dayOf(t.start) + ' · ' + plural(t.asks.length, t.terminal ? 'command' : 'message')))}</ol></>
+      : <><h3 className="caption">{node.terminal ? 'Typed in a terminal' : 'Messages'}</h3><ol className="graph-relations">{node.children.map(id => { const ask = layers.nodes.get(id)!; return link(id, 'question', ask.terminal ? clock(ask.start, true) + ' · ' + ask.title : ask.title, [plural(ask.steps, 'step'), askEnd(ask)].filter(Boolean).join(' · ')); })}</ol></>}
+  </section>;
+}
+
+// One conversation of a line of work: its messages in order and the files it changed.
+function TalkSaid({ talk, layers, onAgent, link, fileLink }: { talk: Talk; layers: WorkLayers; onAgent: (conversationId?: string) => void; link: (id: string, icon: IconName, text: string, note?: string) => ReactNode; fileLink: (path: string, note?: string) => ReactNode }) {
+  const mine = new Set(talk.asks.map(a => a.id)), changed = new Map<string, number>();
+  for (const t of layers.touches) if (t.makes && !isNotes(t.path) && ancestors(layers, t.work).some(id => mine.has(id))) changed.set(t.path, (changed.get(t.path) ?? 0) + 1);
+  return <section className="graph-said">
+    <p className="graph-facts">{[talk.agent, daysOf(talk.start, talk.end), plural(talk.asks.length, talk.terminal ? 'command' : 'message'), plural(talk.steps, 'recorded step'), talk.failed ? talk.failed + ' refused, failed or unknown' : '', changed.size ? plural(changed.size, 'file') + ' changed' : '', talk.running ? 'working now' : ''].filter(Boolean).join(' · ')}</p>
+    {!talk.terminal && <div className="graph-actions"><button onClick={() => onAgent(talk.id)}><Icon name="prompt" size={15} />Show the conversation</button></div>}
+    <h3 className="caption">{talk.terminal ? 'Typed in a terminal' : 'Messages'}</h3><ol className="graph-relations lg-asks">{talk.asks.map(ask => link(ask.id, 'question', ask.title, [clock(ask.start), plural(ask.steps, 'step'), askEnd(ask)].filter(Boolean).join(' · ')))}</ol>
+    {changed.size > 0 && <><h3 className="caption">Files it changed</h3><ul className="graph-relations">{[...changed].map(([path, n]) => fileLink(path, n > 1 ? n + '×' : undefined))}</ul></>}
   </section>;
 }
 
@@ -766,170 +820,6 @@ function Choice({ waiting, client, projectId }: { waiting: NonNullable<GraphNode
     <div>{waiting.options.map(option => <button key={option.id} className="small-button" disabled={!!sending} onClick={() => choose(option.id)}>{option.name}</button>)}</div>
     {problem && <p className="inline-error" role="alert">{problem}</p>}
   </section>;
-}
-
-// The work over time: each message a band, each action a tick. Dragging or the arrow keys
-// show the graph as it stood then; Play runs through it. Long pauses between messages are cut.
-// Ticks a reader can tell apart: the shortest step that leaves this much room between labels.
-const tickSteps = [10e3, 30e3, 60e3, 120e3, 300e3, 600e3, 900e3, 1800e3, 3600e3, 7200e3, 21600e3];
-
-// What happened when, one lane per conversation and one for each other doer the plugins name (the
-// person's cells and commands): each message a band, each action a block in its kind's colour,
-// refused, failed or unknown ones marked. A pause longer than half a minute is folded to a gap,
-// which says how long it was when it has room. Pointing at a block names it; pressing moves the playhead.
-type Block = { key: string; at: number; lane: number; kind: TimelineKind; failed: boolean; event?: GraphEvent; mark?: EventMark };
-const markEnds: Partial<Record<EventMark['outcome'], string>> = { failed: 'Failed', stopped: 'Stopped', unknown: 'Outcome unknown' };
-export const timelineLimits = { lanes: 6 };
-function Timeline({ graph, marks = [], cursor, playing, running, speed, onSpeed, onCursor, onPlay, compact = false }: { graph: Graph; marks?: EventMark[]; cursor: number | null; playing: boolean; running: boolean; speed: number; onSpeed: (speed: number) => void; onCursor: (at: number | null) => void; onPlay: () => void; compact?: boolean }) {
-  const track = useRef<HTMLDivElement>(null), [width, setWidth] = useState(600);
-  const [hover, setHover] = useState<{ block: Block; x: number; lane: number; under?: boolean } | null>(null), [only, setOnly] = useState<TimelineKind | null>(null);
-  useLayoutEffect(() => {
-    const element = track.current;
-    if (!element) return;
-    const observer = new ResizeObserver(() => setWidth(element.clientWidth));
-    observer.observe(element); setWidth(element.clientWidth);
-    return () => observer.disconnect();
-  }, []);
-  // Bands that overlap are one stretch of time, the plugins' events with the messages; between
-  // stretches a fixed gap stands for the pause.
-  const stretches = useMemo(() => {
-    const spans = [...graph.turns.map(t => ({ start: t.start, end: t.end })), ...marks.map(m => ({ start: m.at, end: m.end }))].sort((a, b) => a.start - b.start), out: Array<{ start: number; end: number }> = [];
-    for (const t of spans) { const last = out.at(-1); if (last && t.start <= last.end + 30000) last.end = Math.max(last.end, t.end); else out.push({ start: t.start, end: Math.max(t.end, t.start + 1000) }); }
-    return out;
-  }, [graph.turns, marks]);
-  // One lane per conversation, in the order they began, with the person's own lane above them.
-  // A connected Agent's lane is one of them; callers Rho no longer knows come last.
-  const lanes = useMemo(() => {
-    const out: Array<{ id: string; title: string; agent: string; who: Who; start: number; turns: typeof graph.turns }> = [];
-    for (const t of [...graph.turns].sort((a, b) => a.start - b.start)) {
-      const lane = out.find(l => l.id === t.conversationId);
-      // The person's own typing in a terminal is in their lane.
-      if (lane) lane.turns.push(t); else out.push({ id: t.conversationId, title: t.title, agent: t.agent, who: t.terminal && t.conversationId === 'terminal:' + personPrincipal ? 'person' : 'conversation', start: t.start, turns: [t] });
-    }
-    for (const m of marks) if (!out.some(l => l.id === m.lane)) out.push({ id: m.lane, title: m.laneTitle, agent: m.agent ?? '', who: m.who, start: m.at, turns: [] });
-    const rank = (who: Who) => who === 'person' ? 0 : who === 'conversation' ? 1 : 2;
-    return out.sort((a, b) => rank(a.who) - rank(b.who) || a.start - b.start);
-  }, [graph.turns, marks]);
-  const laneIndex = useMemo(() => new Map(lanes.map((l, i) => [l.id, i])), [lanes]);
-  // Every block on the lanes, oldest first: the conversations' steps and the plugins' events.
-  const blocks = useMemo((): Block[] => {
-    const laneOf = new Map(graph.turns.map(t => [t.id, laneIndex.get(t.conversationId) ?? 0]));
-    return [...graph.events.map(e => ({ key: e.key, at: e.at, lane: laneOf.get(e.turn) ?? 0, kind: kindOfAction(e.action), failed: failed(e), event: e })),
-      ...marks.map(m => ({ key: m.key, at: m.at, lane: laneIndex.get(m.lane) ?? 0, kind: kindOfAction(m.action), failed: m.failed, mark: m }))].sort((a, b) => a.at - b.at);
-  }, [graph.events, graph.turns, marks, laneIndex]);
-  // Pauses take at most half the track, so many of them narrow instead of pushing the work past
-  // its end: the example's twenty pauses in the Overview's 329 px track drew the plot 980 px wide.
-  const gap = Math.min(44, width / 2 / Math.max(1, stretches.length - 1)), usable = width - gap * Math.max(0, stretches.length - 1);
-  const widths = stretchSizes(stretches, blocks, usable);
-  const offsets: number[] = []; let x = 0;
-  stretches.forEach((_, i) => { offsets.push(x); x += widths[i] + gap; });
-  const widthOf = (i: number) => widths[i];
-  const toX = (at: number) => {
-    const found = stretches.findIndex(s => at <= s.end), i = found < 0 ? stretches.length - 1 : found;
-    const s = stretches[i], w = widthOf(i);
-    return offsets[i] + Math.min(w, Math.max(0, (at - s.start) / (s.end - s.start) * w));
-  };
-  const fromX = (px: number) => {
-    for (let i = stretches.length - 1; i >= 0; i--) if (px >= offsets[i]) { const s = stretches[i], w = widthOf(i); return s.start + Math.min(1, Math.max(0, (px - offsets[i]) / w)) * (s.end - s.start); }
-    return stretches[0]?.start ?? 0;
-  };
-  const last = blocks.at(-1)?.at ?? 0;
-  const index = cursor === null ? blocks.length : blocks.filter(b => b.at <= cursor).length;
-  const laneHeight = 24, lanesTop = 0;
-  // The page is the protected resource: past this many lanes the timeline keeps its height and
-  // the lanes scroll inside it, opening on the newest. Nothing is left out.
-  const tall = lanes.length > timelineLimits.lanes, body = useRef<HTMLDivElement>(null);
-  useLayoutEffect(() => { if (tall && body.current) body.current.scrollTop = body.current.scrollHeight; }, [tall, lanes.length]);
-  function scrub(event: ReactPointerEvent<HTMLDivElement>) {
-    const element = event.currentTarget, box = element.getBoundingClientRect();
-    element.setPointerCapture(event.pointerId); setHover(null);
-    const set = (clientX: number) => { const at = fromX(clientX - box.left); const nearest = blocks.reduce((best, b) => Math.abs(b.at - at) < Math.abs(best.at - at) ? b : best, blocks[0]); onCursor(Math.abs(toX(nearest.at) - (clientX - box.left)) < 8 ? nearest.at : at); };
-    set(event.clientX);
-    const move = (e: PointerEvent) => set(e.clientX);
-    const stop = () => { element.removeEventListener('pointermove', move); element.removeEventListener('pointerup', stop); element.removeEventListener('pointercancel', stop); };
-    element.addEventListener('pointermove', move); element.addEventListener('pointerup', stop); element.addEventListener('pointercancel', stop);
-  }
-  // The block nearest the pointer in the lane under it, within a few pixels.
-  function point(event: ReactPointerEvent<HTMLDivElement>) {
-    if (event.buttons) return;
-    const box = event.currentTarget.getBoundingClientRect(), px = event.clientX - box.left, lane = Math.floor((event.clientY - box.top - lanesTop) / laneHeight);
-    let best: Block | null = null, distance = 7;
-    for (const b of blocks) { if (b.lane !== lane) continue; const d = Math.abs(toX(b.at) - px); if (d < distance) { best = b; distance = d; } }
-    setHover(best ? { block: best, x: toX(best.at), lane, under: tall && lane * laneHeight - (body.current?.scrollTop ?? 0) < 52 } : null);
-  }
-  function keys(event: ReactKeyboardEvent<HTMLDivElement>) {
-    const at = cursor ?? last;
-    const step = event.key === 'ArrowRight' ? blocks.find(b => b.at > at)?.at ?? null : event.key === 'ArrowLeft' ? [...blocks].reverse().find(b => b.at < at)?.at ?? blocks[0].at : event.key === 'Home' ? blocks[0].at : event.key === 'End' ? null : undefined;
-    if (step === undefined) return;
-    event.preventDefault(); onCursor(step);
-  }
-  const head = cursor === null ? width : toX(cursor);
-  const duration = graph.turns.reduce((sum, t) => sum + (t.end - t.start), 0);
-  const counts = timelineKinds.map(k => ({ ...k, count: blocks.filter(b => b.kind === k.key).length })).filter(k => k.count > 0);
-  const refused = blocks.filter(b => b.failed).length, conversations = lanes.filter(l => l.who === 'conversation' && !l.turns.every(t => t.terminal)).length, yours = marks.filter(m => m.who === 'person').length;
-  // Each stretch's ticks, at the shortest step that leaves 72 px between labels; a label nearer the
-  // one before it than 60 px, in another stretch too, or one that would start past the end, is left out.
-  const ticks: Array<{ at: number; x: number; first: boolean; label: string }> = [];
-  stretches.forEach((s, i) => {
-    const w = widthOf(i), length = s.end - s.start, step = tickSteps.find(t => w * t / length >= 72) ?? tickSteps.at(-1)!;
-    const add = (at: number, tx: number, first: boolean) => { if (!ticks.length || tx - ticks.at(-1)!.x >= 60) ticks.push({ at, x: tx, first, label: clock(at, step < 60e3) }); };
-    if (offsets[i] <= width - 48) add(s.start, offsets[i], true);
-    for (let t = Math.ceil(s.start / step) * step; t < s.end; t += step) { const tx = toX(t); if (offsets[i] + w - tx >= 24) add(t, tx, false); }
-  });
-  const pauses = stretches.slice(1).map((s, i) => ({ x: offsets[i + 1] - gap, length: s.start - stretches[i].end }));
-  const nodes = useMemo(() => new Map(graph.nodes.map(n => [n.id, n])), [graph.nodes]);
-  const Frame = compact ? 'div' : 'footer';
-  const asked = graph.turns.filter(t => !t.terminal).length;
-  const summary = [asked ? `${asked} ${asked === 1 ? 'message' : 'messages'}` : '', graph.turns.length ? span(duration) : '', conversations > 1 ? `${conversations} conversations` : '', yours ? `${yours} by you` : ''].filter(Boolean).join(' · ');
-  return <Frame className={'graph-timeline' + (compact ? ' compact' : '') + (only ? ' only-' + only : '')} aria-label="Timeline">
-    <div className="tl-head">
-      {!compact && <button className="graph-play" aria-label={playing ? 'Pause' : 'Play the work from the start'} onClick={onPlay}><Icon name={playing ? 'pause' : 'run'} size={16} /></button>}
-      <div className="graph-timeline-text"><strong>{blocks.filter(b => b.kind !== 'ask' && b.kind !== 'answer').length} actions</strong><span>{summary}</span></div>
-      <div className="tl-legend" role="group" aria-label="Show one kind of action">
-        {counts.map(k => <button key={k.key} className={'tl-kind ' + k.key} aria-pressed={only === k.key} onClick={() => setOnly(only === k.key ? null : k.key)}><i aria-hidden="true" /><span>{k.label}</span><small>{k.count}</small></button>)}
-        {refused > 0 && <span className="tl-kind failed"><i aria-hidden="true" /><span>Failed, refused or unknown</span><small>{refused}</small></span>}
-      </div>
-      {!compact && <>
-        <div className="tl-speed" role="group" aria-label="Replay speed">
-          {[1, 2, 4].map(value => <button key={value} aria-pressed={speed === value} onClick={() => onSpeed(value)}>{value}×</button>)}
-        </div>
-        <button className={'graph-now' + (cursor === null ? ' on' : '')} aria-pressed={cursor === null} onClick={() => onCursor(null)}>{running ? <><span className="pulse-dot" aria-hidden="true" />Live</> : 'Now'}</button>
-      </>}
-    </div>
-    <div ref={body} className={'tl-body' + (tall ? ' tall' : '')} style={tall ? { maxHeight: timelineLimits.lanes * laneHeight + 34 } : undefined} onScroll={() => setHover(null)}>
-      <ol className="tl-names" aria-label="Who did it">
-        {lanes.map(l => {
-          // Conversations that share a title lead with when they started, which a cut name still shows.
-          const brand = l.who === 'conversation' ? brandOf(l.agent) : null, twin = l.who === 'conversation' && lanes.some(o => o !== l && o.title === l.title), name = twin && l.turns[0] ? clock(l.turns[0].start) + ' · ' + l.title : l.title;
-          return <li key={l.id} title={name} data-who={l.who}>{brand ? <BrandMark brand={brand} size={13} /> : <Icon name={l.who === 'person' ? 'person' : 'chat'} size={13} />}<span>{name}</span></li>;
-        })}
-      </ol>
-      <div className="tl-plot">
-        <div ref={track} className="graph-track" {...(compact ? { role: 'img', 'aria-label': `${blocks.length} steps over ${lanes.length} ${lanes.length === 1 ? 'lane' : 'lanes'}` } : { role: 'slider', tabIndex: 0, 'aria-label': 'When', 'aria-valuemin': 0, 'aria-valuemax': blocks.length, 'aria-valuenow': index,
-          'aria-valuetext': cursor === null ? 'Now · everything' : `${clock(cursor, true)} · ${index} of ${blocks.length}`, onPointerDown: scrub, onKeyDown: keys })} onPointerMove={point} onPointerLeave={() => setHover(null)}
-          style={{ height: lanes.length * laneHeight } as CSSProperties}>
-          {lanes.map((l, lane) => <div key={l.id} className="tl-lane" style={{ top: lane * laneHeight, height: laneHeight }}>
-            {l.turns.map(t => <span key={t.id} className={'tl-band' + (t.running ? ' running' : '')} style={{ left: toX(t.start), width: Math.max(4, toX(t.end) - toX(t.start)) }} />)}
-            {/* Outside a conversation, each event is its own band, as long as it ran. */}
-            {l.who !== 'conversation' && marks.filter(m => m.lane === l.id).map(m => <span key={m.key} className={'tl-band' + (m.outcome === 'running' ? ' running' : '')} style={{ left: toX(m.at), width: Math.max(4, toX(m.end) - toX(m.at)) }} />)}
-          </div>)}
-          {pauses.map((p, i) => <span key={i} className="tl-fold" style={{ left: p.x, width: gap, height: lanes.length * laneHeight }} aria-hidden="true" />)}
-          {blocks.map(b => <i key={b.key} className={'graph-tick tl-block ' + b.kind + (b.failed ? ' failed' : '') + (cursor !== null && b.at > cursor ? ' later' : '') + (hover?.block.key === b.key ? ' hot' : '')}
-            style={{ left: toX(b.at), top: b.lane * laneHeight + 5 }} />)}
-          <span className="graph-head-line" style={{ left: head, height: lanes.length * laneHeight + 22 }}>{cursor !== null && <time>{clock(cursor, true)}</time>}</span>
-          {hover && <div className={'tl-tip' + (hover.under ? ' under' : '')} style={{ left: Math.min(Math.max(hover.x, 110), width - 110), top: hover.lane * laneHeight }} role="tooltip">
-            <time>{clock(hover.block.at, true)}</time>
-            {hover.block.event ? <><span>{caption(hover.block.event, nodes)}</span>{hover.block.failed && <small>{outcomes[hover.block.event.outcome!]}</small>}</>
-              : hover.block.mark && <><span>{markCaption(hover.block.mark)}</span>{markEnds[hover.block.mark.outcome] && <small>{markEnds[hover.block.mark.outcome]}</small>}</>}
-          </div>}
-        </div>
-        <div className="tl-axis" aria-hidden="true">
-          {ticks.map(t => <span key={t.at + ':' + t.x} className={t.first ? 'first' : ''} style={{ left: t.x }}>{t.label}</span>)}
-          {gap >= 40 && pauses.map((p, i) => <small key={i} style={{ left: p.x + gap / 2 }} title={'A pause of ' + span(p.length)}>{span(p.length)}</small>)}
-        </div>
-      </div>
-    </div>
-  </Frame>;
 }
 
 // The Overview's glance at the same record: the timeline without its controls, and the way to

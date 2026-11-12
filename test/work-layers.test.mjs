@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { buildWorkGraph, foldVersions, ranFiles } from '../dist/work-graph.js';
-import { ancestors, buildWorkLayers, flows, lineFiles, links, shownAs, support, trajectory } from '../dist/work-layers.js';
+import { ancestors, buildWorkLayers, flows, lineFiles, links, shownAs, support, trajectory, talksOf } from '../dist/work-layers.js';
 import { layoutLayers } from '../dist/layers-layout.js';
 import { notesMeaning } from '../dist/notes-meaning.js';
 
@@ -59,6 +59,15 @@ test('a message is its activities: looking, a script written and run until it wo
   assert.ok(level(l, 'step').every(s => l.nodes.get(s.parent).level === 'activity'));
 });
 
+test('a pasted passage is named by its words, not by the tags it arrives in', () => {
+  const { layers: l, graph } = layers(of('c1', [turn('t1', '<pasted_content id="8ce4">\nThe margins are one cause, not several.\nMore follows.\n</pasted_content>', 0, 5, [tool('w', 'Write', 2, root + '/plan.md')])], '<pasted_content id="c32c"> What this project does'));
+  assert.equal(level(l, 'ask')[0].title, 'The margins are one cause, not several.');
+  assert.equal(level(l, 'line')[0].title, 'What this project does');
+  assert.equal(graph.nodes.find(n => n.kind === 'question').title, 'The margins are one cause, not several.');
+  // The message itself is kept as it was sent.
+  assert.match(level(l, 'ask')[0].text, /^<pasted_content id="8ce4">/);
+});
+
 test('cells in a row are an activity; a long look without words stands alone', () => {
   const steps = [tool('n', 'Edit', 1, root + '/project-notes.md'), ...[2, 3, 4, 5, 6, 7].map(s => tool('l' + s, 'Bash', s, 'ls data')), cell('c1', 8), cell('c2', 9), cell('c3', 10), tool('w', 'Write', 12, root + '/plot.R')];
   const { layers: l } = layers(of('c1', [turn('t1', 'Explore', 0, 14, steps)]));
@@ -102,6 +111,11 @@ test('lines of work: a section of the notes names one, shared files join convers
   const lines = l.nodes.get(l.root).children.map(id => l.nodes.get(id));
   assert.deepEqual(lines.map(x => [x.title, x.children.length, !!x.quiet]), [['Ozone over the summer', 1, false], ['Plot', 2, false], ['Asked', 1, true]]);
   assert.equal(lines[0].said, 'How does ozone change by month?');
+  // Between a line and its messages: its conversations, each made of its own messages. The line two
+  // conversations share lists both; a line that is one conversation has one.
+  assert.deepEqual(talksOf(l, lines[1].id).map(t => [t.id, t.title, t.asks.length, t.steps]), [['c2', 'Plot', 1, 3], ['c3', 'Tidy', 1, 1]]);
+  assert.deepEqual(talksOf(l, lines[0].id).map(t => t.id), ['c1']);
+  assert.equal(talksOf(l, lines[1].id).reduce((n, t) => n + t.steps, 0), lines[1].steps);
   // The plot line used what the ozone line made: one line builds on the other, through that file.
   assert.deepEqual(flows(l).map(f => [l.nodes.get(f.from).title, l.nodes.get(f.to).title, f.paths]), [['Ozone over the summer', 'Plot', ['results/monthly.csv']]]);
   assert.deepEqual(lineFiles(l, lines[0].id), { used: [{ path: 'data/air.csv', from: null, at: Date.parse(at(1)) }], made: [{ path: 'analysis.R', existing: false, from: null, at: Date.parse(at(3)) }, { path: 'results/monthly.csv', existing: false, from: null, at: Date.parse(at(5)) }] });

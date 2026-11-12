@@ -137,3 +137,87 @@ with readable names; the timeline shows 6 lanes and scrolls the rest, newest fir
   holds, the page opens on full rows from the top; there is no level between the
   workspace and its lines.
 - Only the builder has read these screens.
+
+## Many conversations
+
+**Question (2026-11-12).** The user sent two screens of the Graph for a real project and
+judged the design ugly and the timeline under it of no use once conversations pile up.
+
+**Observed before.** A copy of that project in `/tmp` with its session records: 16 Claude
+Code conversations, 61 messages and 3,951 recorded steps over five days, read at
+2000 × 1005 in real Chrome (`work/graph-timeline-20261112/before`).
+
+- The timeline gave each conversation a lane: 18 lanes and 2,968 blocks in a strip that
+  shows 6 lanes. Twelve lanes were out of sight at any moment, and since one conversation
+  works at a time, each lane in sight was empty for most of its width. The axis gave
+  times without days over five days (12:58, 22:08, 06:04), and a busy stretch was a pile
+  of blocks, rings and diamonds on top of each other.
+- 13 of the 16 conversations had changed the same files and were one line of work, named
+  by the first of them; its card said nothing of the other 12. Opened, it was one frame
+  of 1,008 × 13,138 px with 56 messages in a column.
+- Two of the three cards quoted `<pasted_content id="…">` as what was asked, the tag a
+  pasted passage arrives in. Every card carried the label "Line of work", an icon in a
+  tinted square, counts as pills and a shadow under a border.
+
+**Changed.**
+
+- The timeline is drawn where work happened (`src/timeline-layout.ts`, `web/timeline.tsx`).
+  A conversation is a named piece from its first message to its last, a piece again when
+  it is taken up after other work, and pieces that do not overlap, names included, share
+  a row, so rows follow how many conversations ran close together and not how many there
+  are (names shorten before the strip takes more than `timelineSizes.rows`, 4; further
+  rows scroll). A message is a
+  band; its steps are columns stacked by kind (ran, edited, read, changed on disk,
+  versions kept), their height by count on a log scale, with a dot under a column that
+  holds a failed, refused or unknown step. Pauses over 30 s fold to 4 to 14 px by length
+  and a stretch is as wide as its steps and duration ask. The axis names each day and
+  gives times within it.
+- The timeline zooms (the buttons, a pinch or ⌘/Ctrl with the wheel, a double click on a
+  conversation) to 48 times its width and scrolls; names stay in sight while their piece
+  is. Hovering names the conversation, the message, when and how long, and the steps
+  under the pointer. A click on a message chooses it in the graph, a click on a name
+  chooses the conversation, and what is chosen in the graph is marked in the timeline.
+  Replay is dragged on the axis.
+- A conversation is a level between a line of work and its messages (`talksOf`). A line
+  of several conversations is named by the first "and N more", lists them on its card with
+  their day and messages, and heads each one's messages when open; a conversation has
+  its own details beside the canvas.
+- A message, conversation or line is named by its words without the pasted-content tags
+  (`plainAsk`).
+- Cards carry a title, one line of facts and what they stand for; the label, the tinted
+  icon, the pills and the resting shadow are gone. A line that builds on another is
+  drawn at the height of the cards' heads, or over the cards between them.
+- A graph too tall for one screen that fits across the page down to 66% opens across
+  it from the top, and only one too wide for that opens small.
+
+**After, same records** (`work/graph-timeline-20261112/after-*`).
+
+- At 2000 × 1005 all 16 conversations are in sight in 4 rows as 19 named pieces, none
+  scrolled away, under an axis of five named days; the strip is 222 px high where the
+  lanes took 238 px. The graph opens at 100% and the large line's card lists its 13
+  conversations.
+- At 1440 × 900 and 1280 × 800 the same 4 rows hold, names shortened where the next
+  piece begins, the legend on its own line; the graph opens at 85% and 72%, where
+  fitting the whole at 1280 × 800 had given 44%.
+- The shipped example (3 conversations, 6 messages) is 2 rows, and its cards keep their
+  figures.
+
+**Checks.** `test/timeline-layout.test.mjs` (pauses fold and a moment goes to its place
+and back, a busy stretch is wider than a long quiet one, conversations in turn share a
+row and overlapping ones do not, 16 in turn stay within the rows, a resumed conversation
+is a second piece, every step is in one column of its conversation by kind, the axis
+names each day without labels running into each other) and `test/work-layers.test.mjs`
+(conversations of a line, a pasted passage named by its words). All tests: 366 passed,
+3 skipped, none failed (369). `npm run acceptance:graph` 9 of 9 on the changed screens.
+
+**Limits.**
+
+- Lines of work are still joined by the files conversations changed, so a project whose
+  conversations all touch its notes or README is one large line. The card and the open
+  line now say which conversations it holds; the grouping is unchanged.
+- An opened line of 56 messages is still one long column, headed by conversation.
+- Past 4 rows the strip scrolls; this project took 4 at each width tried, and no run
+  has needed more.
+- The colours of the kinds are the application's, not checked for colour-blind
+  separation; a failed step is a dot as well as a colour.
+- Only the builder has read these screens; the user's judgment of the new form is open.

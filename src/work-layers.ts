@@ -1,5 +1,5 @@
 import { conversationBlocks, type Activity, type ActivityOutcome, type ConversationStep } from './conversation-presentation.js';
-import { askedAbout } from './asking.js';
+import { askedAbout, plainAsk } from './asking.js';
 import { projectPath, type Basis, type FileKind, type GraphNode, type GraphTurn, type PathScope, type WorkGraph } from './work-graph.js';
 import type { SessionMeaning, Statement, Trace } from './notes-meaning.js';
 import { projectNotesPath } from './project-notes.js';
@@ -214,7 +214,7 @@ export function buildWorkLayers(input: LayersInput): WorkLayers {
     const turn = conversationId + '/' + message.id, question = byId.get('q:' + turn);
     const sent = time(message.sentAt) ?? input.now, start = time(message.startedAt) ?? sent, running = message.state === 'running';
     const end = time(message.endedAt) ?? (running ? input.now : start);
-    const ask: WorkNode = { id: askId(turn), level: 'ask', parent: null, children: [], title: firstLine(askedAbout(message.text).question) || 'A message', said: conversationTitle,
+    const ask: WorkNode = { id: askId(turn), level: 'ask', parent: null, children: [], title: firstLine(plainAsk(askedAbout(message.text).question)) || 'A message', said: firstLine(plainAsk(conversationTitle)) || conversationTitle,
       start: sent, end: Math.max(end, sent), running, steps: 0, failed: 0, turn, conversationId, agent, state: message.state, text: message.text, ...(question?.answer ? { answer: question.answer } : {}), ...(terminal ? { terminal: true } : {}) };
     nodes.set(ask.id, ask); asks.push(ask);
     for (const file of message.files?.changed ?? []) changes.set(ask.id + '\n' + file.path, file.change);
@@ -291,7 +291,7 @@ export function buildWorkLayers(input: LayersInput): WorkLayers {
   for (const ask of asks) {
     const id = home.get(ask.id) ?? 'l:' + find(loose.get(ask.id)!);
     const node = line(id, ask.said || ask.title);
-    if (!node.said) node.said = firstLine(askedAbout(ask.text ?? '').question, 400);
+    if (!node.said) node.said = firstLine(plainAsk(askedAbout(ask.text ?? '').question), 400);
     ask.parent = node.id; node.children.push(ask.id);
     if (!node.conversations!.includes(ask.conversationId!)) node.conversations!.push(ask.conversationId!);
     if (ask.agent && !node.agents!.includes(ask.agent)) node.agents!.push(ask.agent);
@@ -352,6 +352,19 @@ export function trajectory(layers: WorkLayers, id: string): WorkNode[] {
   const walk = (node?: WorkNode) => { if (!node) return; if (node.level === 'step') out.push(node); else for (const child of node.children) walk(layers.nodes.get(child)); };
   walk(layers.nodes.get(id));
   return out.sort((a, b) => a.start - b.start);
+}
+// The conversations of a line of work, in the order they began: a level between the line and its
+// messages, made of the messages of one conversation. A line that is one conversation has one.
+export interface Talk { id: string; line: string; title: string; agent?: string; asks: WorkNode[]; start: number; end: number; steps: number; failed: number; running: boolean; terminal: boolean }
+export function talksOf(layers: WorkLayers, line: string): Talk[] {
+  const out = new Map<string, Talk>();
+  for (const id of layers.nodes.get(line)?.children ?? []) {
+    const ask = layers.nodes.get(id)!, key = ask.conversationId ?? id;
+    const talk = out.get(key) ?? { id: key, line, title: ask.said || ask.title, ...(ask.agent ? { agent: ask.agent } : {}), asks: [], start: ask.start, end: ask.end, steps: 0, failed: 0, running: false, terminal: !!ask.terminal };
+    talk.asks.push(ask); talk.start = Math.min(talk.start, ask.start); talk.end = Math.max(talk.end, ask.end); talk.steps += ask.steps; talk.failed += ask.failed; talk.running ||= ask.running;
+    out.set(key, talk);
+  }
+  return [...out.values()].sort((a, b) => a.start - b.start);
 }
 const lineOf = (layers: WorkLayers, work: string) => ancestors(layers, work).find(id => layers.nodes.get(id)!.level === 'line') ?? null;
 
