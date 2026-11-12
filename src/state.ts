@@ -87,6 +87,7 @@ export class State {
     this.releases.push(await lease(this.directory));
     this.projects = await readJson(path.join(this.directory, 'projects.json'), []);
     this.principals = await readJson(path.join(this.directory, 'principals.json'), []);
+    this.removed = await readJson(path.join(this.directory, 'removed-projects.json'), []);
   }
   private persistPrincipals() {
     // Agent grants and browser pairing use different request queues, but share
@@ -221,12 +222,47 @@ export class State {
     const id = digest(root).slice(0, 32);
     let project = this.projects.find(p => p.id === id);
     if (!project) {
-      project = { id, root, openedAt: new Date().toISOString(), ...(nativeSelected ? { nativeSelected: true as const } : {}) };
+      // A folder opened again after it was removed is the project it was: its name and source folders.
+      const kept = this.removed.find(r => r.project.id === id);
+      project = kept ? { ...kept.project, openedAt: new Date().toISOString() } : { id, root, openedAt: new Date().toISOString(), ...(nativeSelected ? { nativeSelected: true as const } : {}) };
       await this.acquire(project);
       this.projects.push(project);
       await atomicJson(path.join(this.directory, 'projects.json'), this.projects);
+      if (kept) { this.removed = this.removed.filter(r => r !== kept); await this.persistRemoved(); }
     } else await this.acquire(project);
     return project;
+  }
+  // Projects the person removed, so each can be listed again as it was: its record, where it stood
+  // in the list and which tabs had been given it. Only the list changes; a folder, its files and
+  // the records Rho keeps in it are never touched, and this service keeps its hold on a folder it
+  // opened until it closes. At most `kept` are remembered; the oldest is forgotten first, and its
+  // folder is then opened as any folder is.
+  private removed: { project: Project; index: number; selectedBy: string[]; at: string }[] = [];
+  private persistRemoved() { return atomicJson(path.join(this.directory, 'removed-projects.json'), this.removed); }
+  async remove(project: Project, kept: number) {
+    const index = this.projects.indexOf(project);
+    requireThat(index >= 0, 'not_found', 'Project is not registered.');
+    const selectedBy = this.principals.filter(p => p.selectedProjects?.includes(project.id)).map(p => p.id);
+    this.projects.splice(index, 1);
+    for (const p of this.principals) if (p.selectedProjects?.includes(project.id)) p.selectedProjects = p.selectedProjects.filter(id => id !== project.id);
+    this.removed = [...this.removed.filter(r => r.project.id !== project.id), { project, index, selectedBy, at: new Date().toISOString() }].slice(-Math.max(0, kept));
+    await atomicJson(path.join(this.directory, 'projects.json'), this.projects);
+    await this.persistPrincipals(); await this.persistRemoved();
+    return project;
+  }
+  async restore(id: string) {
+    const listed = this.projects.find(p => p.id === id);
+    if (listed) return listed;
+    const kept = this.removed.find(r => r.project.id === id);
+    requireThat(kept, 'not_found', 'This project is no longer kept to bring back. Open its folder again to list it.');
+    requireThat(await fs.stat(kept.project.root).then(s => s.isDirectory(), () => false), 'not_found', 'Its folder is no longer where it was, so the project was not listed again.', { root: kept.project.root });
+    await this.acquire(kept.project);
+    this.projects.splice(Math.min(kept.index, this.projects.length), 0, kept.project);
+    for (const p of this.principals) if (kept.selectedBy.includes(p.id)) p.selectedProjects = [...new Set([...p.selectedProjects ?? [], id])];
+    this.removed = this.removed.filter(r => r !== kept);
+    await atomicJson(path.join(this.directory, 'projects.json'), this.projects);
+    await this.persistPrincipals(); await this.persistRemoved();
+    return kept.project;
   }
   visible(project: Project, principal: Principal) {
     return (!principal.projectId || principal.projectId === project.id) && (!principal.projectRoot || project.root === principal.projectRoot || project.root.startsWith(principal.projectRoot + path.sep) || !!principal.selectedProjects?.includes(project.id));

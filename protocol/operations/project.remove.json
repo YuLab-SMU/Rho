@@ -1,0 +1,118 @@
+{
+  "method": "project.remove",
+  "inputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "projectId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "stop": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "projectId"
+    ]
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "project": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+          },
+          "root": {
+            "type": "string",
+            "minLength": 1
+          },
+          "openedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "sources": {
+            "type": "array",
+            "maxItems": 32,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                },
+                "root": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "name": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "id",
+                "root",
+                "name"
+              ]
+            }
+          },
+          "workspace": {
+            "type": "boolean"
+          },
+          "nativeSelected": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "root",
+          "openedAt"
+        ]
+      },
+      "stopped": {
+        "type": "object",
+        "properties": {
+          "conversations": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "sessions": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "terminals": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "commands": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "conversations",
+          "sessions",
+          "terminals",
+          "commands"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "required": [
+      "project",
+      "stopped"
+    ],
+    "additionalProperties": true
+  },
+  "description": "Person at this machine or operator only: take a project off Rho's list. Its folder, its files and the records Rho keeps in it are not touched, and opening the folder again lists it as it was. Rho leaves nothing of its own running in a folder it no longer lists: while an Agent answers there, or a live session, terminal or command of the person runs there, the request is refused with their counts, and with stop: true each is stopped by its owner's own stop, as the person's, before the project is removed. Managed runs belong to Core and are not stopped."
+}

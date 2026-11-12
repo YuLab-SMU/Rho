@@ -66,9 +66,9 @@ function useRefocus<T extends HTMLElement>(blocked: boolean) {
   }, [blocked]);
   return pending;
 }
-export function Home({ client, projects, folder, focusRequest, onFocused, onOpened, onChoose, onAccessEnded }: {
+export function Home({ client, projects, folder, focusRequest, onFocused, onOpened, onChoose, onRemove, onAccessEnded }: {
   client: BrowserClient; projects: ProjectSummary[]; folder: Folder; focusRequest: boolean; onFocused: () => void;
-  onOpened: (project: ProjectSummary) => void; onChoose: (project: ProjectSummary) => void; onAccessEnded: () => void;
+  onOpened: (project: ProjectSummary) => void; onChoose: (project: ProjectSummary) => void; onRemove?: (project: ProjectSummary) => void; onAccessEnded: () => void;
 }) {
   const [query, setQuery] = useState('');
   const [sheet, setSheet] = useState(false), [picking, setPicking] = useState(false), [failure, setFailure] = useState('');
@@ -108,12 +108,15 @@ export function Home({ client, projects, folder, focusRequest, onFocused, onOpen
         {!sorted.length && <div className="empty-state compact"><p>No projects match “{query}”.</p><button onClick={() => setQuery('')}>Clear search</button></div>}
         {sorted.map((project, index) => {
           const opened = when(project.openedAt), where = place(project);
-          return <button ref={index === 0 ? firstRow : undefined} className="project-row" key={project.id} onClick={() => onChoose(project)}>
-            <span className={'project-symbol ' + projectHue(project.id + projectName(project))}><Icon name="folder" size={20} stroke={1.6} /></span>
-            <span className="project-row-name"><strong>{projectName(project)}</strong><small title={where.full}>{where.text}</small></span>
-            <span className="project-row-time" title={opened.full}>{opened.text && <span className="visually-hidden">Opened </span>}{opened.text}</span>
-            <span className="project-row-chevron"><Icon name="chevron" size={16} stroke={1.5} /></span>
-          </button>;
+          return <div className={'project-row-line' + (onRemove ? ' removable' : '')} key={project.id}>
+            <button ref={index === 0 ? firstRow : undefined} className="project-row" onClick={() => onChoose(project)}>
+              <span className={'project-symbol ' + projectHue(project.id + projectName(project))}><Icon name="folder" size={20} stroke={1.6} /></span>
+              <span className="project-row-name"><strong>{projectName(project)}</strong><small title={where.full}>{where.text}</small></span>
+              <span className="project-row-time" title={opened.full}>{opened.text && <span className="visually-hidden">Opened </span>}{opened.text}</span>
+              <span className="project-row-chevron"><Icon name="chevron" size={16} stroke={1.5} /></span>
+            </button>
+            {onRemove && <button className="icon-button project-row-remove" aria-label={'Remove ' + projectName(project) + ' from Rho'} title="Remove from Rho · its folder stays as it is" onClick={() => onRemove(project)}><Icon name="close" size={15} /></button>}
+          </div>;
         })}
       </div> : <div className="home-empty">
         <span className="empty-symbol"><Icon name="folder-plus" size={26} stroke={1.5} /></span>

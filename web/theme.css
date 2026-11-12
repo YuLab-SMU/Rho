@@ -461,6 +461,15 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 .project-search { width: min(320px, 100%); }
 .project-list { display: flex; flex-direction: column; border: 1px solid var(--color-hairline); border-radius: 14px; background: var(--color-surface); overflow: hidden; }
 .project-row { display: flex; align-items: center; gap: 14px; justify-content: flex-start; padding: 14px 18px; min-height: 76px; border: 0; border-bottom: 1px solid var(--color-divider); border-radius: 0; text-align: left; font-weight: 400; }
+.project-row-line { position: relative; display: flex; border-bottom: 1px solid var(--color-divider); }
+.project-row-line:last-child { border-bottom: 0; }
+.project-row-line > .project-row { flex: 1; min-width: 0; border-bottom: 0; }
+/* A project leaves the list from its row: the cross takes the place of the arrow while the row is pointed at or in reach. */
+.project-row-remove { position: absolute; top: 50%; right: 12px; width: 30px; height: 30px; min-height: 30px; padding: 0; border: 0; border-radius: 7px; background: transparent; color: var(--color-meta); transform: translateY(-50%); opacity: 0; }
+.project-row-line.removable:is(:hover, :focus-within) > .project-row-remove { opacity: 1; }
+.project-row-line.removable:is(:hover, :focus-within) .project-row-chevron { visibility: hidden; }
+.project-row-remove:hover { background: var(--color-hover); color: var(--color-ink); }
+@media (hover: none) { .project-row-remove { opacity: 1; } .project-row-line.removable .project-row-chevron { visibility: hidden; } }
 .project-row:last-child { border-bottom: 0; }
 .project-row:hover { background: var(--color-well); }
 .project-row:active { background: var(--color-hover); }

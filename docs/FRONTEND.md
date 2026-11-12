@@ -30,7 +30,12 @@ switching never changes what is running ([record](SIMULATED-PROJECT-EPISODE.md#o
   one on screen marked and a dot on each one whose Agent is answering (from one bounded
   `conversation.list` per project every five seconds while the page is visible; the open project's
   own record also says when it needs a choice). Choosing one returns to where it was left in this
-  tab; `+` and Rho open the projects list, where a project chosen opens on its Overview.
+  tab; `+` and Rho open the projects list, where a project chosen opens on its Overview. A
+  project is a folder, and the cross on its row here or in the projects list takes it off Rho's
+  list and leaves the folder and its files as they are (`project.remove`), with Undo for fifteen
+  seconds (`project.restore`). While an Agent answers in it, or a session, terminal or command
+  of the person's runs in it, the service refuses with their counts and the page asks before
+  each is stopped ([record](SIMULATED-PROJECT-EPISODE.md#removing-a-project)).
 - **Agent** holds the project's Agents and their conversations in one place. The row opens the
   Agents that work here and says when one is working or needs a choice; `+` starts a new
   conversation, and is the one New while this list is on screen. Under it are the open project's
@@ -191,20 +196,27 @@ inspect what happened. The application gives those actions direct places:
   show its sessions (at first the first Notebook drawn), with a choice of notebook in their
   header when more than one has a session.
   Sessions lists every notebook's sessions, by notebook. Cells read in the order
-  they ran: language and number in the gutter, who ran it (the Agent's name opens its
-  conversation) and its purpose, how long it took or how it ended, the code highlighted,
-  then what it printed, streamed while it runs, with messages, warnings and errors in
-  their place and its plots. Long code and output show their first lines. Where a session
-  started or ended the list says so, and that values from before an end are gone. Each
-  cell has Edit and run and Run again. The person's cell stays at the foot, with R or
-  Python, a hint from what the session holds and ⌘/Ctrl+Enter.
+  they ran, drawn as a notebook draws them ([record](SIMULATED-PROJECT-EPISODE.md#the-notebook-as-a-notebook)):
+  the cell's count in the gutter beside the first line of its code (`[3]`, `[*]` while it
+  runs, red when it failed); above the code, who ran it (the Agent's name opens its
+  conversation) and its purpose, for an Agent's cell or a named one only; the code
+  highlighted; under it how long it took or how it ended, and when; then what it printed,
+  streamed while it runs, with messages, warnings and errors in their place and its plots.
+  A cell names its language only in a notebook that holds cells of both. Long code and
+  output show their first lines. Where a session started or ended the list says so, and
+  that values from before an end are gone. Edit and run and Run again are two icons over
+  the corner of a cell's code, shown with the pointer or the focus. The new cell stays at
+  the foot, drawn as a cell: its code, coloured as it is typed, with a hint from what the
+  session holds; under the code R or Python, and Run (Shift+Enter or ⌘/Ctrl+Enter).
   On the person's own page the Notebook is the cells and that line, and leaves the rest to
   the other views of the sessions ([one set of views](SIMULATED-PROJECT-EPISODE.md#one-set-of-session-views)):
   a plot of a live session is a picture in its cell, numbered as Plots counts it, that brings
   it forward in the Plots view, which is put on the page when it has none; a value named under
-  a cell opens in its own view; and the session's state beside the line ("R 4.5.2 · idle")
-  opens Sessions. Interrupt stays at the line while a cell runs. A wide view centers the cells;
-  below 420 px the code takes its own line above R or Python and Run. Elsewhere (a conversation's
+  a cell opens in its own view; and the session's state ("R 4.5.2 · idle"), in the view's own
+  bar beside the form switch, opens Sessions, with where the session runs next to it when the
+  project names a server. Interrupt stays at the new cell while a cell runs. A wide view
+  centers the cells; under 840 px where the session runs moves to the new cell, which is one
+  line there, and below 420 px the code takes its own line above R or Python and Run. Elsewhere (a conversation's
   Studio, and the Notebook page of a tab that may not arrange one) the Notebook keeps the
   sessions' state, variables and latest plots beside the cells, or folded into one line above
   them in a view under 840 px. A conversation's Studio
@@ -240,8 +252,8 @@ inspect what happened. The application gives those actions direct places:
   Enter runs finished code and goes on to another line, indented, in unfinished code (an
   open bracket or string, a trailing operator, a Python block before its empty line);
   Shift+Enter adds a line, ⌘/Ctrl+Enter runs whatever is there, ↑/↓ bring back what the person
-  ran, a closing bracket on an empty line steps back, Esc interrupts, and the R/Python chip
-  switches language: the small chip each cell carries, also in the notebook form's input. A click in the transcript puts the keyboard in the prompt. A Studio view
+  ran, a closing bracket on an empty line steps back, Esc interrupts, and the R/Python word
+  beside the prompt switches language, as the one under the notebook form's new cell does. A click in the transcript puts the keyboard in the prompt. A Studio view
   saves its form with the page (`props.form`). A
   Notebook placed under a script by running one of its lines starts as a console
   ([episode](SIMULATED-PROJECT-EPISODE.md#two-forms-of-the-notebook)).

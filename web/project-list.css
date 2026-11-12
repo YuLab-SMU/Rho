@@ -4,3 +4,6 @@
 .nav-project .nav-row-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; overflow-wrap: normal; }
 .state-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--color-accent); }
 .state-dot.waiting { background: var(--color-amber); }
+/* A project leaves the list from its row; while the cross shows, it takes the place of the Agent's dot. */
+.nav-closing.closable:is(:hover, :focus-within) > .nav-project :is(.state-dot, .pulse-dot) { visibility: hidden; }
+.nav-closing.closable:is(:hover, :focus-within) > .nav-project { padding-right: 30px; }

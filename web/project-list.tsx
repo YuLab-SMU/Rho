@@ -58,20 +58,24 @@ export function useProjectStates(client: BrowserClient, projects: ProjectSummary
 const stateWords: Record<ProjectState, string> = { working: 'Agent working', waiting: 'Agent needs your choice' };
 // The first thing in the sidebar: the projects, each by name, with the one on screen marked and
 // a dot on each whose Agent is working. One click goes to another project, where it was left.
-export function ProjectList({ projects, total, current, home, states, onHome, onProject }: {
+// A project leaves the list from its row: a project is a folder, and removing it here leaves the
+// folder and everything in it as it is.
+export function ProjectList({ projects, total, current, home, states, onHome, onProject, onRemove }: {
   projects: ProjectSummary[]; total: number; current: string | null; home: boolean; states: Record<string, ProjectState>;
-  onHome: () => void; onProject: (project: ProjectSummary) => void;
+  onHome: () => void; onProject: (project: ProjectSummary) => void; onRemove?: (project: ProjectSummary) => void;
 }) {
   const marks = projectMarks(projects);
   return <nav className="nav-section nav-projects" aria-label="Projects">
     <div className="nav-heading"><span className="section-label">Projects</span><button className="icon-button nav-add" aria-label="Open or create a project" title="Open or create a project" onClick={onHome}><Icon name="plus" size={15} /></button></div>
     <ul className="nav-group">{projects.map(project => {
       const state = states[project.id], name = projectName(project);
-      return <li key={project.id}><button className={'nav-row nav-project' + (state ? ' ' + state : '')} aria-label={name + (state ? ' · ' + stateWords[state] : '')} title={name + (state ? ' · ' + stateWords[state] : '')} aria-current={!home && current === project.id ? 'page' : undefined} onClick={() => onProject(project)}>
+      return <li key={project.id} className={'nav-closing' + (onRemove ? ' closable' : '')}><button className={'nav-row nav-project' + (state ? ' ' + state : '')} aria-label={name + (state ? ' · ' + stateWords[state] : '')} title={name + (state ? ' · ' + stateWords[state] : '')} aria-current={!home && current === project.id ? 'page' : undefined} onClick={() => onProject(project)}>
         <span className={'project-avatar tiny ' + projectHue(project.id + name)} aria-hidden="true">{marks.get(project.id)}</span>
         <span className="nav-row-name">{name}</span>
         {state && <span className={state === 'waiting' ? 'state-dot waiting' : 'pulse-dot'} aria-hidden="true" />}
-      </button></li>;
+      </button>
+        {onRemove && <button className="icon-button nav-close" aria-label={'Remove ' + name + ' from Rho'} title="Remove from Rho · its folder stays as it is" onClick={() => onRemove(project)}><Icon name="close" size={13} /></button>}
+      </li>;
     })}</ul>
     {total > projects.length && <button className="nav-more" onClick={onHome}>All {total} projects</button>}
   </nav>;

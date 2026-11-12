@@ -208,7 +208,12 @@ function App() {
           // Each Agent with access carries the name the page shows for it, so every view names it alike.
           setSnapshot(value.agents ? { ...value, agents: value.agents.map(a => ({ ...a, name: agentDisplayName(a.label ?? 'Agent') })) } : value); setProject(value.project); setProjects(list => list.map(p => p.id === value.project.id ? value.project : p)); live();
         }
-      } catch (e) { if (!abort.signal.aborted) lost(e); }
+      } catch (e) {
+        if (abort.signal.aborted) return;
+        // Removed from Rho in another tab or by a command: this tab returns to the projects.
+        if ((e as { error?: { kind?: string } }).error?.kind === 'not_found') { const gone = project; setProjects(list => list.filter(p => p.id !== gone.id)); leaveProject(); setNotice(name(gone) + ' is no longer listed in Rho. Its folder is as it was; open it again to list it.'); live(); }
+        else lost(e);
+      }
     })();
     return () => abort.abort();
   }, [client, project?.id, reconnect]);
@@ -348,6 +353,45 @@ function App() {
     if (!closed) return;
     client!.call('composition.undo', { projectId: closed.projectId, compositionId: closed.id, expectedVersion: closed.version, changeId: 'reopen-' + closed.id + '-' + crypto.randomUUID().slice(0, 8) })
       .then(() => { if (current.current?.id === closed.projectId) layout(closed.id); }, error => setNotice(compositionName(closed.id) + ' could not be brought back. ' + (error instanceof Error ? error.message : '')));
+  }
+  // Removing a project takes it off Rho's list: a project is a folder, and its folder and files are
+  // not touched. What Rho runs in it (an Agent answering, live sessions, terminals, commands) is
+  // counted by the service first; the person is asked before each is stopped. Undo lists it again.
+  type Running = { conversations: number; sessions: number; terminals: number; commands: number };
+  const [removing, setRemoving] = useState<{ project: ProjectSummary; running: Running; busy: boolean; problem: string } | null>(null);
+  const [removedProject, setRemovedProject] = useState<{ project: ProjectSummary; stopped: Running } | null>(null);
+  const removeDialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => { if (removing) { if (!removeDialog.current?.open) removeDialog.current?.showModal(); } else if (removeDialog.current?.open) removeDialog.current.close(); }, [!!removing]);
+  useEffect(() => { if (!removedProject) return; const timer = setTimeout(() => setRemovedProject(null), 15000); return () => clearTimeout(timer); }, [removedProject]);
+  const runningWords = (n: Running) => ([[n.conversations, 'Agent answering', 'Agents answering'], [n.sessions, 'live session', 'live sessions'], [n.terminals, 'terminal', 'terminals'], [n.commands, 'running command', 'running commands']] as const)
+    .filter(([count]) => count).map(([count, one, many]) => `${count} ${count === 1 ? one : many}`).join(', ');
+  function removeProject(target: ProjectSummary, stop = false) {
+    if (stop) setRemoving(now => now && { ...now, busy: true, problem: '' });
+    client!.call('project.remove', { projectId: target.id, ...(stop ? { stop: true } : {}) }).then(result => {
+      setRemoving(null); setNotice('');
+      places.current.delete(target.id);
+      setProjects(list => list.filter(p => p.id !== target.id));
+      if (current.current?.id === target.id) leaveProject();
+      setRemovedProject({ project: result.project, stopped: result.stopped });
+    }, e => {
+      const error = (e as { error?: { kind?: string; message?: string; details?: { running?: Running } } }).error;
+      if (error?.kind === 'conflict' && error.details?.running) setRemoving({ project: target, running: error.details.running, busy: false, problem: stop ? error.message ?? '' : '' });
+      else {
+        // A page newer than the service it is in front of asks for an operation the service lacks.
+        setRemoving(null); setNotice(error?.message === 'Unknown API operation.' ? 'This Rho service is older than this page and does not remove projects yet. Restart Rho to use it.' : name(target) + ' was not removed. ' + (error?.message ?? humanError(e)));
+        // What the service lists now, in case the project was already gone from it.
+        void client!.call('project.list', {}).then(list => { setProjects(list); if (current.current && !list.some(p => p.id === current.current!.id)) leaveProject(); }, () => {});
+      }
+    });
+  }
+  // The project on screen is gone from the list: this tab returns to the projects.
+  function leaveProject() { sessionStorage.removeItem(projectKey); setProject(null); setSnapshot(null); setFollowing(false); setSide(null); setScreen('home'); setHomeFocus(true); address(); }
+  function restoreProject() {
+    const removed = removedProject;
+    setRemovedProject(null);
+    if (!removed) return;
+    client!.call('project.restore', { projectId: removed.project.id })
+      .then(() => client!.call('project.list', {})).then(setProjects, e => setNotice(name(removed.project) + ' could not be listed again. ' + ((e as { error?: { message?: string } }).error?.message ?? humanError(e))));
   }
   // The Notebook on a page of the person's own: beside what is there, or brought forward.
   function notebookOnPage(page: string, into?: string) {
@@ -648,7 +692,7 @@ function App() {
       <button ref={commandTrigger} className="icon-button command-trigger" aria-label="Commands · Type a command" aria-keyshortcuts="Meta+K Control+K" title={'Commands · ' + shortcut} onClick={() => setCommands(true)}><Icon name="search" size={17} /></button>
     </div>
     <div className="side-scroll">
-      <ProjectList projects={projectList} total={projects.length} current={project?.id ?? null} home={!inProject} states={projectStates} onHome={pick(goHome)} onProject={next => pick(() => switchProject(next))()} />
+      <ProjectList projects={projectList} total={projects.length} current={project?.id ?? null} home={!inProject} states={projectStates} onHome={pick(goHome)} onProject={next => pick(() => switchProject(next))()} onRemove={link ? undefined : removeProject} />
       {project && inProject && (screen === 'plugins' ? <div className="nav-section"><button className="nav-row" onClick={pick(showOverview)}><Icon name="back" size={14} /><span>Back to project</span></button><PluginNavigation catalog={snapshot?.catalog} pluginId={pluginId} onSelect={id => pick(() => choosePlugin(id))()} /></div>
       : <ProjectNavigation project={project} snapshot={snapshot} current={here} sources={sources} partial={files.truncated} adding={addingSource}
           places={narrow ? placeTabs.map(p => ({ ...p, run: pick(p.run) })) : undefined}
@@ -717,9 +761,10 @@ function App() {
           <main id="main" tabIndex={-1} className={(studioOpen || (screen === 'project' && (section === 'file' || section === 'graph'))) && snapshot ? 'main project-main workspace-main' : 'main'}>
             {notice && <div className="offline-bar notice-bar" role="status"><Icon name="info" size={17} /><p>{notice}</p><button onClick={() => setNotice('')}>Dismiss</button></div>}
             {closedWorkspace && closedWorkspace.projectId === project?.id && <div className="offline-bar notice-bar" role="status"><Icon name="info" size={17} /><p>{compositionName(closedWorkspace.id)} is closed. Its files, sessions and conversations are unchanged.</p><button onClick={reopenWorkspace}>Undo</button><button className="shell-quiet" aria-label="Dismiss" onClick={() => setClosedWorkspace(null)}><Icon name="close" size={14} /></button></div>}
+            {removedProject && <div className="offline-bar notice-bar" role="status"><Icon name="info" size={17} /><p>{name(removedProject.project)} is removed from Rho{runningWords(removedProject.stopped) ? ', with ' + runningWords(removedProject.stopped) + ' stopped' : ''}. Its folder and files are as they were.</p><button onClick={restoreProject}>Undo</button><button className="shell-quiet" aria-label="Dismiss" onClick={() => setRemovedProject(null)}><Icon name="close" size={14} /></button></div>}
             {screen === 'project' && snapshot?.presentation?.pending && <div className="offline-bar" role="status"><p>New output is ready. Your current views are kept.</p><button onClick={() => showSection('files')}>Show files</button></div>}
             {(phase === 'offline' || reconnecting) && <div className="offline-bar" role="alert"><Icon name="offline" size={17} /><p>{reconnecting ? 'Reconnecting. ' : "Can't reach Rho. "}{seen}</p><button disabled={reconnecting} onClick={reread}>Reconnect</button></div>}
-            {screen === 'home' || !project ? <Home client={client!} projects={projects} folder={folder} focusRequest={homeFocus} onFocused={() => setHomeFocus(false)} onChoose={chooseProject} onOpened={opened} onAccessEnded={() => useLocalAccess('That access has ended. This tab uses this machine.')} />
+            {screen === 'home' || !project ? <Home client={client!} projects={projects} folder={folder} focusRequest={homeFocus} onFocused={() => setHomeFocus(false)} onChoose={chooseProject} onOpened={opened} onRemove={link ? undefined : removeProject} onAccessEnded={() => useLocalAccess('That access has ended. This tab uses this machine.')} />
               : !snapshot ? <Loading text="Opening project…" />
               : screen === 'plugins' ? <PluginCatalog client={client} projectId={project.id} canManage={!link} catalog={snapshot.catalog} project={name(project)} pluginId={pluginId} onSelect={choosePlugin} live={{ client: client!, snapshot, files: files.files, values: values.sessions, principalId: connection.principalId, onAbout: about }} back={pluginReturn ? { label: 'Back to project', run: () => { setPluginReturn(false); setPluginId(''); setScreen('project'); setMainFocus(true); } } : undefined} />
               : studioOpen ?
@@ -766,6 +811,12 @@ function App() {
     {narrow && notesOpen && notesContents && <Overlay className="context-sheet" label="Notes panel" returnFocus={notesTrigger} onClose={() => showNotes(false)}>{notesContents}</Overlay>}
     {narrow && context && <Overlay className="context-sheet" label={feedbackContext ? 'Your question' : 'Context and access'} returnFocus={contextTrigger} onClose={() => setContext(false)}><div className="drawer-heading"><h2>{feedbackContext ? 'Your question' : 'Connection & access'}</h2><button className="done-button" onClick={() => setContext(false)}>Done</button></div>{contextSections}</Overlay>}
     <dialog ref={dialog} className="commands" aria-label="Commands" onCancel={() => setCommands(false)} onClose={e => { if (e.currentTarget.open) return; setCommands(false); const next = afterCommands.current; afterCommands.current = null; if (next) next(); else commandReturn()?.focus(); }} onClick={e => { if (e.target === e.currentTarget) setCommands(false); }}>{commands && <CommandPalette groups={groups} onRun={runCommand} />}</dialog>
+    <dialog ref={removeDialog} className="confirm" aria-labelledby="remove-title" aria-describedby="remove-body" onCancel={event => { if (removing?.busy) event.preventDefault(); }} onClose={() => setRemoving(null)}>
+      {removing && <><h2 id="remove-title">Remove {name(removing.project)} from Rho?</h2>
+        <p id="remove-body">Rho is running work in it: {runningWords(removing.running)}. Removing the project stops {removing.running.conversations + removing.running.sessions + removing.running.terminals + removing.running.commands === 1 ? 'it' : 'each'}{removing.running.sessions ? ', and the values in a stopped session are gone' : ''}. The folder and its files are not touched.</p>
+        {removing.problem && <p className="inline-error" role="alert">{removing.problem}</p>}
+        <div className="dialog-actions"><button disabled={removing.busy} onClick={() => setRemoving(null)}>Cancel</button><button className="danger" disabled={removing.busy} onClick={() => removeProject(removing.project, true)}>{removing.busy ? 'Stopping…' : 'Stop and remove'}</button></div></>}
+    </dialog>
     <dialog ref={confirmDialog} className="confirm" aria-labelledby="disconnect-title" aria-describedby="disconnect-body" onCancel={() => setConfirming(false)} onClose={() => { setConfirming(false); confirmReturn.current?.focus(); }}>
       <h2 id="disconnect-title">Use this machine's access?</h2><p id="disconnect-body">This tab stops using its link and keeps working as this machine. Open projects, unsaved edits and running work are unchanged.</p><div className="dialog-actions"><button onClick={() => setConfirming(false)}>Cancel</button><button className="danger" onClick={() => useLocalAccess('This tab now uses this machine.')}>Use this machine</button></div>
     </dialog>

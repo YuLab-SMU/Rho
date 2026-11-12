@@ -2361,3 +2361,163 @@ and output past 16 KiB, and put the terminal's commands in the Graph.
 - An Agent outside Rho is not tied to its own session's messages. Its commands form a line of
   their own beside the session, which may show the same work as tool calls.
 - A file that changed again later shows only its last change, as for an Agent's commands.
+
+## The Notebook as a notebook
+
+2026-11-12. The user, on a screenshot of a workspace's Notebook in their own project, boxed two
+places: the gutter of each cell, and the row of chips beside the code of the cell to run. Their
+words: a notebook is a professional tool, many good companies have built one (IntelliJ among
+them), it need not be copied but the principles are the same, and this one is ugly.
+
+### What there was
+
+![The Notebook before: a language pill over a number in each gutter, a title repeating both, two text buttons under every cell, and chips beside the code to run](figures/notebook-cells-before.jpg)
+
+- Each cell's gutter held a coloured language pill with the cell's number alone under it. A cell
+  without a purpose was titled "Python cell 3", so the language and the number were each said
+  twice, on every cell.
+- Under every cell stood two text buttons, Edit and run and Run again.
+- The cell to run was a bordered box holding, before its code and on the same row in a view
+  under 840 px, a language chip, a server chip and a session chip; "Python" was written twice in
+  that row, and Run was pushed to the edge.
+- A session's start read "Python session started · Python 3.13.1"; an end by Rho closing said
+  that its values are gone on two lines.
+
+### What notebooks do, and what was changed
+
+The principles are those the established notebooks share. The kernel belongs to the notebook
+and is said once, in the notebook's bar. The gutter holds the execution count. A cell's code is
+followed by how it ran and then by its output. What can be done to a cell shows when the cell is
+pointed at. The cell being written is a cell like the others.
+
+- **Gutter** (Notebook 0.5.20). The count alone, beside the first line of the code: `[3]`, `[*]`
+  while it runs, empty while it waits, red when it failed. The gutter no longer names the
+  language.
+- **Who and why.** A line above the code for an Agent's cell or a cell with a purpose. The
+  person's own unnamed cell has no title.
+- **How it ended.** A quiet line under the code: Error or Interrupted in red with the time it
+  took, then when it ran. A finished cell shows the time alone; nothing marks it as correct.
+- **Language.** Written at the end of that line only in a notebook that holds cells of both
+  languages. In a notebook of one language no cell says it.
+- **Running a cell again.** Two icons over the corner of the code, shown with the pointer or the
+  keyboard focus, and always on a touch screen.
+- **The new cell.** Drawn as a cell: an empty count, the code in a box of its own, coloured as it
+  is typed with the page's highlighting drawn under the text box. Under the code are the
+  language it runs in, as a quiet word that switches, and Run. It starts one line high.
+- **The session.** Its state, which opens Sessions, and where it runs are in the view's own bar
+  beside the Notebook and Console switch (the page hands the Notebook a `toolbar`). In a view
+  under 840 px the bar keeps the state and where it runs stays with the new cell. A Notebook
+  shown without such a bar keeps both under the new cell.
+- **Marks.** A start names the session once ("Python 3.13.1 started · by you at 11:32"). An end
+  by Rho closing says that its values are gone once.
+- Rho's Plugins page styled every list item inside a view shown on it as one of its own rows
+  (`.plugin-entry-section li`), which took the cells' gutter away there. Its rows are now the
+  section's own items.
+
+![The Notebook after, in a view 655 px wide: counts in the gutter, how each cell ended under its code, the session's state in the view's bar](figures/notebook-cells-after.jpg)
+
+![The new cell in a wider view: the code coloured as typed, the language under it, where the session runs in the bar, and the two icons over a cell's code](figures/notebook-new-cell.jpg)
+
+### What the run showed
+
+A throwaway project in a real browser, each screenshot read: four Python cells (two failing, one
+printing a table) and two R cells (a summary and a plot), at 1440, 1000 and 900 px.
+
+- The count sat 3.5 px under the code's first line at first, since the gutter's line box was
+  taller than the count's; as a block of its own line height it sits within 1 px.
+- A selection made in the new cell covers the letters drawn under it, at both window widths.
+- With a server named in the project, a narrow view's bar wrapped to three rows. It now keeps the
+  session's state alone there.
+- The cell shown alone on the Plugins page lost its count, by the Plugins page's rule above.
+
+### Verification
+
+- Plugins: 226 of 228 passed in each of two runs (2 skipped, none failed). A first run had one
+  failure of 228; only the end of its output was kept, so its name is not known.
+- Rho: 368 of 371 (3 skipped, none failed), the contract checks and the documentation link check.
+- Browser acceptances: frontend and plugin-dx passed. The shell acceptance failed at an evidence
+  toggle that the frame no longer has (the script is older than the frame).
+- The pages acceptance failed where a cell chosen on the Overview opens the Notebook. The
+  screenshot shows the workspace's own notebook, empty: since a workspace's first notebook has
+  sessions of its own (Rho `332edde7`), the Overview's cell opens that notebook and not the
+  Project notebook the Agent's cell ran in. The drawing of a cell is not involved. Open.
+
+### Left open
+
+- This is the builder's reading. The user has not seen it.
+- A cell is still a record of one run: Edit and run puts its code in the new cell, and the run
+  is a new cell at the end. Editing a cell in place is not built.
+- A notebook of both languages counts each language's cells apart, so two cells may both read
+  `[1]`, told apart by the language at the end of their lines.
+- The new cell is a text box with colours under it: no completion, bracket matching or multiple
+  cursors. A composition in progress (an input method) shows without its underline.
+- The console form and the Notebook in a conversation's Studio were looked at for breakage only.
+- The Plugins page's picture of the Notebook is the earlier drawing.
+
+## Removing a project
+
+2026-11-12, in the same message. The user: a project is in essence a folder, yet it cannot even
+be removed from the interface.
+
+### What there was
+
+The service opened and created projects (`project.open`, `project.create`, `project.pick`,
+`project.createWorkspace`) and kept them in its `projects.json`. Nothing removed one, in the
+service, the command line or the page.
+
+### Changes
+
+- `project.remove` (Rho) takes a project off the service's list and out of the folders each tab
+  was given. The folder, its files and the records Rho keeps in `.rho` are not touched. Only the
+  person at this machine or the operator may call it; an Agent's grant cannot hold it.
+- Rho leaves nothing of its own running in a folder it no longer lists. The service counts what
+  it runs there from the hosts it already holds (messages being answered, live sessions, open
+  terminals, the person's running commands) and refuses with the counts. With `stop: true` each
+  is stopped by its owner's own stop, recorded as the person's, and the project is removed once
+  all have ended. If one has not ended after `projectRemoval.stopWaitMs` (15 s) the project stays
+  listed and the reply says what is left. Managed runs are Core's and are neither counted nor
+  stopped.
+- `project.restore` lists a removed project again as it was: its record, its place in the list
+  and the tabs that had it. The last `projectRemoval.kept` (64) removals are kept in the service's
+  state across restarts, the oldest forgotten first. A removed folder opened again in any way is
+  the same project, with its name and source folders.
+- The page: a cross on a project's row in the sidebar and in the projects list. An idle project
+  leaves at once, with a notice that says its folder is as it was and offers Undo for fifteen
+  seconds. A project with work running opens a dialog that names the work and offers Stop and
+  remove. A tab showing a project removed elsewhere returns to the projects list and says so.
+
+![Removing a project with a live session: the dialog names what stops and that the folder is not touched](figures/project-remove-confirm.jpg)
+
+![After Stop and remove: the projects list, with the notice and Undo](figures/project-removed.jpg)
+
+### What the run showed
+
+Two throwaway projects in a real browser, each screenshot read.
+
+- The idle project left from its sidebar row and came back with Undo, in its place.
+- With a Python session holding a value, `project.remove` answered conflict with
+  `{ sessions: 1 }`. Stop and remove ended the session's process (checked by its process id),
+  left `de.csv` and `.rho` in the folder, and wrote the project to `removed-projects.json`.
+  Listed again, the session's record reads stopped by the person.
+- A page in front of a service that lacks the operation (a page from source before an older
+  service) had read the service's "Unknown API operation" as the project being gone. It now says
+  that the service is older than the page.
+
+### Verification
+
+`test/project-remove.test.mjs`, two tests, in Rho's 368 of 371 above: a removal and its Undo in
+place, the folder and `.rho` kept, an Agent's grant refused, a removal kept across a restart, the
+same identity on opening the folder again, a forgotten removal not brought back; and a live
+session counted, refused, then stopped as the person's with `stop`.
+
+### Left open
+
+- This is the builder's reading. The user has not seen it. Their running service is the earlier
+  build and has no `project.remove` until it is restarted.
+- Work that starts between the count and the removal is not seen by the count.
+- A terminal, a running command and an answering Agent are stopped by the same path as a
+  session, but only a session was run in the browser.
+- The service keeps its lease on a removed folder until it closes, so a second Rho service
+  cannot open that folder before then.
+- No command removes a project (`rho` has none yet); the operator's client can call the operation.
+- Projects past the sidebar's eight are removed from the projects list only.

@@ -348,6 +348,18 @@ consumes receipts with a retained change identity; `project.source.add` adds a
 further native choice to an authorized project. Legacy single-directory APIs and
 original managed operations retain their identities and behavior.
 
+`project.remove` takes a project off the service's list; its folder, its files and
+the records in `.rho` are not touched. Only the person at this machine or the
+operator may call it. The service first counts what it runs there from the hosts it
+already holds (messages being answered, live sessions, open terminals, the person's
+running commands; managed runs are Core's and are not counted) and refuses with
+`conflict` and the counts. With `stop: true` each is stopped by its owner's stop as
+the person's, and the project is removed once all have ended; if one has not ended
+after `projectRemoval.stopWaitMs` (15 s) the project stays listed and the reply
+names what is left. `project.restore` lists a removed project again as it was. The
+last `projectRemoval.kept` (64) removals are kept across restarts, the oldest
+forgotten first; a forgotten one is listed again by opening its folder.
+
 Source entries have stable IDs and canonical roots. Files resolves references
 `@<sourceId>/<relative-path>` inside the chosen folders; Documents uses that port
 for its existing buffers and actual write conditions. Saved R script snapshots

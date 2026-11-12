@@ -1,4 +1,4 @@
-import { useContext, useEffect, useState } from 'react';
+import { useContext, useEffect, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { FlowPane, FormSwitch, ObjectView, PlotsPane, ServersPane, SessionPane, SessionsPane, VariablesPane, kernelEntries, type Linked, type NotebookForm } from '@rho-workspace/plugin-kernel/ui';
 import type { UiContribution, UiViewProps } from '../../src/ui-contract.js';
@@ -20,9 +20,11 @@ function Notebook({ viewId, view, client, snapshot, headerTarget, shell }: UiVie
   const choose = (next: NotebookForm) => { setForm(next); page?.setProps?.(viewId, { form: next }); };
   // On the person's own page the Notebook leaves plots and the sessions to their views.
   const linked: Linked | undefined = page?.showPlot && page.showSessions ? { plot: page.showPlot, sessions: page.showSessions } : undefined;
+  // The session the next cell runs in is said once, in the view's own bar beside the form.
+  const toolbar = headerTarget && linked ? (controls: ReactNode) => createPortal(controls, headerTarget, 'kernel-' + viewId) : undefined;
   return <>
     {headerTarget && createPortal(<FormSwitch form={form} onForm={choose} />, headerTarget, 'form-' + viewId)}
-    <SessionPane client={client} snapshot={snapshot} form={form} shell={shell} scope={page?.scope}
+    <SessionPane client={client} snapshot={snapshot} form={form} shell={shell} scope={page?.scope} toolbar={toolbar}
       notebook={typeof view.props.notebook === 'string' && view.props.notebook ? view.props.notebook : undefined} notebooks={page?.notebookNames}
       beside={{ variables: !!page?.has('rho.variables'), plots: !!page?.has('rho.plots') }} linked={linked}
       prepared={!page || page.notebookTarget == null || page.notebookTarget === viewId ? page?.prepared : null} onTaken={page?.taken} onConversation={page?.openConversation} onObject={page?.openValue} />

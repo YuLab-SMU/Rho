@@ -12,7 +12,7 @@ export const browserLimits = { maxSessions: 16, maxPairings: 8, pairingTtlMs: 30
 // The person who selected a folder may also list it and open one of its text files
 // in their own layout; registering resources and execution stay
 // Agent/operator work.
-export const browserMethods = ['protocol.describe', 'protocol.validate', 'project.list', 'project.open', 'project.create', 'project.pick', 'project.createWorkspace', 'project.source.pick', 'project.source.add', 'project.entries', 'project.openFile', 'project.doctor', 'project.runs', 'capability.list', 'observation.snapshot', 'composition.read', 'document.read', 'resource.read', 'skill.list', 'skill.read',
+export const browserMethods = ['protocol.describe', 'protocol.validate', 'project.list', 'project.open', 'project.create', 'project.pick', 'project.createWorkspace', 'project.source.pick', 'project.source.add', 'project.remove', 'project.restore', 'project.entries', 'project.openFile', 'project.doctor', 'project.runs', 'capability.list', 'observation.snapshot', 'composition.read', 'document.read', 'resource.read', 'skill.list', 'skill.read',
   'document.edit', 'document.save', 'document.undoOwn', 'document.revert', 'document.history', 'document.change.read', 'data.page', 'interaction.selection.read', 'interaction.selection.set', 'view.observe', 'view.observations.read', 'feedback.submit', 'feedback.status', 'annotation.read',
   // A person may prepare a context naming one exact object and version: that is how
   // they point the Agent at the thing they are asking about. It writes only that

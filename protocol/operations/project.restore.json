@@ -1,0 +1,77 @@
+{
+  "method": "project.restore",
+  "inputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "projectId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      }
+    },
+    "required": [
+      "projectId"
+    ]
+  },
+  "outputSchema": {
+    "type": "object",
+    "additionalProperties": true,
+    "properties": {
+      "id": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "root": {
+        "type": "string",
+        "minLength": 1
+      },
+      "openedAt": {
+        "type": "string",
+        "format": "date-time"
+      },
+      "name": {
+        "type": "string",
+        "minLength": 1
+      },
+      "sources": {
+        "type": "array",
+        "maxItems": 32,
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+            },
+            "root": {
+              "type": "string",
+              "minLength": 1
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "id",
+            "root",
+            "name"
+          ]
+        }
+      },
+      "workspace": {
+        "type": "boolean"
+      },
+      "nativeSelected": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "id",
+      "root",
+      "openedAt"
+    ]
+  },
+  "description": "Person at this machine or operator only: list a project removed during this run of the service again, as it was, with the access each tab had to it. It starts nothing; what was stopped stays stopped."
+}

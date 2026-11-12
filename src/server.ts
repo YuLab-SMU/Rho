@@ -46,7 +46,12 @@ export interface NativeAdapterRegistration {
   proof: { kind: 'claude-code-init'; sessionId: string; clientVersion: string };
 }
 export const serviceLimits = { maxRequestBytes: 1024 * 1024, maxEventBytes: 65536, eventRetention: 256, maxSubscriptions: 8, maxQueue: 32, maxContexts: 128, maxBindings: 64, maxActivities: 256, maxContextBytes: 1024 * 1024, maxRetainedMetadataBytes: 32 * 1024 * 1024 };
-export interface ServiceConfig extends Partial<typeof serviceLimits>, Partial<typeof requestLimits>, PluginConfig { root: string; stateDir: string; extensions?: Partial<typeof extensionLimits>; coreBinary?: string; rscript: string; python?: string; ssh?: string; serverctl?: string; port?: number; nativeFolders?: Partial<typeof nativeFolderLimits>; workspace?: Partial<typeof workspaceLimits>; interactions?: Partial<typeof interactionLimits>; taskMap?: Partial<typeof taskMapLimits>; browser?: Partial<typeof browserLimits>; webRoot?: string; example?: boolean; agentNativeActivity?: Partial<typeof nativeActivityLimits>; presentationWitness?: Partial<typeof presentationWitnessLimits>; visibility?: Partial<typeof visibilityLimits>; agentDelivery?: Partial<typeof agentDeliveryLimits>; deliveryTransportTimeoutMs?: number; claude?: string; agentBackend?: ConversationConfig['backend']; claudeAcp?: ConversationConfig['claudeAcp']; acpCommand?: ConversationConfig['acpCommand']; codex?: string; codexAcp?: ConversationConfig['codexAcp']; conversations?: Partial<typeof conversationLimits>; describe?: Partial<typeof describeLimits>; modelsDev?: { url?: string; maxBytes?: number; timeoutMs?: number; refreshMs?: number; retryMs?: number }; evidence?: Partial<typeof evidenceExportLimits>; connect?: Partial<typeof connectLimits> }
+// Removing a project: how long its stopped work may take to end before the removal is refused and
+// the project stays listed (stopWaitMs), how many removed projects are remembered to be listed
+// again as they were, the oldest forgotten first (kept), and how many of the person's newest
+// commands are read to find the running ones (commandsRead).
+export const projectRemovalLimits = { stopWaitMs: 15000, kept: 64, commandsRead: 200 };
+export interface ServiceConfig extends Partial<typeof serviceLimits>, Partial<typeof requestLimits>, PluginConfig { projectRemoval?: Partial<typeof projectRemovalLimits>; root: string; stateDir: string; extensions?: Partial<typeof extensionLimits>; coreBinary?: string; rscript: string; python?: string; ssh?: string; serverctl?: string; port?: number; nativeFolders?: Partial<typeof nativeFolderLimits>; workspace?: Partial<typeof workspaceLimits>; interactions?: Partial<typeof interactionLimits>; taskMap?: Partial<typeof taskMapLimits>; browser?: Partial<typeof browserLimits>; webRoot?: string; example?: boolean; agentNativeActivity?: Partial<typeof nativeActivityLimits>; presentationWitness?: Partial<typeof presentationWitnessLimits>; visibility?: Partial<typeof visibilityLimits>; agentDelivery?: Partial<typeof agentDeliveryLimits>; deliveryTransportTimeoutMs?: number; claude?: string; agentBackend?: ConversationConfig['backend']; claudeAcp?: ConversationConfig['claudeAcp']; acpCommand?: ConversationConfig['acpCommand']; codex?: string; codexAcp?: ConversationConfig['codexAcp']; conversations?: Partial<typeof conversationLimits>; describe?: Partial<typeof describeLimits>; modelsDev?: { url?: string; maxBytes?: number; timeoutMs?: number; refreshMs?: number; retryMs?: number }; evidence?: Partial<typeof evidenceExportLimits>; connect?: Partial<typeof connectLimits> }
 const ajv = new Ajv({ allErrors: true, strict: false, allowUnionTypes: true });
 // The same timestamp check every published contract uses; an unknown format would be skipped silently.
 ajv.addFormat('date-time', { type: 'string', validate: isNativeTime });
@@ -750,6 +755,17 @@ export class RhoService {
     });
   }
   private async dataDir(p: Project) { return stateDirectory(p.root, '.rho/rho'); }
+  // What Rho itself runs in a project now, read from the hosts this service already holds for
+  // it: the messages being answered, the live sessions, the open terminals and the person's
+  // running commands. Looking starts no host. Managed runs are Core's and are not counted.
+  private async runningIn(p: Project, commandsRead = projectRemovalLimits.commandsRead) {
+    return {
+      conversations: this.conversations.answering(p.id),
+      sessions: (await this.kernels.get(p.id)?.read(1))?.sessions.filter(s => s.state !== 'ended') ?? [],
+      terminals: this.terminals.get(p.id)?.list().terminals.filter(t => !t.endedAt) ?? [],
+      commands: (await this.consoles.get(p.id)?.list(commandsRead))?.commands.filter(c => c.state === 'running') ?? [],
+    };
+  }
   // One Console per project for the life of this service: it holds the commands it started.
   // Changes reach open pages at most four times a second.
   private consoleFor(p: Project) {
@@ -914,6 +930,45 @@ export class RhoService {
       const p = await this.state.open(path.relative(this.state.root, target) || '.');
       return method === 'project.create' ? p : { ...p, host: await this.bridge.capability(p.root) };
     });
+    // Removing a project takes it off Rho's list and nothing else: its folder, its files and the
+    // records Rho keeps in it stay, and opening the folder again lists it as it was. Rho leaves
+    // nothing of its own running in a folder it no longer lists. What runs there is counted first
+    // and the request refused; with stop each is stopped by its owner's own stop, as the person's,
+    // and the project is removed once all have ended.
+    if (method === 'project.remove' || method === 'project.restore') {
+      requireThat(principal.id === 'operator' || principal.id === localBrowserId, 'scope', 'Only the person at this machine removes a project from Rho or lists one again.');
+      const limits = { ...projectRemovalLimits, ...this.config.projectRemoval };
+      if (method === 'project.restore') return this.serial('projects', async () => {
+        const project = await this.state.restore(b.projectId);
+        if (project.sources) this.plugins.sourceFolders.set(project.id, project.sources);
+        return project;
+      });
+      const p = await this.state.project(b.projectId, principal);
+      const found = await this.runningIn(p, limits.commandsRead), stopped = { conversations: found.conversations.length, sessions: found.sessions.length, terminals: found.terminals.length, commands: found.commands.length };
+      const said = (n: typeof stopped) => [[n.conversations, 'Agent answering', 'Agents answering'], [n.sessions, 'live session', 'live sessions'], [n.terminals, 'terminal', 'terminals'], [n.commands, 'command', 'commands']]
+        .filter(([count]) => count).map(([count, one, many]) => `${count} ${count === 1 ? one : many}`).join(', ');
+      const name = p.name ?? path.basename(p.root);
+      if (said(stopped)) {
+        requireThat(b.stop === true, 'conflict', `${name} has work running in Rho: ${said(stopped)}. Stop it first, or remove the project with stop to stop each as yours.`, { running: stopped });
+        for (const c of found.conversations) await this.conversations.stop(p, principal.id, c);
+        for (const s of found.sessions) await this.kernels.get(p.id)!.stop(s.sessionId, principal.id);
+        for (const t of found.terminals) this.terminals.get(p.id)!.close(t.terminalId);
+        for (const c of found.commands) await this.consoles.get(p.id)!.stop(c.commandId, principal.id);
+        // Each stop is asked of a process; the project stays listed until all have ended.
+        const until = Date.now() + limits.stopWaitMs;
+        let left = await this.runningIn(p, limits.commandsRead);
+        const count = (r: typeof left) => ({ conversations: r.conversations.length, sessions: r.sessions.length, terminals: r.terminals.length, commands: r.commands.length });
+        while (said(count(left)) && Date.now() < until) { await new Promise(resolve => setTimeout(resolve, 100)); left = await this.runningIn(p, limits.commandsRead); }
+        requireThat(!said(count(left)), 'conflict', `${name} was not removed: ${said(count(left))} had not ended ${Math.round(limits.stopWaitMs / 1000)} s after being stopped. It is still listed; remove it again once they have ended.`, { running: count(left) });
+      }
+      return this.serial('projects', async () => {
+        await this.state.remove(p, limits.kept);
+        this.plugins.sourceFolders.delete(p.id);
+        // Pages showing it are told, so each returns to the list of projects.
+        for (const s of this.subscribers) if (s.projectId === p.id) { s.response.end('event: project.removed\ndata: {}\n\n'); this.subscribers.delete(s); }
+        return { project: p, stopped };
+      });
+    }
     const p = await this.state.project(b.projectId, principal);
     const owners = this.plugins.project(p.root, p.id);
     const requests = new Requests(p, this.bridge, (type, subject) => this.emit(p, type, subject), this.config, owners);

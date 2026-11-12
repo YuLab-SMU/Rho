@@ -60,7 +60,8 @@
 .plugin-description { line-height: 1.8; color: var(--color-muted); }
 .plugin-entry-section h2, .plugin-information h2 { padding-bottom: 12px; border-bottom: 1px solid var(--color-hairline); }
 .plugin-count { font-size: 12px; color: var(--color-meta); font-weight: 400; margin-left: 6px; }
-.plugin-entry-section li { display: flex; align-items: center; gap: 14px; padding: 16px 0; border-bottom: 1px solid var(--color-divider); }
+/* The rows of a section are its own list's items; a list inside a view shown here keeps its own form. */
+.plugin-entry-section > ul > li { display: flex; align-items: center; gap: 14px; padding: 16px 0; border-bottom: 1px solid var(--color-divider); }
 .plugin-entry-symbol { color: var(--color-meta); flex: none; }
 .plugin-entry-copy { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; overflow-wrap: anywhere; }
 .plugin-entry-name { font-weight: 500; }
@@ -70,7 +71,7 @@
 .plugin-view-state, .plugin-view-note { font-size: 12px; color: var(--color-meta); }
 .plugin-view-note { margin-top: 12px; }
 /* A view row: its picture, what it is, and the real view opened here on a file of this project. */
-.plugin-views li { flex-direction: column; align-items: stretch; }
+.plugin-views > ul > li { flex-direction: column; align-items: stretch; }
 .plugin-view-row { display: flex; align-items: flex-start; gap: 18px; }
 .plugin-view-figure { flex: none; width: 220px; aspect-ratio: 16 / 10; display: grid; place-content: center; overflow: hidden; border: 1px solid var(--color-hairline); border-radius: 8px; background: var(--color-well); color: var(--color-meta); }
 .plugin-view-figure img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: top left; }
@@ -126,7 +127,7 @@
   .plugin-detail-heading, .plugin-detail-title { align-items: flex-start; flex-direction: column; }
   .plugin-prompts { padding: 15px; }
   .plugin-prompts li { align-items: flex-start; }
-  .plugin-entry-section li { flex-wrap: wrap; }
+  .plugin-entry-section > ul > li { flex-wrap: wrap; }
   .plugin-information dl { grid-template-columns: 85px minmax(0,1fr); }
   .plugin-view-row { flex-wrap: wrap; }
   .plugin-view-figure { width: 100%; }
