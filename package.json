@@ -1,6 +1,6 @@
 {
   "name": "@rho-workspace/rho",
-  "version": "0.5.9",
+  "version": "0.5.10",
   "type": "module",
   "description": "Rho local workspace service, scoped browser shell and headless client",
   "license": "AGPL-3.0-only",
@@ -119,6 +119,8 @@
     "acceptance:smoke": "node scripts/install-smoke.mjs",
     "acceptance:shell": "node scripts/shell-acceptance.mjs",
     "acceptance:pages": "node scripts/pages-acceptance.mjs",
+    "acceptance:notebook": "node scripts/notebook-acceptance.mjs",
+    "acceptance:remove:agent": "node scripts/project-remove-agent-episode.mjs",
     "acceptance:actions": "node scripts/action-acceptance.mjs",
     "acceptance:objects": "node scripts/object-acceptance.mjs",
     "acceptance:continuity": "node scripts/continuity-acceptance.mjs",

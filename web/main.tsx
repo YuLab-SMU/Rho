@@ -17,7 +17,7 @@ import { useAgentNow, type AgentNow } from './agent-now.js';
 import { NotesPanel, useProjectNotes } from './project-notes.js';
 import { compositionName, defaultWorkspace, fileKey, openInWorkspace, processComposition, processConversation } from './canvas.js';
 import { Icon, type IconName } from './icons.js';
-import { addNewNotebook, addNotebook, addObject, addSessionView, addTool, canExplore, createWorkspace, loadTable, notebookOn, scriptLanguage, scriptPrepared, sessionTitles, sessionViewOn, toolOn, type Language, type SessionView, type Tool } from './explore.js';
+import { addNewNotebook, addNotebook, addProjectNotebook, addObject, addSessionView, addTool, canExplore, createWorkspace, loadTable, notebookNames, notebookOn, scriptLanguage, scriptPrepared, sessionTitles, sessionViewOn, toolOn, type Language, type SessionView, type Tool } from './explore.js';
 import { PageAdd } from './page-add.js';
 import { StudioToolsContext, type StudioTools } from './studio-tools.js';
 import type { ResourceTarget } from './canvas.js';
@@ -292,7 +292,15 @@ function App() {
   // person's workspace in Studio, put there or brought forward. A tab that may not arrange a
   // workspace keeps the pages they had before.
   function showConsole(turn?: string) { setConsoleTurn(turn ?? null); if (arrangeable) toolOnPage(sharedWorkspace(), 'console'); else showSection('console'); }
-  function showNotebook() { if (arrangeable && sessions) notebookOnPage(sharedWorkspace()); else showSection('notebook'); }
+  function showNotebook(notebook?: string | null) {
+    if (!arrangeable || !sessions || !snapshot) { showSection('notebook'); return; }
+    const page = sharedWorkspace();
+    if (notebook === undefined) { notebookOnPage(page); return; }
+    // An Overview cell opens the notebook that actually ran it, including the Project notebook.
+    const put = notebook === null ? addProjectNotebook(client!, snapshot.project.id, page)
+      : addNewNotebook(client!, snapshot.project.id, page, undefined, { notebook, title: notebookNames(snapshot.compositions)[notebook] });
+    put.then(id => layout(page, id), error => setNotice('The Notebook could not be opened. ' + (error instanceof Error ? error.message : '')));
+  }
   function showFiles() { if (arrangeable) toolOnPage(sharedWorkspace(), 'files'); else showSection('files'); }
   function showVariables() { if (arrangeable && sessions) sessionViewOnPage(sharedWorkspace(), 'variables'); else showSection('notebook'); }
   function showSources(next: SourceRow) { if (arrangeable) toolOnPage(sharedWorkspace(), `kind:${next}`); else { setCategory(next); showSection('sources'); } }
@@ -798,7 +806,7 @@ function App() {
               : section === 'skills' ? <Suspense fallback={<Loading text="Opening the skills…" />}><SkillsPage client={client!} snapshot={snapshot} onPath={showPath} onConversation={openConversation} onNotebook={showNotebook} /></Suspense>
               : section === 'graph' ? <Suspense fallback={<Loading text="Opening the graph…" />}><WorkGraph initialResource={graphResource} client={client!} snapshot={snapshot} files={files} agentNow={agentNow} following={following} principalId={connection.principalId} notesText={notes.text}
                   onFollow={() => follow()} onStopFollowing={() => setFollowing(false)} onStudio={layout} workspace={sharedWorkspace} onAbout={about} onAgent={id => { if (id) setSelectedConversation(id); setAgentOpen(true); setContext(false); }} /></Suspense>
-              : <Suspense fallback={<Loading text="Opening project…" />}><ProjectOverview key={project.id} section={section} notesText={notes.text} workspace={sharedWorkspace} onExplore={exploreFile} category={category} files={files} sources={sources} onFile={showFile} linked={!!link} onPath={showPath} onNewConversation={() => talk()} agentTab={agentTab} onAgentTab={setAgentTab} onSection={go} onConsole={showConsole} onAgent={id => { if (id) setSelectedConversation(id); setAgentOpen(true); }} client={client!} onProjectChanged={next => { setProject(next); setProjects(list => list.map(p => p.id === next.id ? next : p)); }} project={project} snapshot={snapshot} onLayout={layout} onOpened={(id, view) => { layout(id, view); reread(); }} /></Suspense>}
+              : <Suspense fallback={<Loading text="Opening project…" />}><ProjectOverview key={project.id} section={section} notesText={notes.text} workspace={sharedWorkspace} onExplore={exploreFile} category={category} files={files} sources={sources} onFile={showFile} linked={!!link} onPath={showPath} onNewConversation={() => talk()} agentTab={agentTab} onAgentTab={setAgentTab} onSection={go} onConsole={showConsole} onNotebook={showNotebook} onAgent={id => { if (id) setSelectedConversation(id); setAgentOpen(true); }} client={client!} onProjectChanged={next => { setProject(next); setProjects(list => list.map(p => p.id === next.id ? next : p)); }} project={project} snapshot={snapshot} onLayout={layout} onOpened={(id, view) => { layout(id, view); reread(); }} /></Suspense>}
           </main>
           {projectVisible && agentOpen && !narrow && <SidePanel label="Agent panel">{agentContents}</SidePanel>}
           {projectVisible && notesOpen && !narrow && notesContents && <SidePanel label="Notes panel">{notesContents}</SidePanel>}

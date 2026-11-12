@@ -645,10 +645,10 @@
       "sha256": "f6e73348eeffa68448c2483d0ff942792bef34050874c3999bd26e93436af41a"
     },
     "kernel.run": {
-      "summary": "Run a cell of R or Python in a live session of that language: the project's own, where an Agent's cells run, unless notebook names a notebook, whose sessions are its own (each Notebook on a person's workspace has one). What one cell defines stays for the next in that session. Starts the session when none is live, on this machine or at a place on one of the person's servers (place, or where kernel.places says that language runs next). interpreter names the program a session on this machine starts with, in a folder of the project such as .venv/bin/python; the project keeps it for that language's later sessions, and each cell records the program and version that ran it. replaces names an ended cell of the same notebook and language: the new cell is run in its place, where a notebook shows it, and the earlier run stays in the record. The same changeId from the same caller returns the same cell and never runs it twice. waitMs waits for the cell to end.",
+      "summary": "Run a cell of R or Python in a live session of that language: the project's own, where an Agent's cells run, unless notebook names a notebook, whose sessions are its own (each Notebook on a person's workspace has one). What one cell defines stays for the next in that session. Starts the session when none is live, on this machine or at a place on one of the person's servers (place, or where kernel.places says that language runs next). interpreter names the program a session on this machine starts with, in a folder of the project such as .venv/bin/python; the project keeps it for that language's later sessions, and each cell records the program and version that ran it. replaces names an ended cell of the same notebook and language: within the same session a notebook shows the new cell in its place, with the earlier runs under it. If the session has ended, the new run stands in its new session at its actual time and the old session keeps its cells. The same changeId from the same caller returns the same cell and never runs it twice. waitMs waits for the cell to end.",
       "path": "operations/kernel.run.json",
-      "bytes": 17613,
-      "sha256": "851b6389abe9e77993c8b08864fe3aea6cfdbe9222cc67917a00a68c1c6dcdc6"
+      "bytes": 17731,
+      "sha256": "aa19421bb252fbb6d8c93411b81cb1da91ddb8bc652229395b245a78d26ce9a1"
     },
     "kernel.server.skill": {
       "summary": "One skill bound to a server, as its file reads now: how that server is used. Read it before naming a place there or running work on it.",

@@ -183,33 +183,27 @@ try {
   assert.equal((await call('composition.read', { compositionId: 'fidelity-2' })).version, 1);
   check('a divider is a named, focusable separator moved by arrows; it changes no owner record');
 
-  // A declared item is the Agent's statement: on the view it names and in the evidence, nowhere else.
+  // A declared item is the Agent's statement on the view it names.
   await agent.call('task.map.declare', { projectId: project.id, expectedVersion: 0, changeId: 'items', question: 'Do the scores hold?', vocabulary: { kinds: { check: { label: 'Check' } }, states: { open: { label: 'still open' } } }, items: [{ id: 'scores', kind: 'check', state: 'open', title: 'Scores rise with row order', view: 'Table' }], next: [] });
   await layoutNav('workspace').click(); await scriptView.locator('.cm-content').waitFor();
   const note = page.locator('[data-owner-view="Table"] [data-fact="agent"]');
   await poll(() => note.textContent().catch(() => ''), t => t === 'Agent: Scores rise with row order · still open', 'declared item on the view it names');
   assert.equal(await page.locator('[data-owner-view="Script"] [data-fact="agent"]').count(), 0);
-  const evidenceToggle = page.locator('.shell-evidence-toggle');
-  await evidenceToggle.click();
-  await page.getByRole('region', { name: "The Agent's notes", exact: true }).getByText('Scores rise with row order', { exact: true }).waitFor();
-  await page.getByRole('button', { name: 'Close Agent', exact: true }).click();
-  check("a declared item shows as the Agent's statement on the view it names and in the Agent panel");
+  check("a declared item shows as the Agent's statement only on the view it names");
 
-  // The optional Agent panel exposes recorded calls, closes with Escape and returns focus.
+  // The Agent panel uses the application's bar, closes with Escape and returns focus.
+  const agentToggle = page.getByRole('button', { name: 'Agent panel', exact: true });
   for (const [width, height] of [[1024, 768], [390, 844]]) {
     await page.setViewportSize({ width, height });
-    await evidenceToggle.click();
+    await agentToggle.click();
     const inspector = page.getByRole(width < 768 ? 'dialog' : 'complementary', { name: 'Agent panel', exact: true });
-    await inspector.getByRole('region', { name: "The Agent's notes", exact: true }).getByText('Scores rise with row order', { exact: true }).waitFor();
-    const calls = inspector.getByRole('button', { name: /^Recorded calls/ });
-    if (await calls.getAttribute('aria-expanded') !== 'true') await calls.click();
-    await inspector.getByRole('region', { name: 'Recorded activity', exact: true }).locator('li').first().waitFor();
+    await inspector.getByRole('textbox').waitFor();
     await page.keyboard.press('Escape');
     await inspector.waitFor({ state: 'detached' });
     await poll(() => page.getByRole('button', { name: 'Agent panel', exact: true }).evaluate(el => el === document.activeElement), Boolean, 'focus returns to Agent trigger');
   }
   await page.setViewportSize({ width: 1440, height: 900 });
-  check('Agent panel exposes its calls at desktop and phone widths and Escape returns focus');
+  check('Agent panel opens at desktop and phone widths and Escape returns focus');
 
   // Responsive observation of a static layout: the editor has focus, the table shares the screen.
   await layoutNav('workspace').click(); await scriptView.locator('.cm-content').waitFor();

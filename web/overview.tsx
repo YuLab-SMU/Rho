@@ -91,8 +91,9 @@ interface Props {
   linked?: boolean; onPath?: (path: string) => void; onNewConversation?: () => void; agentTab?: AgentTab; onAgentTab?: (tab: AgentTab) => void;
   // The Console, at one message's commands.
   onConsole?: (turn?: string) => void;
+  onNotebook?: (notebook?: string | null) => void;
 }
-export function ProjectOverview({ project, snapshot, client, section, notesText = '', workspace, onExplore, onSection, onAgent, onLayout, onProjectChanged, onOpened, category, files, sources, onFile, linked = false, onPath, onNewConversation, agentTab, onAgentTab, onConsole }: Props) {
+export function ProjectOverview({ project, snapshot, client, section, notesText = '', workspace, onExplore, onSection, onAgent, onLayout, onProjectChanged, onOpened, category, files, sources, onFile, linked = false, onPath, onNewConversation, agentTab, onAgentTab, onConsole, onNotebook }: Props) {
   // A linked tab's Agent sessions with access are read only while their section is open.
   const [outsideOpen, setOutsideOpen] = useState(false);
   const { runs, problem: runsProblem, readAgain } = useRuns(client, project.id, snapshot.cursor);
@@ -235,7 +236,7 @@ export function ProjectOverview({ project, snapshot, client, section, notesText 
               : artifacts.length ? resultList : <p className="quiet-empty">No results or figures yet.</p>}
             {figures.length > shownFigures && <button className="text-button figures-more" onClick={() => onSection('files')}>{figures.length - shownFigures} more in Files <Icon name="chevron" size={12} /></button>}
           </section>}
-          <NotebookWorkSection work={notebook} snapshot={snapshot} onOpen={() => onSection('notebook')} />
+          <NotebookWorkSection work={notebook} snapshot={snapshot} onOpen={onNotebook ?? (() => onSection('notebook'))} />
           {snapshot.taskMap?.items.length ? <section className="project-section"><div className="section-heading"><h2>From your Agent</h2></div><ul className="agent-notes">{snapshot.taskMap.items.map(item => <li key={item.id} data-fact="agent"><strong>{item.title}</strong>{item.summary && <p>{item.summary}</p>}<small>{snapshot.taskMap!.vocabulary.states[item.state]?.label ?? item.state}</small></li>)}</ul></section> : null}
         </div>
         {side && <aside className="project-side">

@@ -98,6 +98,12 @@ try {
   await page.waitForTimeout(500);
   const box = await asked.boundingBox();
   assert.ok(box && box.y >= 0 && box.y < 450, `the Notebook opens at the cell chosen on the Overview (top ${box?.y})`);
+  // A named notebook is a different session, and an Overview cell from it opens that one too.
+  const named = await kernelAgent.call('kernel.run', { projectId: quiet.id, language: 'r', notebook: 'nb-pages', code: 'named_value <- 42', purpose: 'In a different notebook', changeId: 'named-notebook', waitMs: 30000 });
+  assert.equal(named.cell.state, 'done');
+  await page.locator('.place-tabs').getByRole('button', { name: 'Overview', exact: true }).click();
+  await page.locator('.notebook-work').getByRole('button', { name: /In a different notebook/ }).click();
+  await page.locator('#cell-' + named.cell.cellId).waitFor();
   await page.locator('.project-nav').getByRole('button', { name: /^Pages 中文/ }).click();
   await page.getByRole('heading', { name: 'Pages 中文', exact: true }).waitFor();
 
