@@ -42,7 +42,7 @@ test('the person has a terminal in the project folder, and an Agent may read its
   // An Agent's grant carries the terminal, except its raw output and its size, which are the page's.
   const grant = path.join(root, 'agent.json');
   const connection = await service.agentConnection(p.id, 'terminal', grant);
-  assert.deepEqual(connection.methods.filter(method => method.startsWith('console.terminal.')).sort(), ['console.terminal.close', 'console.terminal.list', 'console.terminal.open', 'console.terminal.screen', 'console.terminal.write']);
+  assert.deepEqual(connection.methods.filter(method => method.startsWith('console.terminal.')).sort(), ['console.terminal.close', 'console.terminal.commands', 'console.terminal.list', 'console.terminal.open', 'console.terminal.screen', 'console.terminal.write']);
   for (const method of ['console.terminal.read', 'console.terminal.resize'])
     await assert.rejects(service.agentConnection(p.id, 'terminal-' + method, path.join(root, method + '.json'), [method]), /operator-only|Unknown/);
   const agent = new RhoClient(JSON.parse(await fs.readFile(grant, 'utf8'))), as = (method, body = {}) => agent.call(method, { projectId: p.id, ...body });
@@ -67,4 +67,37 @@ test('the person has a terminal in the project folder, and an Agent may read its
   assert.equal(closed.terminal.terminalId, terminal.terminalId);
   await waiting.catch(() => {});
   await assert.rejects(call('console.terminal.read', { terminalId: terminal.terminalId }), error => error.error.kind === 'not_found');
+});
+
+test('commands typed in a terminal are recorded with who typed them, for the person and the Agent, apart from the machine\'s shell history', { skip: process.platform === 'win32' && 'Rho does not open a pseudo-terminal on Windows yet' }, async t => {
+  const root = await fs.mkdtemp(path.join(shortTemp, 'rho-terminal-'));
+  await fs.mkdir(path.join(root, 'project')); await fs.mkdir(path.join(root, 'home'));
+  // bash, with a home of its own so the machine's startup files and history stay out of it.
+  const saved = { SHELL: process.env.SHELL, HOME: process.env.HOME, HISTFILE: process.env.HISTFILE };
+  Object.assign(process.env, { SHELL: '/bin/bash', HOME: path.join(root, 'home'), HISTFILE: path.join(root, 'home', 'machine_history') });
+  const service = await new RhoService({ root, stateDir: path.join(root, '.service'), rscript: '/missing' }).start();
+  t.after(async () => { await service.close(); for (const [key, value] of Object.entries(saved)) if (value === undefined) delete process.env[key]; else process.env[key] = value; await fs.rm(root, { recursive: true, force: true }); });
+  const admin = new RhoClient({ url: service.url, token: service.adminToken }), p = await admin.call('project.open', { path: 'project' });
+  const person = new BrowserClient({ url: service.url }), call = (method, body = {}) => person.call(method, { projectId: p.id, ...body });
+  const grant = path.join(root, 'agent.json'), connection = await service.agentConnection(p.id, 'terminal', grant);
+  const agent = new RhoClient(JSON.parse(await fs.readFile(grant, 'utf8'))), as = (method, body = {}) => agent.call(method, { projectId: p.id, ...body });
+
+  const { terminal } = await call('console.terminal.open', { cols: 80, rows: 20 }), terminalId = terminal.terminalId;
+  await as('console.terminal.screen', { terminalId, after: 0, waitMs: 8000 });
+  const cursor = (await admin.call('observation.snapshot', { projectId: p.id })).cursor;
+  const typed = async (who, data) => who('console.terminal.screen', { terminalId, after: (await who('console.terminal.write', { terminalId, data })).offset, waitMs: 8000 });
+  await typed(call, 'echo mine\r');
+  await typed(as, 'ls no-such-file\r');
+  const { commands } = await as('console.terminal.commands', { limit: 5 });
+  assert.deepEqual(commands.map(c => [c.command, c.by, c.state, c.exit, c.cwd]), [['ls no-such-file', [connection.principal ?? commands[0].by[0]], 'exited', commands[0].exit, ''], ['echo mine', ['browser:local'], 'exited', 0, '']]);
+  assert.match(commands[0].by[0], /^agent:/); assert.notEqual(commands[0].exit, 0); assert.match(commands[0].output, /no-such-file/);
+  assert.equal(commands[1].output, 'mine');
+  assert.deepEqual((await call('console.terminal.commands')).commands.map(c => c.commandId), commands.map(c => c.commandId), 'the person reads the same record');
+  for (const end = Date.now() + 3000; (await admin.call('observation.snapshot', { projectId: p.id })).cursor === cursor;) {
+    assert.ok(Date.now() < end, 'a recorded command moves the page\'s cursor'); await new Promise(r => setTimeout(r, 100));
+  }
+  await call('console.terminal.close', { terminalId });
+  await new Promise(r => setTimeout(r, 500));
+  await assert.rejects(fs.stat(path.join(root, 'home', 'machine_history')), 'the machine\'s history file is untouched');
+  assert.match(await fs.readFile(path.join(root, 'project', '.rho/plugins/console/history/bash_history'), 'utf8'), /ls no-such-file/);
 });

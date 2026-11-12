@@ -19826,6 +19826,9 @@ export const ownerContracts: OwnerContractSnapshot = {
                       }
                     ]
                   },
+                  "recording": {
+                    "type": "boolean"
+                  },
                   "rows": {
                     "maximum": 300,
                     "minimum": 1,
@@ -19881,14 +19884,136 @@ export const ownerContracts: OwnerContractSnapshot = {
                   "exit",
                   "bytes",
                   "kept",
-                  "problem",
-                  "typedBy"
+                  "problem"
                 ],
                 "type": "object"
               }
             },
             "required": [
               "terminal"
+            ],
+            "type": "object"
+          },
+          "requires": []
+        },
+        "console.terminal.commands": {
+          "effect": "read",
+          "inputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "limit": {
+                "maximum": 200,
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "required": [],
+            "type": "object"
+          },
+          "outputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "commands": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "by": {
+                      "items": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "minItems": 1,
+                      "type": "array"
+                    },
+                    "command": {
+                      "type": "string"
+                    },
+                    "commandId": {
+                      "pattern": "^tc-[a-f0-9]{16}$",
+                      "type": "string"
+                    },
+                    "cut": {
+                      "type": "boolean"
+                    },
+                    "cwd": {
+                      "type": "string"
+                    },
+                    "endedAt": {
+                      "anyOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "exit": {
+                      "anyOf": [
+                        {
+                          "type": "integer"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "output": {
+                      "type": "string"
+                    },
+                    "problem": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "startedAt": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "state": {
+                      "enum": [
+                        "running",
+                        "exited",
+                        "unknown"
+                      ]
+                    },
+                    "terminalId": {
+                      "pattern": "^t-[a-f0-9]{16}$",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "commandId",
+                    "terminalId",
+                    "command",
+                    "cwd",
+                    "by",
+                    "startedAt",
+                    "endedAt",
+                    "state",
+                    "exit",
+                    "output",
+                    "cut",
+                    "problem"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "omitted": {
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "commands",
+              "omitted"
             ],
             "type": "object"
           },
@@ -19987,6 +20112,9 @@ export const ownerContracts: OwnerContractSnapshot = {
                         }
                       ]
                     },
+                    "recording": {
+                      "type": "boolean"
+                    },
                     "rows": {
                       "maximum": 300,
                       "minimum": 1,
@@ -20042,8 +20170,7 @@ export const ownerContracts: OwnerContractSnapshot = {
                     "exit",
                     "bytes",
                     "kept",
-                    "problem",
-                    "typedBy"
+                    "problem"
                   ],
                   "type": "object"
                 },
@@ -20167,6 +20294,9 @@ export const ownerContracts: OwnerContractSnapshot = {
                       }
                     ]
                   },
+                  "recording": {
+                    "type": "boolean"
+                  },
                   "rows": {
                     "maximum": 300,
                     "minimum": 1,
@@ -20222,8 +20352,7 @@ export const ownerContracts: OwnerContractSnapshot = {
                   "exit",
                   "bytes",
                   "kept",
-                  "problem",
-                  "typedBy"
+                  "problem"
                 ],
                 "type": "object"
               }
@@ -20366,6 +20495,9 @@ export const ownerContracts: OwnerContractSnapshot = {
                       }
                     ]
                   },
+                  "recording": {
+                    "type": "boolean"
+                  },
                   "rows": {
                     "maximum": 300,
                     "minimum": 1,
@@ -20421,8 +20553,7 @@ export const ownerContracts: OwnerContractSnapshot = {
                   "exit",
                   "bytes",
                   "kept",
-                  "problem",
-                  "typedBy"
+                  "problem"
                 ],
                 "type": "object"
               }
@@ -20550,6 +20681,9 @@ export const ownerContracts: OwnerContractSnapshot = {
                       }
                     ]
                   },
+                  "recording": {
+                    "type": "boolean"
+                  },
                   "rows": {
                     "maximum": 300,
                     "minimum": 1,
@@ -20605,8 +20739,7 @@ export const ownerContracts: OwnerContractSnapshot = {
                   "exit",
                   "bytes",
                   "kept",
-                  "problem",
-                  "typedBy"
+                  "problem"
                 ],
                 "type": "object"
               }
@@ -20769,6 +20902,9 @@ export const ownerContracts: OwnerContractSnapshot = {
                       }
                     ]
                   },
+                  "recording": {
+                    "type": "boolean"
+                  },
                   "rows": {
                     "maximum": 300,
                     "minimum": 1,
@@ -20824,8 +20960,7 @@ export const ownerContracts: OwnerContractSnapshot = {
                   "exit",
                   "bytes",
                   "kept",
-                  "problem",
-                  "typedBy"
+                  "problem"
                 ],
                 "type": "object"
               }
@@ -27668,17 +27803,17 @@ export const ownerContracts: OwnerContractSnapshot = {
     },
     "console": {
       "package": "@rho-workspace/plugin-console",
-      "packageVersion": "0.3.3",
+      "packageVersion": "0.3.4",
       "entry": "./operations",
       "entryPath": "@rho-workspace/plugin-console/dist/operations.js",
-      "entrySha256": "8b6fdc948b2021a333f56360da9c05d6332ad5f2206e0bf8e40948473990cbde",
+      "entrySha256": "db4e2441959206815eb7ced7cc8b6329a6eb7ca0773e10997097790b5e08a7b9",
       "exports": {
-        "operationContracts": "7657ac3ee296fe89a3ff86ff8fb2fd5e9599c7e9dd5bfbcab3f3456437cc4229"
+        "operationContracts": "02e2b6a785c546ec0df3fc31947308feaa3415c48b272e5c3742dc26e6b7d048"
       }
     },
     "kernel": {
       "package": "@rho-workspace/plugin-kernel",
-      "packageVersion": "0.5.18",
+      "packageVersion": "0.5.19",
       "entry": "./operations",
       "entryPath": "@rho-workspace/plugin-kernel/dist/operations.js",
       "entrySha256": "7c744c6aec112fe116bfc4ce55cdd80c728cd726c69a18dcf28a666e75897e17",

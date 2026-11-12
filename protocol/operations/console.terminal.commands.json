@@ -1,0 +1,129 @@
+{
+  "method": "console.terminal.commands",
+  "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "projectId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "limit": {
+        "maximum": 200,
+        "minimum": 1,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "projectId"
+    ],
+    "type": "object"
+  },
+  "outputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "commands": {
+        "items": {
+          "additionalProperties": false,
+          "properties": {
+            "by": {
+              "items": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "minItems": 1,
+              "type": "array"
+            },
+            "command": {
+              "type": "string"
+            },
+            "commandId": {
+              "pattern": "^tc-[a-f0-9]{16}$",
+              "type": "string"
+            },
+            "cut": {
+              "type": "boolean"
+            },
+            "cwd": {
+              "type": "string"
+            },
+            "endedAt": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "exit": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "output": {
+              "type": "string"
+            },
+            "problem": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "startedAt": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "state": {
+              "enum": [
+                "running",
+                "exited",
+                "unknown"
+              ]
+            },
+            "terminalId": {
+              "pattern": "^t-[a-f0-9]{16}$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "commandId",
+            "terminalId",
+            "command",
+            "cwd",
+            "by",
+            "startedAt",
+            "endedAt",
+            "state",
+            "exit",
+            "output",
+            "cut",
+            "problem"
+          ],
+          "type": "object"
+        },
+        "type": "array"
+      },
+      "omitted": {
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "commands",
+      "omitted"
+    ],
+    "type": "object"
+  },
+  "description": "The commands run in the project's terminals, newest first, as a zsh or bash shell marked them: who typed each (the person, an Agent or both), the folder, the exit status and the start of what it printed. Kept across restarts of Rho."
+}

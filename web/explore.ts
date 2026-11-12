@@ -34,12 +34,20 @@ export async function loadTable(client: BrowserClient, projectId: string, path: 
   return client.call('kernel.run', { projectId, language, code: loadCode(copy.path, language, name), purpose: `Load ${file} on ${label} as ${name}`, changeId: 'explore-' + crypto.randomUUID(), ...where });
 }
 
-// The Notebook as a view of a Studio page. The first on a page is the project's notebook: every
-// cell of the live sessions. Each one added after it is a notebook of its own over the same
-// sessions, with an identity its view keeps and its cells carry, and a name the person gives it.
+// The Notebook as a view of a Studio page. Each Notebook put on a person's page is a notebook of
+// its own, with R and Python sessions of its own: an identity its view keeps and its cells carry,
+// and a name the person gives it. A view without an identity shows the project's own sessions,
+// where an Agent's cells run unless it names a notebook (the Project notebook); pages made before
+// every notebook had its own sessions keep theirs as it was.
 export const notebookComponent = 'rho.notebook';
-export const notebookView = (id = 'notebook', form?: 'notebook' | 'console'): LayoutNode & { component: string; version: string; props: { title: string; form?: string }; bindings: Record<string, never> } =>
-  ({ id, kind: 'view', component: notebookComponent, version: '1', props: { title: 'Notebook', ...(form ? { form } : {}) }, bindings: {} });
+type NotebookViewNode = LayoutNode & { component: string; version: string; props: { title: string; form?: string; notebook?: string }; bindings: Record<string, never> };
+export const notebookView = (id = 'notebook', form?: 'notebook' | 'console', notebook?: string, title = 'Notebook'): NotebookViewNode =>
+  ({ id, kind: 'view', component: notebookComponent, version: '1', props: { title, ...(form ? { form } : {}), ...(notebook ? { notebook } : {}) }, bindings: {} });
+// A new notebook's view: its view id and its identity share one key.
+export const freshNotebook = (form?: 'notebook' | 'console', title?: string) => {
+  const key = crypto.randomUUID().slice(0, 8);
+  return notebookView('notebook-' + key, form, 'nb-' + key, title);
+};
 export const notebookOn = (nodes: unknown[] | undefined) => (nodes as LayoutNode[] | undefined)?.find(n => n.kind !== 'group' && n.component === notebookComponent)?.id ?? null;
 const newId = (kind: string) => `${kind}-${crypto.randomUUID().slice(0, 8)}`;
 type NotebookNode = LayoutNode & { props?: { title?: string; notebook?: string } };
@@ -49,9 +57,8 @@ export const notebookOf = (view: { props?: Record<string, unknown> } | undefined
 // Each notebook's name by its identity, across the project's pages, so a cell can say where it was run.
 export const notebookNames = (pages: ReadonlyArray<{ views: ReadonlyArray<{ component: string; props: Record<string, unknown> }> }>) =>
   Object.fromEntries(pages.flatMap(page => page.views).filter(v => v.component === notebookComponent && notebookOf(v)).map(v => [notebookOf(v)!, String(v.props.title ?? 'Notebook')]));
-// The page with the Notebook in a pane of its own beside a view, or as its one view.
-export function withNotebook(tree: LayoutTree | null, beside: string | null, id?: string): LayoutTree | null {
-  const view = notebookView(id);
+// The page with a new notebook in a pane of its own beside a view, or as its one view.
+export function withNotebook(tree: LayoutTree | null, beside: string | null, view: LayoutNode = freshNotebook()): LayoutTree | null {
   if (!tree) return { rootId: 'root', nodes: [{ id: 'root', kind: 'group', children: [view.id] }, view] };
   return addBeside(tree, view as never, beside, 'right', newId);
 }
@@ -80,7 +87,7 @@ function keepBrowser(tree: LayoutTree): LayoutTree {
 export const browserShares = { first: 0.2, floor: 0.15 };
 // Puts a view on a saved page, unless the page has one, with one conditional write; a newer
 // layout from another tab is read once and the view placed on it.
-async function addToPage(client: BrowserClient, projectId: string, compositionId: string, there: (nodes: unknown[] | undefined) => string | null, place: (tree: LayoutTree | null) => LayoutTree | null, change: string): Promise<string> {
+async function addToPage<T = string>(client: BrowserClient, projectId: string, compositionId: string, there: (nodes: unknown[] | undefined) => T | null, place: (tree: LayoutTree | null) => LayoutTree | null, change: string): Promise<T> {
   for (let attempt = 0; ; attempt++) {
     const current = await client.call('composition.read', { projectId, compositionId }).catch(error => {
       if (error instanceof BrowserApiError && error.error.kind === 'not_found') return null;
@@ -103,9 +110,28 @@ async function addToPage(client: BrowserClient, projectId: string, compositionId
 // A view put into the group the person chose, as its last tab; an empty page takes it as its one view.
 const intoGroup = (view: LayoutNode, into: string) => (tree: LayoutTree | null): LayoutTree | null =>
   tree ? addInto(tree, view as never, into, newId) : { rootId: 'root', nodes: [{ id: 'root', kind: 'group', children: [view.id] }, view] };
-// The Notebook beside a view, or in the group the person chose, unless the page has one.
-export const addNotebook = (client: BrowserClient, projectId: string, compositionId: string, beside: string | null, into?: string) =>
-  addToPage(client, projectId, compositionId, notebookOn, into ? intoGroup(notebookView(), into) : tree => withNotebook(tree, beside), 'notebook');
+// A notebook beside a view, or in the group the person chose, unless the page has one: its view,
+// and the notebook whose sessions it runs in (null: the project's own).
+export type PlacedNotebook = { id: string; notebook: string | null };
+const notebookThere = (nodes: unknown[] | undefined): PlacedNotebook | null => {
+  const view = notebookNodes(nodes)[0];
+  return view ? { id: view.id, notebook: notebookOf(view as { props?: Record<string, unknown> }) } : null;
+};
+export function addNotebook(client: BrowserClient, projectId: string, compositionId: string, beside: string | null, into?: string): Promise<PlacedNotebook> {
+  const view = freshNotebook();
+  return addToPage(client, projectId, compositionId, notebookThere, into ? intoGroup(view, into) : tree => withNotebook(tree, beside, view), 'notebook');
+}
+// The project's own sessions as a Notebook on the page, for a cell run there (an Agent's, or one
+// from before notebooks had sessions of their own): the page's view of them, or one added beside
+// its notebooks.
+export function addProjectNotebook(client: BrowserClient, projectId: string, compositionId: string): Promise<string> {
+  return addToPage(client, projectId, compositionId, nodes => notebookNodes(nodes).find(n => !notebookOf(n as { props?: Record<string, unknown> }))?.id ?? null, tree => {
+    const view = notebookView('notebook-project', undefined, undefined, 'Project notebook'), last = notebookNodes(tree?.nodes).at(-1);
+    if (!tree) return intoGroup(view, '')(tree);
+    const holder = last && tree.nodes.find(n => n.kind === 'group' && n.children?.includes(last.id) && (n.presentation as { mode?: string } | undefined)?.mode !== 'split');
+    return holder ? addInto(tree, view as never, holder.id, newId) : addBeside(tree, view as never, null, 'right', newId);
+  }, 'notebook');
+}
 // Another notebook on the page, with R and Python sessions of its own: a tab beside the page's
 // notebooks, or in the group the person chose. Its name counts on from the notebooks already
 // there. Given an existing notebook (one whose view is on another page or was closed), the view

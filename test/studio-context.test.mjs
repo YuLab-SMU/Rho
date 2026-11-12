@@ -93,3 +93,20 @@ test('interface observations bound titles and views, preserve uncertainty and ne
   assert.equal(unknown.workspace.state, 'derived'); assert.equal(unknown.workspace.empty, null);
   await captureUiContext(project, { page: 'file', path: '../a-title-is-not-authority' }, async () => { throw new Error('must not read'); }, { maxUiContextViews: 4, maxUiContextBytes: 1600 });
 });
+
+test('a message from Studio names the notebook of each Notebook view on the workspace, so the Agent can work in the one the person means', async () => {
+  const views = [
+    { id: 'notebook-1a2b3c4d', component: 'rho.notebook', props: { title: 'Notebook', notebook: 'nb-1a2b3c4d' } },
+    { id: 'notebook', component: 'rho.notebook', props: { title: 'Notebook' } },
+    { id: 'odd', component: 'rho.notebook', props: { title: 'Odd', notebook: 'not an identity' } },
+    { id: 'variables', component: 'rho.variables', props: { title: 'Variables', notebook: 'nb-ignored' } },
+  ];
+  const context = await captureUiContext({ id: 'p', name: 'p', root: '/p' }, { page: 'studio', compositionId: 'workspace', compositionVersion: 3 },
+    async () => ({ version: 3, views }), { maxUiContextBytes: 16384, maxUiContextViews: 32 });
+  assert.deepEqual(context.workspace.views, [
+    { id: 'notebook-1a2b3c4d', component: 'rho.notebook', title: 'Notebook', notebook: 'nb-1a2b3c4d' },
+    { id: 'notebook', component: 'rho.notebook', title: 'Notebook' },
+    { id: 'odd', component: 'rho.notebook', title: 'Odd' },
+    { id: 'variables', component: 'rho.variables', title: 'Variables' },
+  ]);
+});

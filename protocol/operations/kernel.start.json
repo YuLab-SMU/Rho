@@ -279,5 +279,5 @@
     ],
     "type": "object"
   },
-  "description": "Person at this machine only: start a notebook's R or Python session without a cell (the project's notebook unless notebook names another), where the place names, else where the project runs that language. A live session is returned as it is; one that is stopping is waited for first. An Agent's first cell starts its session."
+  "description": "Person at this machine only: start an R or Python session without a cell (the project's own unless notebook names a notebook), where the place names, else where the project runs that language. A live session is returned as it is; one that is stopping is waited for first. An Agent's first cell starts its session."
 }

@@ -4,7 +4,7 @@
 .console-message.focused { border-color: var(--color-hairline-strong); box-shadow: 0 0 0 3px var(--color-accent-soft); }
 .console-message > header { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding-bottom: 4px; }
 .console-message > header small { color: var(--color-meta); font-size: 12px; }
-.console-message.mine > header strong { font-size: 14px; }
+.console-message.mine > header strong, .console-message.terminal > header strong { font-size: 14px; }
 .console-ask { justify-content: flex-start; min-height: 0; padding: 0; font-size: 14px; font-weight: 600; color: var(--color-ink); max-width: 100%; }
 .console-ask:hover { text-decoration: underline; background: none; }
 .console-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }

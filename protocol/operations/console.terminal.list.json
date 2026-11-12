@@ -98,6 +98,9 @@
                 }
               ]
             },
+            "recording": {
+              "type": "boolean"
+            },
             "rows": {
               "maximum": 300,
               "minimum": 1,
@@ -153,8 +156,7 @@
             "exit",
             "bytes",
             "kept",
-            "problem",
-            "typedBy"
+            "problem"
           ],
           "type": "object"
         },

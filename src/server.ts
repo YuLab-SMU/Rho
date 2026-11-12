@@ -771,7 +771,13 @@ export class RhoService {
     let host = this.terminals.get(p.id);
     if (!host) {
       const { TerminalHost } = this.plugins.need('console');
-      host = new TerminalHost(p.root, { limits: this.config.terminal, python: this.config.python });
+      // A command started or ended in a terminal reaches open pages at most four times a second.
+      let pending: NodeJS.Timeout | undefined;
+      const changed = () => {
+        if (pending || this.closing) return;
+        pending = setTimeout(() => { pending = undefined; void this.serial(p.id, () => this.emit(p, 'console.changed', p.id, localBrowserId)).catch(() => {}); }, 250);
+      };
+      host = new TerminalHost(p.root, { limits: this.config.terminal, python: this.config.python, onChange: changed });
       this.terminals.set(p.id, host);
     }
     return host;
@@ -1206,6 +1212,7 @@ export class RhoService {
       if (method === 'console.terminal.open') return host.open({ cols: b.cols, rows: b.rows, cwd: b.cwd, by: principal.id });
       if (method === 'console.terminal.list') return host.list();
       if (method === 'console.terminal.screen') return host.screen(b.terminalId, { after: b.after, waitMs: b.waitMs, lines: b.lines });
+      if (method === 'console.terminal.commands') return host.commandList(b.limit);
       if (method === 'console.terminal.read') return host.read(b.terminalId, b.after, b.waitMs, b.maxBytes);
       if (method === 'console.terminal.write') return host.write(b.terminalId, b.data, principal.id);
       if (method === 'console.terminal.resize') return host.resize(b.terminalId, b.cols, b.rows);
@@ -1594,7 +1601,7 @@ export class RhoService {
     await this.conversations.close();
     // Commands the person started keep running; the next start records how each is found.
     for (const runner of this.consoles.values()) await runner.close();
-    for (const host of this.terminals.values()) host.shutdown();
+    for (const host of this.terminals.values()) await host.shutdown();
     // Live sessions end with Rho: their values live only in their processes.
     for (const host of this.kernels.values()) await host.close();
     for (const host of this.skillHosts.values()) await host.close();

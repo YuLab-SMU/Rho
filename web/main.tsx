@@ -352,7 +352,7 @@ function App() {
   // The Notebook on a page of the person's own: beside what is there, or brought forward.
   function notebookOnPage(page: string, into?: string) {
     if (!snapshot) return;
-    addNotebook(client!, snapshot.project.id, page, null, into).then(id => layout(page, id), error => setNotice('The Notebook could not be added. ' + (error instanceof Error ? error.message : '')));
+    addNotebook(client!, snapshot.project.id, page, null, into).then(placed => layout(page, placed.id), error => setNotice('The Notebook could not be added. ' + (error instanceof Error ? error.message : '')));
   }
   // Another notebook on a page that has one: its own cells, in the same sessions.
   function newNotebookOnPage(page: string, into?: string) {
@@ -373,8 +373,8 @@ function App() {
     openInWorkspace(client!, now, page, path).then(async placed => {
       const notebook = await addNotebook(client!, projectId, page, placed?.viewId ?? null);
       if (scriptLanguage(path)) setPrepared(scriptPrepared(path, language, !!now.documents.find(d => d.path === path)?.dirty));
-      else await loadTable(client!, projectId, path, language);
-      layout(page, notebook);
+      else await loadTable(client!, projectId, path, language, notebook.notebook);
+      layout(page, notebook.id);
     }).catch(error => setNotice(path + ' · ' + (error instanceof Error ? error.message : 'It could not be explored.')));
   }
   // A value of a live session, looked at from the Notebook page or a conversation's Studio: it opens

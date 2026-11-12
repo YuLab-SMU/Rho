@@ -22,7 +22,7 @@ export function PageAdd({ sources, notebook, sessions = 'unavailable', variables
   const chose = (run: () => void) => (event: MouseEvent<HTMLButtonElement>) => { event.currentTarget.closest('details')?.removeAttribute('open'); run(); };
   return <div className="page-add">
     {notebook !== 'unavailable' && <button className="page-add-notebook" onClick={chose(onNotebook)}>
-      <Icon name="code" size={17} /><span><strong>{notebook === 'present' ? 'New notebook' : 'Notebook'}</strong><small>{notebook === 'present' ? 'Its own cells, with R and Python sessions of its own' : 'Live R and Python sessions you share with the Agent'}</small></span>
+      <Icon name="code" size={17} /><span><strong>{notebook === 'present' ? 'New notebook' : 'Notebook'}</strong><small>{notebook === 'present' ? 'Another notebook, with R and Python sessions of its own' : 'Cells in R and Python sessions of its own'}</small></span>
     </button>}
     {sessions !== 'unavailable' && onSessionView && <button className="page-add-notebook" onClick={chose(() => onSessionView('sessions'))}>
       <Icon name="monitor" size={17} /><span><strong>Sessions</strong><small>{sessions === 'present' ? 'On this page' : 'The R and Python processes: where each runs, its state, Interrupt and Stop'}</small></span>

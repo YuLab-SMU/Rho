@@ -152,13 +152,16 @@ inspect what happened. The application gives those actions direct places:
   a new one, and a project keeps four at once. An Agent may use it too
   ([episode](SIMULATED-PROJECT-EPISODE.md#the-agent-in-the-terminal)): it reads what the screen
   shows as text and types there, and the view says who last did and when; a terminal an Agent
-  opened of its own is offered here to show, and the person's own is offered back. Only the
+  opened of its own is offered here to show, and the person's own is offered back. A zsh or bash
+  terminal [records its commands](SIMULATED-PROJECT-EPISODE.md#each-workspace-notebook-its-own-and-the-terminals-commands)
+  with who typed each, and keeps a shell history of its own, apart from the machine's. Only the
   person at this machine draws one; a tab opened from a link shows Commands. It needs `python3`
   on macOS or Linux; on Windows the view says so and offers Commands. Commands is the record
   the Console page showed, also opened by the board's command count.
   It runs the person's own single shell commands in the project folder. Newest
   first, it lists each message's commands under that message in the order they ran,
-  with the person's commands between them and Rho's managed runs at the end. Each
+  with the person's commands and the commands typed in the terminals (In the terminal, each
+  naming You or the Agent) between them, and Rho's managed runs at the end. Each
   command leads with the Agent's own words on what it was for, over the command with
   the project folder read as "."; without those words, it is named by what each part
   runs ("grep → python3 analysis.py"). Commands in a row that changed no file fold into
@@ -170,17 +173,20 @@ inspect what happened. The application gives those actions direct places:
   at that message. Only the person at this machine can run or stop commands; an
   Agent may read them ([episode](SIMULATED-PROJECT-EPISODE.md#second-pass)).
 - **Notebook** is a view of a Studio workspace, from a group's +, the command palette, Skills or
-  the Overview (offered while the Notebook plugin is selected). It shows the project's live R
-  and Python sessions, which the person shares with the Agent. A workspace can hold several
-  ([episode](SIMULATED-PROJECT-EPISODE.md#several-notebooks)): the first is the project's
-  notebook, whose R and Python sessions the Agent works in unless it names another; once a page
-  has it, a group's + offers New notebook, a notebook of its own (Notebook 2, 3, …, renamed from
-  its tab's menu) with R and Python sessions of its own
+  the Overview (offered while the Notebook plugin is selected). Each Notebook put on a workspace,
+  the first too ([episode](SIMULATED-PROJECT-EPISODE.md#each-workspace-notebook-its-own-and-the-terminals-commands)),
+  is a notebook with R and Python sessions of its own
   ([episode](SIMULATED-PROJECT-EPISODE.md#each-notebook-its-own-sessions)): a value made in one is
-  not in another. A notebook split beside itself or shown on another page is the same notebook.
+  not in another. A workspace can hold several ([episode](SIMULATED-PROJECT-EPISODE.md#several-notebooks)):
+  once a page has one, a group's + offers New notebook (Notebook 2, 3, …, renamed from its tab's
+  menu). An Agent's cells run in the project's own sessions unless it names a notebook; they show
+  in its conversation's Studio and, from a cell's link, in a Project notebook view. A Notebook
+  saved before this without a notebook of its own stays the Project notebook.
+  A notebook split beside itself or shown on another page is the same notebook.
   Each lists only its own cells. A script's line, a table to explore and an expression from a
   value's view go to the notebook the person last worked in, and Variables, Plots and Data flow
-  show its sessions, with a choice of notebook in their header when more than one has a session.
+  show its sessions (at first the first Notebook drawn), with a choice of notebook in their
+  header when more than one has a session.
   Sessions lists every notebook's sessions, by notebook. Cells read in the order
   they ran: language and number in the gutter, who ran it (the Agent's name opens its
   conversation) and its purpose, how long it took or how it ended, the code highlighted,

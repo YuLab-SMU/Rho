@@ -14,7 +14,7 @@ import { CommandPane } from '../console.js';
 import { ConsoleView, FilesView, KindView } from '../studio-tools.js';
 import type { SourceRow } from '../sources.js';
 import { askCell, askPlot, showOnServer, type Prepared, type SessionScope } from '@rho-workspace/plugin-kernel/ui';
-import { addNewNotebook, addNotebook, addObject, addSessionView, canExplore, type SessionView, explorableTable, languageNames, loadTable, notebookComponent, notebookNames, notebookOf, notebookView, projectPath, scriptLanguage, scriptPrepared, sessionComponents, type Language } from '../explore.js';
+import { addNewNotebook, addNotebook, addObject, addProjectNotebook, addSessionView, canExplore, type SessionView, explorableTable, freshNotebook, languageNames, loadTable, notebookComponent, notebookNames, notebookOf, projectPath, scriptLanguage, scriptPrepared, sessionComponents, type Language } from '../explore.js';
 import { ExploreIn } from '../explore-in.js';
 import { useProcess } from '../process-context.js';
 import { ProcessFrame } from './process-views.js';
@@ -156,16 +156,16 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
     if (process) { onExplore?.(path, language); return; }
     setLayoutProblem(''); setExploring(true);
     try {
-      let notebook = target?.id;
+      let notebook = target?.id, own = notebookOf(target);
       if (!notebook) {
-        const view = byId.get(viewId), now = treeNow(), id = 'notebook';
-        const ready = view && now && placeView(now, view, newId), next = ready && addBeside(ready, notebookView(id) as never, viewId, 'right', newId);
+        const view = byId.get(viewId), now = treeNow(), fresh = freshNotebook();
+        const ready = view && now && placeView(now, view, newId), next = ready && addBeside(ready, fresh as never, viewId, 'right', newId);
         if (!allowed('composition.apply') || !next) { setLayoutProblem('The Notebook could not be placed beside this view.'); return; }
         if (!(await writeLayout(next))) return;
-        notebook = id;
+        notebook = fresh.id; own = fresh.props.notebook ?? null;
       }
       if (script) setPrepared(scriptPrepared(path, language, script.dirty));
-      else await loadTable(client, snapshot.project.id, path, language, notebookOf(target));
+      else await loadTable(client, snapshot.project.id, path, language, own);
       onPersonMoved?.(); show(notebook);
     } catch (error) { refusal(error); }
     finally { setExploring(false); }
@@ -203,7 +203,7 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
     const view = notebooks.find(v => notebookOf(v) === notebook);
     if (view) { onPersonMoved?.(); show(view.id); return; }
     setLayoutProblem('');
-    (notebook ? addNewNotebook(client, snapshot.project.id, layout.compositionId, undefined, { notebook, title: names[notebook] }) : addNotebook(client, snapshot.project.id, layout.compositionId, null))
+    (notebook ? addNewNotebook(client, snapshot.project.id, layout.compositionId, undefined, { notebook, title: names[notebook] }) : addProjectNotebook(client, snapshot.project.id, layout.compositionId))
       .then(id => { onPersonMoved?.(); setOpening(id); }, refusal);
   }
   // A script's line run from its editor: the person's cell in the shared session, in the order the
@@ -213,11 +213,12 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
   const runFromScript = useRef<NonNullable<ShellServices['runCode']>>(async () => {});
   runFromScript.current = async ({ viewId, language, code, purpose }) => {
     setLayoutProblem('');
-    const notebook = target?.id, own = notebookOf(target);
+    const notebook = target?.id;
+    let own = notebookOf(target);
     if (!notebook) {
-      const view = byId.get(viewId), now = treeNow(), ready = view && now && placeView(now, view, newId);
-      const next = ready && addBeside(ready, notebookView('notebook', 'console') as never, viewId, 'bottom', newId);
-      if (allowed('composition.apply') && next) await writeLayout(next);
+      const view = byId.get(viewId), now = treeNow(), ready = view && now && placeView(now, view, newId), fresh = freshNotebook('console');
+      const next = ready && addBeside(ready, fresh as never, viewId, 'bottom', newId);
+      if (allowed('composition.apply') && next && await writeLayout(next)) own = fresh.props.notebook ?? null;
     } else {
       const group = groupOf(root, notebook);
       if (group && group.id !== groupOf(root, viewId)?.id) setSelected(s => ({ ...s, [group.id]: notebook }));
@@ -237,7 +238,7 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
   function useInNotebook(language: Language, expression: string, name: string) {
     setPrepared({ key: crypto.randomUUID(), language, code: expression, note: `From the ${name} view. Build on it, then press Run.` });
     if (target) { show(target.id); return; }
-    if (!process) addNotebook(client, snapshot.project.id, layout.compositionId, null).then(id => show(id), refusal);
+    if (!process) addNotebook(client, snapshot.project.id, layout.compositionId, null).then(placed => show(placed.id), refusal);
   }
   // In a conversation's Studio the live sessions show that conversation's share: the cells its
   // Agent and the person ran since it began, up to the moment shown.

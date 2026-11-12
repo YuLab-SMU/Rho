@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { BrowserClient, WorkspaceSnapshot } from '../src/browser.js';
-import { CommandLine, CommandRecord, useCommandLine, useCommands, type ConsoleCommand } from '@rho-workspace/plugin-console/ui';
+import { CommandLine, CommandRecord, TerminalCommandRecord, useCommandLine, useCommands, useTerminalCommands, type ConsoleCommand, type TerminalCommand } from '@rho-workspace/plugin-console/ui';
+import { agentDisplayName } from './brand-marks.js';
 import { buildWorkGraph, type GraphNode, type WorkGraph } from '../src/work-graph.js';
 import { briefOf, durationText, inProject, several } from '../src/conversation-presentation.js';
 import { executionWord, type RunFacts } from '../src/execution-facts.js';
@@ -15,7 +16,8 @@ import { useProcess } from './process-context.js';
 import './console.css';
 
 // Every command run in the project, in one place: what the Agent ran in each message, from its
-// own reports, the commands the person ran here, and the runs Rho managed. A message's commands
+// own reports, the commands the person ran here, the commands typed in the project's terminals by
+// the person or an Agent, each named, and the runs Rho managed. A message's commands
 // read in the order they ran, each led by the Agent's own words on what it was for when it gave
 // them, with how it ended when that was not a clean exit, how long it took, the files that
 // changed on disk while it ran (seen, not claimed) and what it printed. Commands in a row that
@@ -39,7 +41,9 @@ function QuietRun({ runs, root, onPath, onRunAgain }: { runs: GraphNode[]; root:
     <ol className="console-list">{runs.map(run => <Command key={run.id} node={run} changed={[]} root={root} onPath={onPath} onRunAgain={onRunAgain} />)}</ol>
   </details></li>;
 }
-type Item = { at: number; key: string; agent?: GraphNode; changed?: GraphNode[]; quiet?: GraphNode[]; mine?: ConsoleCommand };
+type Item = { at: number; key: string; agent?: GraphNode; changed?: GraphNode[]; quiet?: GraphNode[]; mine?: ConsoleCommand; typed?: TerminalCommand };
+// Who typed a terminal command: the person at this machine is You; an Agent goes by its name.
+const typist = (snapshot: WorkspaceSnapshot) => (principal: string) => principal === 'browser:local' ? 'You' : agentDisplayName(snapshot.agents?.find(a => a.principal === principal)?.label ?? 'An Agent');
 // A message's commands in the order they ran; those in a row that changed no file and ended
 // cleanly go together.
 function commandItems(graph: WorkGraph, runs: GraphNode[]): Item[] {
@@ -121,37 +125,47 @@ export function ConsolePage({ client, snapshot, files, focusTurn, onPath, onConv
   // The person's commands and their line come from the Console plugin.
   const { commands: mine, off, problem: mineProblem, read } = useCommands(client, projectId, snapshot.cursor);
   const line = useCommandLine(client, projectId, { onRan: () => void read(), center: true });
+  const { commands: typed, problem: typedProblem } = useTerminalCommands(client, projectId, snapshot.cursor);
+  const who = typist(snapshot);
   const [inspecting, setInspecting] = useState<string | null>(null);
   const dialog = useRef<HTMLDialogElement>(null);
   useEffect(() => { if (inspecting && !dialog.current?.open) dialog.current?.showModal(); }, [inspecting]);
   // A finished command may have changed files; read the folders again so its changes show.
-  const finished = (mine ?? []).filter(r => r.state !== 'running').length;
-  useEffect(() => { if (mine) files.refresh(); }, [finished]);
+  const finished = [...mine ?? [], ...typed ?? []].filter(r => r.state !== 'running').length;
+  useEffect(() => { if (mine || typed) files.refresh(); }, [finished]);
   // What changed on disk between a command's start and end: seen, not claimed.
-  const changedDuring = (r: ConsoleCommand) => {
+  const changedDuring = (r: { startedAt: string; endedAt: string | null }) => {
     const from = Date.parse(r.startedAt), to = r.endedAt ? Date.parse(r.endedAt) + 1000 : Date.now();
     return files.files.filter(f => f.category && f.modifiedAt && Date.parse(f.modifiedAt) >= from - 1000 && Date.parse(f.modifiedAt) <= to).slice(0, 8);
   };
   const messages = [...graph.turns].sort((a, b) => b.start - a.start).filter(t => graph.nodes.some(n => n.kind === 'run' && n.turn === t.id));
-  // One story, newest first: each message's commands, and the commands the person ran between them.
-  type Block = { kind: 'message'; at: number; turn: WorkGraph['turns'][number] } | { kind: 'mine'; at: number; records: ConsoleCommand[] };
+  // One story, newest first: each message's commands, and the commands the person ran and the
+  // commands typed in the terminals between them.
+  type Block = { kind: 'message'; at: number; turn: WorkGraph['turns'][number] } | { kind: 'mine'; at: number; records: ConsoleCommand[] } | { kind: 'terminal'; at: number; typed: TerminalCommand[] };
   const blocks: Block[] = [];
-  for (const item of [...messages.map(turn => ({ at: turn.start, turn })), ...(mine ?? []).map(record => ({ at: Date.parse(record.startedAt), record }))].sort((a, b) => b.at - a.at)) {
+  for (const item of [...messages.map(turn => ({ at: turn.start, turn })), ...(mine ?? []).map(record => ({ at: Date.parse(record.startedAt), record })), ...(typed ?? []).map(command => ({ at: Date.parse(command.startedAt), command }))].sort((a, b) => b.at - a.at)) {
+    const last = blocks.at(-1);
     if ('turn' in item) blocks.push({ kind: 'message', at: item.at, turn: item.turn });
-    else { const last = blocks.at(-1); if (last?.kind === 'mine') last.records.push(item.record); else blocks.push({ kind: 'mine', at: item.at, records: [item.record] }); }
+    else if ('record' in item) { if (last?.kind === 'mine') last.records.push(item.record); else blocks.push({ kind: 'mine', at: item.at, records: [item.record] }); }
+    else if (last?.kind === 'terminal') last.typed.push(item.command); else blocks.push({ kind: 'terminal', at: item.at, typed: [item.command] });
   }
   const managed = [...(runs ?? [])].sort((a, b) => b.acceptedAt.localeCompare(a.acceptedAt));
-  const nothing = !loading && !problem && !runsProblem && !mineProblem && !blocks.length && !managed.length;
+  const nothing = !loading && !problem && !runsProblem && !mineProblem && !typedProblem && !blocks.length && !managed.length;
   return <div className="console-page">
     {children}
     {!off && <CommandLine folder={projectName(snapshot.project)} line={line} />}
     {off && <p className="console-note">Running commands here needs the Console plugin, which is off for this project.</p>}
     {mineProblem && !off && <p className="inline-error" role="alert">{mineProblem}</p>}
+    {typedProblem && <p className="inline-error" role="alert">{typedProblem}</p>}
     {problem && <p className="inline-error" role="alert">{problem}</p>}
     {loading && <p className="muted" role="status">Reading the conversations…</p>}
     {nothing && <div className="empty-state compact"><p>No shell commands recorded. R and Python cells run through the shared sessions are kept in Notebook.</p></div>}
     {blocks.map(block => block.kind === 'message'
       ? <Message key={block.turn.id} graph={graph} turn={block.turn} root={snapshot.project.root} onPath={onPath} onConversation={onConversation} focused={focusTurn === block.turn.id} onRunAgain={off ? undefined : line.prepare} />
+      : block.kind === 'terminal' ? <section key={block.typed[0]!.commandId} className="console-message terminal" aria-label="In the terminal">
+          <header><strong>In the terminal</strong><small>{day(block.typed.at(-1)!.startedAt)} · {block.typed.length} {block.typed.length === 1 ? 'command' : 'commands'}{typedBy(block.typed, who)}{block.typed.some(c => c.state === 'running') ? ' · running' : ''}</small></header>
+          <ol className="console-list">{block.typed.map(command => <Typed key={command.commandId} command={command} who={who} changed={changedDuring(command)} onPath={onPath} />)}</ol>
+        </section>
       : <section key={block.records[0]!.commandId} className="console-message mine" aria-label="Your commands">
           <header><strong>You ran</strong><small>{day(block.records.at(-1)!.startedAt)} · {block.records.length} {block.records.length === 1 ? 'command' : 'commands'}{block.records.some(r => r.state === 'running') ? ' · running' : ''}</small></header>
           <ol className="console-list">{block.records.map(record => <Mine key={record.commandId} record={record} client={client} projectId={projectId} changed={changedDuring(record)} onPath={onPath} line={line} />)}</ol>
@@ -179,6 +193,15 @@ export function ConsolePage({ client, snapshot, files, focusTurn, onPath, onConv
 // at the bottom and open while it runs, the person's own commands where they ran, and a line to
 // run one. Commands with no recorded file change fold where they happened. During a replay it
 // shows what had run by then, and the line to run waits for now.
+// Who typed a block's terminal commands, when more than the person did.
+function typedBy(commands: TerminalCommand[], who: (principal: string) => string) {
+  const names = [...new Set(commands.flatMap(c => c.by))].map(who).filter((name, i, all) => all.indexOf(name) === i);
+  return names.length === 1 && names[0] === 'You' ? '' : ' · ' + (names.length > 1 ? names.slice(0, -1).join(', ') + ' and ' + names.at(-1) : 'by ' + names[0]);
+}
+// A command typed in a terminal, from the Console plugin, with the files that changed while it ran.
+function Typed({ command, who, changed, onPath }: { command: TerminalCommand; who: (principal: string) => string; changed: Array<{ path: string; name: string }>; onPath: (path: string) => void }) {
+  return <TerminalCommandRecord command={command} who={who} made={changed.length > 0} after={<Changed files={changed} onPath={onPath} />} />;
+}
 // A command the person ran, from the Console plugin, with the files that changed while it ran.
 function Mine({ record, client, projectId, changed, onPath, line }: { record: ConsoleCommand; client: BrowserClient; projectId: string; changed: Array<{ path: string; name: string }>; onPath: (path: string) => void; line: ReturnType<typeof useCommandLine> }) {
   return <CommandRecord record={record} client={client} projectId={projectId} made={changed.length > 0} after={<Changed files={changed} onPath={onPath} />} onRunAgain={r => void line.start(r.command)} onStop={r => void line.stop(r)} />;
@@ -187,6 +210,8 @@ export function CommandPane({ client, snapshot }: { client: BrowserClient; snaps
   const process = useProcess();
   const projectId = snapshot.project.id;
   const { commands: mine, off, problem, read } = useCommands(client, projectId, snapshot.cursor);
+  const { commands: typed } = useTerminalCommands(client, projectId, snapshot.cursor);
+  const who = typist(snapshot);
   const list = useRef<HTMLOListElement>(null), atEnd = useRef(true);
   const line = useCommandLine(client, projectId, { onRan: () => { atEnd.current = true; void read(); } });
   const graph = process?.graph, at = process?.at ?? null;
@@ -199,13 +224,17 @@ export function CommandPane({ client, snapshot }: { client: BrowserClient; snaps
       const started = Date.parse(record.startedAt);
       if (started >= since && (at === null || started <= at)) out.push({ at: started, key: record.commandId, mine: record });
     }
+    for (const command of typed ?? []) {
+      const started = Date.parse(command.startedAt);
+      if (started >= since && (at === null || started <= at)) out.push({ at: started, key: command.commandId, typed: command });
+    }
     return out.sort((a, b) => a.at - b.at);
-  }, [graph, mine, at, process?.conversationId]);
+  }, [graph, mine, typed, at, process?.conversationId]);
   useEffect(() => { const element = list.current; if (element && atEnd.current) element.scrollTop = element.scrollHeight; }, [items]);
   const finished = (mine ?? []).filter(r => r.state !== 'running').length;
   useEffect(() => { if (mine) void read(); }, [finished]);
   const showPath = (path: string) => process?.showPath(path);
-  const changedDuring = (r: ConsoleCommand) => {
+  const changedDuring = (r: { startedAt: string; endedAt: string | null }) => {
     const from = Date.parse(r.startedAt), to = r.endedAt ? Date.parse(r.endedAt) + 1000 : Date.now();
     return (process?.files ?? []).filter(f => f.versions.some(v => v.at >= from - 1000 && v.at <= to)).map(f => ({ path: f.path, name: f.title }));
   };
@@ -213,7 +242,8 @@ export function CommandPane({ client, snapshot }: { client: BrowserClient; snaps
   return <div className="command-pane">
     <ol ref={list} className="console-list command-pane-list" onScroll={event => { const e = event.currentTarget; atEnd.current = e.scrollHeight - e.scrollTop - e.clientHeight < 24; }}>
       {!items.length && <li className="console-note">No commands yet. The commands the Agent runs in this conversation appear here, and you can run your own below.</li>}
-      {items.map(item => !item.mine ? <ItemRow key={item.key} item={item} root={snapshot.project.root} onPath={showPath} onRunAgain={at === null && !off ? line.prepare : undefined} />
+      {items.map(item => item.typed ? <Typed key={item.key} command={item.typed} who={who} changed={changedDuring(item.typed)} onPath={showPath} />
+        : !item.mine ? <ItemRow key={item.key} item={item} root={snapshot.project.root} onPath={showPath} onRunAgain={at === null && !off ? line.prepare : undefined} />
         : <Mine key={item.key} record={item.mine!} client={client} projectId={projectId} changed={changedDuring(item.mine!)} onPath={showPath} line={line} />)}
     </ol>
     {at !== null ? <p className="console-note command-pane-replay">Replaying · commands run from here use the project as it is now.</p>

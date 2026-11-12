@@ -55,6 +55,7 @@
             "console.run",
             "console.stop",
             "console.terminal.close",
+            "console.terminal.commands",
             "console.terminal.list",
             "console.terminal.open",
             "console.terminal.read",

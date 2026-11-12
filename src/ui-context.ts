@@ -35,7 +35,8 @@ export interface UiContext extends UiLocation {
     currentVersion: number | null;
     state: 'current' | 'changed' | 'deleted' | 'not-created' | 'derived' | 'unavailable';
     empty: boolean | null; viewCount: number | null; omittedViews: number;
-    views: Array<{ id: string; component: string; title: string }>;
+    // A Notebook view names the notebook whose sessions it runs in; none for the project's own.
+    views: Array<{ id: string; component: string; title: string; notebook?: string }>;
   };
   figureSelection?: FigureBrief;
 }
@@ -46,7 +47,7 @@ export const uiContextSchema = obj({ ...uiLocationSchema.properties,
     observedVersion: { anyOf: [integer, { type: 'null' }] }, currentVersion: { anyOf: [integer, { type: 'null' }] },
     state: { enum: ['current', 'changed', 'deleted', 'not-created', 'derived', 'unavailable'] },
     empty: { type: ['boolean', 'null'] }, viewCount: { anyOf: [integer, { type: 'null' }] }, omittedViews: integer,
-    views: { type: 'array', items: obj({ id: identity, component: { type: 'string' }, title: { type: 'string' } }) }
+    views: { type: 'array', items: obj({ id: identity, component: { type: 'string' }, title: { type: 'string' }, notebook: identity }, ['id', 'component', 'title']) }
   }),
   figureSelection: { type: 'object' }
 }, ['page', 'capturedAt', 'project']);
@@ -76,7 +77,8 @@ export async function captureUiContext(project: Project, location: UiLocation,
       workspace.state = current.deleted ? 'deleted' : current.version === location.compositionVersion ? 'current' : 'changed';
       workspace.viewCount = current.views.length;
       workspace.empty = current.views.length === 0;
-      workspace.views = current.views.slice(0, limits.maxUiContextViews).map((v: any) => ({ id: v.id, component: v.component, title: Array.from(String(v.props?.title ?? v.id)).slice(0, 160).join('') }));
+      workspace.views = current.views.slice(0, limits.maxUiContextViews).map((v: any) => ({ id: v.id, component: v.component, title: Array.from(String(v.props?.title ?? v.id)).slice(0, 160).join(''),
+        ...(v.component === 'rho.notebook' && typeof v.props?.notebook === 'string' && /^[A-Za-z0-9._:@-]{1,128}$/.test(v.props.notebook) ? { notebook: v.props.notebook } : {}) }));
       workspace.omittedViews = current.views.length - workspace.views.length;
     } catch (error: any) {
       if (error.code === 'ENOENT' && !derived) {

@@ -2172,3 +2172,91 @@ put in an Agent's grant. What was typed there left no record in Rho.
 - An Agent that types before its own shell's prompt has drawn gets the shell's partial-line mark;
   the skill tells it to wait.
 - Windows still has no terminal.
+
+## Each workspace notebook its own, and the terminal's commands
+
+2026-11-12, the user's answers to what [Each notebook its own sessions](#each-notebook-its-own-sessions)
+and [The Agent in the terminal](#the-agent-in-the-terminal) left open: a workspace's first Notebook
+has its own sessions too; the terminal records the commands the person and the Agent type,
+telling them apart, and keeps them apart from the machine's own shell history. A Windows
+terminal is left for later.
+
+### What there was
+
+- The first Notebook of a workspace showed the project's sessions, where the Agent's cells run,
+  and listed every cell.
+- What was typed in a terminal was in the activity record (an Agent's calls) and nowhere else.
+  The shell kept its history in the machine's own file, so commands typed in Rho's terminal,
+  the Agent's too, were recalled in every other terminal on the machine.
+
+### Changes
+
+- **Every Notebook put on a workspace is its own** (Rho `web/explore.ts`). The first gets an
+  identity as the later ones do, and a table explored, a script's line or a value from the page
+  runs in it. The project's own sessions are named the Project notebook (Notebook 0.5.19): an
+  Agent's cells run there unless it names a notebook, and a link to such a cell opens a Project
+  notebook view. A Notebook saved earlier without an identity stays the Project notebook.
+  Variables, Plots and Data flow show the first Notebook drawn until another is chosen.
+- **The Agent can find the person's notebook.** A message from Studio carries each Notebook
+  view's notebook in its interface context, and the Agent's instructions and the kernel skill
+  say to pass it to `kernel.run` when the person asks for work in their notebook.
+- **A zsh or bash terminal records its commands** (Console 0.3.4, `shell-marks.ts`). The shell
+  starts with Rho's startup files around the person's own, as VS Code's terminal does (a
+  `ZDOTDIR` for zsh, an init file for bash). Before each command its hook prints the line and
+  folder, before the next prompt the exit status, in an escape sequence terminals ignore, with a
+  nonce only that shell holds. The service reads them where they fall in the output, so each
+  command is kept with who typed it (everyone whose input reached the shell since the prompt,
+  so a line both typed names both), the folder, the exit status and the start of what it
+  printed. `console.terminal.commands` lists them for the person and the Agent; they are kept
+  across restarts.
+- **Its own history.** The shell's history file is `.rho/plugins/console/history/` in the
+  project: the up arrow recalls what was run in this project's terminals, and the machine's own
+  history is not read or written.
+- **Commands shows them.** Among the messages' commands and the person's own, In the terminal
+  lists each typed command with You or the Agent's name, how it ended, and when opened the folder
+  and output. A conversation's Studio lists those typed since it began.
+
+![Commands with the terminal's commands, the Agent's named and its output opened, beside a workspace's first Notebook running in its own session](figures/studio-terminal-commands.jpg)
+
+### Verification
+
+- The terminal host with zsh and bash on macOS, under a home of its own and then with the
+  machine's own zsh setup (Powerlevel10k): the person's and an Agent's commands with their exit
+  status, folder and output, a line both typed naming both, a forged mark printed by a program
+  ignored, `exit` recorded as the shell's end, the records read back by a new host with one left
+  running marked unknown. zsh's end-of-line mark (`%` in inverse video) after output without a
+  final newline was first kept as output; it is now left out.
+- A throwaway project in a real browser at 1600 × 940, each screenshot read: the empty
+  workspace's Notebook ran `exists("agentValue")` as `FALSE` after the Agent made `agentValue`
+  in the project's session, said it runs in this notebook's own R session, and did not list the
+  Agent's cell; Variables beside it showed that notebook's `x`; Sessions showed the Project
+  notebook (started by the Agent) and the Notebook apart. In the terminal the person typed two
+  commands and the Agent two; Commands listed the four with who typed each, `ls results` as
+  Exit 1, and the Agent's `head` opened with its folder and output. The up arrow recalled the
+  Agent's last commands from the project's history; the command typed then was in that file
+  and not in the machine's. The figure was taken at 1440 × 740.
+- The machine's own history held eight commands from the earlier terminal checks of
+  2026-11-11, typed before the terminal had a history of its own.
+- Rho-plugins: a test for each of bash and zsh found on the machine (the above, under a home of
+  its own), passing 3 of 3. The scrollback limit test failed once under load: `seq 1 9999`
+  could arrive in one 64 KiB read, so nothing was dropped; it now prints more than one read.
+  The suite passed 222 of 224, 2 skipped.
+- Rho: new tests that a bash terminal's commands reach the person and the Agent with who typed
+  them, move the page's cursor and stay out of the machine's history file, and that a message's
+  context names each Notebook's notebook. The first full run failed the older terminal test at
+  its cleanup: Rho's close wrote the commands file while the folder was being removed. Close now
+  writes only what changed and waits for it. The suite then passed 355 of 358 with the debug
+  Core, 3 skipped (Windows only), and the frontend, plugin-dx, sources, graph and agent-canvas
+  acceptances passed.
+
+### Left open
+
+- This is the builder's reading. The user has not seen it. Their running Rho needs the service
+  built and started again, which ends the R and Python sessions it holds.
+- A Notebook saved before this keeps the project's sessions; nothing turns it into a notebook of
+  its own.
+- Other shells (fish, sh) run without marks and their commands are not recorded. A command left
+  out of bash's history (HISTCONTROL) is recorded as the line before it. Keys sent to a running
+  program are counted as typing the next command.
+- What a full-screen program drew, and output past 16 KiB, are not kept with the command.
+- Commands typed in the terminal are not in the Graph.
