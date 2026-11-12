@@ -11,15 +11,20 @@ import { RhoClient } from '../dist/client.js';
 // conversations and continue through the same session, or a copy while another window holds it.
 const shortTemp = process.platform === 'win32' ? tmpdir() : '/tmp';
 // An ACP Agent that writes each request it gets to requests.jsonl and answers in the session it was given.
-const peer = `import fs from 'node:fs';import readline from 'node:readline';
-const out=v=>process.stdout.write(JSON.stringify({jsonrpc:'2.0',...v})+'\\n');let sid='new-session';
+// With PEER_HOLD it starts a process of its own, as the Claude adapter starts Claude Code, which
+// holds the session open in a live session file in that folder.
+const peer = `import fs from 'node:fs';import readline from 'node:readline';import path from 'node:path';import {spawn} from 'node:child_process';
+const out=v=>process.stdout.write(JSON.stringify({jsonrpc:'2.0',...v})+'\\n');let sid='new-session',held=null;
 readline.createInterface({input:process.stdin}).on('line',l=>{const r=JSON.parse(l),reply=result=>out({id:r.id,result});
  if(r.method)fs.appendFileSync(process.env.PEER_LOG,JSON.stringify({method:r.method,sessionId:r.params?.sessionId??null,pid:process.pid})+'\\n');
  if(r.method==='initialize')reply({protocolVersion:1,agentCapabilities:{loadSession:true,sessionCapabilities:{fork:{}}}});
  if(r.method==='session/new')reply({sessionId:sid});
  if(r.method==='session/load'){sid=r.params.sessionId;reply({});}
  if(r.method==='session/fork'){sid='forked-'+r.params.sessionId;reply({sessionId:sid});}
- if(r.method==='session/prompt'){out({method:'session/update',params:{sessionId:sid,update:{sessionUpdate:'agent_message_chunk',content:{type:'text',text:'Continued '+sid},messageId:'m'}}});reply({stopReason:'end_turn'});}});`;
+ if(r.method==='session/prompt'){
+  if(process.env.PEER_HOLD&&!held){held=spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:'ignore'});fs.mkdirSync(process.env.PEER_HOLD,{recursive:true});
+   fs.writeFileSync(path.join(process.env.PEER_HOLD,held.pid+'.json'),JSON.stringify({pid:held.pid,sessionId:sid,cwd:'',kind:'interactive',entrypoint:'sdk-ts',startedAt:Date.now()}));}
+  out({method:'session/update',params:{sessionId:sid,update:{sessionUpdate:'agent_message_chunk',content:{type:'text',text:'Continued '+sid},messageId:'m'}}});reply({stopReason:'end_turn'});}});`;
 const claudeId = '0f1e2d3c-4b5a-4968-8776-655443322110', codexId = '01a1b242-0000-7000-8000-000000000001';
 
 async function setup(t) {
@@ -147,4 +152,27 @@ test('the next message continues the same session; a held session is refused unl
   for (let i = 0; i < 200 && !(await call('agent.sessions.list')).sessions.find(s => s.sessionId === codexId).open; i++) await new Promise(r => setTimeout(r, 20));
   await assert.rejects(call('conversation.send', { conversationId: viaCodex.conversation.conversationId, changeId: 'codex-held', text: 'More.' }), e => e.error?.kind === 'condition' && /open in Codex/.test(e.message));
   await fs.rm(lock);
+});
+
+// Claude Code started by Rho's adapter keeps a live session file of its own, as any Claude Code
+// does. Its process descends from the adapter's: the session is Rho's, not another window's, and
+// the next message goes on. On Windows every message after the first was refused.
+test('a session held open by the Agent the conversation\'s adapter started is the conversation\'s own, and the next message goes on', async t => {
+  const { config, call } = await setup(t);
+  const live = path.join(config, 'sessions');
+  process.env.PEER_HOLD = live;
+  t.after(async () => {
+    delete process.env.PEER_HOLD;
+    for (const file of await fs.readdir(live).catch(() => [])) try { process.kill(Number.parseInt(file), 'SIGKILL'); } catch { /* it has ended */ }
+  });
+  const session = (await call('agent.sessions.list')).sessions.find(s => s.producer === 'claude-code');
+  const started = await call('conversation.start', { changeId: 'own', text: 'Go on.', continue: { session: session.id } });
+  const id = started.conversation.conversationId;
+  assert.equal((await answered(call, id)).turns.at(-1).state, 'completed');
+  const holder = (await fs.readdir(live)).map(file => Number.parseInt(file));
+  assert.equal(holder.length, 1, 'the adapter\'s own process holds the session open');
+  assert.equal((await call('agent.sessions.list')).sessions.find(s => s.sessionId === claudeId).open, null, 'listed as the conversation\'s, not open elsewhere');
+  await call('conversation.send', { conversationId: id, changeId: 'next', text: 'More.' });
+  const read = await answered(call, id);
+  assert.deepEqual(read.turns.map(turn => turn.state), ['completed', 'completed']);
 });

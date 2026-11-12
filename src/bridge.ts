@@ -3,25 +3,28 @@ import * as fs from 'node:fs/promises';
 import path from 'node:path';
 import { once } from 'node:events';
 import { Fault, confined, requireThat, stateDirectory } from '@rho-workspace/plugin-contracts';
+import { endProgram, spawnProgram } from './programs.js';
 export interface CliResult { exitCode: number; reply: any }
 // Results of a CLI that could not be started at all, which trying again does not change.
 const unstarted = new WeakSet<CliResult>();
 export async function command(binary: string, args: string[], stdin?: string, timeoutMs = 20000, maxBytes = 2 * 1024 * 1024): Promise<CliResult> {
   return new Promise((resolve) => {
-    const child = spawn(binary, args, { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
+    const unavailable = () => { const result = { exitCode: 3, reply: { ok: false, error: { kind: 'host_unavailable', message: 'Selected executable is unavailable.' } } }; unstarted.add(result); resolve(result); };
+    let child: ReturnType<typeof spawnProgram>;
+    try { child = spawnProgram(binary, args, { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true }); } catch { unavailable(); return; }
     let output = Buffer.alloc(0), overflow = false, timedOut = false;
-    const timer = setTimeout(() => { timedOut = true; child.kill('SIGKILL'); }, timeoutMs);
-    child.stdout.on('data', b => { if (output.length + b.length <= maxBytes) output = Buffer.concat([output, b]); else { overflow = true; child.kill('SIGKILL'); } });
+    const timer = setTimeout(() => { timedOut = true; endProgram(child); }, timeoutMs);
+    child.stdout!.on('data', (b: Buffer) => { if (output.length + b.length <= maxBytes) output = Buffer.concat([output, b]); else { overflow = true; endProgram(child); } });
     // Native diagnostics may contain private file names. Keep public structured
     // replies; the service does not log arguments, source, credentials or stderr.
-    child.stderr.resume();
-    child.on('error', () => { clearTimeout(timer); const result = { exitCode: 3, reply: { ok: false, error: { kind: 'host_unavailable', message: 'Selected executable is unavailable.' } } }; unstarted.add(result); resolve(result); });
+    child.stderr!.resume();
+    child.on('error', () => { clearTimeout(timer); unavailable(); });
     child.on('close', code => {
       clearTimeout(timer);
       try { resolve({ exitCode: timedOut || overflow ? 4 : code ?? 4, reply: JSON.parse(output.toString('utf8')) }); }
       catch { resolve({ exitCode: timedOut || overflow ? 4 : code === 2 ? 2 : 4, reply: { ok: false, error: { kind: 'reply_unknown', message: 'No complete public CLI reply was obtained.' } } }); }
     });
-    child.stdin.on('error', () => {}); child.stdin.end(stdin);
+    child.stdin!.on('error', () => {}); child.stdin!.end(stdin);
   });
 }
 // On Windows a Host serves a named pipe, not a socket file in its state folder. Its name hashes

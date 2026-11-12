@@ -1965,6 +1965,7 @@ no colours, no full-screen programs. Its output was read again every 700 ms.
 - This is the builder's reading. The user has not seen it; their own running Rho has no terminal
   until it is built and started again.
 - Windows has no terminal yet (it needs ConPTY), and a machine without `python3` is told so.
+  Windows has one since 2026-11-13 ([episode](WINDOWS-TERMINAL-EPISODE.md)).
 - A terminal ends with Rho. Nothing of it is kept across a restart but what the shell itself keeps.
 - The prompt's symbols need a Nerd Font installed; the view names the common ones before the
   machine's monospace face. Headless Chrome drew boxes for them.
@@ -2171,7 +2172,7 @@ put in an Agent's grant. What was typed there left no record in Rho.
 - The Agent is named by its grant's label.
 - An Agent that types before its own shell's prompt has drawn gets the shell's partial-line mark;
   the skill tells it to wait.
-- Windows still has no terminal.
+- Windows still has no terminal. It has one since 2026-11-13 ([episode](WINDOWS-TERMINAL-EPISODE.md)).
 
 ## Each workspace notebook its own, and the terminal's commands
 

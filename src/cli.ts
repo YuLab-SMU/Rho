@@ -54,7 +54,7 @@ For an Agent:
 Start Rho on ~/Rho/projects and ~/Rho/state in this terminal, and say where it is and what is missing:
   rho
 Start Rho with chosen folders and options:
-  rho --root PROJECTS_DIRECTORY --state-dir SERVICE_STATE [--core ABSOLUTE_CORE_BINARY] [--rscript ABSOLUTE_RSCRIPT] [--python PYTHON] [--ssh SSH] [--serverctl SERVERCTL] [--claude CLAUDE_CODE_BINARY] [--codex CODEX_BINARY] [--agent-backend claude-acp|codex-acp|claude-cli|acp] [--acp-command JSON_ARGV] [--port PORT] [--limits JSON_FILE] [--plugins documents,files,...] [--example on|off] [--open]
+  rho --root PROJECTS_DIRECTORY --state-dir SERVICE_STATE [--core ABSOLUTE_CORE_BINARY] [--rscript ABSOLUTE_RSCRIPT] [--python PYTHON] [--terminal-shell SHELL] [--ssh SSH] [--serverctl SERVERCTL] [--claude CLAUDE_CODE_BINARY] [--codex CODEX_BINARY] [--agent-backend claude-acp|codex-acp|claude-cli|acp] [--acp-command JSON_ARGV] [--port PORT] [--limits JSON_FILE] [--plugins documents,files,...] [--example on|off] [--open]
 Add --background to either start to have it return once Rho is ready, with Rho's output in
 SERVICE_STATE/rho.log and the last start's in rho.previous.log.
 
@@ -73,6 +73,8 @@ Less common:
                                              observe an external ACP client (use as its agent command)
 --example off starts Rho without the project it ships; a new state otherwise gets that project
 once, copied into the projects directory. --open opens the printed url in the default browser.
+--terminal-shell (or RHO_TERMINAL_SHELL) is the shell a terminal opens; without it, SHELL on
+macOS and Linux, and pwsh, else Windows PowerShell, else cmd.exe on Windows.
 Without --port a start takes the port this state's last start had, and a new one only when that
 port is taken; --port 0 always takes a new one.
 Opening that url on this machine needs no link, code or session credential; --pair makes a
@@ -94,7 +96,7 @@ async function harnessAcp() {
     }
   return undefined;
 }
-const options = { example: { type: 'string' }, 'verify-evidence': { type: 'string' }, acp: { type: 'string' }, 'acp-agent': { type: 'string' }, root: { type: 'string' }, 'state-dir': { type: 'string' }, core: { type: 'string' }, rscript: { type: 'string' }, python: { type: 'string' }, ssh: { type: 'string' }, serverctl: { type: 'string' }, claude: { type: 'string' }, codex: { type: 'string' }, 'agent-backend': { type: 'string' }, 'acp-command': { type: 'string' }, port: { type: 'string' }, limits: { type: 'string' }, plugins: { type: 'string' }, pair: { type: 'string' }, open: { type: 'boolean' }, background: { type: 'boolean' }, status: { type: 'boolean' }, 'install-skill': { type: 'string' }, version: { type: 'boolean' },
+const options = { example: { type: 'string' }, 'verify-evidence': { type: 'string' }, acp: { type: 'string' }, 'acp-agent': { type: 'string' }, root: { type: 'string' }, 'state-dir': { type: 'string' }, core: { type: 'string' }, rscript: { type: 'string' }, python: { type: 'string' }, 'terminal-shell': { type: 'string' }, ssh: { type: 'string' }, serverctl: { type: 'string' }, claude: { type: 'string' }, codex: { type: 'string' }, 'agent-backend': { type: 'string' }, 'acp-command': { type: 'string' }, port: { type: 'string' }, limits: { type: 'string' }, plugins: { type: 'string' }, pair: { type: 'string' }, open: { type: 'boolean' }, background: { type: 'boolean' }, status: { type: 'boolean' }, 'install-skill': { type: 'string' }, version: { type: 'boolean' },
   grant: { type: 'string' }, project: { type: 'string' }, 'project-id': { type: 'string' }, session: { type: 'string' }, agent: { type: 'string' }, mcp: { type: 'string' }, stop: { type: 'boolean' }, help: { type: 'boolean', short: 'h' } } as const;
 // A command that is refused says why and what to do. A service that is not running is the
 // common case for --grant and --pair; anything without a known reason keeps its stack.
@@ -253,7 +255,7 @@ if (values.acp) {
   // for its own work says so itself and is left alone.
   if (values.example !== undefined && !['on', 'off'].includes(values.example)) throw new Error('Choose --example on or off.');
   const example = values.example !== 'off';
-  const service = await new RhoService({ example, ...limits, root: path.resolve(projectsRoot), stateDir: path.resolve(stateDirectory), ...native, agentBackend: agentBackend as 'claude-acp' | 'codex-acp' | 'claude-cli' | 'acp', acpCommand, codex: values.codex ?? process.env.RHO_CODEX ?? 'codex', claude: values.claude ?? process.env.RHO_CLAUDE ?? 'claude', python: values.python ?? process.env.RHO_PYTHON, ssh: values.ssh ?? process.env.RHO_SSH, serverctl: values.serverctl ?? process.env.RHO_SERVERCTL, port: values.port === undefined ? undefined : Number(values.port), ...(values.plugins !== undefined ? { plugins: values.plugins ? values.plugins.split(',') as PluginId[] : [] } : {}) }).start().catch(async error => {
+  const service = await new RhoService({ example, ...limits, root: path.resolve(projectsRoot), stateDir: path.resolve(stateDirectory), ...native, agentBackend: agentBackend as 'claude-acp' | 'codex-acp' | 'claude-cli' | 'acp', acpCommand, codex: values.codex ?? process.env.RHO_CODEX ?? 'codex', claude: values.claude ?? process.env.RHO_CLAUDE ?? 'claude', python: values.python ?? process.env.RHO_PYTHON, terminalShell: values['terminal-shell'] ?? process.env.RHO_TERMINAL_SHELL, ssh: values.ssh ?? process.env.RHO_SSH, serverctl: values.serverctl ?? process.env.RHO_SERVERCTL, port: values.port === undefined ? undefined : Number(values.port), ...(values.plugins !== undefined ? { plugins: values.plugins ? values.plugins.split(',') as PluginId[] : [] } : {}) }).start().catch(async error => {
     // Starting Rho again on a state it already runs on is the common refusal: say where it runs.
     const held = (error as { details?: { stateDirectory?: unknown } })?.details?.stateDirectory;
     const running = typeof held === 'string' ? await fs.readFile(path.join(held, 'connection.json'), 'utf8').then(text => String(JSON.parse(text).url), () => '') : '';

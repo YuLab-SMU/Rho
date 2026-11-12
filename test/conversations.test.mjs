@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { RhoService } from '../dist/server.js';
 import { CheckedClient as RhoClient } from './checked-client.mjs';
 import { BrowserClient } from '../dist/browser.js';
+import { standIn } from './support/stand-in.mjs';
 
 // A stand-in for the Claude Code CLI: it records each start, confirms the session it was
 // given, and answers in the stream-json shape the real CLI writes. "slow" keeps working until
@@ -28,9 +29,9 @@ process.stdin.on('end', () => {
 });
 `;
 async function fixture(root) {
-  const state = path.join(root, '.service'), log = path.join(root, 'claude.jsonl'), claude = path.join(root, 'claude-stub.mjs');
+  const state = path.join(root, '.service'), log = path.join(root, 'claude.jsonl');
   await fs.mkdir(path.join(root, 'work'), { recursive: true });
-  await fs.writeFile(claude, fakeClaude(log), { mode: 0o755 });
+  const claude = await standIn(path.join(root, 'claude-stub.mjs'), fakeClaude(log), { exe: true });
   const service = await new RhoService({ root, stateDir: state, rscript: 'Rscript', claude, agentBackend: 'claude-cli' }).start();
   const operator = new RhoClient({ url: service.url, token: service.adminToken });
   const p = await operator.call('project.open', { path: 'work' });
@@ -55,7 +56,7 @@ async function fixture(root) {
   return { service, operator, p, person, starts, settled, running };
 }
 
-test('messages freeze the sending tab location and carry it to an existing Agent session', { skip: process.platform === 'win32' && 'the stand-in client is a script' }, async () => {
+test('messages freeze the sending tab location and carry it to an existing Agent session', async () => {
   const root = await fs.mkdtemp(path.join(tmpdir(), 'rho-ui-context-'));
   const f = await fixture(root);
   try {
@@ -93,8 +94,7 @@ test('messages freeze the sending tab location and carry it to an existing Agent
   } finally { await f.service.close(); await fs.rm(root, { recursive: true, force: true }); }
 });
 
-// Windows starts a script only through a shell, so a stand-in client cannot be started there.
-const stand = { skip: process.platform === 'win32' && 'the stand-in client is a script' };
+const stand = {};
 test('a conversation started in Rho keeps one identity per message and resumes its own session', stand, async () => {
   const root = await fs.mkdtemp(path.join(tmpdir(), 'rho-conversation-'));
   let f = await fixture(root);
