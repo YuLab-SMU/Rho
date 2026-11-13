@@ -42,9 +42,16 @@ try {
   const seed = await client.call('kernel.run', { projectId: project.id, language: 'r', code: seedCode, purpose: 'Disposable third-party plugin trial', changeId: 'seed', waitMs: 0 });
   const seeded = await finished(seed.cell); assert.equal(seeded.state, 'done', text(seeded));
   const packages = await run('check');
+  const profile = json((await run('profile', { object: 'sce' })).text);
+  assert.ok(profile.payload.design && profile.payload.design.condition, 'profile keeps the design block');
+  const design = json((await run('design', { object: 'sce' })).text);
+  assert.ok(Array.isArray(design.columns) || typeof design.columns === 'object', 'design lists colData column names');
+  const confirmed = json((await run('confirm-design', { object: 'sce', design: { condition: 'Treatment' } })).text);
+  assert.ok(typeof confirmed.fingerprint === 'string' && confirmed.fingerprint.length > 0);
   const before = json((await run('ledger', { object: 'sce', includeArtifacts: true })).text);
+  assert.ok(before.policy && Array.isArray(before.policy.redacted_fields), 'ledger returns its outbound policy');
   await run('registry', { object: 'sce' }); await run('skill', { name: 'sclet-driver' });
-  const plan = { task: 'plugin-acceptance', context_fingerprint: before.fingerprint, actions: [
+  const plan = { task: 'plugin-acceptance', context_fingerprint: before.payload.fingerprint, actions: [
     { id: 'normalize', action: 'normalize_data' },
     { id: 'hvg', action: 'find_variable_features', params: { nfeatures: 50 }, depends_on: 'normalize' },
     { id: 'scale', action: 'scale_data', depends_on: 'hvg' },
@@ -61,8 +68,9 @@ try {
     findings: [], evidence: [], warnings: ['Synthetic input, not evidence for a biological hypothesis.'], recommendations: [], proposed_actions: [], success_criteria: [], stop_conditions: [], context: { fingerprint: json(text(executed)).fingerprint }, metadata: { provider: 'integration-test' },
   } });
   const report = await run('report', { object: 'sce', recordId: 'smoke-report' }); assert.match(report.text, /all checks passed/);
+  assert.match(report.text, /Outbound policy:/); assert.match(report.text, /"requires_user_consent":true/);
   const after = json((await run('ledger', { object: 'sce', includeArtifacts: true })).text);
-  assert.equal(after.dataset.reductions, 'PCA'); assert.equal(after.features.hvg.n, 50);
+  assert.equal(after.payload.dataset.reductions, 'PCA'); assert.equal(after.payload.features.hvg.n, 50);
   assert.equal(json((await run('validate', { object: 'sce', plan })).text).validation.valid, false);
   await client.call('extension.manage', { pluginId: plugin.id, expectedDigest: plugin.digest, action: 'disable' });
   await assert.rejects(invoke('ledger', { object: 'sce' }), /disabled/);
