@@ -15,7 +15,7 @@ type Skill = Entries['skills'][number];
 type View = Entries['views'][number];
 
 export interface LiveSessionValues { language: string; state: string; variables: { name: string; type: string }[] }
-export interface LiveContext { client: BrowserClient; snapshot: WorkspaceSnapshot; files: ProjectFile[]; values?: LiveSessionValues[]; principalId?: string; onAbout: (pluginId: string) => void }
+export interface LiveContext { client: BrowserClient; snapshot: WorkspaceSnapshot; files: ProjectFile[]; values?: LiveSessionValues[]; principalId?: string; onAbout: (pluginId: string) => void; onOpenInStudio?: (pluginId: string, entryId: string) => void }
 type Subject = { path?: string; resource?: ResourceTarget; props?: Record<string, unknown>; name: string } | { reason: string };
 // The real thing in this project a view can show now, by what the view declares it is
 // bound to; or why nothing here fits it yet. Nothing is created to make a picture.

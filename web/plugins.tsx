@@ -201,7 +201,7 @@ export function PluginCatalog({ client, projectId, canManage, catalog, project, 
       })}</div>
     </section>)}
     {catalog.operations.some(o => o.method === 'extension.list' && o.state === 'available' && o.authorized)
-      ? <ThirdPartyPlugins client={client} projectId={projectId} canManage={canManage} query={query} />
+      ? <ThirdPartyPlugins client={client} projectId={projectId} canManage={canManage} query={query} onOpenInStudio={live?.onOpenInStudio} />
       : <p className="plugin-empty">Third-party plugin information is not granted to this tab.</p>}
     {workspaceSkills.length > 0 && <section className="plugin-entry-section plugin-skills plugin-workspace-skills" aria-labelledby="workspace-skills-title">
       <h2 id="workspace-skills-title">Rho workspace Skills <span className="plugin-count">{workspaceSkills.length}</span></h2>

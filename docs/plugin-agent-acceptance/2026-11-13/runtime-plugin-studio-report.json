@@ -1,0 +1,29 @@
+{
+  "passed": true,
+  "checks": [
+    "rho plugin check executes the generated host and operations",
+    "a host syntax error is machine-readable and does not replace the source",
+    "composition.apply accepts a digest-bound runtime HTML Studio leaf",
+    "the composed runtime view renders real empty status at 1440px and 390px without overflow",
+    "Plugins can place the installed runtime view into the current Studio composition",
+    "an installed update keeps the old composition digest and shows a stale recovery state",
+    "a conditional props update reopens the new digest without changing the view identity",
+    "disable and enable preserve the Studio leaf and recover through Retry",
+    "removal retains the Studio reference and composition receipts"
+  ],
+  "responsive": [
+    {
+      "width": 1440,
+      "overflow": false
+    },
+    {
+      "width": 390,
+      "overflow": false
+    }
+  ],
+  "errors": [],
+  "digests": {
+    "initial": "d96b5c3bb892fb14cc6bd0ba6de0a9f2c9ed7dbb56a23261753247dba719f6f4",
+    "updated": "c59065269b644d4ab2bc2c064fa63184e0d6ee25ceaad16b9afe73da04f5a86c"
+  }
+}

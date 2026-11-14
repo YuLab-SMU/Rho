@@ -76,13 +76,35 @@ snapshot and keeps the previous selection after a failed check. The Plugins page
 now has an explicit **Refresh plugins** action for loading a new package digest.
 
 The runtime check proves host import and operation control flow. It does not prove
-the actual project data, authorization or browser layout. Those require the next
-real Agent run and a Chrome episode against the installed view.
+the actual project data, authorization or browser layout; the Studio follow-up
+below supplies that separate browser evidence.
 
-## Remaining gap
+## Studio follow-up
 
-The runtime HTML plugin appears on Plugins and works through its iframe bridge.
-It is not yet a Studio composition entry. The episode therefore proves the
-independent package path, data call, browser rendering and update retention. It
-does not prove that an Agent can place this runtime view inside Studio. That is
-the next owner-level capability to design from a real request.
+The runtime HTML plugin is now also a `rho.extension.html@1` Studio composition
+leaf. Its props keep the plugin id, view entry and selected package digest. A
+layout change therefore retains an exact package identity, while an update,
+disable or removal leaves the view readable and shows a recovery message instead
+of silently switching revisions. The follow-up Chrome episode records the real
+composition, responsive screenshots, stale-digest state and recovery.
+
+The disposable follow-up passed these checks:
+
+- `rho plugin check` accepted the generated host and rejected a broken host
+  without installing it.
+- The Plugins page's **Open in Studio** action inserted the view into the saved
+  `workspace` composition. The 1440 px and 390 px screenshots are
+  [here](plugin-agent-acceptance/2026-11-13/task-panel-studio-1440.png) and
+  [here](plugin-agent-acceptance/2026-11-13/task-panel-studio-390.png); both had
+  no horizontal overflow.
+- Updating the package left the old digest in the layout until an explicit
+  **Reload plugin view** showed the stale state. A conditional `props` operation
+  reopened the same view id at the new digest.
+- Disable, enable and removal were observed in the view. Removal retained the
+  composition leaf and its receipt. The stale, disabled and removed screenshots
+  are [recorded](plugin-agent-acceptance/2026-11-13/task-panel-stale.png),
+  [here](plugin-agent-acceptance/2026-11-13/task-panel-disabled.png) and
+  [here](plugin-agent-acceptance/2026-11-13/task-panel-removed.png).
+
+The machine-readable episode report is
+[`runtime-plugin-studio-report.json`](plugin-agent-acceptance/2026-11-13/runtime-plugin-studio-report.json).

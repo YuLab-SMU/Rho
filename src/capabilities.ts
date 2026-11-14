@@ -44,6 +44,11 @@ const applicationContent = [
   'registered references; bind those directly with composition.apply, including artifacts',
   'inside owner state. Do not manually register internal paths. A layout acknowledgement',
   'alone does not prove the browser displayed the result.',
+  'A runtime HTML plugin view joins the same Studio composition tree. After extension.describe,',
+  'place one view with component "rho.extension.html", version "1", bindings {}, and props',
+  '{ title, pluginId, expectedDigest, entryId }. Read composition.read first and use a conditional',
+  'composition.apply against its current version. The saved digest prevents an update from silently',
+  'changing the view; after an update, read extension.describe again and reopen it with the new digest.',
   'People and Agents share the document buffer and conditional save operation.',
   'When the person should see or change a run\u2019s inputs before it starts, propose it',
   'instead of submitting it: composition.apply a view with component "rho.action",',
@@ -55,7 +60,7 @@ const applicationContent = [
   'run or export it as files; a stopped run is not resubmitted under its own operationId.'
 ].join('\n');
 const applicationSkill = {
-  id: 'rho.workspace', version: '1.6', content: applicationContent,
+  id: 'rho.workspace', version: '1.7', content: applicationContent,
   intent: 'Work in this project through versioned operations, in a safe order.',
   requires: ['capability.list', 'observation.snapshot', 'action.submit', 'composition.apply', 'context.read'],
   example: { method: 'observation.snapshot', input: { projectId: 'the-open-project' } },

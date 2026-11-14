@@ -3,6 +3,7 @@ import type { BrowserClient } from '../src/browser.js';
 import { Icon } from './icons.js';
 import type { extensionDirectory } from '../src/extension-directory.js';
 import type { InstalledExtension } from '../src/extensions.js';
+import { runtimeExtensionProps } from '../src/extension-view.js';
 import type { ExtensionMarket } from '../src/extension-markets.js';
 import { ExtensionMarkets } from './extension-markets.js';
 
@@ -39,7 +40,30 @@ export function ExtensionView({ client, projectId, plugin, viewId }: { client: B
   return <div className="extension-view">{error ? <p role="alert">{error} <button onClick={() => retry(x => x + 1)}>Retry</button></p> : !html ? <p role="status">Opening plugin…</p> : <iframe key={attempt + ':' + plugin.digest} ref={frame} title={plugin.title} src="/extension-frame.html" sandbox="allow-scripts allow-forms" style={{ height }} />}</div>;
 }
 
-export function ThirdPartyPlugins({ client, projectId, canManage, query = '' }: { client: BrowserClient; projectId: string; canManage: boolean; query?: string }) {
+// A Studio composition stores the package identity, then resolves the current descriptor before
+// asking for HTML. An update, disable or removal therefore leaves the layout readable and gives the
+// person a digest-bound recovery message instead of silently opening a different package.
+export function RuntimeExtensionView({ client, projectId, view }: { client: BrowserClient; projectId: string; view: { props: Record<string, unknown> } }) {
+  const [plugin, setPlugin] = useState<InstalledExtension | null>(null), [error, setError] = useState(''), [attempt, retry] = useState(0);
+  const props = view.props;
+  useEffect(() => {
+    let alive = true; setPlugin(null); setError('');
+    if (!runtimeExtensionProps(props)) { setError('This Studio view has an invalid runtime plugin reference.'); return () => { alive = false; }; }
+    client.call('extension.describe', { projectId, pluginId: props.pluginId }).then(result => {
+      const described = result as unknown as InstalledExtension;
+      if (described.digest !== props.expectedDigest) throw new Error('This plugin was updated after the layout saved it. Read Plugins and reopen the view at the new digest.');
+      if (!described.enabled) throw new Error('This plugin is disabled. Enable it from Plugins, then retry this view.');
+      if (!described.manifest.views.some(entry => entry.id === props.entryId)) throw new Error('This plugin view entry is no longer installed. Reopen it from Plugins.');
+      if (alive) setPlugin(described);
+    }).catch(error => { if (alive) setError(error instanceof Error ? error.message : String(error)); });
+    return () => { alive = false; };
+  }, [client, projectId, props.pluginId, props.expectedDigest, props.entryId, attempt]);
+  if (error) return <section className="extension-view extension-view-unavailable" role="status"><p>{error}</p><button onClick={() => retry(value => value + 1)}>Retry</button></section>;
+  if (!plugin || !runtimeExtensionProps(props)) return <p className="extension-view-status" role="status">Opening plugin…</p>;
+  return <section className="runtime-extension-view"><div className="runtime-extension-toolbar"><span>Package digest <code>{plugin.digest.slice(0, 12)}…</code></span><button aria-label="Reload plugin view" onClick={() => retry(value => value + 1)}>Reload plugin view</button></div><ExtensionView key={plugin.digest + ':' + props.entryId} client={client} projectId={projectId} plugin={plugin} viewId={props.entryId} /></section>;
+}
+
+export function ThirdPartyPlugins({ client, projectId, canManage, query = '', onOpenInStudio }: { client: BrowserClient; projectId: string; canManage: boolean; query?: string; onOpenInStudio?: (pluginId: string, entryId: string) => void }) {
   const [directory, setDirectory] = useState<typeof extensionDirectory>([]);
   const [markets, setMarkets] = useState<ExtensionMarket[]>([]);
   const [plugins, setPlugins] = useState<InstalledExtension[]>([]), [source, setSource] = useState(''), [busy, setBusy] = useState(''), [message, setMessage] = useState(''), [error, setError] = useState('');
@@ -98,6 +122,7 @@ export function ThirdPartyPlugins({ client, projectId, canManage, query = '' }: 
           <span className="plugin-entry-symbol" aria-hidden="true"><Icon name="layout" size={16} /></span>
           <span><strong>{view.title}</strong><code>{view.id} · {view.file}</code></span>
           <button disabled={!!busy || !p.enabled} onClick={() => { setOpened({ plugin: p, viewId: view.id }); setSkill(null); }}>Open {view.title}</button>
+          {onOpenInStudio && <button disabled={!!busy || !p.enabled} onClick={() => onOpenInStudio(p.id, view.id)}>Open in Studio</button>}
         </div>)}
         <h4>Skills <span className="plugin-count">{p.manifest.skills.length}</span></h4>
         {!p.manifest.skills.length && <p className="plugin-empty">No Skill is declared.</p>}

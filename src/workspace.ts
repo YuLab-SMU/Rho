@@ -4,12 +4,14 @@ import { Ajv } from 'ajv';
 import { isNativeTime } from './native-time.js';
 import { atomicBytes, atomicJson, canonical, confined, digest, now, readJson, requireThat, stateDirectory, type Resource } from '@rho-workspace/plugin-contracts';
 import type { ProjectPlugins } from './plugins.js';
+import type { Extensions } from './extensions.js';
 import type { DocumentState } from '@rho-workspace/plugin-documents';
 import type { Project } from './state.js';
 import { protocol } from './protocol.js';
 import { Capabilities } from './capabilities.js';
 import { Interactions, interactionLimits } from './interactions.js';
 import { Compositions, compositionLimits } from './composition.js';
+import { runtimeExtensionProps } from './extension-view.js';
 const ajv = new Ajv({ strict: false, allowUnionTypes: true });
 // The same timestamp check every published contract uses; an unknown format would be skipped silently.
 ajv.addFormat('date-time', { type: 'string', validate: isNativeTime });
@@ -32,7 +34,7 @@ const validateWorkspace3 = ajv.compile<any>({ ...workspaceSchema, properties: { 
 export const workspaceLimits = { ...compositionLimits, maxCompositions: 32, maxMetadataBytes: 32 * 1024 * 1024 };
 export class Workspace {
   limits: typeof workspaceLimits;
-  constructor(public project: Project, public owners: ProjectPlugins, limits: Partial<typeof workspaceLimits> = {}, public interactions: Partial<typeof interactionLimits> = {}) { this.limits = { ...workspaceLimits, ...limits }; }
+  constructor(public project: Project, public owners: ProjectPlugins, limits: Partial<typeof workspaceLimits> = {}, public interactions: Partial<typeof interactionLimits> = {}, public extensions?: Extensions) { this.limits = { ...workspaceLimits, ...limits }; }
   private async directory() { return stateDirectory(this.project.root, '.rho/rho/compositions'); }
   private async file(id: string) { return path.join(await this.directory(), digest(id) + '.json'); }
   async compositions(includeDeleted = false) {
@@ -52,6 +54,24 @@ export class Workspace {
   async validateViews(views: any[], retained: any[] = [], trustedPresentation?: { authorBindingId: string; basisWitnessId: string }, retainedNotes: any[] = []) {
     const availability: Record<string, unknown> = {};
     for (const view of views) {
+      if (view.component === 'rho.extension.html') {
+        requireThat(view.version === '1' && runtimeExtensionProps(view.props) && !Object.keys(view.bindings ?? {}).length, 'invalid', 'A runtime HTML plugin view needs component rho.extension.html@1, props { pluginId, expectedDigest, entryId } and no bindings.');
+        const props = view.props;
+        const retainedView = retained.some(v => v.id === view.id && v.component === view.component && v.version === view.version && canonical(v.props) === canonical(view.props) && canonical(v.bindings) === canonical(view.bindings));
+        let unavailable = '';
+        try {
+          requireThat(!!this.extensions, 'unavailable', 'Runtime HTML plugin views are unavailable in this service build.');
+          const plugin = this.extensions!.describe(props.pluginId);
+          requireThat(plugin.digest === props.expectedDigest, 'stale', 'The runtime HTML plugin changed. Read extension.describe and reopen the view at its new digest.');
+          requireThat(plugin.enabled, 'unavailable', 'The runtime HTML plugin is disabled. Enable it before opening this view.');
+          requireThat(plugin.manifest.views.some(entry => entry.id === props.entryId), 'not_found', 'The runtime HTML plugin view entry is not installed.');
+        } catch (error) {
+          unavailable = error instanceof Error ? error.message : String(error);
+          if (!retainedView) throw error;
+        }
+        availability[view.id] = unavailable ? { state: 'unavailable', reason: unavailable } : { state: 'entry-installed', visibility: 'unobserved' };
+        continue;
+      }
       if (view.component === 'rho.agent-note' && ![...retained, ...retainedNotes].some(v => v.id === view.id && v.component === view.component && canonical(v.props) === canonical(view.props) && canonical(v.bindings) === canonical(view.bindings))) requireThat(trustedPresentation && view.props.authorBindingId === trustedPresentation.authorBindingId && view.props.basisWitnessId === trustedPresentation.basisWitnessId, 'scope', 'Agent note authorship and basis are written only by the assigned presentation path.');
       if (view.component === actionFormComponent.id) {
         requireThat(view.version === actionFormComponent.version && !Object.keys(view.bindings).length, 'invalid', 'A rho.action view is version "1" and binds nothing; its proposal is in props.');

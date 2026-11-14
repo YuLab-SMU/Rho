@@ -104,6 +104,29 @@ view to load the new digest. Plugin installation and management remain local
 person actions. An Agent can discover and call an installed package only through
 its granted `extension.*` methods.
 
+To place a runtime HTML view in Studio, read the current workspace with
+`composition.read`, then apply a conditional layout change containing a view like:
+
+```json
+{
+  "id": "extension-lab.my-plugin-main",
+  "kind": "view",
+  "component": "rho.extension.html",
+  "version": "1",
+  "props": {
+    "title": "Task panel",
+    "pluginId": "lab.my-plugin",
+    "expectedDigest": "digest returned by extension.describe",
+    "entryId": "main"
+  },
+  "bindings": {}
+}
+```
+
+Keep the plugin id, entry id and digest in the composition. If the package is
+updated, disabled or removed, Studio keeps this reference and shows the recovery
+reason; read `extension.describe` and explicitly reopen it at the new digest.
+
 ## Rules that hold in every version
 
 - **Ask before ending anything someone else is using.** Restarting or upgrading Rho ends every

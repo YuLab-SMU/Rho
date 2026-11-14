@@ -137,6 +137,7 @@
     "ui:create": "node scripts/ui-plugin.mjs create",
     "ui:dev": "node scripts/ui-plugin.mjs dev",
     "acceptance:plugin-dx": "node scripts/plugin-dx-acceptance.mjs",
+    "acceptance:plugin-runtime": "npm run build && node scripts/runtime-plugin-studio-acceptance.mjs",
     "acceptance:agent-activity": "node scripts/agent-activity-episode.mjs",
     "acceptance:acp": "node scripts/acp-episode.mjs",
     "acceptance:agent-ui": "node scripts/agent-ui-acceptance.mjs",

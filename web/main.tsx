@@ -12,10 +12,11 @@ import { sourceItems, sourceRowOrder, useProjectFiles, type SourceItem } from '.
 import { FormSwitch, savedForm, saveForm, useLiveValues, type Prepared } from '@rho-workspace/plugin-kernel/ui';
 import { ExternalConversationsContext, useExternalConversations } from './external-conversations.js';
 import { workSessions } from '../src/external-work.js';
+import type { InstalledExtension } from '../src/extensions.js';
 import { agentDisplayName } from './brand-marks.js';
 import { useAgentNow, type AgentNow } from './agent-now.js';
 import { NotesPanel, useProjectNotes } from './project-notes.js';
-import { compositionName, defaultWorkspace, fileKey, openInWorkspace, processComposition, processConversation } from './canvas.js';
+import { compositionName, defaultWorkspace, fileKey, openExtensionInWorkspace, openInWorkspace, processComposition, processConversation } from './canvas.js';
 import { Icon, type IconName } from './icons.js';
 import { addNewNotebook, addNotebook, addProjectNotebook, addObject, addSessionView, addTool, canExplore, createWorkspace, loadTable, notebookNames, notebookOn, scriptLanguage, scriptPrepared, sessionTitles, sessionViewOn, toolOn, type Language, type SessionView, type Tool } from './explore.js';
 import { PageAdd } from './page-add.js';
@@ -322,6 +323,14 @@ function App() {
     const path = typeof target === 'string' ? target : target.path;
     openInWorkspace(client, snapshot, workspace, target, into).then(placed => placed ? layout(placed.compositionId, placed.viewId) : setNotice(path + ' · Rho has no viewer for this kind of file yet.'),
       error => setNotice(path + ' · ' + (error instanceof Error ? error.message : 'It could not be opened.')));
+  }
+  async function openPluginInStudio(pluginId: string, entryId: string) {
+    if (!snapshot || !client || !arrangeable) return;
+    try {
+      const plugin = await client.call('extension.describe', { projectId: snapshot.project.id, pluginId }) as unknown as InstalledExtension;
+      const opened = await openExtensionInWorkspace(client, snapshot, sharedWorkspace(), plugin, entryId);
+      layout(opened.compositionId, opened.viewId);
+    } catch (error) { setNotice('The plugin could not be opened in Studio. ' + (error instanceof Error ? error.message : String(error))); }
   }
   // One of the project's own tools on a page of the person's: put there, or brought forward.
   function toolOnPage(page: string, tool: Tool, into?: string) {
@@ -774,7 +783,7 @@ function App() {
             {(phase === 'offline' || reconnecting) && <div className="offline-bar" role="alert"><Icon name="offline" size={17} /><p>{reconnecting ? 'Reconnecting. ' : "Can't reach Rho. "}{seen}</p><button disabled={reconnecting} onClick={reread}>Reconnect</button></div>}
             {screen === 'home' || !project ? <Home client={client!} projects={projects} folder={folder} focusRequest={homeFocus} onFocused={() => setHomeFocus(false)} onChoose={chooseProject} onOpened={opened} onRemove={link ? undefined : removeProject} onAccessEnded={() => useLocalAccess('That access has ended. This tab uses this machine.')} />
               : !snapshot ? <Loading text="Opening project…" />
-              : screen === 'plugins' ? <PluginCatalog client={client} projectId={project.id} canManage={!link} catalog={snapshot.catalog} project={name(project)} pluginId={pluginId} onSelect={choosePlugin} live={{ client: client!, snapshot, files: files.files, values: values.sessions, principalId: connection.principalId, onAbout: about }} back={pluginReturn ? { label: 'Back to project', run: () => { setPluginReturn(false); setPluginId(''); setScreen('project'); setMainFocus(true); } } : undefined} />
+              : screen === 'plugins' ? <PluginCatalog client={client} projectId={project.id} canManage={!link} catalog={snapshot.catalog} project={name(project)} pluginId={pluginId} onSelect={choosePlugin} live={{ client: client!, snapshot, files: files.files, values: values.sessions, principalId: connection.principalId, onAbout: about, onOpenInStudio: arrangeable ? (pluginId, entryId) => void openPluginInStudio(pluginId, entryId) : undefined }} back={pluginReturn ? { label: 'Back to project', run: () => { setPluginReturn(false); setPluginId(''); setScreen('project'); setMainFocus(true); } } : undefined} />
               : studioOpen ?
                 <div className="studio-main">
                 {/* A person's workspace is its views alone: each group of tabs adds a view with its

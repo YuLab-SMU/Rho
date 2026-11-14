@@ -18,6 +18,8 @@ import { addNewNotebook, addNotebook, addObject, addProjectNotebook, addSessionV
 import { ExploreIn } from '../explore-in.js';
 import { useProcess } from '../process-context.js';
 import { ProcessFrame } from './process-views.js';
+import { RuntimeExtensionView } from '../extensions.js';
+import { runtimeExtensionComponent } from '../../src/extension-view.js';
 import { ShellContext } from '../shell-services.js';
 import { WorkspaceViewsContext, type WorkspaceViews } from './workspace-views.js';
 import type { ShellServices } from '../../src/ui-contract.js';
@@ -391,6 +393,7 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
   });
   const body = (id: string): ReactNode => {
     const view = byId.get(id)!, isVisible = visible.includes(id);
+    if (view.component === runtimeExtensionComponent) return <RuntimeExtensionView client={client} projectId={snapshot.project.id} view={view} />;
     if (view.component === 'rho.action') return <ActionForm view={view} snapshot={snapshot} client={client} live={live} />;
     // A conversation's Studio shows that conversation's commands; a workspace shows the project's.
     if (view.component === 'rho.console') return process ? <CommandPane client={client} snapshot={snapshot} /> : <ConsoleView client={client} snapshot={snapshot} view={view} headerTarget={isVisible ? ownHeader(id) : null} onProps={props => saveProps(id, props)} />;

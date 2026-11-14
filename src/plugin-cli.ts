@@ -62,6 +62,8 @@ export async function pluginCli(args: string[]) {
 Read \`extension.describe\` for the installed digest and operation schemas. The generated view reads the project's task map and Agent sessions through \`read-status\`.
 
 The status operation is read-only. A missing task map or an unavailable Agent session is data to show as an empty or error state. It must not start work. Keep \`expectedDigest\` and a stable \`changeId\` for native operations, then use \`extension.read\` after a lost reply.
+
+To put this view in Studio, read \`composition.read\`, then conditionally apply a view with component \`rho.extension.html\`, version \`1\`, bindings \`{}\` and props \`{ title, pluginId, expectedDigest, entryId }\`. Keep the digest from \`extension.describe\`; after an update, read the new descriptor and reopen the view.
 `,
       'view.html': `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${id}</title>
@@ -111,7 +113,7 @@ The status operation is read-only. A missing task map or an unavailable Agent se
 </script>
 </body></html>
 `,
-      'README.md': `# ${id}\n\nDevelop: \`rho plugin dev .\`\nCheck: \`rho plugin check .\`\nDistribute: \`npm pack --ignore-scripts\`, then share the tarball, Git package source or publish to your own npm namespace.\n\nThe generated status panel reads the project task map and Agent sessions through declared read operations. Replace its view and host with the capability your project needs, then run \`rho plugin check .\` after each change.\n\nSee Rho's docs/THIRD-PARTY-PLUGINS.md for the host and iframe APIs, permissions and contribution process.\n`,
+      'README.md': `# ${id}\n\nDevelop: \`rho plugin dev .\`\nCheck: \`rho plugin check .\`\nDistribute: \`npm pack --ignore-scripts\`, then share the tarball, Git package source or publish to your own npm namespace.\n\nThe generated status panel reads the project task map and Agent sessions through declared read operations. Replace its view and host with the capability your project needs, then run \`rho plugin check .\` after each change. To compose it in Studio, use the \`rho.extension.html@1\` view reference documented in the generated Skill.\n\nSee Rho's docs/THIRD-PARTY-PLUGINS.md for the host, iframe, composition and permissions APIs.\n`,
     };
     for (const [file, text] of Object.entries(files)) await fs.writeFile(path.join(target, file), text, { flag: 'wx' });
     process.stdout.write(`Created ${path.resolve(target)}. Run rho plugin check, then rho plugin dev.\n`); return;

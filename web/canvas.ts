@@ -1,5 +1,7 @@
 import { BrowserApiError, type BrowserClient, type WorkspaceSnapshot } from '../src/browser.js';
 import { addInto } from '../src/shell-layout.js';
+import type { InstalledExtension } from '../src/extensions.js';
+import { runtimeExtensionView } from '../src/extension-view.js';
 import { capturable } from './sources.js';
 
 // Opening a project file into a workspace: text becomes the one shared document buffer in
@@ -165,6 +167,50 @@ export function openInWorkspace(client: BrowserClient, snapshot: WorkspaceSnapsh
         return { compositionId, viewId: made.node.id };
       } catch (error) {
         // Another tab moved the layout first: place the view again on what it wrote.
+        if (attempt === 0 && error instanceof BrowserApiError && error.error.kind === 'stale') continue;
+        throw error;
+      }
+    }
+  });
+  queues.set(key, run);
+  return run;
+}
+
+// A standalone HTML plugin has no scientific resource binding. It still joins the same saved
+// composition tree, with its package digest in props so an update cannot silently change a view.
+export function openExtensionInWorkspace(client: BrowserClient, snapshot: WorkspaceSnapshot, compositionId: string, plugin: InstalledExtension, entryId: string, into?: string): Promise<{ compositionId: string; viewId: string }> {
+  const key = snapshot.project.id + '/' + compositionId + '/extension/' + plugin.id + '/' + entryId;
+  const run = (queues.get(key) ?? Promise.resolve()).catch(() => undefined).then(async () => {
+    const entry = plugin.manifest.views.find(view => view.id === entryId);
+    if (!entry) throw new Error('The plugin view entry is no longer installed.');
+    const node = runtimeExtensionView({ pluginId: plugin.id, expectedDigest: plugin.digest, entryId, title: entry.title }, `extension-${plugin.id}-${entryId}`) as unknown as Node;
+    for (let attempt = 0; ; attempt++) {
+      const current = await client.call('composition.read', { projectId: snapshot.project.id, compositionId }).catch(error => {
+        if (error instanceof BrowserApiError && error.error.kind === 'not_found') return null;
+        throw error;
+      }) as { version: number; rootId?: string; nodes?: unknown[]; deleted?: boolean } | null;
+      const existing = (current?.nodes as Node[] | undefined)?.find(value => value.id === node.id
+        || value.kind === 'view' && value.component === node.component && (value.props as Record<string, unknown> | undefined)?.pluginId === plugin.id && (value.props as Record<string, unknown> | undefined)?.entryId === entryId);
+      if (existing) {
+        const existingProps = existing.props as Record<string, unknown> | undefined, nextProps = node.props as Record<string, unknown>;
+        const same = existing.component === node.component && existing.version === node.version
+          && existingProps?.pluginId === nextProps.pluginId && existingProps?.entryId === nextProps.entryId
+          && existingProps?.expectedDigest === nextProps.expectedDigest && JSON.stringify(existing.bindings) === JSON.stringify(node.bindings);
+        if (same) return { compositionId, viewId: existing.id };
+        try {
+          await client.call('composition.apply', { projectId: snapshot.project.id, compositionId, expectedVersion: current?.version ?? 0, changeId: 'reopen-extension-' + crypto.randomUUID(), operations: [{ op: 'props', id: existing.id, props: node.props }] } as never);
+          return { compositionId, viewId: existing.id };
+        } catch (error) {
+          if (attempt === 0 && error instanceof BrowserApiError && error.error.kind === 'stale') continue;
+          throw error;
+        }
+      }
+      const next = placed(current?.rootId && current.nodes?.length ? { rootId: current.rootId, nodes: current.nodes as Node[] } : null, node, 'data', into);
+      if (!next) return { compositionId, viewId: node.id };
+      try {
+        await client.call('composition.apply', { projectId: snapshot.project.id, compositionId, expectedVersion: current?.version ?? 0, changeId: 'open-extension-' + crypto.randomUUID(), operations: [{ op: 'replace', rootId: next.rootId, nodes: next.nodes }] } as never);
+        return { compositionId, viewId: node.id };
+      } catch (error) {
         if (attempt === 0 && error instanceof BrowserApiError && error.error.kind === 'stale') continue;
         throw error;
       }

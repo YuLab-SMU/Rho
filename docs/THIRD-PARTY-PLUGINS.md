@@ -227,7 +227,13 @@ Pass a third argument to `rho.call` to retain an explicit original changeId.
 The default generates one per deliberate call. A stale digest is refused; reopen
 the view after an update. Several views may be declared and selected in the plugin
 panel. These runtime views currently live on Plugins, not in Studio's resource
-binding/layout contract. Existing compiled React extensions still use
+binding/layout contract. A runtime view can also be a saved Studio leaf: after
+`extension.describe`, use `composition.read` followed by a conditional
+`composition.apply` with `component: "rho.extension.html"`, `version: "1"`,
+`bindings: {}` and props `{ title, pluginId, expectedDigest, entryId }`.
+Studio checks the selected digest before loading the HTML. Updates, disable and
+removal retain the layout reference and show the reason until the person or Agent
+explicitly reopens a new digest. Existing compiled React extensions still use
 [UI extension authoring](PLUGIN-AUTHORING.md).
 
 ## Contribute and distribute

@@ -118,3 +118,27 @@ test('service discovers plugins without starting sessions, preserves grants and 
   assert.equal(denied.state, 'unknown'); assert.match(denied.error, /another project/);
   assert.deepEqual((await admin.call('kernel.read', { projectId: other.id })).sessions, []);
 });
+
+test('runtime HTML views are digest-bound Studio leaves and retain a stale reference', async t => {
+  const { root, source, cleanup } = await fixture(t);
+  await fs.mkdir(path.join(root, 'project'));
+  const service = await new RhoService({ root, stateDir: path.join(root, 'service'), rscript: '/missing', extensions: { timeoutMs: 2000 } }).start();
+  cleanup.push(() => service.close());
+  const client = new RhoClient({ url: service.url, token: service.adminToken });
+  const project = await client.call('project.open', { path: 'project' });
+  const installed = await client.call('extension.install', { source });
+  const view = { id: 'task-panel', kind: 'view', component: 'rho.extension.html', version: '1', props: { title: 'Task panel', pluginId: installed.id, expectedDigest: installed.digest, entryId: 'main' }, bindings: {} };
+  const first = await client.call('composition.apply', { projectId: project.id, compositionId: 'workspace', expectedVersion: 0, changeId: 'runtime-view', operations: [{ op: 'replace', rootId: 'root', nodes: [{ id: 'root', kind: 'group', children: [view.id] }, view] }] });
+  assert.equal(first.availability[view.id].state, 'entry-installed');
+  assert.deepEqual(first.views[0].props, view.props);
+  const updatedSource = path.join(root, 'updated'); await fs.cp(source, updatedSource, { recursive: true });
+  await fs.appendFile(path.join(updatedSource, 'host.mjs'), '\n// updated runtime\n');
+  const updated = await client.call('extension.install', { source: updatedSource, replace: installed.id, expectedDigest: installed.digest });
+  assert.notEqual(updated.digest, installed.digest);
+  const stale = await client.call('composition.apply', { projectId: project.id, compositionId: 'workspace', expectedVersion: first.version, changeId: 'runtime-stale', operations: [{ op: 'props', id: view.id, props: view.props }] });
+  assert.equal(stale.availability[view.id].state, 'unavailable');
+  assert.match(stale.availability[view.id].reason, /changed|digest/i);
+  const current = await client.call('composition.read', { projectId: project.id, compositionId: 'workspace' });
+  assert.equal(current.views[0].props.expectedDigest, installed.digest);
+  assert.equal(current.receipts.some(receipt => receipt.changeId === 'runtime-view'), true);
+});

@@ -294,7 +294,7 @@ export class RhoService {
       const owners = this.plugins.project(project.root, project.id), capabilities = new Capabilities(this.plugins, project);
       requireThat(await capabilities.isAvailable('data.page'), 'unavailable', 'Basic presentation needs the selected Tables owner.');
       const route = await new TaskRouting(project).read();
-      const display = new Presentation(project, new Workspace(project, owners, this.config.workspace), this.config.presentationWitness, this.config.visibility);
+      const display = new Presentation(project, new Workspace(project, owners, this.config.workspace, {}, this.extensions), this.config.presentationWitness, this.config.visibility);
       if (!(await display.state()).policy) {
         const history = await new (this.plugins.need('agent').NativeActivity)(project.root, project.id, this.config.agentNativeActivity).read({ after: 0, cursor: null, limit: 1, maxBytes: 65536 });
         requireThat(history.cursor === 0, 'condition', 'Initial presentation setup must precede native observations; missing prior display state requires reconciliation, never resetting first facts.');
@@ -337,7 +337,7 @@ export class RhoService {
       } while (!record && cursor);
       requireThat(record?.event.kind === 'artifact.ready' && route.participants.some((x: any) => x.bindingId === record.bindingId && x.role === 'business'), 'stale', 'Original artifact-ready observation is unavailable; do not rediscover or rerun its producer.');
       const output = record.event.output, facts: any = { source: { eventId, cursor: record.cursor, bindingId: record.bindingId, nativeToolUseId: record.event.nativeToolUseId }, registration: null, validation: { state: 'not-checked' }, resource: null };
-      const display = new Presentation(project, new Workspace(project, owners, this.config.workspace), this.config.presentationWitness, this.config.visibility);
+      const display = new Presentation(project, new Workspace(project, owners, this.config.workspace, {}, this.extensions), this.config.presentationWitness, this.config.visibility);
       const sourceEvent = { adapterId: record.adapterId, adapterEpoch: record.adapterEpoch, sourceSeq: record.event.sourceSeq };
       const historical = output.policyRef !== route.policyRef;
       try {
@@ -361,7 +361,7 @@ export class RhoService {
         if (selectedPolicy) {
           try {
             requireThat(canonical(selectedPolicy.candidateDeclaration) === canonical(output.declaration), 'condition', 'Output differs from the selected basic presentation policy.');
-            const current = await new Workspace(project, owners, this.config.workspace).read(route.compositionId).catch((e: any) => { if (e.code === 'ENOENT') return null; throw e; });
+            const current = await new Workspace(project, owners, this.config.workspace, {}, this.extensions).read(route.compositionId).catch((e: any) => { if (e.code === 'ENOENT') return null; throw e; });
             facts.presentation = await display.ensureBasic({ projectId, taskId: route.taskId, sourceEvent, configurationId: selectedPolicy.policyId, policyRef: output.policyRef, candidate: facts.resource, expectedVersion: current?.version ?? 0 }, route);
             await this.emit(project, 'composition.changed', route.compositionId);
           } catch (e) {
@@ -392,7 +392,7 @@ export class RhoService {
       // start/send already holds the service's project serializer while this
       // observation is frozen, before the conversation is recorded or launched.
       uiContext: (project, location, limits) => captureUiContext(project, location,
-        id => new Workspace(project, this.plugins.project(project.root, project.id), this.config.workspace).read(id), limits,
+        id => new Workspace(project, this.plugins.project(project.root, project.id), this.config.workspace, {}, this.extensions).read(id), limits,
         this.plugins.optional('figures') ? (ref, selectionId, rows) => this.figuresFor(project).brief(ref, selectionId, rows) : undefined),
       context: async (project, id) => {
         const context = await this.plugins.project(project.root, project.id).need('agent').peekContext(id);
@@ -974,7 +974,7 @@ export class RhoService {
     const p = await this.state.project(b.projectId, principal);
     const owners = this.plugins.project(p.root, p.id);
     const requests = new Requests(p, this.bridge, (type, subject) => this.emit(p, type, subject), this.config, owners);
-    const workspace = new Workspace(p, owners, this.config.workspace, this.config.interactions);
+    const workspace = new Workspace(p, owners, this.config.workspace, this.config.interactions, this.extensions);
     const interactions = new Interactions(p, owners, this.config.interactions);
     const routing = new TaskRouting(p, this.config.capabilityLimits?.maxReceipts, this.config.maxRetainedMetadataBytes);
     if (method.startsWith('extension.')) {
