@@ -25,6 +25,13 @@ To work in it as an Agent, use Rho's tools rather than these files: from your sh
 (\`kernel.run\`), so the person sees each step and figure on the page. When you tell them what
 you did, tell them where to look: this project's page in their browser, whose address
 \`rho open --no-browser\` prints (without \`--no-browser\` it also opens the page).
+
+When the person asks for a Rho plugin, use Rho's independent package path. Run
+\`rho plugin create <directory> --id <id>\`, then \`rho plugin check <directory>\` and
+\`rho plugin dev <directory>\`. A Rho plugin has \`rho-plugin.json\`, \`host.mjs\`,
+\`SKILL.md\` and a standalone \`view.html\`. Claude Code's own \`.claude-plugin\`
+and \`.claude/skills\` formats are different and do not register a Rho plugin.
+The generated Rho package includes a task-map and Agent-session status example.
 `;
 
 export async function lease(directory: string) {

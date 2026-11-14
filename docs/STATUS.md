@@ -1,8 +1,10 @@
 # Rho status
 
-Updated: 2026-11-12.
+Updated: 2026-11-13.
 
 ## Current focus
+
+[Agent plugin episode](PLUGIN-AGENT-EPISODE.md) (2026-11-13, source): the local Magpie route is `auto/deepseek-v4.1-flash[1m]`. After the project note distinguished Rho packages from Claude Code plugins and the driver allowed exact Rho CLI commands, DeepSeek created a standard `task-panel` package, passed `rho plugin check`, installed digest `7be90b0022ad04519011508a4e2571880808e95fb874c62148ef2af1629fad25`, rendered through Plugins at 1440 and 390 px with no horizontal overflow, and retained the previous digest after an invalid edit. A valid edit selected a new digest and restoring the source returned the original. The runtime status operation reads task map and Agent sessions. Studio composition for runtime HTML views remains open.
 
 [Notebook follow-up and 0.5.10](NOTEBOOK-FOLLOWUP-EPISODE.md) (2026-11-12): Notebook 0.5.23 completes Python function arguments and import names without calling functions or importing packages. A rerun after a session ends stands in the new session, after the old end. R and Python editing, completion, error repair and rerunning after stop passed in Chrome locally and over real SSH; a conversation Studio passed with a controlled ACP peer and real Python cells. Real Claude Code 2.1.322 and Codex 0.164.0 each waited on a native command while the browser counted all four kinds of project work, then removed it: the Agent and native tool, command and session processes ended, the terminal closed, and the folder and original turn stayed. Pages now opens the cell’s own notebook from Overview (Project or named); the shell check uses the current Agent control. Both former failures pass. Version 0.5.10 selects this batch for unsigned npm publication through the existing CI candidate workflow; the person’s running service is not restarted.
 

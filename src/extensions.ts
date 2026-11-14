@@ -4,6 +4,7 @@ import * as fs from 'node:fs/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { fork, spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { Ajv } from 'ajv';
 import { atomicJson, canonical, digest, requireThat } from '@rho-workspace/plugin-contracts';
 
@@ -15,6 +16,10 @@ export interface ExtensionManifest {
   views: { id: string; title: string; file: string }[];
 }
 export interface InstalledExtension { id: string; name: string; version: string; title: string; description: string; digest: string; source: string; sourceCommit?: string; market?: { id: string; title: string; url: string; digest: string; keywords?: string[] }; enabled: boolean; installedAt: string; manifest: ExtensionManifest }
+export interface ExtensionRuntimeCheck {
+  host: 'passed' | 'failed';
+  operations: { id: string; state: 'passed' | 'failed'; error?: string }[];
+}
 interface Receipt { invocationId: string; caller: string; projectId: string; pluginId: string; packageDigest: string; operation: string; requestDigest: string; state: 'pending' | 'completed' | 'unknown'; startedAt: string; endedAt?: string; value?: unknown; error?: string; delegations?: { method: string; request: unknown; state: 'pending' | 'completed' | 'unknown'; value?: unknown; error?: string }[] }
 const ajv = new Ajv({ strict: false, allErrors: true });
 const identifier = /^[a-z0-9][a-z0-9._-]{0,95}$/;
@@ -109,6 +114,36 @@ export class Extensions {
       const file = await this.file(root, entry.file); requireThat((await fs.stat(file)).size <= this.limits.maxContentBytes, 'limit', 'Plugin entry exceeds extensions.maxContentBytes.');
     }
     return { name: pkg.name as string, version: pkg.version as string, manifest: m };
+  }
+  async checkRuntime(root: string, checked: { manifest: ExtensionManifest }): Promise<ExtensionRuntimeCheck> {
+    const entry = await this.file(root, checked.manifest.host!);
+    const worker = fileURLToPath(new URL('./extension-check-worker.js', import.meta.url));
+    const child = spawn(process.execPath, [worker, entry, JSON.stringify(checked.manifest.operations), root], {
+      cwd: root,
+      env: { PATH: process.env.PATH ?? '', HOME: process.env.HOME ?? '', SystemRoot: process.env.SystemRoot ?? '' },
+      stdio: ['ignore', 'pipe', 'pipe']
+    });
+    let output = '', errorOutput = '', timedOut = false;
+    const keep = (target: 'output' | 'errorOutput', bytes: Buffer) => {
+      const value = (target === 'output' ? output : errorOutput) + bytes.toString('utf8');
+      if (target === 'output') output = value.slice(-this.limits.maxResultBytes);
+      else errorOutput = value.slice(-8192);
+    };
+    child.stdout.on('data', (bytes: Buffer) => keep('output', bytes));
+    child.stderr.on('data', (bytes: Buffer) => keep('errorOutput', bytes));
+    const exitCode = await new Promise<number | null>(resolve => {
+      const timer = setTimeout(() => { timedOut = true; child.kill(); }, this.limits.timeoutMs);
+      child.once('error', () => { clearTimeout(timer); resolve(null); });
+      child.once('exit', (code: number | null) => { clearTimeout(timer); resolve(code); });
+    });
+    if (timedOut) return { host: 'failed', operations: [{ id: '__host__', state: 'failed', error: `Host check exceeded extensions.timeoutMs (${this.limits.timeoutMs} ms).` }] };
+    if (exitCode !== 0) return { host: 'failed', operations: [{ id: '__host__', state: 'failed', error: errorOutput.trim() || output.trim() || `Host check exited with ${exitCode ?? 'no code'}.` }] };
+    try {
+      const result = JSON.parse(output) as ExtensionRuntimeCheck;
+      return result;
+    } catch {
+      return { host: 'failed', operations: [{ id: '__host__', state: 'failed', error: 'Host check returned invalid JSON.' }] };
+    }
   }
   private async verify(p: InstalledExtension) { requireThat(await this.hash(path.join(this.directory, 'versions', p.digest, 'node_modules')) === p.digest, 'conflict', 'Installed plugin bytes changed. Reinstall the package before use.'); }
   async content(id: string, expected: string, kind: 'skill' | 'view', entryId: string) {

@@ -69,6 +69,7 @@
     "pack:local": "node scripts/pack-local.mjs",
     "recovery": "node scripts/recovery-acceptance.mjs",
     "agent": "node scripts/agent-experiment.mjs",
+    "agent:plugin": "node scripts/plugin-agent-episode.mjs",
     "acceptance:collaboration": "node scripts/collaboration-acceptance.mjs",
     "acceptance:collaboration:agent": "RHO_COLLAB_MODEL=1 node scripts/collaboration-acceptance.mjs",
     "build:service": "node scripts/clean-dist.mjs && node scripts/contract-owners.mjs && npm run build:protocol-artifact && node scripts/contract-types.mjs && tsc && node -e \"require('node:fs').chmodSync('dist/cli.js', 0o755)\" && node scripts/plugin-inventory.mjs",

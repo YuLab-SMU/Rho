@@ -52,6 +52,7 @@ observed.
 | [What Rho-core earns](CORE-VALUE-EPISODE.md) | A real analysis run through plain tools, a 30-line convention and the Core CLI, plus two Agents on the same task: what Core costs, what only it can report, and which parts to keep, simplify or drop |
 | [Third-party plugins](THIRD-PARTY-PLUGINS.md) | Create, install, develop, manage and contribute independent packages; optional sclet adapter |
 | [Third-party episode](THIRD-PARTY-PLUGINS-EPISODE.md) | Real sclet analysis, package lifecycle, development and browser evidence |
+| [Agent plugin episode](PLUGIN-AGENT-EPISODE.md) | One-sentence task-panel request, local Magpie DeepSeek run, generated package, runtime check and browser evidence |
 | [Remote plugin markets](PLUGIN-MARKETS-EPISODE.md) | User-added indexes, keyword discovery, cached refresh failures and real public Git installation |
 | [Figures](FIGURES-EPISODE.md) | Every ggplot a cell draws kept with marks bound to their rows: selecting in the Notebook and Plots view, asking the Agent, the Agent reading and pointing back |
 | [Saved figures](SAVED-FIGURES-EPISODE.md) | A ggplot saved with `ggsave` is a figure of its file on the answer board, in Results & figures and in its cell, while the file keeps those bytes |

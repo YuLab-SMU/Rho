@@ -34,6 +34,22 @@ export async function run(op, input, ctx) {
 }
 const request = p => ({ pluginId: p.id, expectedDigest: p.digest, projectId: 'project', operation: 'write', input: {}, changeId: 'original' });
 
+test('runtime check imports the host and runs generated operation samples', async t => {
+  const root = await fs.mkdtemp(path.join(tmpdir(), 'rho-check-')), source = path.join(root, 'source');
+  await pluginCli(['create', source, '--id', 'check-plugin']);
+  const manager = new Extensions(path.join(root, 'state'));
+  await manager.init();
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const checked = await manager.check(source);
+  const runtime = await manager.checkRuntime(source, checked);
+  assert.equal(runtime.host, 'passed');
+  assert.deepEqual(runtime.operations.map(operation => operation.state), ['passed', 'passed']);
+  await fs.writeFile(path.join(source, 'host.mjs'), 'export async function run( {');
+  const broken = await manager.checkRuntime(source, checked);
+  assert.equal(broken.host, 'failed');
+  assert.match(broken.operations[0].error, /Unexpected end|host/i);
+});
+
 test('independent package installs without hooks; update stages, disable/remove preserve results, tampering refuses', async t => {
   const { root, source, manager, manifest, manifestFile } = await fixture(t);
   const p = await manager.install(source);

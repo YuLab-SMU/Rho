@@ -78,6 +78,32 @@ published 0.5.3. When it and `rho --help` disagree, `rho --help` wins.
 
 Read only the reference the task needs.
 
+## Create a plugin from a request
+
+When a person asks for a project-specific panel or tool, use the independent
+plugin path before changing Rho itself:
+
+```sh
+rho plugin create my-plugin --id lab.my-plugin
+rho plugin check ./my-plugin
+rho plugin dev ./my-plugin
+```
+
+Read `extension.list`, `extension.describe` and the package Skill before calling
+an installed plugin. A generated package includes a read-only task and Agent
+status example. Replace its declared owner methods with the capabilities the
+request actually needs, keep the project scope supplied by Rho, and show loading,
+empty and error states in the view. `rho plugin check` runs the host and every
+declared operation with sample input. Run it after each edit. Its result proves
+host control flow, while a real project and browser run prove data, authorization
+and presentation.
+
+`rho plugin dev` keeps the last working package snapshot when a source check or
+install fails. After a successful update, refresh the Plugins page and reopen the
+view to load the new digest. Plugin installation and management remain local
+person actions. An Agent can discover and call an installed package only through
+its granted `extension.*` methods.
+
 ## Rules that hold in every version
 
 - **Ask before ending anything someone else is using.** Restarting or upgrading Rho ends every

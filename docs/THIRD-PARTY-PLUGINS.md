@@ -128,9 +128,23 @@ rho plugin dev ./my-plugin
 ```
 
 `create` refuses to overwrite a directory. The generated package has a working
-greeting operation, Skill and view. `dev` installs checked snapshots on source
-changes, ignoring `.git` and `node_modules`. Reopen a view to load a new snapshot.
-Invalid edits retain the last working installation. No Rho rebuild is needed.
+greeting operation, a read-only `read-status` operation, a Skill and a view. The
+status example reads `task.map.read` and `agent.sessions.list`, then keeps loading,
+empty and error states visible in the page. Replace those declared operations with
+the owner capability your project needs.
+
+`check` validates the manifest and then imports the host in a child process. It runs
+each declared operation once with a bounded sample input. Delegated calls receive a
+synthetic reply, so this check proves host control flow and declared operation shape;
+the installed view still needs a real project to verify its data and permissions.
+The output is JSON with `valid`, `runtime.host` and one state per operation. A broken
+host or operation exits nonzero with the failing operation beside its error.
+
+`dev` runs the same runtime check before each install. It watches source changes,
+ignores `.git` and `node_modules`, and keeps the previous selected snapshot when a
+check or install fails. The Plugins page has **Refresh plugins** for a source change
+that installed a new digest. Reopen a view after the refresh to load that snapshot.
+No Rho rebuild is needed.
 
 | File | Responsibility |
 | --- | --- |

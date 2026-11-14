@@ -38,12 +38,31 @@ export async function pluginCli(args: string[]) {
     const id = values.id ?? path.basename(path.resolve(target));
     if (!/^[a-z0-9][a-z0-9._-]{0,95}$/.test(id)) throw new Error('Use a lowercase plugin id containing letters, digits, dots, underscores or hyphens.');
     await fs.mkdir(path.resolve(target));
-    const manifest = { apiVersion: 1, id, title: id, description: 'An independent Rho plugin.', host: 'host.mjs', operations: [{ id: 'greet', title: 'Greet', description: 'Return a greeting without changing project data.', effect: 'read', methods: [], inputSchema: { type: 'object', properties: { name: { type: 'string', maxLength: 120 } }, required: ['name'], additionalProperties: false } }], skills: [{ id: 'guide', title: 'Use this plugin', file: 'SKILL.md' }], views: [{ id: 'main', title: id, file: 'view.html' }] };
+    const manifest = { apiVersion: 1, id, title: id, description: 'An independent Rho plugin.', host: 'host.mjs', operations: [
+      { id: 'greet', title: 'Greet', description: 'Return a greeting without changing project data.', effect: 'read', methods: [], inputSchema: { type: 'object', properties: { name: { type: 'string', maxLength: 120 } }, required: ['name'], additionalProperties: false } },
+      { id: 'read-status', title: 'Read task status', description: 'Read the project task map and Agent sessions for a live status panel.', effect: 'read', methods: ['task.map.read', 'agent.sessions.list'], inputSchema: { type: 'object', additionalProperties: false } }
+    ], skills: [{ id: 'guide', title: 'Use this plugin', file: 'SKILL.md' }], views: [{ id: 'main', title: id, file: 'view.html' }] };
     const files: Record<string, string> = {
       'package.json': JSON.stringify({ name: 'rho-plugin-' + id, version: '0.1.0', type: 'module', license: 'MIT', rhoPlugin: 'rho-plugin.json', files: ['rho-plugin.json', 'host.mjs', 'view.html', 'SKILL.md'] }, null, 2) + '\n',
       'rho-plugin.json': JSON.stringify(manifest, null, 2) + '\n',
-      'host.mjs': `export async function run(operation, input, context) {\n  if (operation === 'greet') return { greeting: 'Hello, ' + input.name + '!' };\n  throw new Error('Unknown operation');\n}\n`,
-      'SKILL.md': `# ${id}\n\nRead extension.describe for the installed digest and operation schemas. Call greet with a name. This operation reads only. Use a stable changeId for native operations; observe extension.read after a lost reply.\n`,
+      'host.mjs': `export async function run(operation, input, context) {
+  if (operation === 'greet') return { greeting: 'Hello, ' + input.name + '!' };
+  if (operation === 'read-status') {
+    const [taskMap, agents] = await Promise.all([
+      context.call('task.map.read', {}),
+      context.call('agent.sessions.list', {})
+    ]);
+    return { taskMap, agents };
+  }
+  throw new Error('Unknown operation');
+}
+`,
+      'SKILL.md': `# ${id}
+
+Read \`extension.describe\` for the installed digest and operation schemas. The generated view reads the project's task map and Agent sessions through \`read-status\`.
+
+The status operation is read-only. A missing task map or an unavailable Agent session is data to show as an empty or error state. It must not start work. Keep \`expectedDigest\` and a stable \`changeId\` for native operations, then use \`extension.read\` after a lost reply.
+`,
       'view.html': `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${id}</title>
 <style>
@@ -68,37 +87,44 @@ export async function pluginCli(args: string[]) {
   code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; }
 </style></head>
 <body>
-<header><span class="mark" aria-hidden="true">${id.charAt(0).toUpperCase()}</span><div><h1>${id}</h1><p>An independent Rho plugin. This page calls its own <code>greet</code> operation through Rho.</p></div></header>
-<form>
-  <label for="name">Your name</label>
-  <div class="row"><input id="name" name="name" value="World" maxlength="120" required><button>Greet</button></div>
-  <output aria-live="polite"></output>
-  <p class="note">The reply comes from this package's <code>host.mjs</code> on this machine. Replace this page with your own; keep scripts and styles inline.</p>
-</form>
+<header><span class="mark" aria-hidden="true">${id.charAt(0).toUpperCase()}</span><div><h1>${id}</h1><p>Task map and Agent activity from the current Rho project.</p></div><button id="refresh" type="button">Refresh</button></header>
+<main aria-live="polite"><p id="state">Loading project status…</p><section id="tasks" hidden><h2>Tasks</h2><ul></ul></section><section id="agents" hidden><h2>Agents</h2><ul></ul></section></main>
+<p class="note">This starter reads \`task.map.read\` and \`agent.sessions.list\`. It keeps loading, empty and error states visible so you can replace the view safely.</p>
 <script>
-  const form = document.querySelector('form'), out = document.querySelector('output'), button = form.querySelector('button');
-  form.onsubmit = async event => {
-    event.preventDefault();
-    button.disabled = true; out.className = ''; out.textContent = 'Greeting…';
+  const state = document.querySelector('#state'), refresh = document.querySelector('#refresh');
+  const tasks = document.querySelector('#tasks'), agents = document.querySelector('#agents');
+  const list = (section, values, empty) => { const ul = section.querySelector('ul'); ul.replaceChildren(); for (const value of values) { const li = document.createElement('li'); li.textContent = value; ul.append(li); } section.hidden = values.length === 0; if (!values.length && empty) { const li = document.createElement('li'); li.textContent = empty; ul.append(li); section.hidden = false; } };
+  async function load() {
+    state.className = ''; state.textContent = 'Loading project status…'; refresh.disabled = true;
     try {
-      const receipt = await rho.call('greet', { name: form.elements.name.value });
+      const receipt = await rho.call('read-status');
       if (receipt.state !== 'completed') throw new Error(receipt.error || receipt.state);
-      out.textContent = receipt.value.greeting;
-    } catch (error) { out.className = 'failed'; out.textContent = error.message; }
-    finally { button.disabled = false; }
-  };
+      const taskItems = receipt.value.taskMap?.items ?? [];
+      const agentItems = receipt.value.agents?.sessions ?? [];
+      list(tasks, taskItems.map(item => item.title + ' · ' + item.state), 'No task map has been declared.');
+      list(agents, agentItems.map(agent => agent.name || agent.id || 'Agent'), 'No Agent session is visible.');
+      state.textContent = 'Updated just now';
+    } catch (error) { state.className = 'failed'; state.textContent = 'Could not read project status: ' + error.message; tasks.hidden = true; agents.hidden = true; }
+    finally { refresh.disabled = false; }
+  }
+  refresh.addEventListener('click', load); load();
 </script>
 </body></html>
 `,
-      'README.md': `# ${id}\n\nDevelop: \`rho plugin dev .\`\nCheck: \`rho plugin check .\`\nDistribute: \`npm pack --ignore-scripts\`, then share the tarball, Git package source or publish to your own npm namespace.\n\nSee Rho's docs/THIRD-PARTY-PLUGINS.md for the host and iframe APIs, permissions and contribution process.\n`,
+      'README.md': `# ${id}\n\nDevelop: \`rho plugin dev .\`\nCheck: \`rho plugin check .\`\nDistribute: \`npm pack --ignore-scripts\`, then share the tarball, Git package source or publish to your own npm namespace.\n\nThe generated status panel reads the project task map and Agent sessions through declared read operations. Replace its view and host with the capability your project needs, then run \`rho plugin check .\` after each change.\n\nSee Rho's docs/THIRD-PARTY-PLUGINS.md for the host and iframe APIs, permissions and contribution process.\n`,
     };
     for (const [file, text] of Object.entries(files)) await fs.writeFile(path.join(target, file), text, { flag: 'wx' });
     process.stdout.write(`Created ${path.resolve(target)}. Run rho plugin check, then rho plugin dev.\n`); return;
   }
   if (command === 'check') {
     if (!target) throw new Error('Name a plugin directory.');
-    const checked = await new Extensions('').check(path.resolve(target));
-    process.stdout.write(JSON.stringify({ valid: true, ...checked }, null, 2) + '\n'); return;
+    const manager = new Extensions('');
+    const checked = await manager.check(path.resolve(target));
+    const runtime = await manager.checkRuntime(path.resolve(target), checked);
+    const valid = runtime.host === 'passed' && runtime.operations.every(operation => operation.state === 'passed');
+    process.stdout.write(JSON.stringify({ valid, ...checked, runtime }, null, 2) + '\n');
+    if (!valid) process.exitCode = 1;
+    return;
   }
   const client = await RhoClient.fromFile(path.resolve(values.connection ?? path.join(homedir(), 'Rho', 'state', 'connection.json')));
   const list = async (): Promise<any[]> => (await client.call('extension.list', {}) as any).plugins;
@@ -135,10 +161,19 @@ export async function pluginCli(args: string[]) {
     result = await client.call('extension.call', { projectId: project.id, pluginId: p.id, expectedDigest: p.digest, operation, input: JSON.parse(values.input ?? '{}'), changeId });
   } else if (command === 'dev') {
     if (!target) throw new Error('Name a plugin directory.');
-    const root = path.resolve(target), checked = await new Extensions('').check(root); let busy = false, pending = false;
+    const root = path.resolve(target), manager = new Extensions('');
+    await manager.check(root);
+    let busy = false, pending = false;
     const update = async () => {
       if (busy) { pending = true; return; } busy = true;
-      try { const p = (await list()).find(p => p.id === checked.manifest.id); const installed = await install({ source: root, ...(p ? { replace: p.id, expectedDigest: p.digest } : {}) }); process.stdout.write(`Installed ${installed.id} ${installed.version} ${installed.digest}. Reopen its view to load this snapshot.\n`); }
+      try {
+        const checked = await manager.check(root);
+        const runtime = await manager.checkRuntime(root, checked);
+        if (runtime.host !== 'passed' || runtime.operations.some(operation => operation.state !== 'passed')) throw new Error('Plugin runtime check failed: ' + JSON.stringify(runtime));
+        const p = (await list()).find(p => p.id === checked.manifest.id);
+        const installed = await install({ source: root, ...(p ? { replace: p.id, expectedDigest: p.digest } : {}) });
+        process.stdout.write(`Installed ${installed.id} ${installed.version} ${installed.digest}. Reopen its view to load this snapshot.\n`);
+      }
       catch (e) { process.stderr.write((e instanceof Error ? e.message : String(e)) + '\n'); }
       finally { busy = false; if (pending) { pending = false; void update(); } }
     };
