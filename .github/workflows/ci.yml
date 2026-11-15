@@ -160,6 +160,7 @@ jobs:
         working-directory: Rho
         env:
           RHO_SERVICE_NO_APPLY: '1'
+          RHO_FOUNDATION_SERVICE_APPLY: ${{ matrix.platform == 'win32-x64' && '1' || '0' }}
         run: npm run acceptance:foundation:matrix && npm run acceptance:foundation
       - name: Upload foundation reports
         if: always()

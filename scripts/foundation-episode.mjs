@@ -13,6 +13,7 @@ const repo = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 const output = path.resolve(process.env.RHO_FOUNDATION_EPISODE ?? path.join(repo, 'work', 'foundation-episode'));
 const cli = path.join(repo, 'dist', 'cli.js');
 const preserve = process.env.RHO_FOUNDATION_KEEP === '1';
+const applyNativeService = process.env.RHO_FOUNDATION_SERVICE_APPLY === '1';
 const now = () => new Date().toISOString();
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
@@ -179,6 +180,7 @@ try {
 
   const installedCli = path.join(binRoot, process.platform === 'win32' ? 'rho.cmd' : 'rho');
   const isolatedEnv = { ...env, RHO_HOST_ROOT: hostRoot };
+  if (applyNativeService) delete isolatedEnv.RHO_SERVICE_NO_APPLY;
   const installRecord = await record(report, 'rho-install-manifest', () => command(installedCli, ['install', '--json'], root, isolatedEnv), result => ({ passed: result.code === 0, parsed: result.code === 0 ? JSON.parse(result.stdout) : null }));
   assert.equal(installRecord.passed, true, installRecord.result.stderr);
   report.baselineManifest = installRecord.parsed?.installed?.manifest;
@@ -214,9 +216,23 @@ try {
   assert.equal(crashed.parsed.status.running, false);
   const crashRestart = await record(report, 'rho-crash-recovery-restart', () => command(installedCli, ['start', '--profile', 'foundation', '--example', 'off', '--background'], root, isolatedEnv), result => ({ passed: result.code === 0 }));
   assert.equal(crashRestart.passed, true, crashRestart.result.stderr);
-  for (const [name, args] of [['rho-versions', ['versions', '--json']], ['rho-upgrade-dry-run', ['upgrade', '--dry-run', '--json']], ['rho-upgrade-apply', ['upgrade', '--apply', '--package', artifact, '--json']], ['rho-logs', ['logs', '--json']], ['rho-cache', ['cache', 'list']], ['rho-service-install', ['service', 'install', 'foundation']], ['rho-service-status', ['service', 'status', 'foundation']], ['rho-service-uninstall', ['service', 'uninstall', 'foundation']]]) {
-    const step = await record(report, name, () => command(installedCli, args, root, isolatedEnv), result => ({ passed: result.code === 0 }));
+  const serviceInstallArgs = ['service', 'install', 'foundation', ...(applyNativeService ? ['--apply'] : [])];
+  const serviceStatusArgs = ['service', 'status', 'foundation'];
+  const serviceUninstallArgs = ['service', 'uninstall', 'foundation', ...(applyNativeService ? ['--apply'] : [])];
+  for (const [name, args] of [['rho-versions', ['versions', '--json']], ['rho-upgrade-dry-run', ['upgrade', '--dry-run', '--json']], ['rho-upgrade-apply', ['upgrade', '--apply', '--package', artifact, '--json']], ['rho-logs', ['logs', '--json']], ['rho-cache', ['cache', 'list']], ['rho-service-install', serviceInstallArgs], ['rho-service-status', serviceStatusArgs], ['rho-service-uninstall', serviceUninstallArgs]]) {
+    const serviceStep = name.startsWith('rho-service-');
+    const step = await record(report, name, () => command(installedCli, args, root, isolatedEnv), result => ({ passed: result.code === 0, ...(serviceStep && result.code === 0 ? { parsed: JSON.parse(result.stdout) } : {}) }));
     assert.equal(step.passed, true, step.result.stderr);
+    if (applyNativeService && name === 'rho-service-install') {
+      assert.equal(step.parsed?.service?.applied, true, JSON.stringify(step));
+      assert.equal(step.parsed?.service?.state, 'registered', JSON.stringify(step));
+      assert.equal(step.parsed?.service?.manager?.code, 0, JSON.stringify(step));
+    }
+    if (applyNativeService && name === 'rho-service-status') assert.equal(step.parsed?.service?.registered, true, JSON.stringify(step));
+    if (applyNativeService && name === 'rho-service-uninstall') {
+      assert.equal(step.parsed?.service?.applied, true, JSON.stringify(step));
+      assert.equal(step.parsed?.service?.manager?.code, 0, JSON.stringify(step));
+    }
   }
   const stop = await record(report, 'rho-profile-stop', () => command(installedCli, ['stop', '--state-dir', canonicalState], root, isolatedEnv), result => ({ passed: result.code === 0 }));
   assert.equal(stop.passed, true, stop.result.stderr);
