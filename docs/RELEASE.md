@@ -285,3 +285,25 @@ listed none of the example's Codex sessions in Chrome, and the example kept both
 page and documentation home now [read the version from npm](DOCS-SITE-EPISODE.md#the-release-npm-serves-read-when-the-page-opens):
 they named 0.5.9 at 12:43 UTC with no deployment for it. The setup page and Skill were deployed
 the same day.
+
+## Version 0.5.11 publication
+
+This release selects Core `8bed8ef5dbb841c61845317b330e2e7f755d8f50`, Plugins
+`2f0cb1f3e6387e8607317ac101a9dbadb40f6c9a` and Rho `8f93cd2a83e081ab500a07858d1b95145f71b41a`.
+It carries the runtime plugin Studio composition, Agent-driven plugin authoring loop, human
+Notebook Graph and named Notebook work. The local Rho suite passed 374/377 (three Windows-only
+skips); Plugins passed 235/243 (eight platform/package skips).
+
+[CI 43717200792](https://github.com/YuLab-SMU/Rho/actions/runs/43717200792) passed all 18 jobs,
+including the four Cores, three platform test jobs, figure describers, the candidate pack and all
+offline installations. The candidate artifact digest was
+`sha256:5af4235094e6b328fba8c09ad53b879b923a9bf193d7633ae91aa811152ee44b`, and its tarball
+SHA-256 was `a3fe7bc4a7ad8526beb95025ae722b12f5dc9a5a40b9457bf1309f9be0a4c390`.
+
+Tag `v0.5.11` and [release 43717800596](https://github.com/YuLab-SMU/Rho/actions/runs/43717800596)
+verified that retained candidate without rebuilding and published
+`@rho-workspace/rho@0.5.11` to `latest` at 13:13:24 UTC. npm recorded package shasum
+`c06218ad9f27b8e31dd258b7263cd945eecadb6f`, package size 27.0 MB, and Sigstore provenance
+[log entry 3903028196](https://search.sigstore.dev/?logIndex=3903028196). The registry served
+version `0.5.11` and `latest` at 13:29:42 UTC. A fresh registry installation was not rerun in
+this episode; the four offline installation reports above are the accepted installation evidence.
