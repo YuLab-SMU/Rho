@@ -76,6 +76,6 @@ try {
 } finally {
   await fs.mkdir(path.dirname(output), { recursive: true });
   await fs.writeFile(output, JSON.stringify(report, null, 2) + '\n');
-  process.stdout.write(JSON.stringify({ status: report.status, report: output, fixture: root }) + '\n');
+  process.stdout.write(JSON.stringify({ status: report.status, report: output, fixture: root, ...(report.failure ? { failure: report.failure } : {}) }) + '\n');
   await fs.rm(root, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
 }
