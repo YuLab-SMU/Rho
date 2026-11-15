@@ -252,35 +252,62 @@
       "_rolldown-runtime-XKyaHtl9.js"
     ]
   },
+  "../../../../Users/xiayh/Projects/Rho/node_modules/@codemirror/autocomplete/dist/index.js": {
+    "file": "assets/dist-ta4j0aqo.js",
+    "name": "dist",
+    "src": "../../../../Users/xiayh/Projects/Rho/node_modules/@codemirror/autocomplete/dist/index.js",
+    "isDynamicEntry": true,
+    "imports": [
+      "_dist-D978o95T.js",
+      "index.html",
+      "../../../../Users/xiayh/Projects/Rho/node_modules/@codemirror/language/dist/index.js"
+    ]
+  },
+  "../../../../Users/xiayh/Projects/Rho/node_modules/@codemirror/commands/dist/index.js": {
+    "file": "assets/dist-CK7JHnzi.js",
+    "name": "dist",
+    "src": "../../../../Users/xiayh/Projects/Rho/node_modules/@codemirror/commands/dist/index.js",
+    "isDynamicEntry": true,
+    "imports": [
+      "_dist-D978o95T.js",
+      "index.html",
+      "_dist-DCtcCJPs.js",
+      "../../../../Users/xiayh/Projects/Rho/node_modules/@codemirror/language/dist/index.js"
+    ]
+  },
   "../../../../Users/xiayh/Projects/Rho/node_modules/@codemirror/lang-markdown/dist/index.js": {
-    "file": "assets/dist-DaizXaK-.js",
+    "file": "assets/dist-DwxdRlK9.js",
     "name": "dist",
     "src": "../../../../Users/xiayh/Projects/Rho/node_modules/@codemirror/lang-markdown/dist/index.js",
     "isDynamicEntry": true,
     "imports": [
+      "_dist-D978o95T.js",
       "index.html",
       "_dist-DCtcCJPs.js",
       "../../../../Users/xiayh/Projects/Rho/node_modules/@codemirror/language/dist/index.js",
-      "_dist-DXm73Ssp.js"
+      "../../../../Users/xiayh/Projects/Rho/node_modules/@codemirror/autocomplete/dist/index.js",
+      "_dist-tN6K-HcH.js"
     ]
   },
   "../../../../Users/xiayh/Projects/Rho/node_modules/@codemirror/lang-python/dist/index.js": {
-    "file": "assets/dist-nNBbGf30.js",
+    "file": "assets/dist-ByLFbb_7.js",
     "name": "dist",
     "src": "../../../../Users/xiayh/Projects/Rho/node_modules/@codemirror/lang-python/dist/index.js",
     "isDynamicEntry": true,
     "imports": [
       "_dist-DCtcCJPs.js",
       "../../../../Users/xiayh/Projects/Rho/node_modules/@codemirror/language/dist/index.js",
-      "_dist-DXm73Ssp.js"
+      "../../../../Users/xiayh/Projects/Rho/node_modules/@codemirror/autocomplete/dist/index.js",
+      "_dist-tN6K-HcH.js"
     ]
   },
   "../../../../Users/xiayh/Projects/Rho/node_modules/@codemirror/language/dist/index.js": {
-    "file": "assets/dist-DSqILD19.js",
+    "file": "assets/dist-C21FjRqG.js",
     "name": "dist",
     "src": "../../../../Users/xiayh/Projects/Rho/node_modules/@codemirror/language/dist/index.js",
     "isDynamicEntry": true,
     "imports": [
+      "_dist-D978o95T.js",
       "index.html",
       "_dist-DCtcCJPs.js"
     ]
@@ -291,57 +318,42 @@
     "src": "../../../../Users/xiayh/Projects/Rho/node_modules/@codemirror/legacy-modes/mode/r.js",
     "isDynamicEntry": true
   },
-  "_answer-board-CBkGbSLD.js": {
-    "file": "assets/answer-board-CBkGbSLD.js",
+  "_agent-now-DdRKt-w-.js": {
+    "file": "assets/agent-now-DdRKt-w-.js",
+    "name": "agent-now",
+    "imports": [
+      "_rolldown-runtime-XKyaHtl9.js",
+      "_react-Dss-ouuy.js"
+    ]
+  },
+  "_answer-board-CeYS8k8y.js": {
+    "file": "assets/answer-board-CeYS8k8y.js",
     "name": "answer-board"
-  },
-  "_canvas-BXhC8RDZ.js": {
-    "file": "assets/canvas-BXhC8RDZ.js",
-    "name": "canvas",
-    "imports": [
-      "_rolldown-runtime-XKyaHtl9.js",
-      "_react-Dss-ouuy.js",
-      "_home-CCbP6kS-.js"
-    ]
-  },
-  "_choices-ChGkr6G7.js": {
-    "file": "assets/choices-ChGkr6G7.js",
-    "name": "choices",
-    "imports": [
-      "_rolldown-runtime-XKyaHtl9.js",
-      "_react-Dss-ouuy.js",
-      "_markdown-0ngRuTpW.js",
-      "_canvas-BXhC8RDZ.js",
-      "index.html",
-      "_notes-meaning-BltSa_9a.js"
-    ],
-    "css": [
-      "assets/choices-DLah50GC.css"
-    ]
   },
   "_choices-DLah50GC.css": {
     "file": "assets/choices-DLah50GC.css",
     "src": "_choices-DLah50GC.css"
   },
-  "_console-By4Mvn1y.css": {
-    "file": "assets/console-By4Mvn1y.css",
-    "src": "_console-By4Mvn1y.css"
-  },
-  "_console-DIoPdruK.js": {
-    "file": "assets/console-DIoPdruK.js",
-    "name": "console",
+  "_choices-xK6r3Rve.js": {
+    "file": "assets/choices-xK6r3Rve.js",
+    "name": "choices",
     "imports": [
       "_rolldown-runtime-XKyaHtl9.js",
       "_react-Dss-ouuy.js",
-      "_home-CCbP6kS-.js",
       "_markdown-0ngRuTpW.js",
-      "_canvas-BXhC8RDZ.js",
+      "_previews-Bx8Cvx2o.js",
       "index.html",
-      "_facts-BMO6V3-3.js",
-      "_work-turns-B5lc1xhy.js"
+      "_notes-meaning-oscOChdc.js"
     ],
     "css": [
-      "assets/console-By4Mvn1y.css"
+      "assets/choices-DLah50GC.css"
+    ]
+  },
+  "_dist-D978o95T.js": {
+    "file": "assets/dist-D978o95T.js",
+    "name": "dist",
+    "imports": [
+      "_rolldown-runtime-XKyaHtl9.js"
     ]
   },
   "_dist-DCtcCJPs.js": {
@@ -351,42 +363,44 @@
       "_rolldown-runtime-XKyaHtl9.js"
     ]
   },
-  "_dist-DXm73Ssp.js": {
-    "file": "assets/dist-DXm73Ssp.js",
+  "_dist-tN6K-HcH.js": {
+    "file": "assets/dist-tN6K-HcH.js",
     "name": "dist",
     "imports": [
-      "index.html",
-      "_dist-DCtcCJPs.js",
-      "../../../../Users/xiayh/Projects/Rho/node_modules/@codemirror/language/dist/index.js"
+      "_dist-DCtcCJPs.js"
     ]
   },
-  "_explore-in-Nw8RNHVC.js": {
-    "file": "assets/explore-in-Nw8RNHVC.js",
+  "_explore-in-DOXYKfvm.js": {
+    "file": "assets/explore-in-DOXYKfvm.js",
     "name": "explore-in",
     "imports": [
       "_react-Dss-ouuy.js",
       "_markdown-0ngRuTpW.js",
-      "index.html"
+      "_previews-Bx8Cvx2o.js",
+      "_ui-D37DkhZd.js"
     ]
   },
-  "_facts-BMO6V3-3.js": {
-    "file": "assets/facts-BMO6V3-3.js",
+  "_facts-BqJwjMn_.js": {
+    "file": "assets/facts-BqJwjMn_.js",
     "name": "facts",
     "imports": [
       "_rolldown-runtime-XKyaHtl9.js",
       "_react-Dss-ouuy.js",
-      "_markdown-0ngRuTpW.js"
+      "_home-DR5Nldua.js",
+      "_markdown-0ngRuTpW.js",
+      "_agent-now-DdRKt-w-.js",
+      "_previews-Bx8Cvx2o.js"
     ],
     "css": [
-      "assets/facts-C2lGSk0Z.css"
+      "assets/facts-CWY2iX43.css"
     ]
   },
-  "_facts-C2lGSk0Z.css": {
-    "file": "assets/facts-C2lGSk0Z.css",
-    "src": "_facts-C2lGSk0Z.css"
+  "_facts-CWY2iX43.css": {
+    "file": "assets/facts-CWY2iX43.css",
+    "src": "_facts-CWY2iX43.css"
   },
-  "_home-CCbP6kS-.js": {
-    "file": "assets/home-CCbP6kS-.js",
+  "_home-DR5Nldua.js": {
+    "file": "assets/home-DR5Nldua.js",
     "name": "home",
     "imports": [
       "_rolldown-runtime-XKyaHtl9.js",
@@ -402,12 +416,30 @@
       "_react-Dss-ouuy.js"
     ]
   },
-  "_notes-meaning-BltSa_9a.js": {
-    "file": "assets/notes-meaning-BltSa_9a.js",
+  "_notes-meaning-oscOChdc.js": {
+    "file": "assets/notes-meaning-oscOChdc.js",
     "name": "notes-meaning",
     "imports": [
       "index.html"
     ]
+  },
+  "_previews-Bx8Cvx2o.js": {
+    "file": "assets/previews-Bx8Cvx2o.js",
+    "name": "previews",
+    "imports": [
+      "_rolldown-runtime-XKyaHtl9.js",
+      "_react-Dss-ouuy.js",
+      "_home-DR5Nldua.js",
+      "_markdown-0ngRuTpW.js",
+      "_ui-D37DkhZd.js"
+    ],
+    "css": [
+      "assets/previews-C_B8ub0K.css"
+    ]
+  },
+  "_previews-C_B8ub0K.css": {
+    "file": "assets/previews-C_B8ub0K.css",
+    "src": "_previews-C_B8ub0K.css"
   },
   "_react-Dss-ouuy.js": {
     "file": "assets/react-Dss-ouuy.js",
@@ -420,15 +452,15 @@
     "file": "assets/rolldown-runtime-XKyaHtl9.js",
     "name": "rolldown-runtime"
   },
-  "_skills-work-DY4JEYNE.js": {
-    "file": "assets/skills-work-DY4JEYNE.js",
+  "_skills-work-BIrYPTgC.js": {
+    "file": "assets/skills-work-BIrYPTgC.js",
     "name": "skills-work",
     "imports": [
       "_rolldown-runtime-XKyaHtl9.js",
       "_react-Dss-ouuy.js",
-      "_home-CCbP6kS-.js",
+      "_home-DR5Nldua.js",
       "_markdown-0ngRuTpW.js",
-      "index.html"
+      "_agent-now-DdRKt-w-.js"
     ]
   },
   "_snapshot-CAxBYPvV.js": {
@@ -439,26 +471,53 @@
       "_react-Dss-ouuy.js"
     ]
   },
-  "_timeline-events-CYbI-ZMD.js": {
-    "file": "assets/timeline-events-CYbI-ZMD.js",
+  "_timeline-events-B-0Gw4IE.js": {
+    "file": "assets/timeline-events-B-0Gw4IE.js",
     "name": "timeline-events",
     "imports": [
       "_rolldown-runtime-XKyaHtl9.js",
       "_react-Dss-ouuy.js",
-      "index.html"
+      "_agent-now-DdRKt-w-.js",
+      "_previews-Bx8Cvx2o.js"
     ]
   },
-  "_work-turns-B5lc1xhy.js": {
-    "file": "assets/work-turns-B5lc1xhy.js",
+  "_ui-D37DkhZd.js": {
+    "file": "assets/ui-D37DkhZd.js",
+    "name": "ui",
+    "imports": [
+      "_rolldown-runtime-XKyaHtl9.js",
+      "_react-Dss-ouuy.js"
+    ]
+  },
+  "_ui-DKJbUS2u.js": {
+    "file": "assets/ui-DKJbUS2u.js",
+    "name": "ui",
+    "imports": [
+      "_rolldown-runtime-XKyaHtl9.js",
+      "_react-Dss-ouuy.js",
+      "_previews-Bx8Cvx2o.js"
+    ]
+  },
+  "_work-turns-CMPLLrZv.css": {
+    "file": "assets/work-turns-CMPLLrZv.css",
+    "src": "_work-turns-CMPLLrZv.css"
+  },
+  "_work-turns-DbMcYhU8.js": {
+    "file": "assets/work-turns-DbMcYhU8.js",
     "name": "work-turns",
     "imports": [
       "_rolldown-runtime-XKyaHtl9.js",
       "_react-Dss-ouuy.js",
-      "index.html"
+      "_markdown-0ngRuTpW.js",
+      "_agent-now-DdRKt-w-.js",
+      "_previews-Bx8Cvx2o.js"
+    ],
+    "css": [
+      "assets/work-turns-CMPLLrZv.css"
     ]
   },
   "graph.tsx": {
-    "file": "assets/graph-r7MPJsNy.js",
+    "file": "assets/graph-D8ZboUKi.js",
     "name": "graph",
     "src": "graph.tsx",
     "isDynamicEntry": true,
@@ -466,28 +525,36 @@
       "_rolldown-runtime-XKyaHtl9.js",
       "_react-Dss-ouuy.js",
       "_markdown-0ngRuTpW.js",
-      "_canvas-BXhC8RDZ.js",
+      "_agent-now-DdRKt-w-.js",
+      "_previews-Bx8Cvx2o.js",
+      "_work-turns-DbMcYhU8.js",
+      "_ui-DKJbUS2u.js",
       "index.html",
-      "_work-turns-B5lc1xhy.js",
       "_snapshot-CAxBYPvV.js",
-      "_timeline-events-CYbI-ZMD.js",
-      "_choices-ChGkr6G7.js"
+      "_timeline-events-B-0Gw4IE.js",
+      "_choices-xK6r3Rve.js"
     ],
     "css": [
-      "assets/graph-BYKN84J3.css"
+      "assets/graph-CE28x7yy.css"
     ]
   },
   "index.html": {
-    "file": "assets/index-D6osHOj0.js",
+    "file": "assets/index-DGIyUuGj.js",
     "name": "index",
     "src": "index.html",
     "isEntry": true,
     "imports": [
       "_rolldown-runtime-XKyaHtl9.js",
       "_react-Dss-ouuy.js",
-      "_home-CCbP6kS-.js",
+      "_home-DR5Nldua.js",
       "_markdown-0ngRuTpW.js",
-      "_canvas-BXhC8RDZ.js"
+      "_agent-now-DdRKt-w-.js",
+      "_previews-Bx8Cvx2o.js",
+      "_facts-BqJwjMn_.js",
+      "_ui-D37DkhZd.js",
+      "_work-turns-DbMcYhU8.js",
+      "_dist-D978o95T.js",
+      "_ui-DKJbUS2u.js"
     ],
     "dynamicImports": [
       "_dist-DCtcCJPs.js",
@@ -496,48 +563,66 @@
       "../../../../Users/xiayh/Projects/Rho/node_modules/@codemirror/legacy-modes/mode/r.js",
       "../../../../Users/xiayh/Projects/Rho/node_modules/@codemirror/lang-markdown/dist/index.js",
       "../../../../Users/xiayh/Projects/Rho-plugins/plugins/markdown/dist/render.js",
+      "_dist-D978o95T.js",
+      "index.html",
+      "../../../../Users/xiayh/Projects/Rho/node_modules/@codemirror/autocomplete/dist/index.js",
+      "../../../../Users/xiayh/Projects/Rho/node_modules/@codemirror/commands/dist/index.js",
       "review.tsx",
       "shell/workspace.tsx",
       "overview.tsx",
       "preview.tsx",
       "graph.tsx",
-      "_console-DIoPdruK.js",
-      "index.html",
+      "_ui-D37DkhZd.js",
       "skills.tsx",
       "studio-process.tsx"
     ],
     "css": [
-      "assets/index-DBd77u4a.css"
+      "assets/index-BjECscVV.css"
+    ],
+    "assets": [
+      "assets/markdown.reader-50Y1DbBd.png",
+      "assets/rho.editor-VO1CaI8e.png",
+      "assets/rho.flow-m4JHySKd.png",
+      "assets/rho.media-baDn3t0j.png",
+      "assets/rho.notebook-Dfo6cL8N.png",
+      "assets/rho.plots-tAeOZTjS.png",
+      "assets/rho.scatter-D2oru1ew.png",
+      "assets/rho.servers-DcinA_5q.png",
+      "assets/rho.sessions-CO56lk-D.png",
+      "assets/rho.table-8reGUv7x.png",
+      "assets/rho.variables-PqgOGE62.png"
     ]
   },
   "overview.tsx": {
-    "file": "assets/overview-DvONNRZt.js",
+    "file": "assets/overview-fz_Mo_sW.js",
     "name": "overview",
     "src": "overview.tsx",
     "isDynamicEntry": true,
     "imports": [
       "_rolldown-runtime-XKyaHtl9.js",
       "_react-Dss-ouuy.js",
-      "_home-CCbP6kS-.js",
+      "_home-DR5Nldua.js",
       "_markdown-0ngRuTpW.js",
-      "_canvas-BXhC8RDZ.js",
+      "_agent-now-DdRKt-w-.js",
+      "_previews-Bx8Cvx2o.js",
+      "_facts-BqJwjMn_.js",
+      "_ui-D37DkhZd.js",
+      "_work-turns-DbMcYhU8.js",
       "index.html",
-      "_facts-BMO6V3-3.js",
-      "_work-turns-B5lc1xhy.js",
-      "_choices-ChGkr6G7.js",
-      "_skills-work-DY4JEYNE.js",
-      "_explore-in-Nw8RNHVC.js",
-      "_answer-board-CBkGbSLD.js"
+      "_choices-xK6r3Rve.js",
+      "_skills-work-BIrYPTgC.js",
+      "_explore-in-DOXYKfvm.js",
+      "_answer-board-CeYS8k8y.js"
     ],
     "dynamicImports": [
       "graph.tsx"
     ],
     "css": [
-      "assets/overview-CmC7mah4.css"
+      "assets/overview-CiX8ioBd.css"
     ]
   },
   "preview.tsx": {
-    "file": "assets/preview-CsJehdZF.js",
+    "file": "assets/preview-DA7g9TPV.js",
     "name": "preview",
     "src": "preview.tsx",
     "isDynamicEntry": true,
@@ -545,13 +630,58 @@
       "_rolldown-runtime-XKyaHtl9.js",
       "_react-Dss-ouuy.js",
       "_markdown-0ngRuTpW.js",
-      "_canvas-BXhC8RDZ.js",
+      "_previews-Bx8Cvx2o.js",
+      "_ui-D37DkhZd.js",
       "index.html",
-      "_explore-in-Nw8RNHVC.js"
+      "_explore-in-DOXYKfvm.js"
     ]
   },
+  "previews/markdown.reader.png": {
+    "file": "assets/markdown.reader-50Y1DbBd.png",
+    "src": "previews/markdown.reader.png"
+  },
+  "previews/rho.editor.png": {
+    "file": "assets/rho.editor-VO1CaI8e.png",
+    "src": "previews/rho.editor.png"
+  },
+  "previews/rho.flow.png": {
+    "file": "assets/rho.flow-m4JHySKd.png",
+    "src": "previews/rho.flow.png"
+  },
+  "previews/rho.media.png": {
+    "file": "assets/rho.media-baDn3t0j.png",
+    "src": "previews/rho.media.png"
+  },
+  "previews/rho.notebook.png": {
+    "file": "assets/rho.notebook-Dfo6cL8N.png",
+    "src": "previews/rho.notebook.png"
+  },
+  "previews/rho.plots.png": {
+    "file": "assets/rho.plots-tAeOZTjS.png",
+    "src": "previews/rho.plots.png"
+  },
+  "previews/rho.scatter.png": {
+    "file": "assets/rho.scatter-D2oru1ew.png",
+    "src": "previews/rho.scatter.png"
+  },
+  "previews/rho.servers.png": {
+    "file": "assets/rho.servers-DcinA_5q.png",
+    "src": "previews/rho.servers.png"
+  },
+  "previews/rho.sessions.png": {
+    "file": "assets/rho.sessions-CO56lk-D.png",
+    "src": "previews/rho.sessions.png"
+  },
+  "previews/rho.table.png": {
+    "file": "assets/rho.table-8reGUv7x.png",
+    "src": "previews/rho.table.png"
+  },
+  "previews/rho.variables.png": {
+    "file": "assets/rho.variables-PqgOGE62.png",
+    "src": "previews/rho.variables.png"
+  },
   "review.tsx": {
-    "file": "assets/review-QTLmlS6X.js",
+    "file": "assets/review-BQLL2b_J.js",
     "name": "review",
     "src": "review.tsx",
     "isDynamicEntry": true,
@@ -564,7 +694,7 @@
     ]
   },
   "shell/workspace.tsx": {
-    "file": "assets/workspace-Gjqef6LQ.js",
+    "file": "assets/workspace-BEqnpcfp.js",
     "name": "workspace",
     "src": "shell/workspace.tsx",
     "isDynamicEntry": true,
@@ -572,33 +702,33 @@
       "_rolldown-runtime-XKyaHtl9.js",
       "_react-Dss-ouuy.js",
       "_markdown-0ngRuTpW.js",
-      "_canvas-BXhC8RDZ.js",
+      "_previews-Bx8Cvx2o.js",
+      "_facts-BqJwjMn_.js",
+      "_ui-D37DkhZd.js",
       "index.html",
-      "_console-DIoPdruK.js",
-      "_facts-BMO6V3-3.js",
       "_snapshot-CAxBYPvV.js",
-      "_explore-in-Nw8RNHVC.js"
+      "_explore-in-DOXYKfvm.js"
     ]
   },
   "skills.tsx": {
-    "file": "assets/skills-Dip7Aqav.js",
+    "file": "assets/skills--ohU1Ew1.js",
     "name": "skills",
     "src": "skills.tsx",
     "isDynamicEntry": true,
     "imports": [
       "_rolldown-runtime-XKyaHtl9.js",
       "_react-Dss-ouuy.js",
-      "_home-CCbP6kS-.js",
+      "_home-DR5Nldua.js",
       "_markdown-0ngRuTpW.js",
-      "index.html",
-      "_skills-work-DY4JEYNE.js"
+      "_ui-D37DkhZd.js",
+      "_skills-work-BIrYPTgC.js"
     ],
     "css": [
       "assets/skills-WkE0KCzn.css"
     ]
   },
   "studio-process.tsx": {
-    "file": "assets/studio-process-CPyfzcPw.js",
+    "file": "assets/studio-process-CQ5REfHs.js",
     "name": "studio-process",
     "src": "studio-process.tsx",
     "isDynamicEntry": true,
@@ -606,16 +736,17 @@
       "_rolldown-runtime-XKyaHtl9.js",
       "_react-Dss-ouuy.js",
       "_markdown-0ngRuTpW.js",
-      "_canvas-BXhC8RDZ.js",
+      "_agent-now-DdRKt-w-.js",
+      "_previews-Bx8Cvx2o.js",
+      "_work-turns-DbMcYhU8.js",
       "index.html",
-      "_console-DIoPdruK.js",
-      "_timeline-events-CYbI-ZMD.js",
-      "_notes-meaning-BltSa_9a.js",
-      "_answer-board-CBkGbSLD.js",
+      "_timeline-events-B-0Gw4IE.js",
+      "_notes-meaning-oscOChdc.js",
+      "_answer-board-CeYS8k8y.js",
       "shell/workspace.tsx"
     ],
     "css": [
-      "assets/studio-process-15hDngmT.css"
+      "assets/studio-process-DvVtet5u.css"
     ]
   }
 }

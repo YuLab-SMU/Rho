@@ -3,7 +3,7 @@
   <head>
     <script>// The website demo has no backend. This script runs before the application and answers its
 // API requests from demo-data/recording.json, the answers a real Rho service gave while
-// scripts/demo-tour.mjs walked the shipped PA14 project. A request the recording does not hold
+// scripts/demo-tour.mjs walked the shipped city bike-share project. A request the recording does not hold
 // is refused as unavailable: nothing is computed, saved or sent anywhere.
 (function () {
   var realFetch = window.fetch.bind(window);
@@ -97,7 +97,7 @@
     var b = document.createElement('a');
     b.href = '../#install';
     b.target = '_top';
-    b.textContent = innerWidth < 768 ? 'Demo · no backend' : 'Demo · recorded PA14 project · no backend';
+    b.textContent = innerWidth < 768 ? 'Demo · no backend' : 'Demo · recorded bike-share project · no backend';
     b.style.cssText = 'position:fixed;right:12px;bottom:12px;z-index:2147483646;font-size:' + (innerWidth < 768 ? '11px;padding:3px 8px' : '12px;padding:5px 10px') + ';border:1px solid #c9d6cf;border-radius:999px;background:rgba(255,255,255,.94);color:#1e6b52;font-weight:600;line-height:1.4;font-family:system-ui,-apple-system,sans-serif;text-decoration:none';
     document.body.appendChild(b);
   }
@@ -108,15 +108,24 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="light" />
-    <title>Rho demo · PA14 quorum sensing</title>
+    <title>Rho demo · City bike-share demand</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231e6b52'/%3E%3Ctext x='16' y='23' font-family='Georgia,serif' font-size='22' text-anchor='middle' fill='white'%3E%CF%81%3C/text%3E%3C/svg%3E" />
-    <script type="module" crossorigin src="./assets/index-D6osHOj0.js"></script>
+    <script type="module" crossorigin src="./assets/index-DGIyUuGj.js"></script>
     <link rel="modulepreload" crossorigin href="./assets/rolldown-runtime-XKyaHtl9.js">
     <link rel="modulepreload" crossorigin href="./assets/react-Dss-ouuy.js">
     <link rel="modulepreload" crossorigin href="./assets/markdown-0ngRuTpW.js">
-    <link rel="modulepreload" crossorigin href="./assets/home-CCbP6kS-.js">
-    <link rel="modulepreload" crossorigin href="./assets/canvas-BXhC8RDZ.js">
-    <link rel="stylesheet" crossorigin href="./assets/index-DBd77u4a.css">
+    <link rel="modulepreload" crossorigin href="./assets/home-DR5Nldua.js">
+    <link rel="modulepreload" crossorigin href="./assets/agent-now-DdRKt-w-.js">
+    <link rel="modulepreload" crossorigin href="./assets/ui-D37DkhZd.js">
+    <link rel="modulepreload" crossorigin href="./assets/previews-Bx8Cvx2o.js">
+    <link rel="modulepreload" crossorigin href="./assets/facts-BqJwjMn_.js">
+    <link rel="modulepreload" crossorigin href="./assets/work-turns-DbMcYhU8.js">
+    <link rel="modulepreload" crossorigin href="./assets/dist-D978o95T.js">
+    <link rel="modulepreload" crossorigin href="./assets/ui-DKJbUS2u.js">
+    <link rel="stylesheet" crossorigin href="./assets/previews-C_B8ub0K.css">
+    <link rel="stylesheet" crossorigin href="./assets/facts-CWY2iX43.css">
+    <link rel="stylesheet" crossorigin href="./assets/work-turns-CMPLLrZv.css">
+    <link rel="stylesheet" crossorigin href="./assets/index-BjECscVV.css">
   </head>
   <body>
     <div id="root"></div>

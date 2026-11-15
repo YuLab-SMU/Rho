@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Rho — see what your Agent did in your R project</title>
-<meta name="description" content="Rho is a local workspace for R projects that you share with Claude Code or Codex. Try the real interface on a recorded project, then install it by asking your Agent.">
+<title>Rho — continue long-running work with people and Agents</title>
+<meta name="description" content="Rho is a shared work-state layer for long-running human–Agent work. Enter, understand, change and continue the same project state.">
 <meta name="theme-color" content="#ffffff">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231e6b52'/%3E%3Ctext x='16' y='23' font-family='Georgia,serif' font-size='22' text-anchor='middle' fill='white'%3E%CF%81%3C/text%3E%3C/svg%3E">
 <script>document.documentElement.classList.add('js')</script>
@@ -261,23 +261,23 @@ dialog::backdrop { background: rgba(20, 28, 26, .45); }
 <main>
   <section class="hero" aria-labelledby="title">
     <div class="wrap" data-enter>
-      <h1 id="title">See what your Agent did.</h1>
+      <h1 id="title">Keep the work moving.</h1>
       <div class="hero-sub">
-        <p>Rho is a local workspace for R projects that you share with an Agent: Claude Code, Codex, or DeepSeek Harness through its plugin. The same files, the same runs, and one record of how each result was reached.</p>
+        <p>Rho is a shared work-state layer for long-running work. People and Agents enter the same project state, understand what has happened, change the work and leave explicit context for whoever continues next.</p>
         <div class="actions">
           <button class="btn primary" type="button" data-open-install>Install with your Agent</button>
-          <a class="btn" href="demo/#project=7f0199b0d7a10127e5ee741020769275" target="_blank" rel="noopener">Open the demo full screen</a>
+          <a class="btn" href="demo/#project=add01cc132db90b85db2e881578813f5" target="_blank" rel="noopener">Open the demo full screen</a>
         </div>
       </div>
     </div>
     <figure class="demo wrap" id="demo">
       <div class="demo-frame" data-ui>
         <p class="loading">Loading the demo…</p>
-        <iframe src="demo/#project=7f0199b0d7a10127e5ee741020769275" title="Rho, replaying a recorded session on the PA14 quorum sensing project" allow="clipboard-write"></iframe>
+        <iframe src="demo/#project=add01cc132db90b85db2e881578813f5" title="Rho, replaying a recorded session on the City bike-share demand project" allow="clipboard-write"></iframe>
       </div>
       <figcaption>
-        <p>This is Rho itself, replaying six recorded requests to an Agent on the PA14 quorum-sensing project it ships with. Open a figure, a table, the Graph or a Studio session. There is no backend: nothing you do here is sent anywhere.</p>
-        <a href="demo/#project=7f0199b0d7a10127e5ee741020769275" target="_blank" rel="noopener">Full screen</a>
+        <p>This is Rho itself, replaying five recorded requests to an Agent on the City bike-share demand project it ships with. Open a figure, a table, the Graph or a Studio session. There is no backend: nothing you do here is sent anywhere.</p>
+        <a href="demo/#project=add01cc132db90b85db2e881578813f5" target="_blank" rel="noopener">Full screen</a>
       </figcaption>
     </figure>
   </section>
@@ -337,10 +337,10 @@ description: Install, start, …</code></pre>
       <div class="beat">
         <div class="beat-text" data-enter>
           <h3>Open the example and ask.</h3>
-          <p>The first start copies the PA14 quorum-sensing project into ~/Rho/projects: the project in the demo above, with its recorded work. The setup page's last step has your Agent give you Rho's address and say what is missing, if anything. Ask in Rho's Agent panel, which drives your own Claude Code or Codex under your own permissions.</p>
+          <p>The first start copies the City bike-share demand project into ~/Rho/projects: the project in the demo above, with its recorded work. The setup page's last step has your Agent give you Rho's address and say what is missing, if anything. Ask in Rho's Agent panel, which drives your own Claude Code or Codex under your own permissions.</p>
         </div>
         <div class="beat-frag">
-          <figure class="shot"><img src="img/overview.jpg" width="1600" height="1013" loading="lazy" alt="Rho's Overview of the PA14 quorum sensing project: the latest question, its answer and the summary figure it produced."></figure>
+          <figure class="shot"><img src="img/bike_overview.jpg" width="1600" height="615" loading="lazy" alt="Rho's Overview of the City bike-share demand project, with a weekday and weekend demand profile."></figure>
           <p class="frag-note">The Overview opens on the latest answer and the files it produced.</p>
         </div>
       </div>
@@ -381,13 +381,13 @@ description: Install, start, …</code></pre>
         <div class="actions"><a class="btn" href="#demo">See these answers in the demo</a></div>
       </div>
       <figure class="result">
-        <img src="img/summary.jpg" width="1400" height="1500" loading="lazy" alt="The PA14 summary figure: colony area of wild type and four quorum-sensing mutants, and colony area across co-culture ratios with a fitted peak.">
-        <figcaption>results/summary.png, drawn in R by the Agent for the sixth request.</figcaption>
+        <img src="img/bike_summary.jpg" width="1600" height="1143" loading="lazy" alt="The City bike-share demand summary figure, with hourly demand, seasonal totals, weather association and station pressure points.">
+        <figcaption>results/summary.png, drawn in R by the Agent for the fourth request.</figcaption>
       </figure>
     </div>
     <div class="prompt-sets">
       <div class="tabs" role="tablist" aria-label="Prompt sets" aria-orientation="vertical">
-        <button role="tab" type="button" id="tab-example" aria-controls="set-example" aria-selected="false"><b>PA14 example</b><span>6 prompts</span></button>
+        <button role="tab" type="button" id="tab-example" aria-controls="set-example" aria-selected="false"><b>Bike-share example</b><span>5 prompts</span></button>
         <button role="tab" type="button" id="tab-documents" aria-controls="set-documents" aria-selected="false"><b>Documents</b><span>3 prompts</span></button>
         <button role="tab" type="button" id="tab-r" aria-controls="set-r" aria-selected="false"><b>R</b><span>3 prompts</span></button>
         <button role="tab" type="button" id="tab-tables" aria-controls="set-tables" aria-selected="false"><b>Tables</b><span>3 prompts</span></button>
@@ -404,14 +404,13 @@ description: Install, start, …</code></pre>
       </div>
       <div>
         <div role="tabpanel" id="set-example" aria-labelledby="tab-example">
-          <p class="panel-intro"><strong>The PA14 quorum-sensing project.</strong> 6 requests, in the order they were sent, each followed by how long the Agent took and what it wrote.</p>
+          <p class="panel-intro"><strong>The City bike-share demand project.</strong> 5 requests, in the order they were sent, each followed by how long the Agent took and what it wrote.</p>
           <ol class="bands">
-          <li class="band"><span class="took">17 min<small>to answer</small></span><div><p class="ask">Let's start with the swarming assay of the single mutants. I want to know whether losing either quorum-sensing system makes PA14 swarm worse than wild type: compare the mutants against wild type on colony area, say how big the difference is, and whether the colonies also change shape. Do the analysis in R and leave a figure and a table of the numbers in results/ so I can look at them.</p><p class="note">Wrote swarming_single_mutants.R, swarming_single_mutants_summary.csv, swarming_system_contrast.csv and 1 more.</p></div><div class="side"><img class="thumb" src="img/swarming_single_mutants.jpg" width="104" height="78" loading="lazy" alt="swarming_single_mutants.png, the figure this request produced"><button class="btn copy" type="button" data-copy-ask>Copy</button></div></li>
-          <li class="band"><span class="took">15 min<small>to answer</small></span><div><p class="ask">Now the co-culture experiment: when ΔrhlI and ΔlasI are grown together, do they swarm like wild type again, and does it depend on the ratio they are mixed at? I care about where the peak is and how strong the ratio effect is. Same rules: R, a figure and a table in results/. One clean figure is enough — do not spend several rounds restyling it.</p><p class="note">Wrote swarming_cocultures.R, swarming_cocultures_summary.csv, swarming_cocultures_ratio_model.csv and 1 more.</p></div><div class="side"><img class="thumb" src="img/swarming_cocultures.jpg" width="104" height="78" loading="lazy" alt="swarming_cocultures.png, the figure this request produced"><button class="btn copy" type="button" data-copy-ask>Copy</button></div></li>
-          <li class="band"><span class="took">22 min<small>to answer</small></span><div><p class="ask">Next, the expression side: what do the mutants change in gene expression? The counts and sample sheet are in data/rnaseq; strains 97 and 98 are the single mutants and 99 is the double. Compare each mutant with wild type in each medium, and tell me what stands out — how many genes change, the strongest ones, and whether the two single mutants overlap. Leave the differential-expression table and a figure in results/.</p><p class="note">Wrote rnaseq_differential_expression.R, rnaseq_differential_expression.csv, rnaseq_de_summary.csv and 4 more.</p></div><div class="side"><img class="thumb" src="img/rnaseq_differential_expression.jpg" width="104" height="78" loading="lazy" alt="rnaseq_differential_expression.png, the figure this request produced"><button class="btn copy" type="button" data-copy-ask>Copy</button></div></li>
-          <li class="band"><span class="took">2 min<small>to answer</small></span><div><p class="ask">One thing before we call this done: results/rnaseq_differential_expression.csv is 10 MB, which is too big to hand on. Keep a compact version in results/ instead — only the genes that pass FDR &lt; 0.05 and |log2FC| &gt;= 1, with the columns we actually read — have the script write that, remove the full table from the project, and update the notes' Files bullets to match. Don't redo the analysis.</p><p class="note">Wrote rnaseq_differential_expression.R and rnaseq_differential_expression.csv.</p></div><div class="side"><button class="btn copy" type="button" data-copy-ask>Copy</button></div></li>
-          <li class="band"><span class="took">7 min<small>to answer</small></span><div><p class="ask">Last thing: put the project's conclusion where it is easy to find — results/summary.md, the three questions this project asked with the answer to each in two or three sentences, the key numbers, and the figure for each. Keep it short and use what we already have; no new analysis.</p><p class="note">Wrote summary.md.</p></div><div class="side"><button class="btn copy" type="button" data-copy-ask>Copy</button></div></li>
-          <li class="band"><span class="took">12 min<small>to answer</small></span><div><p class="ask">One more: draw the project's one-page summary figure in results/summary.png — three panels, one per question (mutant areas vs wild type, the co-culture ratio response with the peak, and genes changed per mutant and medium). Use the result files already in results/, no new analysis, and label it so it stands on its own.</p><p class="note">Wrote summary.md, summary_figure.R and summary.png.</p></div><div class="side"><img class="thumb" src="img/summary.jpg" width="104" height="78" loading="lazy" alt="summary.png, the figure this request produced"><button class="btn copy" type="button" data-copy-ask>Copy</button></div></li>
+          <li class="band"><span class="took">12 min<small>to answer</small></span><div><p class="ask">Start with the city bike-share data. Compare weekday and weekend demand by hour, keep member and casual riders visible, and write the first figure and compact summary tables.</p><p class="note">Wrote hourly_demand.R, hourly_profile.csv, monthly_demand.csv and 1 more.</p></div><div class="side"><img class="thumb" src="img/bike_hourly_demand.jpg" width="104" height="78" loading="lazy" alt="bike_hourly_demand.png, the figure this request produced"><button class="btn copy" type="button" data-copy-ask>Copy</button></div></li>
+          <li class="band"><span class="took">16 min<small>to answer</small></span><div><p class="ask">Now look at who rides and where the network is under pressure. Summarize members versus casual riders, rank stations by peak utilization, and make a heatmap for rebalancing.</p><p class="note">Wrote station_patterns.R, rider_mix.csv, station_demand.csv and 2 more.</p></div><div class="side"><img class="thumb" src="img/bike_station_heatmap.jpg" width="104" height="78" loading="lazy" alt="bike_station_heatmap.png, the figure this request produced"><button class="btn copy" type="button" data-copy-ask>Copy</button></div></li>
+          <li class="band"><span class="took">5 min<small>to answer</small></span><div><p class="ask">Put the three answers in results/summary.md, with links to the figures and the assumptions behind this compact example.</p><p class="note">Wrote summary.md.</p></div><div class="side"><button class="btn copy" type="button" data-copy-ask>Copy</button></div></li>
+          <li class="band"><span class="took">8 min<small>to answer</small></span><div><p class="ask">Draw the project's one-page summary figure so a person can see the demand rhythm, rider mix and station pressure points together.</p><p class="note">Wrote summary_figure.R and summary.png.</p></div><div class="side"><img class="thumb" src="img/bike_summary.jpg" width="104" height="78" loading="lazy" alt="bike_summary.png, the figure this request produced"><button class="btn copy" type="button" data-copy-ask>Copy</button></div></li>
+          <li class="band"><span class="took">4 min<small>to answer</small></span><div><p class="ask">Add a small trip-level sample to the project so the next person can inspect individual rides and ask a selected-row question.</p><p class="note">Wrote trips_sample.csv and README.md.</p></div><div class="side"><button class="btn copy" type="button" data-copy-ask>Copy</button></div></li>
           </ol>
         </div>
         <div role="tabpanel" id="set-documents" aria-labelledby="tab-documents">
@@ -531,7 +530,7 @@ description: Install, start, …</code></pre>
         <h2 id="checked-title">Checked so far</h2>
         <p>Each line is a check that was run, not a promise. <a href="docs/reference/status">Current status</a></p>
       </div>
-      <div class="tile"><b>npm <span data-npm-version>0.5.8</span></b><p>Published from the exact candidate the CI suite tested, with provenance.</p></div>
+      <div class="tile"><b>npm <span data-npm-version>0.5.11</span></b><p>Published from the exact candidate the CI suite tested, with provenance.</p></div>
       <div class="tile"><b>macOS arm64</b><p>The baseline. CI runs the suite and installs the packed candidate offline.</p></div>
       <div class="tile"><b>Linux x64, arm64</b><p>The suite and an offline install of the same candidate, on each.</p></div>
       <div class="tile"><b>Windows x64</b><p>The suite and an offline install; Rscript 4.5.1 checked.</p></div>
@@ -575,8 +574,8 @@ description: Install, start, …</code></pre>
     </ul>
   </nav>
   <div class="t-ver">
-    <b data-npm-version>0.5.8</b>
-    <p class="legal">The npm release, published <span data-npm-published>10 Nov 2026</span>. Demo recorded 2 Nov 2026.</p>
+    <b data-npm-version>0.5.11</b>
+    <p class="legal">The npm release, published <span data-npm-published>15 Nov 2026</span>. Demo recorded 15 Nov 2026.</p>
   </div>
   <div class="t-issue">
     <a class="big" href="https://github.com/YuLab-SMU/Rho/issues">Report an issue</a>
