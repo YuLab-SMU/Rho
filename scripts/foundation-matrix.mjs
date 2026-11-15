@@ -56,7 +56,7 @@ try {
     assert.ok(service.file.endsWith(expectedSuffix), `${platform}: unexpected service descriptor ${service.file}`);
     assert.equal(await fs.access(service.descriptor).then(() => true, () => false), true, `${platform}: native descriptor was not written`);
     assert.ok((await fs.readFile(service.descriptor, 'utf8')).includes(platform === 'linux' ? '[Service]' : platform === 'darwin' ? '<plist' : '<Task'), `${platform}: native descriptor has unexpected content`);
-    if (platform === 'darwin') assert.match(paths.paths.config.path, /Library\/Application Support\/Rho$/);
+    if (platform === 'darwin') assert.equal(paths.paths.config.path, path.join(base, 'home', 'Library', 'Application Support', 'Rho'));
     if (platform === 'linux') {
       assert.equal(paths.paths.config.path, path.join(base, 'xdg-config', 'rho'));
       assert.equal(paths.paths.state.path, path.join(base, 'xdg-state', 'rho'));
