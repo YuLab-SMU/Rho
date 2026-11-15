@@ -274,3 +274,7 @@ doctor 最少检查以下内容。
 - WorkBuddy、Cursor 和其他宿主适配器的公开版本范围。
 - 临时目录、缓存和日志预算在长时间 Agent episode 中的最终数值。
 - 旧版本 shim 和 legacy path 扫描的结束版本。
+
+## 当前决策
+
+F0–F6 已对本地实现的可选项作出可复现决策：quick start 使用平台解析器返回的 `Documents/Rho/projects`，服务单元默认只生成 descriptor，只有 `--apply` 才调用平台 manager，Unix 锁由服务进程持有 JSON owner 文件，预算使用本文件表中的初始值，配置与缓存通过 digest 关联，legacy shim 在兼容窗口内继续由 manifest 管理。真实 WorkBuddy/Cursor 版本范围、Windows 原生注册和 shim 兼容窗口结束版本仍由对应宿主/Release owner 选择。
