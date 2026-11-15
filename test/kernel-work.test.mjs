@@ -23,6 +23,9 @@ test('human Notebook cells become one person work line without duplicating the t
   assert.equal(turns[0].turn.steps.length, 2);
   assert.deepEqual(turns[0].turn.files.changed.map(file => file.path), ['results/out.csv']);
 
+  const named = notebookWork(cells.map(item => ({ ...item, notebook: 'nb-growth' })), { 'nb-growth': 'Growth analysis' });
+  assert.equal(named[0].conversationTitle, 'Growth analysis');
+
   const files = [
     { path: 'data/input.csv', bytes: 30, modifiedAt: at(0), category: 'data' },
     { path: 'results/out.csv', bytes: 40, modifiedAt: at(4), category: 'results' },

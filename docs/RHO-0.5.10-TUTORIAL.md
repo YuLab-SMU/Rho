@@ -170,6 +170,8 @@ Studio 把人当前要对照的东西放在一起。这次的 5 个 views 让你
 
 一个项目可以放多个 Notebook。新建 Notebook 时，Rho 会给它一个不重复的默认名称（例如 `Notebook`、`Notebook 2`）；选中 Notebook 标签后，点击标签旁边的铅笔按钮即可改名。改名只改变这个视图在当前项目里的标题，不会清掉其中的 cell、输出或运行记录。
 
+Overview 里的 Notebook 区块、时间线和右侧 Workspace 摘要会沿用这个标题。本教程项目把它命名为 `Growth analysis`，所以回到 Overview 时，三处都会显示这个名字。
+
 ### 3.4 Notes：留下人的判断
 
 Notes 记录问题、方法、结果、选择、文件和下一步。结果表说“是多少”，Notes 说“为什么这样做、哪些限制仍然存在”。

@@ -5,6 +5,7 @@ import { regions, type Region } from '../src/shell-layout.js';
 import { executionWord, integrityWord, results, shortPath, type RunFacts } from '../src/execution-facts.js';
 import { useRuns } from './executions.js';
 import { projectName, place, SourceFolders, when } from './home.js';
+import { notebookNames } from './explore.js';
 import { Icon, type IconName } from './icons.js';
 import { availability, fileIcon, resourceIcon, size, sourceLabels, type Entry, type Section, type SourceRow } from './project.js';
 import { compositionName, processConversation } from './canvas.js';
@@ -110,6 +111,7 @@ export function ProjectOverview({ project, snapshot, client, section, notesText 
   const work = useProjectWork(client, snapshot, section === 'overview' && workAllowed, setHasWork);
   const readsKernel = snapshot.catalog.operations.some(o => o.method === 'kernel.read' && o.state === 'available' && o.authorized);
   const notebook = useNotebookWork(client, project.id, snapshot.cursor, section === 'overview' && readsKernel);
+  const names = notebookNames(snapshot.compositions);
   const notebookRead = !readsKernel || notebook.read !== null || !!notebook.problem;
   const readsSkills = snapshot.catalog.operations.some(o => o.method === 'skills.list' && o.state === 'available' && o.authorized);
   const skills = useSkillList(client, project.id, snapshot.cursor, section === 'overview' && readsSkills);
@@ -236,7 +238,7 @@ export function ProjectOverview({ project, snapshot, client, section, notesText 
               : artifacts.length ? resultList : <p className="quiet-empty">No results or figures yet.</p>}
             {figures.length > shownFigures && <button className="text-button figures-more" onClick={() => onSection('files')}>{figures.length - shownFigures} more in Files <Icon name="chevron" size={12} /></button>}
           </section>}
-          <NotebookWorkSection work={notebook} snapshot={snapshot} onOpen={onNotebook ?? (() => onSection('notebook'))} />
+          <NotebookWorkSection work={notebook} snapshot={snapshot} names={names} onOpen={onNotebook ?? (() => onSection('notebook'))} />
           {snapshot.taskMap?.items.length ? <section className="project-section"><div className="section-heading"><h2>From your Agent</h2></div><ul className="agent-notes">{snapshot.taskMap.items.map(item => <li key={item.id} data-fact="agent"><strong>{item.title}</strong>{item.summary && <p>{item.summary}</p>}<small>{snapshot.taskMap!.vocabulary.states[item.state]?.label ?? item.state}</small></li>)}</ul></section> : null}
         </div>
         {side && <aside className="project-side">

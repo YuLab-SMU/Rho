@@ -50,7 +50,7 @@ function changedFiles(cells: readonly Cell[]) {
 
 // Add one human Notebook turn per kernel session. The source records remain the
 // cells themselves; this is only the read-side shape the Graph already consumes.
-export function notebookWork(cells: readonly Cell[]): GraphTurn[] {
+export function notebookWork(cells: readonly Cell[], names: Readonly<Record<string, string>> = {}): GraphTurn[] {
   const groups = new Map<string, Cell[]>();
   for (const cell of cells) {
     if (cell.by !== personPrincipal) continue;
@@ -68,6 +68,6 @@ export function notebookWork(cells: readonly Cell[]): GraphTurn[] {
       steps: ordered.map(stepOf), omitted: 0,
       files: { changed: changedFiles(ordered), omitted: 0, partial: false },
     };
-    return { conversationId, conversationTitle: first.notebook ? 'Notebook · ' + first.notebook : 'Notebook', agent: 'You', turn, person: true, kernelCells: ordered.map(c => c.cellId) };
+    return { conversationId, conversationTitle: first.notebook ? names[first.notebook] ?? 'Notebook · ' + first.notebook : 'Notebook', agent: 'You', turn, person: true, kernelCells: ordered.map(c => c.cellId) };
   }).sort((a, b) => a.turn.sentAt.localeCompare(b.turn.sentAt));
 }

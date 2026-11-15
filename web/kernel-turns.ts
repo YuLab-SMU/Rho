@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { BrowserClient, WorkspaceSnapshot } from '../src/browser.js';
 import type { RhoOutput } from '../src/contract.generated.js';
 import { notebookWork } from '../src/kernel-work.js';
+import { notebookNames } from './explore.js';
 import type { EventMark } from '../src/timeline-events.js';
 import type { GraphTurn } from '../src/work-graph.js';
 
@@ -24,7 +25,7 @@ export function useNotebookTurns(client: BrowserClient, snapshot: WorkspaceSnaps
     });
     return () => { live = false; };
   }, [available, client, snapshot.cursor, snapshot.project.id]);
-  const human = useMemo(() => notebookWork(state.cells), [state.cells]);
+  const human = useMemo(() => notebookWork(state.cells, notebookNames(snapshot.compositions)), [state.cells, snapshot.compositions]);
   return { turns: [...turns, ...human], loading: state.loading, problem: state.problem, omitted: state.omitted };
 }
 
