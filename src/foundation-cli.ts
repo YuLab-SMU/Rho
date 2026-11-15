@@ -1,4 +1,5 @@
 import * as fs from 'node:fs/promises';
+import { constants as fsConstants } from 'node:fs';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -14,6 +15,7 @@ import {
   foundationPaths,
   hostCleanup,
   hostScan,
+  jsonHostAdapter,
   migrateLegacy,
   packageIdentity,
   pathExists,
@@ -23,9 +25,12 @@ import {
   profileRemove,
   profileWrite,
   cacheReport,
+  logsReport,
+  pruneLogs,
   pruneCache,
   pruneTemporary,
   readFoundationJson,
+  readFoundationOperation,
   reportFoundationPaths,
   temporaryReport,
   updateFoundationOperation,
@@ -110,32 +115,97 @@ async function runNpm(args: string[], cwd: string) {
   });
 }
 
+async function runProgram(program: string, args: string[], cwd = process.cwd()) {
+  return new Promise<{ code: number; stdout: string; stderr: string }>(resolve => {
+    const child = spawn(program, args, { cwd, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+    let stdout = '', stderr = '';
+    child.stdout.on('data', chunk => { stdout += chunk; });
+    child.stderr.on('data', chunk => { stderr = (stderr + chunk).slice(-8000); });
+    child.on('error', error => resolve({ code: 1, stdout, stderr: error.message }));
+    child.on('close', code => resolve({ code: code ?? 1, stdout, stderr }));
+  });
+}
+
+const xmlEscape = (value: string) => value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&apos;');
+const safeServiceName = (value: string) => value.replace(/[^A-Za-z0-9._-]/g, '-').slice(0, 64) || 'default';
+
+function serviceDefinition(paths: ReturnType<typeof foundationPaths>, profile: string) {
+  const safe = safeServiceName(profile), label = paths.platform === 'darwin' ? `com.rho.workspace.${safe}` : `rho-${safe}`;
+  const descriptorDir = path.join(paths.config, 'services');
+  const metadata = path.join(descriptorDir, safe + (paths.platform === 'darwin' ? '.plist.json' : paths.platform === 'win32' ? '.task.json' : '.service.json'));
+  const native = path.join(descriptorDir, safe + (paths.platform === 'darwin' ? '.plist' : paths.platform === 'win32' ? '.xml' : '.service'));
+  const registration = paths.platform === 'darwin'
+    ? path.join(paths.home, 'Library', 'LaunchAgents', label + '.plist')
+    : paths.platform === 'win32'
+      ? path.join(paths.config, 'tasks', label + '.xml')
+      : path.join(paths.config, 'systemd', 'user', label + '.service');
+  const command = process.execPath, cliPath = currentCli;
+  const args = [cliPath, 'start', '--profile', profile];
+  const content = paths.platform === 'darwin'
+    ? `<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0"><dict><key>Label</key><string>${xmlEscape(label)}</string><key>ProgramArguments</key><array>${[command, ...args].map(value => `<string>${xmlEscape(value)}</string>`).join('')}</array><key>RunAtLoad</key><true/><key>KeepAlive</key><true/></dict></plist>\n`
+    : paths.platform === 'win32'
+      ? `<?xml version="1.0" encoding="UTF-8"?>\n<Task xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task"><RegistrationInfo><Description>Rho ${xmlEscape(profile)} workspace</Description></RegistrationInfo><Triggers><LogonTrigger><Enabled>true</Enabled></LogonTrigger></Triggers><Actions Context="Author"><Exec><Command>${xmlEscape(command)}</Command><Arguments>${xmlEscape(args.map(value => `"${value}"`).join(' '))}</Arguments></Exec></Actions></Task>\n`
+      : `[Unit]\nDescription=Rho ${profile} workspace\nAfter=network.target\n[Service]\nType=simple\nExecStart=${[command, ...args].map(value => JSON.stringify(value)).join(' ')}\nRestart=on-failure\n[Install]\nWantedBy=default.target\n`;
+  return { profile, label, metadata, native, registration, command, args, content, platform: paths.platform };
+}
+
+async function writeServiceText(file: string, content: string) {
+  await fs.mkdir(path.dirname(file), { recursive: true, mode: 0o700 });
+  const temporary = `${file}.${process.pid}.${Date.now()}.tmp`;
+  await fs.writeFile(temporary, content, { mode: 0o600 });
+  await fs.rename(temporary, file);
+}
+
 async function installCommand(args: string[]) {
-  const parsed = parseArgs({ args, options: { json: { type: 'boolean' }, profile: { type: 'string' }, root: { type: 'string' }, 'state-dir': { type: 'string' }, port: { type: 'string' } } });
+  const parsed = parseArgs({ args, options: { json: { type: 'boolean' }, profile: { type: 'string' }, root: { type: 'string' }, 'state-dir': { type: 'string' }, port: { type: 'string' }, logs: { type: 'string' }, plugins: { type: 'string' } } });
   const paths = parsed.values.root || parsed.values['state-dir'] ? foundationPathsForState(String(parsed.values['state-dir'] ?? foundationPaths().state), String(parsed.values.root ?? foundationPaths().projects)) : foundationPaths();
   await ensureFoundationPaths(paths);
   const identity = await packageIdentity();
   const manifest = await ensureManifest(paths, identity);
+  const preflight = { node: process.version, npmPrefix: process.env.npm_config_prefix ?? null, packageRoot: identity?.root ?? null, writable: await fs.access(paths.app, fsConstants.W_OK).then(() => true, () => false) };
   if (parsed.values.profile) {
     const profilePaths = foundationPaths();
-    await profileWrite(profilePaths, String(parsed.values.profile), { root: paths.projects, state: paths.state, ...(parsed.values.port ? { port: Number(parsed.values.port) } : {}), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+    await profileWrite(profilePaths, String(parsed.values.profile), { root: paths.projects, state: paths.state, ...(parsed.values.port ? { port: Number(parsed.values.port) } : {}), ...(parsed.values.logs ? { logs: path.resolve(String(parsed.values.logs)) } : {}), ...(parsed.values.plugins ? { plugins: String(parsed.values.plugins).split(',').filter(Boolean) } : {}), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
   }
-  const result = { installed: { manifest: paths.manifest, paths, package: identity } };
+  const result = { installed: { manifest: paths.manifest, paths, package: identity, preflight } };
   if (parsed.values.json) json(result); else process.stdout.write(`Rho installation recorded at ${paths.manifest}.\n`);
   return 0;
 }
 
 async function versionsCommand(args: string[]) {
   const parsed = parseArgs({ args, options: { json: { type: 'boolean' } } });
-  const versions = await packageCandidates();
-  const result = { active: versions.find(item => item.active) ?? null, versions, schemaVersion: 1, generatedAt: new Date().toISOString() };
+  const activeIdentity = await packageIdentity(), versions = await packageCandidates();
+  const pluginsRoot = process.env.RHO_PLUGINS_ROOT ?? path.resolve(path.dirname(activeIdentity?.root ?? process.cwd()), '..', 'Rho-plugins');
+  const pluginsPackage = await readPackage(path.join(pluginsRoot, 'package.json'));
+  const core = process.env.RHO_CORE_BINARY ? { binary: path.resolve(process.env.RHO_CORE_BINARY), source: 'environment' } : null;
+  const result = { active: versions.find(item => item.active) ?? null, versions, components: { core, plugins: pluginsPackage ? { root: pluginsRoot, package: pluginsPackage, source: 'checkout' } : null, adapters: [] }, schemaVersion: 1, generatedAt: new Date().toISOString() };
   if (parsed.values.json) json(result); else for (const item of versions) process.stdout.write(`${item.active ? '* ' : '  '}${item.package?.name ?? 'package'}@${item.package?.version ?? 'unknown'} ${item.root}\n`);
   return 0;
 }
 
+async function upgradeCommand(args: string[]) {
+  const parsed = parseArgs({ args, options: { 'dry-run': { type: 'boolean' }, apply: { type: 'boolean' }, package: { type: 'string' }, json: { type: 'boolean' } } });
+  const identity = await packageIdentity(), prefix = identity ? await npmPrefixFor(identity.root) : null;
+  const candidates = await packageCandidates();
+  const plan = { current: identity, prefix, package: parsed.values.package ?? identity?.name ?? '@rho-workspace/rho', candidates, preserve: ['profiles', 'state', 'projects', 'host registrations'] };
+  if (!parsed.values.apply) { const value = { upgrade: { dryRun: true, plan } }; if (parsed.values.json) json(value); else process.stdout.write(JSON.stringify(value, null, 2) + '\n'); return 0; }
+  if (!prefix) return fail('Cannot determine the npm prefix for the active package. Run upgrade from an npm installation or pass an explicit package prefix.');
+  const operation = await beginFoundationOperation(foundationPaths(), 'upgrade', plan);
+  let journal = await addFoundationStage(foundationPaths(), operation, 'discover', 'completed', plan);
+  const packageResult = await runNpm(['install', '--global', '--prefix', prefix, '--ignore-scripts', '--no-audit', '--no-fund', String(parsed.values.package ?? identity?.name ?? '@rho-workspace/rho')], path.dirname(identity?.root ?? process.cwd()));
+  journal = await addFoundationStage(foundationPaths(), journal, 'package', packageResult.code === 0 ? 'completed' : 'failed', { package: packageResult });
+  await updateFoundationOperation(foundationPaths(), journal, { state: packageResult.code === 0 ? 'completed' : 'failed' });
+  const value = { upgrade: { operationId: operation.operationId, package: packageResult, plan } };
+  if (parsed.values.json) json(value); else process.stdout.write(JSON.stringify(value, null, 2) + '\n');
+  return packageResult.code === 0 ? 0 : 1;
+}
+
 async function uninstallCommand(args: string[]) {
-  const parsed = parseArgs({ args, options: { 'dry-run': { type: 'boolean' }, purge: { type: 'boolean' }, 'skip-package': { type: 'boolean' }, json: { type: 'boolean' } } });
+  const parsed = parseArgs({ args, options: { 'dry-run': { type: 'boolean' }, purge: { type: 'boolean' }, resume: { type: 'string' }, 'skip-package': { type: 'boolean' }, json: { type: 'boolean' } } });
   const paths = foundationPaths(), identity = await packageIdentity(), bins = identity ? await binEntries(identity.root) : [];
+  const receipt = path.join(path.dirname(paths.app), 'Rho-uninstall-receipt.json');
+  const previousReceipt = await readFoundationJson<Record<string, unknown> | null>(receipt, null);
+  if (previousReceipt && !parsed.values.resume) { const value = { uninstall: { alreadyCompleted: true, receipt, result: previousReceipt } }; if (parsed.values.json) json(value); else process.stdout.write(JSON.stringify(value, null, 2) + '\n'); return 0; }
   const manifest = await readFoundationJson<{ profiles?: Record<string, { state?: string }> } | null>(paths.manifest, null);
   const profileStates = Object.values(manifest?.profiles ?? {}).map(profile => profile.state).filter((state): state is string => !!state);
   const hosts = await hostScan(paths);
@@ -146,9 +216,20 @@ async function uninstallCommand(args: string[]) {
   const stopped = [] as string[], pending = [] as string[];
   for (const state of profileStates) (await stopProfile(state) ? stopped : pending).push(state);
   if (pending.length) { if (parsed.values.json) json({ uninstall: { pending, stopped } }); else process.stderr.write(`Rho profiles did not stop within 30 seconds: ${pending.join(', ')}\n`); return 1; }
-  const operation = await beginFoundationOperation(paths, 'uninstall', plan);
+  let resumeOperation = parsed.values.resume ? await readFoundationOperation(paths, String(parsed.values.resume)) : null;
+  if (!resumeOperation && !parsed.values.resume) {
+    const operationRoot = path.join(paths.data, 'operations');
+    const candidates = [] as import('./foundation.js').FoundationOperation[];
+    for (const entry of await fs.readdir(operationRoot, { withFileTypes: true }).catch(() => [])) {
+      if (!entry.name.startsWith('uninstall-') || !entry.name.endsWith('.json')) continue;
+      const candidate = await readFoundationJson<import('./foundation.js').FoundationOperation | null>(path.join(operationRoot, entry.name), null);
+      if (candidate && ['failed', 'running', 'unknown'].includes(candidate.state)) candidates.push(candidate);
+    }
+    resumeOperation = candidates.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0] ?? null;
+  }
+  if (parsed.values.resume && !resumeOperation) return fail(`Uninstall operation ${parsed.values.resume} was not found.`);
+  const operation = resumeOperation ?? await beginFoundationOperation(paths, 'uninstall', { ...plan, resumedFrom: parsed.values.resume ?? undefined });
   let journal = await addFoundationStage(paths, operation, 'stop', 'completed', { stopped });
-  const receipt = path.join(path.dirname(paths.app), 'Rho-uninstall-receipt.json');
   const quarantined: string[] = [];
   for (const candidate of staging) {
     const target = path.join(paths.state, 'quarantine', 'npm', path.basename(candidate));
@@ -198,12 +279,13 @@ async function migrateCommand(args: string[]) {
 async function profileCommand(args: string[]) {
   const action = args[0] ?? 'list', rest = args.slice(1), paths = foundationPaths();
   if (action === 'list') { json({ profiles: await profileList(paths) }); return 0; }
-  const parsed = parseArgs({ args: rest, allowPositionals: true, options: { root: { type: 'string' }, 'state-dir': { type: 'string' }, port: { type: 'string' } } });
+  const parsed = parseArgs({ args: rest, allowPositionals: true, options: { root: { type: 'string' }, 'state-dir': { type: 'string' }, port: { type: 'string' }, logs: { type: 'string' }, plugins: { type: 'string' }, limits: { type: 'string' } } });
   const name = parsed.positionals[0]; if (!name || !/^[A-Za-z0-9._-]{1,64}$/.test(name)) return fail('Give a profile name.');
   if (action === 'remove') { json({ profiles: await profileRemove(paths, name) }); return 0; }
   if (action !== 'create') return fail('Choose profile list, create or remove.');
   const now = new Date().toISOString();
-  json({ profiles: await profileWrite(paths, name, { root: path.resolve(String(parsed.values.root ?? paths.projects)), state: path.resolve(String(parsed.values['state-dir'] ?? paths.state)), ...(parsed.values.port ? { port: Number(parsed.values.port) } : {}), createdAt: now, updatedAt: now }) });
+  const limits = parsed.values.limits ? JSON.parse(await fs.readFile(String(parsed.values.limits), 'utf8')) : undefined;
+  json({ profiles: await profileWrite(paths, name, { root: path.resolve(String(parsed.values.root ?? paths.projects)), state: path.resolve(String(parsed.values['state-dir'] ?? paths.state)), ...(parsed.values.port ? { port: Number(parsed.values.port) } : {}), ...(parsed.values.logs ? { logs: path.resolve(String(parsed.values.logs)) } : {}), ...(parsed.values.plugins ? { plugins: String(parsed.values.plugins).split(',').filter(Boolean) } : {}), ...(limits ? { limits } : {}), createdAt: now, updatedAt: now }) });
   return 0;
 }
 
@@ -226,43 +308,67 @@ async function configCommand(args: string[]) {
 async function cacheCommand(args: string[]) {
   const action = args[0] ?? 'list', paths = foundationPaths();
   if (action === 'list') { json({ temporary: await temporaryReport(paths), cache: await cacheReport(paths) }); return 0; }
-  if (action === 'prune') { json({ temporary: await pruneTemporary(paths), cache: await pruneCache(paths) }); return 0; }
+  if (action === 'prune') { json({ temporary: await pruneTemporary(paths), cache: await pruneCache(paths), logs: await pruneLogs(paths) }); return 0; }
   return fail('Choose cache list or prune.');
 }
 
 async function logsCommand(args: string[]) {
   const parsed = parseArgs({ args, options: { json: { type: 'boolean' } } });
-  const paths = foundationPaths(), files = [] as { path: string; bytes: number; modifiedAt: string }[];
-  for (const name of await fs.readdir(paths.logs, { withFileTypes: true }).catch(() => [])) {
-    if (!name.isFile()) continue;
-    const file = path.join(paths.logs, name.name), stat = await fs.stat(file).catch(() => null);
-    if (stat) files.push({ path: file, bytes: stat.size, modifiedAt: stat.mtime.toISOString() });
-  }
-  const result = { directory: paths.logs, files: files.sort((a, b) => b.modifiedAt.localeCompare(a.modifiedAt)) };
+  const result = await logsReport(foundationPaths());
   if (parsed.values.json) json(result); else for (const file of result.files) process.stdout.write(`${file.bytes}\t${file.modifiedAt}\t${file.path}\n`);
   return 0;
 }
 
 async function hostCommand(args: string[]) {
   const action = args[0] ?? 'scan', parsed = parseArgs({ args: args.slice(1), options: { 'dry-run': { type: 'boolean' }, json: { type: 'boolean' } } });
-  if (action === 'scan') { json({ hosts: await hostScan(foundationPaths()) }); return 0; }
+  if (action === 'scan') { const paths = foundationPaths(), adapter = jsonHostAdapter(); json({ hosts: await hostScan(paths), adapters: [{ id: adapter.id, detected: await adapter.detect(paths), owned: await adapter.listOwned(paths) }] }); return 0; }
   if (action !== 'cleanup') return fail('Choose host scan or cleanup.');
   const result = await hostCleanup(foundationPaths(), { dryRun: !!parsed.values['dry-run'] }); json({ cleanup: result }); return 0;
 }
 
 async function serviceCommand(args: string[]) {
   const action = args[0] ?? 'status', paths = foundationPaths(), profile = args[1] ?? 'default';
-  const unitDir = path.join(paths.config, 'services');
-  const suffix = paths.platform === 'darwin' ? '.plist.json' : paths.platform === 'win32' ? '.task.json' : '.service.json';
-  const file = path.join(unitDir, profile + suffix);
-  if (action === 'status') { json({ profile, installed: await pathExists(file), directory: unitDir, file }); return 0; }
-  await fs.mkdir(unitDir, { recursive: true, mode: 0o700 });
-  if (action === 'uninstall') { await fs.rm(file, { force: true }); json({ service: { profile, installed: false, file } }); return 0; }
+  const parsed = parseArgs({ args: args.slice(2), options: { apply: { type: 'boolean' }, json: { type: 'boolean' }, 'dry-run': { type: 'boolean' } } });
+  const definition = serviceDefinition(paths, profile);
+  const metadata = await readFoundationJson<Record<string, unknown> | null>(definition.metadata, null);
+  const result = async (value: unknown) => { json(value); return 0; };
+  if (action === 'status') {
+    return result({ service: { profile, platform: paths.platform, installed: !!metadata, file: definition.metadata, descriptor: definition.native, registration: definition.registration, registered: await pathExists(definition.registration), metadata: definition.metadata, ...(metadata ? { state: metadata.state } : {}) } });
+  }
+  await fs.mkdir(path.dirname(definition.metadata), { recursive: true, mode: 0o700 });
+  if (action === 'uninstall') {
+    const apply = !!parsed.values.apply && !process.env.RHO_SERVICE_NO_APPLY;
+    let manager = { code: 0, stdout: '', stderr: '' };
+    if (apply) {
+      if (paths.platform === 'darwin') manager = await runProgram('launchctl', ['bootout', `gui/${process.getuid?.() ?? 0}/${definition.label}`]);
+      else if (paths.platform === 'linux') manager = await runProgram('systemctl', ['--user', 'disable', '--now', `${definition.label}.service`]);
+      else if (paths.platform === 'win32') manager = await runProgram('schtasks.exe', ['/Delete', '/TN', definition.label, '/F']);
+    }
+    await fs.rm(definition.registration, { force: true }).catch(() => {});
+    await fs.rm(definition.native, { force: true });
+    await fs.rm(definition.metadata, { force: true });
+    const value = { service: { profile, platform: paths.platform, installed: false, file: definition.metadata, descriptor: definition.native, registration: definition.registration, applied: apply, manager } };
+    return result(value);
+  }
   if (action !== 'install') return fail('Choose service install, uninstall or status.');
-  const identity = await packageIdentity();
-  const executable = process.execPath, launchArgs = [identity?.root ? path.join(identity.root, 'dist', 'cli.js') : currentCli, 'start', '--profile', profile];
-  const unit = { schemaVersion: 1, profile, command: executable, args: launchArgs, generatedAt: new Date().toISOString(), platform: paths.platform };
-  await writeFoundationJson(file, unit); json({ service: { ...unit, file } }); return 0;
+  const apply = !!parsed.values.apply && !process.env.RHO_SERVICE_NO_APPLY;
+  const unit = { schemaVersion: 1, profile, label: definition.label, command: definition.command, args: definition.args, descriptor: definition.native, registration: definition.registration, generatedAt: new Date().toISOString(), platform: definition.platform, applyRequested: apply, state: 'descriptor' as string };
+  if (!parsed.values['dry-run']) {
+    await writeServiceText(definition.native, definition.content);
+    if (apply) {
+      await fs.mkdir(path.dirname(definition.registration), { recursive: true, mode: 0o700 });
+      await writeServiceText(definition.registration, definition.content);
+      const manager = paths.platform === 'darwin'
+        ? await runProgram('launchctl', ['bootstrap', `gui/${process.getuid?.() ?? 0}`, definition.registration])
+        : paths.platform === 'linux'
+          ? await runProgram('systemctl', ['--user', 'daemon-reload']).then(async first => first.code ? first : runProgram('systemctl', ['--user', 'enable', '--now', `${definition.label}.service`]))
+          : await runProgram('schtasks.exe', ['/Create', '/TN', definition.label, '/XML', definition.registration, '/F']);
+      unit.state = manager.code === 0 ? 'registered' : 'pending';
+      (unit as Record<string, unknown>).manager = manager;
+    }
+    await writeFoundationJson(definition.metadata, unit);
+  }
+  return result({ service: { ...unit, file: definition.metadata } });
 }
 
 export async function restartCommand(args: string[]) {
@@ -285,6 +391,7 @@ export async function foundationCli(command: string, args: string[]) {
     if (command === 'install') return installCommand(args);
     if (command === 'uninstall') return uninstallCommand(args);
     if (command === 'versions') return versionsCommand(args);
+    if (command === 'upgrade') return upgradeCommand(args);
     if (command === 'migrate') return migrateCommand(args);
     if (command === 'profile') return profileCommand(args);
     if (command === 'config') return configCommand(args);
@@ -294,9 +401,18 @@ export async function foundationCli(command: string, args: string[]) {
     if (command === 'service') return serviceCommand(args);
     if (command === 'paths') { json(await reportFoundationPaths(foundationPaths())); return 0; }
     if (command === 'doctor') {
-      const parsed = parseArgs({ args, options: { repair: { type: 'boolean' }, scan: { type: 'boolean' }, json: { type: 'boolean' } } });
+      const parsed = parseArgs({ args, options: { repair: { type: 'boolean' }, scan: { type: 'boolean' }, json: { type: 'boolean' }, bundle: { type: 'string' } } });
       const result = parsed.values.repair ? await (await import('./foundation.js')).repairFoundation(foundationPaths()) : await doctorFoundation(foundationPaths(), { scan: !!parsed.values.scan });
       const diagnosis = 'report' in result ? result.report : result;
+      if (parsed.values.bundle) {
+        const redact = (value: unknown, key = ''): unknown => {
+          if (/token|secret|password|credential|api.?key|authorization/i.test(key)) return '[redacted]';
+          if (Array.isArray(value)) return value.map(item => redact(item));
+          if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([name, item]) => [name, redact(item, name)]));
+          return value;
+        };
+        await writeFoundationJson(path.resolve(parsed.values.bundle), { schemaVersion: 1, product: 'Rho', generatedAt: new Date().toISOString(), doctor: redact(result) });
+      }
       if (parsed.values.json) json(result);
       else for (const item of diagnosis.checks) process.stdout.write(`${item.state.padEnd(7)} ${item.id} ${item.detail}${item.remedy ? ` Remedy: ${item.remedy}` : ''}\n`);
       return diagnosis.ok ? 0 : 1;

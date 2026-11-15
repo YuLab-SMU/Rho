@@ -38,7 +38,7 @@ async function record(report, name, run, check = undefined) {
   return item;
 }
 
-async function tree(root, maximum = 2000) {
+async function tree(root, maximum = 2000, includeDigest = false) {
   const entries = [];
   async function visit(folder, relative = '') {
     if (entries.length >= maximum) return;
@@ -47,7 +47,8 @@ async function tree(root, maximum = 2000) {
       const file = path.join(folder, name.name), rel = path.join(relative, name.name);
       const stat = await fs.lstat(file).catch(() => null);
       if (!stat) continue;
-      entries.push({ path: rel.split(path.sep).join('/'), kind: name.isDirectory() ? 'directory' : name.isSymbolicLink() ? 'symlink' : 'file', bytes: name.isFile() ? stat.size : undefined, mode: stat.mode & 0o777 });
+      const entry = { path: rel.split(path.sep).join('/'), kind: name.isDirectory() ? 'directory' : name.isSymbolicLink() ? 'symlink' : 'file', bytes: name.isFile() ? stat.size : undefined, mode: stat.mode & 0o777, mtimeMs: stat.mtimeMs, owner: { uid: stat.uid, gid: stat.gid }, ...(includeDigest && name.isFile() ? { digest: sha256(await fs.readFile(file)) } : {}) };
+      entries.push(entry);
       if (name.isDirectory()) await visit(file, rel);
     }
   }
@@ -96,6 +97,7 @@ const report = {
   fixture: { root, home: fixtureHome, npmPrefix, npmCache, tempRoot, projects, state, hostRoot },
   steps: [],
   observations: [],
+  issueKeys: { A: Array.from({ length: 9 }, (_, i) => `A${i + 1}`), B: Array.from({ length: 12 }, (_, i) => `B${i + 10}`), C: Array.from({ length: 11 }, (_, i) => `C${i + 22}`), D: Array.from({ length: 5 }, (_, i) => `D${i + 33}`), E: Array.from({ length: 5 }, (_, i) => `E${i + 38}`), F: Array.from({ length: 4 }, (_, i) => `F${i + 43}`) },
   status: 'running',
 };
 
@@ -116,7 +118,7 @@ try {
   const binRoot = path.join(npmPrefix, 'bin');
   const installedPackage = await fs.readFile(path.join(packageRoot, 'package.json'), 'utf8');
   const installedVersion = JSON.parse(installedPackage).version;
-  report.installation = { packageRoot, binRoot, version: installedVersion, packageTree: await tree(packageRoot), binTree: await tree(binRoot) };
+  report.installation = { packageRoot, binRoot, version: installedVersion, packageTree: await tree(packageRoot), binTree: await tree(binRoot, 2000, true) };
 
   const packageScope = path.dirname(packageRoot);
   const stagingCollision = path.join(packageScope, '.rho-R1eVz1mA');
@@ -163,7 +165,7 @@ try {
   await writeJson(path.join(fixtureHome, '.rho-state', 'principals.json'), [{ id: 'legacy' }]);
   await writeJson(path.join(fixtureHome, '.rho-state', 'projects.json'), []);
   await fs.writeFile(path.join(fixtureHome, 'Rho', 'tutorial-state-0.5.10-final'), 'legacy tutorial\n');
-  report.legacy = await tree(fixtureHome);
+  report.legacy = await tree(fixtureHome, 2000, true);
   report.observations.push({ id: 'B10-B21', result: 'Legacy home roots, mixed service state, project-nested locks and copied tutorial state are present in one disposable tree for migration.' });
 
   await fs.mkdir(path.join(hostRoot, 'workbuddy'), { recursive: true });
@@ -175,11 +177,18 @@ try {
 
   const installedCli = path.join(binRoot, process.platform === 'win32' ? 'rho.cmd' : 'rho');
   const isolatedEnv = { ...env, RHO_HOST_ROOT: hostRoot };
+  const installRecord = await record(report, 'rho-install-manifest', () => command(installedCli, ['install', '--json'], root, isolatedEnv), result => ({ passed: result.code === 0, parsed: result.code === 0 ? JSON.parse(result.stdout) : null }));
+  assert.equal(installRecord.passed, true, installRecord.result.stderr);
+  report.baselineManifest = installRecord.parsed?.installed?.manifest;
   const paths = await record(report, 'rho-paths-in-isolated-home', () => command(installedCli, ['paths'], root, isolatedEnv), result => ({ passed: result.code === 0, parsed: result.code === 0 ? JSON.parse(result.stdout) : null }));
   assert.equal(paths.passed, true, paths.result.stderr);
   assert.ok(paths.parsed.home.startsWith(fixtureHome));
   const diagnosis = await record(report, 'rho-doctor-legacy-state', () => command(installedCli, ['doctor', '--json'], root, isolatedEnv), result => ({ passed: [0, 1].includes(result.code), parsed: result.stdout ? JSON.parse(result.stdout) : null }));
   assert.equal(diagnosis.passed, true, diagnosis.result.stderr);
+  const bundle = path.join(root, 'doctor-bundle.json');
+  const diagnosticBundle = await record(report, 'rho-doctor-bundle', () => command(installedCli, ['doctor', '--json', '--bundle', bundle], root, isolatedEnv), result => ({ passed: result.code === 0 || result.code === 1, bundleExists: result.code === 0 || result.code === 1 ? true : false }));
+  assert.equal(diagnosticBundle.passed, true, diagnosticBundle.result.stderr);
+  assert.equal(await fs.access(bundle).then(() => true, () => false), true);
   const migration = await record(report, 'rho-migrate-dry-run', () => command(installedCli, ['migrate', '--dry-run', '--json'], root, isolatedEnv), result => ({ passed: result.code === 0, parsed: result.code === 0 ? JSON.parse(result.stdout) : null }));
   assert.equal(migration.passed, true, migration.result.stderr);
   const migrationApply = await record(report, 'rho-migrate-apply', () => command(installedCli, ['migrate', '--apply', '--json'], root, isolatedEnv), result => ({ passed: result.code === 0, parsed: result.code === 0 ? JSON.parse(result.stdout) : null }));
@@ -194,7 +203,15 @@ try {
   assert.equal(runningStatus.parsed.status.running, true);
   const restart = await record(report, 'rho-profile-restart', () => command(installedCli, ['restart', '--profile', 'foundation', '--example', 'off'], root, isolatedEnv), result => ({ passed: result.code === 0 }));
   assert.equal(restart.passed, true, restart.result.stderr);
-  for (const [name, args] of [['rho-versions', ['versions', '--json']], ['rho-logs', ['logs', '--json']], ['rho-cache', ['cache', 'list']], ['rho-service-install', ['service', 'install', 'foundation']], ['rho-service-status', ['service', 'status', 'foundation']], ['rho-service-uninstall', ['service', 'uninstall', 'foundation']]]) {
+  const crashStatus = JSON.parse((await command(installedCli, ['status', '--state-dir', path.join(fixtureHome, 'Library', 'Application Support', 'Rho', 'state')], root, isolatedEnv)).stdout);
+  if (Number.isInteger(crashStatus.status?.pid)) process.kill(crashStatus.status.pid, 'SIGKILL');
+  await new Promise(resolve => setTimeout(resolve, 250));
+  const crashed = await record(report, 'rho-crash-recovery-status', () => command(installedCli, ['status', '--state-dir', path.join(fixtureHome, 'Library', 'Application Support', 'Rho', 'state')], root, isolatedEnv), result => ({ passed: result.code === 0, parsed: result.code === 0 ? JSON.parse(result.stdout) : null }));
+  assert.equal(crashed.passed, true, crashed.result.stderr);
+  assert.equal(crashed.parsed.status.running, false);
+  const crashRestart = await record(report, 'rho-crash-recovery-restart', () => command(installedCli, ['start', '--profile', 'foundation', '--example', 'off', '--background'], root, isolatedEnv), result => ({ passed: result.code === 0 }));
+  assert.equal(crashRestart.passed, true, crashRestart.result.stderr);
+  for (const [name, args] of [['rho-versions', ['versions', '--json']], ['rho-upgrade-dry-run', ['upgrade', '--dry-run', '--json']], ['rho-upgrade-apply', ['upgrade', '--apply', '--package', artifact, '--json']], ['rho-logs', ['logs', '--json']], ['rho-cache', ['cache', 'list']], ['rho-service-install', ['service', 'install', 'foundation']], ['rho-service-status', ['service', 'status', 'foundation']], ['rho-service-uninstall', ['service', 'uninstall', 'foundation']]]) {
     const step = await record(report, name, () => command(installedCli, args, root, isolatedEnv), result => ({ passed: result.code === 0 }));
     assert.equal(step.passed, true, step.result.stderr);
   }

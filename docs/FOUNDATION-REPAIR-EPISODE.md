@@ -15,7 +15,7 @@ The script packs the current checkout, installs that tarball globally under an i
 
 ## Observed run
 
-The macOS arm64 run used Node `v22.22.3` and Rho `0.5.11`. The tarball was `rho-workspace-rho-0.5.11.tgz` with SHA-256 `cd0a876d109d6c45eb2995044753e17f0482d1e51c4330ea703833c39fbc6b33`. Installation under the disposable prefix completed successfully.
+The macOS arm64 run used Node `v22.22.3` and Rho `0.5.11`. The tarball was `rho-workspace-rho-0.5.11.tgz` with SHA-256 `cebd87f6c96cfdefc120b0ba498aee55d0293d4c2735b46732fad67da8be6fac`. Installation under the disposable prefix completed successfully.
 
 The occupied staging probe returned the expected rename failure. The half-uninstall fixture retained `rho`, `rho-ui` and `rho-screen-check` symlinks while the package directory was absent. The legacy fixture contained `~/Rho`, `~/rho-local-play`, `~/.rho-app`, `~/.rho-state`, project `.rho/rho` and tutorial state. The fake WorkBuddy root held Rho-owned records beside user-owned records.
 
@@ -37,6 +37,6 @@ The report status was `passed`. The installed package answered `rho paths` from 
 | Clean host records by Rho ownership | Passed |
 | Complete installed-package uninstall and shim cleanup | Passed |
 
-The completed F0 fixture also ran canonical state apply, profile creation, `start`, `status`, `restart`, `versions`, `logs`, `cache list`, service descriptor install/status/uninstall, profile stop and the installed-package uninstall transaction. All 22 recorded steps passed.
+The completed F0 fixture also ran the installation manifest, canonical state apply, diagnostic bundle, profile creation, `start`, `status`, `restart`, forced crash recovery, versions, upgrade dry-run/apply, logs, cache list, native service descriptor install/status/uninstall, profile stop and the installed-package purge uninstall transaction. All 28 recorded steps passed.
 
-The run completed a purge and retained the uninstall journal and receipt under the disposable application data root. The companion platform matrix passed the macOS, Linux/XDG and Windows/APPDATA path conventions and generated service descriptors in disposable roots. Native service-manager registration and a real WorkBuddy/Cursor connector matrix still require those host machines.
+The run completed a purge and retained the uninstall journal and receipt under the disposable application data root. The companion platform matrix passed the macOS, Linux/XDG and Windows/APPDATA path conventions and generated native service descriptors in disposable roots. Native service-manager registration and a real WorkBuddy/Cursor connector matrix still require those host machines. See the [F0–F6 implementation audit](FOUNDATION-REPAIR-AUDIT.md) for the requirement-by-requirement evidence.

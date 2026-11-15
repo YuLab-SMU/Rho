@@ -40,11 +40,11 @@ export interface FoundationManifest {
   schemaVersion: number;
   product: 'Rho';
   installationId: string;
-  package?: { name: string; version: string; root: string };
+  package?: { name: string; version: string; root: string; prefix?: string; digest?: string; owner: 'rho'; source: string; active: boolean };
   paths: Partial<Record<FoundationPathKey, string>>;
-  bins: { name: string; path: string; target?: string }[];
-  profiles: Record<string, { root: string; state: string; port?: number; createdAt: string; updatedAt: string }>;
-  hosts: { host: string; file: string; digest: string; entries: number; updatedAt: string }[];
+  bins: { name: string; path: string; target?: string; owner: 'rho'; digest?: string; deletion: 'remove-if-matches'; restore?: string }[];
+  profiles: Record<string, { root: string; state: string; port?: number; logs?: string; plugins?: string[]; limits?: Record<string, unknown>; pid?: number; endpoint?: string; createdAt: string; updatedAt: string }>;
+  hosts: { host: string; file: string; digest: string; entries: number; owner: 'rho'; pending?: boolean; updatedAt: string }[];
   operations: string[];
   createdAt: string;
   updatedAt: string;
@@ -56,6 +56,20 @@ export interface FoundationStateEnvelope {
   createdAt: string;
   owner: 'rho';
   source: string;
+}
+
+export interface FoundationProcessRecord {
+  pid: number;
+  kind: 'service' | 'worker' | 'helper';
+  profile?: string;
+  state?: string;
+  endpoint?: string;
+  command: string;
+  args?: string[];
+  parentPid?: number;
+  workerDir?: string;
+  startedAt: string;
+  owner: 'rho';
 }
 
 export interface FoundationOperation {
@@ -215,8 +229,43 @@ export async function readFoundationJson<T>(file: string, fallback: T): Promise<
   catch { return fallback; }
 }
 
+export async function readSecretInput(name: string, env: NodeJS.ProcessEnv = process.env) {
+  const fileName = `${name}_FILE`;
+  if (env[fileName]) {
+    const file = resolve(env[fileName]!);
+    const stat = await fs.stat(file);
+    if ((stat.mode & 0o077) !== 0) throw Object.assign(new Error(`${fileName} must point to a private file (mode 0600 or stricter).`), { kind: 'security', path: file });
+    return { value: (await fs.readFile(file, 'utf8')).trimEnd(), source: fileName, path: file };
+  }
+  if (env[name]) return { value: env[name]!, source: name };
+  return undefined;
+}
+
 export async function pathExists(file: string) {
   return fs.access(file).then(() => true, () => false);
+}
+
+export async function registerFoundationProcess(paths: FoundationPaths, record: Omit<FoundationProcessRecord, 'owner' | 'startedAt'> & Partial<Pick<FoundationProcessRecord, 'owner' | 'startedAt'>>) {
+  const value: FoundationProcessRecord = { ...record, owner: 'rho', startedAt: record.startedAt ?? iso() };
+  const file = path.join(paths.runtime, 'processes', `${record.pid}.json`);
+  await writeFoundationJson(file, value);
+  return { file, record: value };
+}
+
+export async function unregisterFoundationProcess(paths: FoundationPaths, pid: number) {
+  const file = path.join(paths.runtime, 'processes', `${pid}.json`);
+  await fs.rm(file, { force: true });
+  return file;
+}
+
+export async function listFoundationProcesses(paths: FoundationPaths) {
+  const records: FoundationProcessRecord[] = [];
+  for (const entry of await fs.readdir(path.join(paths.runtime, 'processes'), { withFileTypes: true }).catch(() => [])) {
+    if (!entry.isFile() || !entry.name.endsWith('.json')) continue;
+    const record = await readFoundationJson<FoundationProcessRecord | null>(path.join(paths.runtime, 'processes', entry.name), null);
+    if (record?.owner === 'rho' && Number.isInteger(record.pid)) records.push(record);
+  }
+  return records;
 }
 
 export async function ensureManifest(paths: FoundationPaths, packageInfo?: { name: string; version: string; root: string }) {
@@ -230,12 +279,14 @@ export async function ensureManifest(paths: FoundationPaths, packageInfo?: { nam
   };
   manifest.paths = { ...manifest.paths, config: paths.config, data: paths.data, state: paths.state, runtime: paths.runtime, cache: paths.cache, logs: paths.logs, projects: paths.projects, manifest: paths.manifest, hosts: paths.hosts };
   if (packageInfo) {
-    manifest.package = packageInfo;
     const declared = await readFoundationJson<{ bin?: Record<string, string> | string }>(path.join(packageInfo.root, 'package.json'), {});
     const bins = typeof declared.bin === 'string' ? { rho: declared.bin } : declared.bin ?? {};
     const prefix = process.env.npm_config_prefix ?? (packageInfo.root.includes(`${path.sep}lib${path.sep}node_modules`) ? packageInfo.root.split(`${path.sep}lib${path.sep}node_modules`)[0] : undefined);
     const binRoot = prefix ? paths.platform === 'win32' ? prefix : path.join(prefix, 'bin') : undefined;
-    if (binRoot) manifest.bins = Object.entries(bins).map(([name, target]) => ({ name, path: path.join(binRoot, paths.platform === 'win32' ? name + '.cmd' : name), target: path.resolve(packageInfo.root, target) }));
+    const packageFile = path.join(packageInfo.root, 'package.json');
+    const packageDigest = await fs.readFile(packageFile).then(bytes => digest(bytes)).catch(() => undefined);
+    manifest.package = { ...packageInfo, prefix, digest: packageDigest, owner: 'rho', source: packageInfo.root, active: true };
+    if (binRoot) manifest.bins = Object.entries(bins).map(([name, target]) => ({ name, path: path.join(binRoot, paths.platform === 'win32' ? name + '.cmd' : name), target: path.resolve(packageInfo.root, target), owner: 'rho', digest: undefined, deletion: 'remove-if-matches' }));
   }
   manifest.updatedAt = iso();
   await writeFoundationJson(paths.manifest, manifest);
@@ -243,7 +294,17 @@ export async function ensureManifest(paths: FoundationPaths, packageInfo?: { nam
   const stateEnvelope = await readFoundationJson<FoundationStateEnvelope | null>(stateEnvelopeFile, null);
   if (!stateEnvelope || stateEnvelope.installationId !== manifest.installationId || stateEnvelope.schemaVersion !== foundationSchemaVersion)
     await writeFoundationJson(stateEnvelopeFile, { schemaVersion: foundationSchemaVersion, installationId: manifest.installationId, createdAt: stateEnvelope?.createdAt ?? iso(), owner: 'rho', source: packageInfo?.root ?? stateEnvelope?.source ?? 'rho' } satisfies FoundationStateEnvelope);
+  await syncCacheConfig(paths);
   return manifest;
+}
+
+export async function syncCacheConfig(paths: FoundationPaths) {
+  const configDigest = await fs.readFile(paths.configFile).then(bytes => digest(bytes)).catch(() => undefined);
+  const file = path.join(paths.cache, 'config-schema.json');
+  const previous = await readFoundationJson<{ configDigest?: string } | null>(file, null);
+  const changed = !!previous?.configDigest && previous.configDigest !== configDigest;
+  await writeFoundationJson(file, { schemaVersion: 1, owner: 'rho', configDigest, previousDigest: previous?.configDigest, changedAt: changed ? iso() : undefined, updatedAt: iso() });
+  return { file, configDigest, previousDigest: previous?.configDigest, changed };
 }
 
 export async function updateManifest(paths: FoundationPaths, update: (manifest: FoundationManifest) => FoundationManifest | void) {
@@ -278,10 +339,10 @@ export async function addFoundationStage(paths: FoundationPaths, operation: Foun
   return updateFoundationOperation(paths, next, { state: state === 'failed' ? 'failed' : state === 'completed' && next.stages.every(stage => stage.state === 'completed') ? 'completed' : 'running' });
 }
 
-async function walk(root: string, options: { maxEntries: number; maxDepth: number; maxBytes?: number }, relative = '', out: { path: string; kind: string; bytes: number; mtimeMs: number }[] = []) {
-  if (out.length >= options.maxEntries || relative.split(path.sep).filter(Boolean).length > options.maxDepth) return out;
+async function walk(root: string, options: { maxEntries: number; maxDepth: number; maxBytes?: number; maxMs?: number; startedAt?: number }, relative = '', out: { path: string; kind: string; bytes: number; mtimeMs: number }[] = []) {
+  if (out.length >= options.maxEntries || relative.split(path.sep).filter(Boolean).length > options.maxDepth || (options.maxMs && Date.now() - (options.startedAt ?? Date.now()) > options.maxMs)) return out;
   for (const entry of (await fs.readdir(root, { withFileTypes: true }).catch(() => [])).sort((a, b) => a.name.localeCompare(b.name))) {
-    if (out.length >= options.maxEntries) break;
+    if (out.length >= options.maxEntries || (options.maxMs && Date.now() - (options.startedAt ?? Date.now()) > options.maxMs)) break;
     const file = path.join(root, entry.name), rel = path.join(relative, entry.name);
     const stat = await fs.lstat(file).catch(() => null);
     if (!stat) continue;
@@ -309,16 +370,16 @@ async function treeDigest(root: string): Promise<string> {
 export async function summarizePath(root: string, options = defaultFoundationBudgets) {
   const stat = await fs.lstat(root).catch(() => null);
   if (stat?.isFile()) return { path: root, exists: true, entries: 1, bytes: stat.size, truncated: false };
-  const entries = await walk(root, { maxEntries: options.doctorMaxEntries, maxDepth: options.doctorMaxDepth });
+  const entries = await walk(root, { maxEntries: options.doctorMaxEntries, maxDepth: options.doctorMaxDepth, maxMs: options.doctorMaxMs, startedAt: Date.now() });
   const bytes = entries.reduce((sum, entry) => sum + entry.bytes, 0);
   return { path: root, exists: await pathExists(root), entries: entries.length, bytes, truncated: entries.length >= options.doctorMaxEntries };
 }
 
 export async function reportFoundationPaths(paths = foundationPaths()) {
-  const entries = {} as Record<FoundationPathKey, { path: string; exists: boolean; entries: number; bytes: number; truncated: boolean }>;
+  const entries = {} as Record<FoundationPathKey, { path: string; exists: boolean; entries: number; bytes: number; truncated: boolean; owner: string; deletable: boolean }>;
   for (const key of ['config', 'data', 'state', 'runtime', 'cache', 'logs', 'projects', 'manifest', 'hosts'] as FoundationPathKey[]) {
     const file = key === 'manifest' ? paths.manifest : key === 'config' ? paths.config : paths[key];
-    entries[key] = await summarizePath(file);
+    entries[key] = { ...await summarizePath(file), owner: key === 'projects' ? 'selected-project' : 'rho', deletable: key !== 'projects' };
   }
   const legacy = [];
   for (const candidate of paths.legacy) if (await pathExists(candidate)) legacy.push(await summarizePath(candidate));
@@ -360,21 +421,40 @@ export async function doctorFoundation(paths = foundationPaths(), options: { sca
     checks.push(check('bins', state, `${manifest.bins.length} manifest shim(s): ${manifest.bins.length - missing.length - mismatched.length} aligned, ${missing.length} missing, ${mismatched.length} mismatched.`, state !== 'ok' ? 'Run rho doctor --repair to reconcile only manifest-owned shims.' : undefined, { missing, mismatched }));
   }
   for (const [key, value] of Object.entries(report.paths)) {
-    checks.push(value.exists ? check(`path:${key}`, 'ok', `${key} is present at ${value.path} with ${value.entries} entries and ${value.bytes} bytes.`, undefined, value) : check(`path:${key}`, key === 'projects' ? 'warn' : 'fail', `${key} is missing at ${value.path}.`, `Run rho install or create the path through rho start.`, value));
+    const mode = value.exists ? await fs.stat(value.path).then(stat => stat.mode & 0o077).catch(() => 0) : 0;
+    const state = value.exists ? mode ? 'fail' : 'ok' : key === 'projects' ? 'warn' : 'fail';
+    checks.push(state === 'ok' ? check(`path:${key}`, 'ok', `${key} is present at ${value.path} with ${value.entries} entries and ${value.bytes} bytes.`, undefined, { ...value, mode: value.exists ? mode : undefined }) : check(`path:${key}`, state, value.exists ? `${key} is group/world accessible at ${value.path}.` : `${key} is missing at ${value.path}.`, value.exists ? 'Restrict Rho application directories to the current user.' : `Run rho install or create the path through rho start.`, { ...value, mode: value.exists ? mode : undefined }));
   }
   if (report.legacy.length) checks.push(check('legacy', 'warn', `${report.legacy.length} legacy root(s) remain discoverable.`, 'Run rho migrate --dry-run, then rho migrate --apply after reviewing the report.', report.legacy));
   else checks.push(check('legacy', 'ok', 'No known legacy Rho root is present under the selected HOME.'));
   const notesDir = path.join(paths.runtime, 'running');
   const notes = await summarizePath(notesDir);
   checks.push(notes.exists ? check('runtime', 'ok', `Runtime registry is present at ${notesDir}.`, undefined, notes) : check('runtime', 'warn', `Runtime registry has not been created at ${notesDir}.`, 'Start a profile to create it.', notes));
+  const processes = await listFoundationProcesses(paths), staleProcesses = processes.filter(record => !processAlive(record.pid));
+  checks.push(staleProcesses.length ? check('processes', 'warn', `${staleProcesses.length} stale Rho process record(s) remain.`, 'Run rho doctor --repair to quarantine stale process records.', { processes, staleProcesses }) : check('processes', 'ok', `${processes.length} registered Rho process(es) are live.`, undefined, processes));
   const host = await hostScan(paths, options.scan ? 10000 : 2000);
   checks.push(host.files.length ? check('hosts', 'warn', `${host.files.length} host JSON file(s) contain Rho-owned entries.`, 'Run rho host cleanup --dry-run, then rho host cleanup after reviewing the report.', host) : check('hosts', 'ok', 'No Rho-owned host entries were found.', undefined, host));
+  const pendingHost = await readFoundationJson<{ state?: string; files?: unknown[] } | null>(path.join(paths.data, 'pending-host-cleanup.json'), null);
+  if (pendingHost?.state === 'pending') checks.push(check('host-pending', 'warn', 'A host cleanup operation is pending because one or more host files were unavailable or changed.', 'Run rho host cleanup, then rho doctor --repair.', pendingHost));
+  const secretFiles = [] as { name: string; path: string; state: 'ok' | 'warn' | 'fail'; detail: string }[];
+  for (const name of ['RHO_API_KEY_FILE', 'RHO_CONNECTION_FILE']) {
+    const file = process.env[name];
+    if (!file) continue;
+    const stat = await fs.stat(file).catch(() => null);
+    if (!stat) secretFiles.push({ name, path: file, state: 'fail', detail: 'secret file is missing' });
+    else if ((stat.mode & 0o077) !== 0) secretFiles.push({ name, path: file, state: 'fail', detail: 'secret file is group/world accessible' });
+    else secretFiles.push({ name, path: file, state: 'ok', detail: 'secret file exists with private mode' });
+  }
+  if (secretFiles.length) checks.push(check('secrets', secretFiles.some(item => item.state === 'fail') ? 'fail' : 'ok', `${secretFiles.length} secret-file input(s) were checked.`, secretFiles.some(item => item.state === 'fail') ? 'Use a 0600 secret file and do not put its value on the command line.' : undefined, secretFiles));
   const temp = await temporaryReport(paths);
   const tempState = temp.entries > defaultFoundationBudgets.tempMaxEntries || temp.bytes > defaultFoundationBudgets.tempMaxBytes ? 'fail' : temp.entries > 0 ? 'warn' : 'ok';
   checks.push(check('temporary', tempState, `${temp.entries} temporary entries use ${temp.bytes} bytes.`, tempState === 'fail' ? 'Run rho cache prune before creating more temporary work.' : undefined, temp));
   const cache = await cacheReport(paths);
   const cacheState = cache.bytes > defaultFoundationBudgets.cacheMaxBytes ? 'fail' : cache.bytes > 0 ? 'warn' : 'ok';
   checks.push(check('cache', cacheState, `${cache.entries} rebuildable cache files use ${cache.bytes} bytes.`, cacheState === 'fail' ? 'Run rho cache prune before creating more cached work.' : undefined, cache));
+  const pluginRoot = process.env.RHO_PLUGINS_ROOT;
+  const plugins = pluginRoot ? await readFoundationJson<{ name?: string; version?: string } | null>(path.join(pluginRoot, 'package.json'), null) : null;
+  checks.push(check('components', identity || plugins || process.env.RHO_CORE_BINARY ? 'ok' : 'unknown', `Rho${identity ? ` ${identity.version}` : ''}${plugins ? `, Plugins ${plugins.version ?? 'unknown'}` : ''}${process.env.RHO_CORE_BINARY ? `, Core ${path.resolve(process.env.RHO_CORE_BINARY)}` : ''}.`, identity || plugins || process.env.RHO_CORE_BINARY ? undefined : 'Set RHO_CORE_BINARY/RHO_PLUGINS_ROOT or run from the selected component composition.', { rho: identity, plugins, core: process.env.RHO_CORE_BINARY ?? null }));
   const result = { ok: checks.every(item => !['fail', 'unknown'].includes(item.state)), checks, paths: report, manifest, generatedAt: iso() };
   if (options.repair) await repairFoundation(paths, result);
   return result;
@@ -407,6 +487,12 @@ export async function repairFoundation(paths: FoundationPaths, diagnosis?: Await
     const file = path.join(stale, name), item = await readFoundationJson<{ pid?: number } | null>(file, null);
     if (item?.pid && !processAlive(item.pid)) { await fs.rename(file, path.join(paths.state, 'quarantine-' + name)).catch(() => {}); repaired.push('stale:' + name); }
   }
+  for (const processRecord of await listFoundationProcesses(paths)) {
+    if (processAlive(processRecord.pid)) continue;
+    const file = path.join(paths.runtime, 'processes', `${processRecord.pid}.json`);
+    await fs.rename(file, path.join(paths.state, 'quarantine-process-' + processRecord.pid + '.json')).catch(() => {});
+    repaired.push('process:' + processRecord.pid);
+  }
   if (report.checks.some(item => item.id === 'temporary' && item.state === 'fail')) { await pruneTemporary(paths); repaired.push('temporary'); }
   return { repaired, report: await doctorFoundation(paths) };
 }
@@ -424,13 +510,29 @@ export async function temporaryDirectory(paths: FoundationPaths, operation: stri
   const id = `${operation}-${randomUUID()}`;
   const directory = path.join(paths.cache, 'temporary', id);
   await fs.mkdir(directory, { recursive: true, mode: 0o700 });
-  await writeFoundationJson(path.join(directory, 'meta.json'), { schemaVersion: 1, id, operation, owner, createdAt: iso(), expiresAt: new Date(Date.now() + ttlMs).toISOString(), state: 'active' });
+  const configDigest = await fs.readFile(paths.configFile).then(bytes => digest(bytes)).catch(() => undefined);
+  await writeFoundationJson(path.join(directory, 'meta.json'), { schemaVersion: 1, id, operation, owner, profile: process.env.RHO_PROFILE ?? 'default', configDigest, cleanupPolicy: 'ttl', createdAt: iso(), expiresAt: new Date(Date.now() + ttlMs).toISOString(), state: 'active', pinned: false });
   return directory;
+}
+
+export async function createTemporaryHome(paths: FoundationPaths, operation: string, owner: string, sourceHome: string, allowlist: string[] = [], ttlMs = defaultFoundationBudgets.tempTtlMs) {
+  const directory = await temporaryDirectory(paths, operation, owner, ttlMs), home = path.join(directory, 'home');
+  await fs.mkdir(home, { recursive: true, mode: 0o700 });
+  const copied: string[] = [], skipped: string[] = [];
+  for (const relative of allowlist) {
+    if (/(^|\/)(?:connection|principals|credentials|auth|\.env)(?:\.json|\..*)?$/i.test(relative)) { skipped.push(relative); continue; }
+    const source = path.join(sourceHome, relative), target = path.join(home, relative);
+    if (!await pathExists(source)) continue;
+    await fs.mkdir(path.dirname(target), { recursive: true, mode: 0o700 });
+    await fs.cp(source, target, { recursive: true, dereference: false }); copied.push(relative);
+  }
+  await writeFoundationJson(path.join(directory, 'meta.json'), { schemaVersion: 1, operation, owner, createdAt: iso(), expiresAt: new Date(Date.now() + ttlMs).toISOString(), cleanupPolicy: 'ttl', allowlist, copied, skipped, state: 'active', pinned: false });
+  return { directory, home, copied, skipped };
 }
 
 export async function temporaryReport(paths: FoundationPaths) {
   const root = path.join(paths.cache, 'temporary');
-  const entries = await walk(root, { maxEntries: defaultFoundationBudgets.doctorMaxEntries, maxDepth: 3 });
+  const entries = await walk(root, { maxEntries: defaultFoundationBudgets.doctorMaxEntries, maxDepth: 3, maxMs: defaultFoundationBudgets.doctorMaxMs, startedAt: Date.now() });
   const systemTemp = process.env.TMPDIR ?? process.env.TMP ?? process.env.TEMP ?? os.tmpdir();
   const external = [] as typeof entries;
   for (const name of (await fs.readdir(systemTemp, { withFileTypes: true }).catch(() => [])).filter(entry => entry.name.startsWith('rho-'))) {
@@ -441,19 +543,41 @@ export async function temporaryReport(paths: FoundationPaths) {
 }
 
 export async function cacheReport(paths: FoundationPaths) {
-  const entries = await walk(paths.cache, { maxEntries: defaultFoundationBudgets.doctorMaxEntries, maxDepth: defaultFoundationBudgets.doctorMaxDepth });
+  const entries = await walk(paths.cache, { maxEntries: defaultFoundationBudgets.doctorMaxEntries, maxDepth: defaultFoundationBudgets.doctorMaxDepth, maxMs: defaultFoundationBudgets.doctorMaxMs, startedAt: Date.now() });
   const files = entries.filter(entry => entry.kind === 'file' && !entry.path.startsWith('temporary/'));
   return { path: paths.cache, entries: files.length, bytes: files.reduce((sum, entry) => sum + entry.bytes, 0), files, truncated: entries.length >= defaultFoundationBudgets.doctorMaxEntries };
 }
 
+export async function logsReport(paths: FoundationPaths) {
+  const files: { path: string; bytes: number; modifiedAt: string; owner: 'rho'; retentionDays: number }[] = [];
+  for (const entry of await fs.readdir(paths.logs, { withFileTypes: true }).catch(() => [])) {
+    if (!entry.isFile() || !/^rho(?:\.[0-9]+|\.previous)?\.log$/.test(entry.name)) continue;
+    const file = path.join(paths.logs, entry.name), stat = await fs.stat(file).catch(() => null);
+    if (stat) files.push({ path: file, bytes: stat.size, modifiedAt: stat.mtime.toISOString(), owner: 'rho', retentionDays: 30 });
+  }
+  return { directory: paths.logs, files: files.sort((a, b) => b.modifiedAt.localeCompare(a.modifiedAt)), bytes: files.reduce((sum, file) => sum + file.bytes, 0), limit: 100 * 1024 * 1024, retentionDays: 30 };
+}
+
+export async function pruneLogs(paths: FoundationPaths, nowMs = Date.now()) {
+  const before = await logsReport(paths), removed: string[] = [];
+  let total = before.bytes;
+  for (const file of [...before.files].sort((a, b) => a.modifiedAt.localeCompare(b.modifiedAt))) {
+    if (file.path.endsWith('rho.log')) continue;
+    if (total <= before.limit && nowMs - Date.parse(file.modifiedAt) <= 30 * 24 * 60 * 60 * 1000) continue;
+    await fs.rm(file.path, { force: true }); total -= file.bytes; removed.push(file.path);
+  }
+  return { removed, before, after: await logsReport(paths) };
+}
+
 export async function pruneCache(paths: FoundationPaths, maxBytes = defaultFoundationBudgets.cacheMaxBytes) {
   const report = await cacheReport(paths);
+  const schema = await syncCacheConfig(paths);
   let remaining = report.bytes;
   const removed: string[] = [];
   for (const entry of [...report.files].sort((a, b) => a.mtimeMs - b.mtimeMs)) {
     if (remaining <= maxBytes) break;
-    const metadata = await readFoundationJson<{ pinned?: boolean } | null>(path.join(path.dirname(path.join(paths.cache, entry.path)), 'meta.json'), null);
-    if (metadata?.pinned) continue;
+    const metadata = await readFoundationJson<{ pinned?: boolean; configDigest?: string } | null>(path.join(path.dirname(path.join(paths.cache, entry.path)), 'meta.json'), null);
+    if (metadata?.pinned && (!metadata.configDigest || metadata.configDigest === schema.configDigest)) continue;
     const file = path.join(paths.cache, entry.path);
     await fs.rm(file, { force: true }); remaining -= entry.bytes; removed.push(file);
   }
@@ -555,8 +679,10 @@ export async function hostCleanup(paths = foundationPaths(), options: { dryRun?:
     } catch (error) { report.files.push({ path: file, digestBefore: digest(bytes), removed: 0, changed: false, error: error instanceof Error ? error.message : String(error) }); report.skipped += 1; }
   }
   if (!dryRun && report.files.length) await updateManifest(paths, manifest => {
-    manifest.hosts = [...manifest.hosts.filter(entry => !report.files.some(file => file.path === entry.file)), ...report.files.filter(file => file.changed).map(file => ({ host: path.basename(paths.hosts), file: file.path, digest: file.digestAfter ?? file.digestBefore, entries: file.removed, updatedAt: iso() }))];
+    manifest.hosts = [...manifest.hosts.filter(entry => !report.files.some(file => file.path === entry.file)), ...report.files.filter(file => file.changed).map(file => ({ host: path.basename(paths.hosts), file: file.path, digest: file.digestAfter ?? file.digestBefore, entries: file.removed, owner: 'rho' as const, updatedAt: iso() }))];
   });
+  if (!dryRun && report.skipped) await writeFoundationJson(path.join(paths.data, 'pending-host-cleanup.json'), { schemaVersion: 1, owner: 'rho', hostRoot: paths.hosts, files: report.files.filter(file => file.error), createdAt: iso(), state: 'pending' });
+  else if (!dryRun && !report.skipped) await fs.rm(path.join(paths.data, 'pending-host-cleanup.json'), { force: true }).catch(() => {});
   return report;
 }
 
@@ -586,7 +712,7 @@ export async function migrateLegacy(paths = foundationPaths(), options: { dryRun
       for (const file of (await fs.readdir(oldState, { withFileTypes: true }).catch(() => [])).filter(entry => entry.isFile() && /^(projects|principals|removed-projects|connection|agent-|models-dev|agent-settings)/.test(entry.name))) {
         const from = path.join(oldState, file.name), to = path.join(paths.state, file.name);
         if (await pathExists(to)) { conflicts.push(to); continue; }
-        await fs.mkdir(paths.state, { recursive: true, mode: 0o700 }); await fs.copyFile(from, to); copied.push(to);
+        await fs.mkdir(paths.state, { recursive: true, mode: 0o700 }); await fs.copyFile(from, to); copied.push(to); copiedEntries.push({ path: to, kind: 'file', digest: digest(await fs.readFile(to)) });
       }
       if (name === 'Rho') {
         const projectsRoot = path.join(source.path, 'projects');
@@ -603,8 +729,26 @@ export async function migrateLegacy(paths = foundationPaths(), options: { dryRun
     }
   }
   current = await addFoundationStage(paths, current, 'copy', 'completed', { copied, copiedEntries, conflicts });
+  current = await addFoundationStage(paths, current, 'verify', 'running', { entries: copiedEntries.length });
+  const mismatches: string[] = [];
+  for (const entry of copiedEntries) {
+    const stat = await fs.lstat(entry.path).catch(() => null);
+    const actual = stat?.isFile() ? digest(await fs.readFile(entry.path)) : stat?.isDirectory() ? await treeDigest(entry.path) : undefined;
+    if (entry.digest && actual !== entry.digest) mismatches.push(entry.path);
+  }
+  if (mismatches.length) {
+    current = await addFoundationStage(paths, current, 'verify', 'failed', { mismatches });
+    await updateFoundationOperation(paths, current, { state: 'failed', error: `Migration verification failed for ${mismatches.join(', ')}` });
+    return { operationId: current.operationId, dryRun: false, sources, conflicts, copied, copiedEntries, removed, mismatches };
+  }
+  current = await addFoundationStage(paths, current, 'verify', 'completed', { entries: copiedEntries.length });
+  current = await addFoundationStage(paths, current, 'switch', 'running');
+  const sourceRecords: { path: string; digest: string }[] = [];
+  for (const source of sources) sourceRecords.push({ path: source.path, digest: await treeDigest(source.path) });
+  await writeFoundationJson(path.join(paths.state, 'migration-source.json'), { schemaVersion: 1, owner: 'rho', operationId: current.operationId, sources: sourceRecords, switchedAt: iso() });
+  current = await addFoundationStage(paths, current, 'switch', 'completed', { state: paths.state });
   if (options.purge) {
-    current = await addFoundationStage(paths, current, 'purge', 'running');
+    current = await addFoundationStage(paths, current, 'clean', 'running');
     for (const source of sources) {
       const name = path.basename(source.path);
       if (name === 'Rho') {
@@ -612,7 +756,7 @@ export async function migrateLegacy(paths = foundationPaths(), options: { dryRun
         for (const child of await fs.readdir(source.path).catch(() => [])) if (/^tutorial-state-|\.log$/.test(child)) { await fs.rm(path.join(source.path, child), { recursive: true, force: true }); removed.push(path.join(source.path, child)); }
       } else if (name !== 'rho-local-play') { await fs.rm(source.path, { recursive: true, force: true }); removed.push(source.path); }
     }
-    current = await addFoundationStage(paths, current, 'purge', 'completed', { removed });
+    current = await addFoundationStage(paths, current, 'clean', 'completed', { removed });
   }
   await updateFoundationOperation(paths, current, { state: 'completed' });
   return { operationId: current.operationId, dryRun: false, sources, conflicts, copied, copiedEntries, removed };
@@ -621,7 +765,7 @@ export async function migrateLegacy(paths = foundationPaths(), options: { dryRun
 export async function rollbackMigration(paths = foundationPaths(), operationId: string) {
   const operation = await readFoundationOperation(paths, operationId);
   if (!operation || operation.kind !== 'migrate') throw new Error(`Migration operation ${operationId} was not found.`);
-  const purge = [...operation.stages].reverse().find(stage => stage.name === 'purge');
+  const purge = [...operation.stages].reverse().find(stage => stage.name === 'purge' || stage.name === 'clean');
   const removed = purge?.detail && typeof purge.detail === 'object' && Array.isArray((purge.detail as { removed?: unknown }).removed)
     ? (purge.detail as { removed: unknown[] }).removed : [];
   if (removed.length) throw Object.assign(new Error(`Migration ${operationId} purged source paths and cannot be rolled back automatically. Restore from its retained backup before retrying.`), { kind: 'condition', operationId });

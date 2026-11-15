@@ -7,7 +7,7 @@ import * as fs from 'node:fs/promises';
 import { constants as fsConstants } from 'node:fs';
 import os from 'node:os';
 import { spawn } from 'node:child_process';
-import { ensureFoundationPaths, foundationPaths, foundationPathsForState, ensureManifest, packageIdentity, readFoundationJson, updateManifest } from './foundation.js';
+import { ensureFoundationPaths, foundationPaths, foundationPathsForState, ensureManifest, packageIdentity, readFoundationJson, updateManifest, registerFoundationProcess, unregisterFoundationProcess } from './foundation.js';
 // A widened link is optional: the fragment carries a one-time code, which no request or Referer
 // sends and which the page redeems and removes. Opening the plain url needs no code at all.
 const link = (url: string, code: string) => url + '/#pair=' + code;
@@ -58,9 +58,9 @@ Start Rho using the platform data directories in this terminal, and say where it
   rho
 Lifecycle and foundation tools:
   rho start|stop|status|restart [--profile NAME] [START_OPTIONS]
-  rho paths | rho doctor [--json] [--repair] [--scan]
+  rho paths | rho doctor [--json] [--repair] [--scan] [--bundle FILE]
   rho migrate --dry-run|--apply|--rollback OPERATION_ID [--purge]
-  rho versions | rho install | rho uninstall [--dry-run|--purge]
+  rho versions | rho upgrade [--dry-run|--apply] | rho install | rho uninstall [--dry-run|--purge]
   rho profile list|create|remove NAME
   rho config show|path|schema | rho cache list|prune | rho logs | rho host scan|cleanup
 Start Rho with chosen folders and options:
@@ -134,7 +134,7 @@ else if (command === 'status') { process.argv.splice(2, 1); process.argv.push('-
 else if (command === 'stop') { process.argv.splice(2, 1); process.argv.push('--stop'); }
 if (command === 'restart') {
   process.exitCode = await (await import('./foundation-cli.js')).restartCommand(process.argv.slice(3));
-} else if (['install', 'uninstall', 'versions', 'migrate', 'paths', 'doctor', 'profile', 'config', 'cache', 'logs', 'host', 'service'].includes(command ?? '')) {
+} else if (['install', 'uninstall', 'versions', 'upgrade', 'migrate', 'paths', 'doctor', 'profile', 'config', 'cache', 'logs', 'host', 'service'].includes(command ?? '')) {
   process.exitCode = await (await import('./foundation-cli.js')).foundationCli(command!, process.argv.slice(3));
 } else if (process.argv[2] === 'plugin') {
   try { await (await import('./plugin-cli.js')).pluginCli(process.argv.slice(3)); }
@@ -255,7 +255,7 @@ if (values.acp) {
   const defaults = foundationPaths();
   const userConfig = await readFoundationJson<Record<string, any>>(defaults.configFile, {});
   const profileName = values.profile ?? process.env.RHO_PROFILE;
-  const profiles = profileName ? await readFoundationJson<Record<string, { root?: string; state?: string; port?: number }>>(path.join(defaults.config, 'profiles.json'), {}) : {};
+  const profiles = profileName ? await readFoundationJson<Record<string, { root?: string; state?: string; port?: number; logs?: string; plugins?: string[]; limits?: Record<string, unknown> }>>(path.join(defaults.config, 'profiles.json'), {}) : {};
   const profile = profileName ? profiles[profileName] : undefined;
   if (profileName && !profile) { process.stderr.write(`Rho profile ${profileName} does not exist. Use rho profile list or rho profile create ${profileName}.\n`); process.exit(1); }
   const configuredRoot = values.root ?? process.env.RHO_PROJECTS_DIR ?? profile?.root ?? userConfig.root;
@@ -275,7 +275,7 @@ if (values.acp) {
     const { startInBackground } = await import('./background.js');
     process.exit(await startInBackground(process.argv.slice(2).filter(arg => arg !== '--background'), stateDirectory));
   }
-  const limits = values.limits ? JSON.parse(await fs.readFile(values.limits, 'utf8')) : {};
+  const limits = values.limits ? JSON.parse(await fs.readFile(values.limits, 'utf8')) : profile?.limits ?? {};
   const allowed = new Set(['maxRequestBytes', 'maxEventBytes', 'eventRetention', 'maxSubscriptions', 'maxQueue', 'maxContexts', 'maxBindings', 'maxActivities', 'maxContextBytes', 'maxRetainedMetadataBytes', 'maxConcurrentActions', 'maxOperations', 'maxLogPageBytes', 'maxCodeBytes', 'maxReconciled', 'documents', 'resources', 'workspace', 'r', 'annotations', 'interactions', 'capabilityLimits', 'browser', 'nativeFolders', 'projectRemoval', 'conversations', 'evidence', 'console']);
   if (Object.keys(limits).some(k => !allowed.has(k))) throw new Error('Unknown service budget in --limits file.');
   const { RhoService } = await import('./server.js'), { runtime } = await import('./runtime.js');
@@ -293,7 +293,8 @@ if (values.acp) {
   // for its own work says so itself and is left alone.
   if (values.example !== undefined && !['on', 'off'].includes(values.example)) throw new Error('Choose --example on or off.');
   const example = values.example !== 'off';
-  const service = await new RhoService({ example, ...limits, root: path.resolve(projectsRoot), stateDir: path.resolve(stateDirectory), ...native, agentBackend: agentBackend as 'claude-acp' | 'codex-acp' | 'claude-cli' | 'acp', acpCommand, codex: values.codex ?? process.env.RHO_CODEX ?? 'codex', claude: values.claude ?? process.env.RHO_CLAUDE ?? 'claude', python: values.python ?? process.env.RHO_PYTHON, terminalShell: values['terminal-shell'] ?? process.env.RHO_TERMINAL_SHELL, ssh: values.ssh ?? process.env.RHO_SSH, serverctl: values.serverctl ?? process.env.RHO_SERVERCTL, port: selectedPort, ...(values.plugins !== undefined ? { plugins: values.plugins ? values.plugins.split(',') as PluginId[] : [] } : {}) }).start().catch(async error => {
+  const selectedPlugins = values.plugins !== undefined ? (values.plugins ? values.plugins.split(',') as PluginId[] : []) : profile?.plugins as PluginId[] | undefined;
+  const service = await new RhoService({ example, ...limits, root: path.resolve(projectsRoot), stateDir: path.resolve(stateDirectory), ...native, agentBackend: agentBackend as 'claude-acp' | 'codex-acp' | 'claude-cli' | 'acp', acpCommand, codex: values.codex ?? process.env.RHO_CODEX ?? 'codex', claude: values.claude ?? process.env.RHO_CLAUDE ?? 'claude', python: values.python ?? process.env.RHO_PYTHON, terminalShell: values['terminal-shell'] ?? process.env.RHO_TERMINAL_SHELL, ssh: values.ssh ?? process.env.RHO_SSH, serverctl: values.serverctl ?? process.env.RHO_SERVERCTL, port: selectedPort, ...(selectedPlugins !== undefined ? { plugins: selectedPlugins } : {}) }).start().catch(async error => {
     // Starting Rho again on a state it already runs on is the common refusal: say where it runs.
     const held = (error as { details?: { stateDirectory?: unknown } })?.details?.stateDirectory;
     const running = typeof held === 'string' ? await fs.readFile(path.join(held, 'connection.json'), 'utf8').then(text => String(JSON.parse(text).url), () => '') : '';
@@ -301,11 +302,13 @@ if (values.acp) {
   });
   const foundation = foundationPathsForState(stateDirectory, projectsRoot);
   process.env.RHO_RUNNING_DIR = path.join(foundation.runtime, 'running');
+  process.env.RHO_WORKER_DIR = path.join(foundation.runtime, 'workers', profileName ?? 'default');
   await ensureManifest(foundation, await packageIdentity());
   await updateManifest(foundation, manifest => {
     const activeProfile = profileName ?? 'default';
-    manifest.profiles[activeProfile] = { root: path.resolve(projectsRoot), state: path.resolve(stateDirectory), port: Number(new URL(service.url).port), createdAt: manifest.profiles[activeProfile]?.createdAt ?? new Date().toISOString(), updatedAt: new Date().toISOString() };
+    manifest.profiles[activeProfile] = { ...manifest.profiles[activeProfile], root: path.resolve(projectsRoot), state: path.resolve(stateDirectory), port: Number(new URL(service.url).port), ...(profile?.logs ? { logs: path.resolve(profile.logs) } : {}), ...(selectedPlugins !== undefined ? { plugins: selectedPlugins } : {}), limits, createdAt: manifest.profiles[activeProfile]?.createdAt ?? new Date().toISOString(), updatedAt: new Date().toISOString() };
   });
+  await registerFoundationProcess(foundation, { pid: process.pid, kind: 'service', profile: profileName ?? 'default', state: path.resolve(stateDirectory), endpoint: service.url, command: process.execPath, args: process.argv.slice(2), parentPid: process.ppid, workerDir: process.env.RHO_WORKER_DIR });
   // A request left by a --stop that this state's earlier service never took is not for this start.
   await fs.rm(stopRequest(service.state.directory), { force: true });
   // Where `rho connect` finds this Rho without being given its state folder.
@@ -362,7 +365,7 @@ if (values.acp) {
   let closing = false, asked: NodeJS.Timeout | undefined;
   // The last line says what stopped Rho and when, so a log read later tells a stop in order from
   // one ended from outside, which writes nothing.
-  const stop = async (by: string) => { if (closing) return; closing = true; clearInterval(asked); await withdraw(service.state.directory).catch(() => {}); const reports = await service.close(); process.stdout.write(JSON.stringify({ shutdown: reports, by, at: new Date().toISOString() }) + '\n'); };
+  const stop = async (by: string) => { if (closing) return; closing = true; clearInterval(asked); await withdraw(service.state.directory).catch(() => {}); await unregisterFoundationProcess(foundation, process.pid).catch(() => {}); const reports = await service.close(); process.stdout.write(JSON.stringify({ shutdown: reports, by, at: new Date().toISOString() }) + '\n'); };
   // Windows has no SIGTERM another process can send, and a console may pass on Ctrl+C turned off;
   // there Ctrl+Break on Rho's console (SIGBREAK) stops it in order too.
   for (const signal of ['SIGTERM', 'SIGINT', ...(process.platform === 'win32' ? ['SIGBREAK'] as const : [])] as const) process.on(signal, () => stop(signal));

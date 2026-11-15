@@ -67,6 +67,7 @@ observed.
 | [Architecture](ARCHITECTURE.md) | Source ownership, state and lifecycle boundaries |
 | [Foundation repair and upgrade plan](FOUNDATION-REPAIR-PLAN.md) | Six work packages that turn the three-round installation, path, lifecycle, temporary-resource, host-coupling and observability findings into staged repair and migration work |
 | [Foundation repair episode F0](FOUNDATION-REPAIR-EPISODE.md) | Disposable HOME and npm-prefix reproduction of installation, half-uninstall, legacy-state and host-residue findings |
+| [Foundation repair implementation audit](FOUNDATION-REPAIR-AUDIT.md) | Requirement-by-requirement F0–F6 evidence, command coverage and platform/host limits |
 | [Technology stack](TECHSTACK.md) | Libraries and runtimes used by the current implementation |
 | [Roadmap](ROADMAP.md) | Product direction and the questions being worked on |
 | [Headless backend](HEADLESS.md) | Installation, HTTP/SSE, Agent adapters, persistence and resource budgets |

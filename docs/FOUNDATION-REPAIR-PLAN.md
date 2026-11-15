@@ -6,7 +6,7 @@ Updated: 2026-11-15.
 
 ## 实施状态
 
-2026-11-15 的 F0 episode 已经把 F1–F6 的本地核心入口跑通。当前主线提供平台路径解析、安装 manifest、`paths`、`doctor`、迁移 dry-run/apply/rollback、profile 配置、start/stop/status/restart、版本盘点、临时目录与缓存预算、日志轮转、宿主 JSON 所有权清理、service descriptor 和事务式 npm 卸载。验收脚本在 disposable HOME 和 npm prefix 中完成了 22 个步骤，独立的 platform matrix 已覆盖 macOS、Linux/XDG 和 Windows/APPDATA 的路径与 descriptor 契约。真实三平台安装升级、宿主连接器版本和 Windows 原生 service registration 仍需各自的机器证据。
+2026-11-15 的 F0 episode 已经把 F1–F6 的本地核心入口跑通。当前主线提供平台路径解析、安装 manifest、`paths`、`doctor`、诊断 bundle、迁移 dry-run/apply/rollback、profile 配置、start/stop/status/restart、版本盘点、upgrade、临时目录与缓存预算、日志轮转、宿主 JSON 所有权清理、service descriptor/manager registration 和事务式 npm 卸载。验收脚本在 disposable HOME 和 npm prefix 中完成了 28 个步骤，独立的 platform matrix 已覆盖 macOS、Linux/XDG 和 Windows/APPDATA 的路径与 native descriptor 契约。逐项证据见 [implementation audit](FOUNDATION-REPAIR-AUDIT.md)。真实三平台安装升级、宿主连接器版本和 Windows 原生 service registration 仍需各自的机器证据。
 
 ## 目标
 

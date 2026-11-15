@@ -12,6 +12,10 @@ import {
   migrateLegacy,
   rollbackMigration,
   cacheReport,
+  createTemporaryHome,
+  listFoundationProcesses,
+  readSecretInput,
+  registerFoundationProcess,
   pruneTemporary,
   repairFoundation,
   temporaryDirectory,
@@ -155,5 +159,34 @@ test('doctor repair reconciles a missing manifest-owned shim without touching an
     const targetReal = await fs.realpath(target);
     assert.equal(await fs.realpath(shim), targetReal);
     assert.equal(await fs.realpath(unrelated), targetReal);
+  } finally { await f.cleanup(); }
+});
+
+test('temporary fake HOME copies only an allowlist and process records are enumerable', async () => {
+  const f = await fixture();
+  try {
+    await ensureFoundationPaths(f.paths, false);
+    const source = path.join(f.root, 'source-home');
+    await fs.mkdir(path.join(source, '.config'), { recursive: true });
+    await fs.writeFile(path.join(source, '.config', 'settings.json'), '{"theme":"dark"}\n');
+    await fs.writeFile(path.join(source, '.config', 'connection.json'), '{"token":"secret"}\n');
+    const fake = await createTemporaryHome(f.paths, 'fake-home', 'foundation-test', source, ['.config/settings.json', '.config/connection.json'], 60_000);
+    assert.deepEqual(fake.copied, ['.config/settings.json']);
+    assert.deepEqual(fake.skipped, ['.config/connection.json']);
+    assert.equal(await fs.access(path.join(fake.home, '.config', 'connection.json')).then(() => true, () => false), false);
+    await registerFoundationProcess(f.paths, { pid: process.pid, kind: 'worker', command: process.execPath, workerDir: fake.home });
+    assert.equal((await listFoundationProcesses(f.paths)).some(record => record.pid === process.pid && record.kind === 'worker'), true);
+  } finally { await f.cleanup(); }
+});
+
+test('secret file input requires private mode and never returns a command-line value', async () => {
+  const f = await fixture();
+  try {
+    const secret = path.join(f.root, 'secret');
+    await fs.writeFile(secret, 'token\n', { mode: 0o600 });
+    const value = await readSecretInput('RHO_API_KEY', { RHO_API_KEY_FILE: secret });
+    assert.deepEqual(value, { value: 'token', source: 'RHO_API_KEY_FILE', path: secret });
+    await fs.chmod(secret, 0o644);
+    await assert.rejects(readSecretInput('RHO_API_KEY', { RHO_API_KEY_FILE: secret }), /private file/);
   } finally { await f.cleanup(); }
 });

@@ -106,7 +106,7 @@ export async function startInBackground(args: string[], stateDirectory: string, 
   // left in place, and this start's output follows it.
   // Keep at most the configured number of log files including the current file and
   // `rho.previous.log`.  A failed restart can therefore never grow an unbounded stack.
-  for (let index = defaultFoundationBudgets.logFiles - 2; index >= 1; index -= 1) await fs.rename(rotatedLogFile(state, index), rotatedLogFile(state, index + 1)).catch(() => {});
+  for (let index = Math.max(1, defaultFoundationBudgets.logFiles - 3); index >= 1; index -= 1) await fs.rename(rotatedLogFile(state, index), rotatedLogFile(state, index + 1)).catch(() => {});
   await fs.rename(previousLogFile(state), rotatedLogFile(state, 1)).catch(() => {});
   const moved = await fs.rename(log, previousLogFile(state)).then(() => true, (e: NodeJS.ErrnoException) => e.code === 'ENOENT');
   const before = moved ? 0 : (await lines(log)).length;
