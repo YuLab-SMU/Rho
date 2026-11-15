@@ -105,10 +105,10 @@ const verified = [
         :src="shot('studio.png')"
         width="1440"
         height="900"
-        alt="Rho Studio showing the PA14 quorum sensing project: project notes, the Agent's command list with one failed command, its answer, and a reply box."
+        alt="Rho Studio showing the City bike-share demand project: project notes, the Agent's command list, its answer, and a reply box."
       />
       <figcaption>
-        <span class="tag">Studio</span> A real run on the bundled PA14 quorum sensing project. The
+        <span class="tag">Studio</span> A real run on the bundled City bike-share demand project. The
         Agent's commands, one failure among them, its answer, and the notes left for the next
         question.
       </figcaption>
@@ -194,15 +194,15 @@ const verified = [
       </div>
       <figure class="frame side">
         <img
-          :src="shot('notebook.png')"
+          :src="shot('code.png')"
           width="1440"
           height="900"
           loading="lazy"
-          alt="Rho Notebook with R cells, their output and figures inside the same project workspace."
+          alt="Rho Code showing the bike-share analysis script and its project files inside the same workspace."
         />
         <figcaption>
-          <span class="tag">Notebook</span> R cells and their figures in the project, not in a
-          separate session.
+          <span class="tag">Code</span> The analysis script and its project files in one place,
+          ready for the next question.
         </figcaption>
       </figure>
     </section>
