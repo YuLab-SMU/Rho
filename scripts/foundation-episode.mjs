@@ -224,7 +224,7 @@ try {
     const step = await record(report, name, () => command(installedCli, args, root, isolatedEnv), result => ({ passed: result.code === 0, ...(serviceStep && result.code === 0 ? { parsed: JSON.parse(result.stdout) } : {}) }));
     assert.equal(step.passed, true, step.result.stderr);
     if (applyNativeService && name === 'rho-service-install') {
-      assert.equal(step.parsed?.service?.applied, true, JSON.stringify(step));
+      assert.equal(step.parsed?.service?.applyRequested, true, JSON.stringify(step));
       assert.equal(step.parsed?.service?.state, 'registered', JSON.stringify(step));
       assert.equal(step.parsed?.service?.manager?.code, 0, JSON.stringify(step));
     }
