@@ -146,7 +146,7 @@ function serviceDefinition(paths: ReturnType<typeof foundationPaths>, profile: s
   const content = paths.platform === 'darwin'
     ? `<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0"><dict><key>Label</key><string>${xmlEscape(label)}</string><key>ProgramArguments</key><array>${[command, ...args].map(value => `<string>${xmlEscape(value)}</string>`).join('')}</array><key>RunAtLoad</key><true/><key>KeepAlive</key><true/></dict></plist>\n`
     : paths.platform === 'win32'
-      ? `<?xml version="1.0" encoding="UTF-8"?>\n<Task xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task"><RegistrationInfo><Description>Rho ${xmlEscape(profile)} workspace</Description></RegistrationInfo><Triggers><LogonTrigger><Enabled>true</Enabled></LogonTrigger></Triggers><Actions Context="Author"><Exec><Command>${xmlEscape(command)}</Command><Arguments>${xmlEscape(args.map(value => `"${value}"`).join(' '))}</Arguments></Exec></Actions></Task>\n`
+      ? `<?xml version="1.0" encoding="UTF-16"?>\n<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task"><RegistrationInfo><Description>Rho ${xmlEscape(profile)} workspace</Description></RegistrationInfo><Triggers><LogonTrigger><Enabled>true</Enabled></LogonTrigger></Triggers><Actions Context="Author"><Exec><Command>${xmlEscape(command)}</Command><Arguments>${xmlEscape(args.map(value => `"${value}"`).join(' '))}</Arguments></Exec></Actions></Task>\n`
       : `[Unit]\nDescription=Rho ${profile} workspace\nAfter=network.target\n[Service]\nType=simple\nExecStart=${[command, ...args].map(value => JSON.stringify(value)).join(' ')}\nRestart=on-failure\n[Install]\nWantedBy=default.target\n`;
   return { profile, label, metadata, native, registration, command, args, content, platform: paths.platform };
 }
@@ -154,7 +154,10 @@ function serviceDefinition(paths: ReturnType<typeof foundationPaths>, profile: s
 async function writeServiceText(file: string, content: string) {
   await fs.mkdir(path.dirname(file), { recursive: true, mode: 0o700 });
   const temporary = `${file}.${process.pid}.${Date.now()}.tmp`;
-  await fs.writeFile(temporary, content, { mode: 0o600 });
+  const value = process.platform === 'win32' && path.extname(file).toLowerCase() === '.xml'
+    ? Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(content, 'utf16le')])
+    : content;
+  await fs.writeFile(temporary, value, { mode: 0o600 });
   await fs.rename(temporary, file);
 }
 
