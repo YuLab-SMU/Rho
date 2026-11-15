@@ -15,6 +15,7 @@ const cli = path.join(repo, 'dist', 'cli.js');
 const preserve = process.env.RHO_FOUNDATION_KEEP === '1';
 const now = () => new Date().toISOString();
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
+const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 
 async function command(program, args, cwd, env, timeoutMs = 180000) {
   const startedAt = now();
@@ -105,17 +106,17 @@ try {
   await fs.mkdir(projects, { recursive: true });
   const artifactDir = path.join(root, 'artifact');
   await fs.mkdir(artifactDir, { recursive: true });
-  const packed = await record(report, 'pack-current-source', () => command('npm', ['pack', '--ignore-scripts', '--json', '--pack-destination', artifactDir], repo, env), result => ({ passed: result.code === 0 }));
+  const packed = await record(report, 'pack-current-source', () => command(npmCommand, ['pack', '--ignore-scripts', '--json', '--pack-destination', artifactDir], repo, env), result => ({ passed: result.code === 0 }));
   assert.equal(packed.result.code, 0, packed.result.stderr || packed.result.stdout);
   const packedFilename = (await fs.readdir(artifactDir)).find(name => name.endsWith('.tgz'));
   assert.ok(packedFilename, 'npm pack produced no tarball');
   const artifact = path.join(artifactDir, packedFilename);
   report.artifact = { path: artifact, sha256: sha256(await fs.readFile(artifact)), filename: packedFilename };
 
-  const install = await record(report, 'npm-install-global-in-isolated-prefix', () => command('npm', ['install', '--global', '--prefix', npmPrefix, '--ignore-scripts', '--no-audit', '--no-fund', artifact], root, env), result => ({ passed: result.code === 0 }));
+  const install = await record(report, 'npm-install-global-in-isolated-prefix', () => command(npmCommand, ['install', '--global', '--prefix', npmPrefix, '--ignore-scripts', '--no-audit', '--no-fund', artifact], root, env), result => ({ passed: result.code === 0 }));
   assert.equal(install.result.code, 0, install.result.stderr || install.result.stdout);
-  const packageRoot = path.join(npmPrefix, 'lib', 'node_modules', '@rho-workspace', 'rho');
-  const binRoot = path.join(npmPrefix, 'bin');
+  const packageRoot = process.platform === 'win32' ? path.join(npmPrefix, 'node_modules', '@rho-workspace', 'rho') : path.join(npmPrefix, 'lib', 'node_modules', '@rho-workspace', 'rho');
+  const binRoot = process.platform === 'win32' ? npmPrefix : path.join(npmPrefix, 'bin');
   const installedPackage = await fs.readFile(path.join(packageRoot, 'package.json'), 'utf8');
   const installedVersion = JSON.parse(installedPackage).version;
   report.installation = { packageRoot, binRoot, version: installedVersion, packageTree: await tree(packageRoot), binTree: await tree(binRoot, 2000, true) };
@@ -136,8 +137,8 @@ try {
   report.observations.push({ id: 'A1-A2', result: 'An occupied npm staging target blocks a package-directory rename and leaves the package tree and target as two independent objects.' });
 
   const halfPrefix = path.join(root, 'half-uninstall-prefix');
-  const halfPackage = path.join(halfPrefix, 'lib', 'node_modules', '@rho-workspace', 'rho');
-  const halfBin = path.join(halfPrefix, 'bin');
+  const halfPackage = process.platform === 'win32' ? path.join(halfPrefix, 'node_modules', '@rho-workspace', 'rho') : path.join(halfPrefix, 'lib', 'node_modules', '@rho-workspace', 'rho');
+  const halfBin = process.platform === 'win32' ? halfPrefix : path.join(halfPrefix, 'bin');
   await fs.mkdir(path.dirname(halfPackage), { recursive: true });
   await fs.cp(packageRoot, halfPackage, { recursive: true, dereference: true });
   await fs.mkdir(halfBin, { recursive: true });
@@ -229,8 +230,8 @@ try {
   const uninstall = await record(report, 'installed-uninstall-transaction', () => command(installedCli, ['uninstall', '--purge', '--json'], root, isolatedEnv), result => ({ passed: result.code === 0, parsed: result.stdout ? JSON.parse(result.stdout) : null }));
   assert.equal(uninstall.passed, true, uninstall.result.stderr);
   report.uninstall = uninstall.parsed;
-  assert.equal(await fs.access(path.join(npmPrefix, 'lib', 'node_modules', '@rho-workspace', 'rho')).then(() => true, () => false), false);
-  assert.equal(await fs.access(path.join(npmPrefix, 'bin', process.platform === 'win32' ? 'rho.cmd' : 'rho')).then(() => true, () => false), false);
+  assert.equal(await fs.access(packageRoot).then(() => true, () => false), false);
+  assert.equal(await fs.access(path.join(binRoot, process.platform === 'win32' ? 'rho.cmd' : 'rho')).then(() => true, () => false), false);
   assert.equal(await fs.access(uninstall.parsed.uninstall.receipt).then(() => true, () => false), true);
 
   const status = await record(report, 'legacy-status-read', () => command(process.execPath, [cli, '--status', '--state-dir', state], root, env), result => ({ passed: result.code === 0 }));
