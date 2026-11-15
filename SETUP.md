@@ -93,14 +93,13 @@ Check: `npm ls -g @rho-workspace/rho` shows the version, and `rho --version` pri
 ## 4. Start Rho
 
 ```sh
-mkdir -p "$HOME/Rho/projects"
-rho --root "$HOME/Rho/projects" --state-dir "$HOME/Rho/state" --open --background
+rho --open --background
 ```
 
 If you are Codex, Rho's Agent panel should use Codex too:
 
 ```sh
-rho --root "$HOME/Rho/projects" --state-dir "$HOME/Rho/state" --agent-backend codex-acp --open --background
+rho --agent-backend codex-acp --open --background
 ```
 
 The command returns once Rho is ready, within a minute. Its first line is one JSON object that
@@ -115,7 +114,9 @@ log says so.
   it does not, your client ended the processes your command started. Give the person the start
   command without `--background`, to run in a terminal they keep open. Go on when it answers.
 
-The first start copies an example project, `City bike-share demand`, into `~/Rho/projects`.
+The first start copies an example project, `City bike-share demand`, into `~/.rho`. If `~/Rho/projects`
+already exists, quick start silently moves its project entries into `~/.rho` and records the migration
+receipt in the platform state folder.
 
 Rho keeps running until it is stopped, the person logs out or the machine restarts, or the
 container or sandbox it runs in ends; it does not start again by itself. On a remote machine or
@@ -165,7 +166,7 @@ rho --grant "$HOME/Rho/state/connection.json" --project "City bike-share demand"
 Another client gives itself a stable session name and asks Rho how to connect:
 
 ```sh
-rho connect "$HOME/Rho/projects/City bike-share demand" --as YOUR_AGENT_NAME
+rho connect "$HOME/.rho/City bike-share demand" --as YOUR_AGENT_NAME
 ```
 
 The reply names the MCP server to add, its `command` and `args`, ready entries for the clients
@@ -206,12 +207,12 @@ Keep it brief, in their language:
 1. **Rho is a page in their web browser,** not this chat or a terminal: the address
    `http://127.0.0.1:…`. Opening it in a browser on this machine is all the access needed: no
    account, link or code.
-2. **Where things are:** projects in `~/Rho/projects`, service state in `~/Rho/state`, the log
+2. **Where things are:** projects in `~/.rho`, service state in the platform state folder, the log
    at `~/Rho/state/rho.log`, and the version installed.
 3. **What is done and what is missing,** step by step, and what works without what is missing.
 4. **How to start working**, in either place:
    - in the browser: open `City bike-share demand` and ask in Rho's Agent panel;
-   - in a new session of this client started in `~/Rho/projects/City bike-share demand`, where
+   - in a new session of this client started in `~/.rho/City bike-share demand`, where
      Rho's tools and the skill are available.
 
    Read the example's `README.md` and suggest three questions they could ask about it.
@@ -247,20 +248,19 @@ as a downloader.
 4. **Start Rho:**
 
    ```powershell
-   New-Item -ItemType Directory -Force "$HOME\Rho\projects" | Out-Null
-   rho.cmd --root "$HOME\Rho\projects" --state-dir "$HOME\Rho\state" --open --background
+   rho.cmd --root "$HOME\.rho" --open --background
    ```
 
    If you are Codex:
-   `rho.cmd --root "$HOME\Rho\projects" --state-dir "$HOME\Rho\state" --agent-backend codex-acp --open --background`.
-   In Git Bash, make the folder with `mkdir -p "$HOME/Rho/projects"`. Then check with
-   `rho.cmd --status --state-dir "$HOME\Rho\state"` in a separate command, as step 4 says.
+   `rho.cmd --root "$HOME\.rho" --agent-backend codex-acp --open --background`.
+   In Git Bash, use `rho.cmd --root "$HOME/.rho" --open --background`. Then check with
+   `rho.cmd --status` in a separate command, as step 4 says.
 5. **Install the skill** with `rho.cmd --install-skill "$HOME\.claude\skills\rho"`. Codex:
    `"$env:USERPROFILE\.codex\skills\rho"` in PowerShell, or `$env:CODEX_HOME\skills\rho` when
    `CODEX_HOME` is set.
 6. **Connect yourself** as in step 6, with
    `rho.cmd --grant "$HOME\Rho\state\connection.json" --project "City bike-share demand" --agent codex`
-   (or `--agent claude-code`), or `rho.cmd connect "$HOME\Rho\projects\City bike-share demand" --as YOUR_AGENT_NAME`.
+   (or `--agent claude-code`), or `rho.cmd connect "$HOME\.rho\City bike-share demand" --as YOUR_AGENT_NAME`.
 7. **Check R** as in step 7. Windows PowerShell 5.1 drops the double quotes inside an argument it
    passes to a program, so these use single quotes in R:
 

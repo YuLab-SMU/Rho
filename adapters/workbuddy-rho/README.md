@@ -23,7 +23,7 @@ What WorkBuddy did with Rho before this package is in the
 
 | File | What it is |
 | --- | --- |
-| [connector-meta.json](connector/connector-meta.json) | Name, descriptions and examples in Chinese and English, `source` `rho-workspace`, `type` `cli`, the connector's own `version`, and WorkBuddy 4.24.0 or later for `versionCheck` |
+| [connector-meta.json](connector/connector-meta.json) | Name, descriptions and examples in Chinese and English, `source` `rho-workspace`, `type` `cli`, and the connector's own `version` |
 | [cli.json](connector/cli.json) | `init` installs `@rho-workspace/rho@latest` with a Node WorkBuddy provides in Rho's own range (`>=22.22.0 <27`); `versionCheck` reinstalls below 0.5.8; `status` is `rho --version` (Rho has no sign-in, so an installed `rho` is a connected one); `unAuth` changes nothing |
 | [icon.svg](connector/icon.svg) | Rho's icon |
 | [skills/rho/SKILL.md](connector/skills/rho/SKILL.md) | The Skill for WorkBuddy. The build adds the references of [skills/rho](../../skills/rho/references) beside it, so they follow Rho's own |

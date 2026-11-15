@@ -181,6 +181,17 @@ try {
   const installedCli = path.join(binRoot, process.platform === 'win32' ? 'rho.cmd' : 'rho');
   const isolatedEnv = { ...env, RHO_HOST_ROOT: hostRoot };
   if (applyNativeService) delete isolatedEnv.RHO_SERVICE_NO_APPLY;
+  const quickStart = await record(report, 'rho-quick-start-silent-legacy-migration', () => command(installedCli, ['--example', 'off', '--background'], root, isolatedEnv), result => ({ passed: result.code === 0 }));
+  assert.equal(quickStart.passed, true, quickStart.result.stderr);
+  const quickPaths = await record(report, 'rho-quick-start-default-project-root', () => command(installedCli, ['paths'], root, isolatedEnv), result => ({ passed: result.code === 0, parsed: result.code === 0 ? JSON.parse(result.stdout) : null }));
+  assert.equal(quickPaths.passed, true, quickPaths.result.stderr);
+  const quickProjects = quickPaths.parsed.paths.projects.path;
+  assert.equal(quickProjects, path.join(fixtureHome, '.rho'));
+  assert.equal(await fs.access(path.join(quickProjects, 'legacy-project')).then(() => true, () => false), true);
+  assert.equal(await fs.access(path.join(fixtureHome, 'Rho', 'projects', 'legacy-project')).then(() => true, () => false), false);
+  assert.equal(await fs.access(path.join(quickPaths.parsed.paths.state.path, 'quick-start-project-migration.json')).then(() => true, () => false), true);
+  const quickStop = await record(report, 'rho-quick-start-stop', () => command(installedCli, ['stop'], root, isolatedEnv), result => ({ passed: result.code === 0 }));
+  assert.equal(quickStop.passed, true, quickStop.result.stderr);
   const installRecord = await record(report, 'rho-install-manifest', () => command(installedCli, ['install', '--json'], root, isolatedEnv), result => ({ passed: result.code === 0, parsed: result.code === 0 ? JSON.parse(result.stdout) : null }));
   assert.equal(installRecord.passed, true, installRecord.result.stderr);
   report.baselineManifest = installRecord.parsed?.installed?.manifest;

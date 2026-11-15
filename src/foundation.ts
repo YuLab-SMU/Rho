@@ -1,5 +1,6 @@
 import * as fs from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import { randomUUID, createHash } from 'node:crypto';
@@ -182,7 +183,7 @@ export function foundationPaths(env: NodeJS.ProcessEnv = process.env): Foundatio
   runtime = pathOverride(env, 'RHO_RUNTIME_DIR', runtime);
   cache = pathOverride(env, 'RHO_CACHE_DIR', cache);
   logs = pathOverride(env, 'RHO_LOG_DIR', logs);
-  const projects = pathOverride(env, 'RHO_PROJECTS_DIR', path.join(home, 'Documents', 'Rho', 'projects'));
+  const projects = pathOverride(env, 'RHO_PROJECTS_DIR', path.join(home, '.rho'));
   const manifest = path.join(state, 'install-manifest.json');
   const hosts = pathOverride(env, 'RHO_HOST_ROOT', path.join(data, 'hosts'));
   return {
@@ -235,7 +236,15 @@ export async function readSecretInput(name: string, env: NodeJS.ProcessEnv = pro
   if (env[fileName]) {
     const file = resolve(env[fileName]!);
     const stat = await fs.stat(file);
-    if ((stat.mode & 0o077) !== 0) throw Object.assign(new Error(`${fileName} must point to a private file (mode 0600 or stricter).`), { kind: 'security', path: file });
+    const privateFile = process.platform === 'win32'
+      ? (() => {
+        const acl = spawnSync('icacls.exe', [file], { encoding: 'utf8', windowsHide: true, timeout: 2000 });
+        if (acl.status !== 0) return false;
+        const text = `${acl.stdout ?? ''}\n${acl.stderr ?? ''}`;
+        return !/(?:Everyone|Authenticated Users|\\Users\b|S-1-1-0|S-1-5-11|S-1-5-32-545)/i.test(text);
+      })()
+      : (stat.mode & 0o077) === 0;
+    if (!privateFile) throw Object.assign(new Error(`${fileName} must point to a private file (mode 0600 or stricter).`), { kind: 'security', path: file });
     return { value: (await fs.readFile(file, 'utf8')).trimEnd(), source: fileName, path: file };
   }
   if (env[name]) return { value: env[name]!, source: name };
@@ -366,6 +375,55 @@ async function treeDigest(root: string): Promise<string> {
   }
   await visit(root);
   return digest(items.join('\n'));
+}
+
+export interface QuickStartProjectMigration {
+  schemaVersion: 1;
+  kind: 'quick-start-project-migration';
+  source: string;
+  target: string;
+  moved: string[];
+  conflicts: string[];
+  sourceDigest: string;
+  mode: 'silent-move';
+  completedAt: string;
+}
+
+// A no-flag quick start adopts the old project collection without asking a second question.
+// Each entry is moved atomically when possible; a cross-device copy is verified before its old
+// entry is removed. Existing target names are left in place and recorded as conflicts.
+export async function migrateQuickStartProjects(paths = foundationPaths()): Promise<QuickStartProjectMigration | null> {
+  const source = path.join(paths.home, 'Rho', 'projects'), target = paths.projects;
+  if (path.resolve(source) === path.resolve(target) || !await pathExists(source)) return null;
+  await ensureFoundationPaths(paths);
+  const moved: string[] = [], conflicts: string[] = [];
+  for (const entry of (await fs.readdir(source, { withFileTypes: true }).catch(() => [])).sort((a, b) => a.name.localeCompare(b.name))) {
+    const from = path.join(source, entry.name), to = path.join(target, entry.name);
+    if (await pathExists(to)) { conflicts.push(entry.name); continue; }
+    try {
+      await fs.rename(from, to);
+      moved.push(entry.name);
+      continue;
+    } catch {
+      if (await pathExists(to)) { conflicts.push(entry.name); continue; }
+    }
+    const before = await treeDigest(from);
+    try {
+      await fs.cp(from, to, { recursive: true, dereference: false });
+      if (before !== await treeDigest(to)) throw new Error(`quick-start migration verification failed for ${entry.name}`);
+      await fs.rm(from, { recursive: true, force: true });
+      moved.push(entry.name);
+    } catch {
+      await fs.rm(to, { recursive: true, force: true }).catch(() => {});
+      conflicts.push(entry.name);
+    }
+  }
+  const receipt: QuickStartProjectMigration = {
+    schemaVersion: 1, kind: 'quick-start-project-migration', source, target, moved, conflicts,
+    sourceDigest: await treeDigest(source), mode: 'silent-move', completedAt: iso(),
+  };
+  await writeFoundationJson(path.join(paths.state, 'quick-start-project-migration.json'), receipt);
+  return receipt;
 }
 
 export async function summarizePath(root: string, options = defaultFoundationBudgets) {

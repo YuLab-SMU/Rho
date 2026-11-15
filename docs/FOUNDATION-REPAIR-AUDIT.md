@@ -6,7 +6,7 @@ This audit records the evidence for the foundation plan. All commands below use 
 
 | Work package | Implemented behavior | Evidence |
 | --- | --- | --- |
-| F0 | npm tarball install, occupied staging rename, three-shim half-uninstall, legacy roots, project lock, host residue, diagnostic bundle, crash/restart, upgrade dry-run/apply and purge uninstall | `npm run acceptance:foundation`, 28/28 steps, `work/foundation-episode/report.json` |
+| F0 | npm tarball install, occupied staging rename, three-shim half-uninstall, legacy roots, project lock, host residue, diagnostic bundle, silent quick-start migration, crash/restart, upgrade dry-run/apply and purge uninstall | `npm run acceptance:foundation`, 31/31 steps, `work/foundation-episode/report.json` |
 | F1 | platform resolver, state envelope, migration inventory, copy verification, switch journal, project-lock migration and digest-checked rollback | `test/foundation.test.mjs`, migration rollback test, `rho migrate --dry-run/--apply/--rollback` |
 | F2 | manifest package/bin ownership, version inventory, upgrade dry-run/apply entrypoint, staged uninstall, dangling-shim repair, quarantine, receipt and resumable operation journal | installed-package F0 episode, `rho versions`, `rho upgrade --dry-run`, `rho uninstall --dry-run` |
 | F3 | CLI/env/profile precedence, profile roots/ports/logs/plugins/limits, service PID/process registry, direct service lock, native descriptor generation and optional manager registration | launcher tests, service descriptor matrix, Windows CI `schtasks.exe` apply/remove, `rho profile`, `rho status`, `rho service` |

@@ -27,8 +27,6 @@ need(/^[a-z0-9]+(-[a-z0-9]+)*$/.test(meta.source), 'source must be kebab-case');
 need(meta.type === 'cli', 'a CLI connector must say "type": "cli"');
 need(/^\d+\.\d+\.\d+$/.test(meta.version ?? ''), 'version must be a semantic version');
 for (const key of ['examples_zh', 'examples_en']) need(meta[key]?.length >= 2 && meta[key].length <= 5, `${key} needs 2 to 5 examples`);
-// cli.json versionCheck needs WorkBuddy 4.24.0, a Node runtime 4.22.0.
-need(meta.minWorkbuddyVersion && atLeast(meta.minWorkbuddyVersion, '4.24.0'), 'versionCheck needs minWorkbuddyVersion 4.24.0 or later');
 for (const key of ['init', 'status', 'unAuth']) for (const p of platforms) need(cli[key]?.[p], `cli.json lacks ${key}.${p}`);
 for (const p of platforms) need(cli.versionCheck?.command?.[p], `cli.json lacks versionCheck.command.${p}`);
 need(cli.runtime?.type === 'node' && cli.runtime.version === rho.engines?.node, `runtime.version must be Rho's engines.node (${rho.engines?.node})`);

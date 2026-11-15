@@ -6,7 +6,7 @@ Updated: 2026-11-15.
 
 ## 实施状态
 
-2026-11-15 的 F0 episode 已经把 F1–F6 的本地核心入口跑通。当前主线提供平台路径解析、安装 manifest、`paths`、`doctor`、诊断 bundle、迁移 dry-run/apply/rollback、profile 配置、start/stop/status/restart、版本盘点、upgrade、临时目录与缓存预算、日志轮转、宿主 JSON 所有权清理、service descriptor/manager registration 和事务式 npm 卸载。验收脚本在 disposable HOME 和 npm prefix 中完成了 28 个步骤，macOS 与 Linux 容器都通过了完整 episode，独立的 platform matrix 已覆盖 macOS、Linux/XDG 和 Windows/APPDATA 的路径与 native descriptor 契约；最终 Windows CI 还实际创建并删除了 Task Scheduler 任务。逐项证据见 [implementation audit](FOUNDATION-REPAIR-AUDIT.md)。宿主连接器版本和 macOS/Linux 原生 service manager 仍需各自的机器证据。
+2026-11-15 的 F0 episode 已经把 F1–F6 的本地核心入口跑通。当前主线提供平台路径解析、安装 manifest、`paths`、`doctor`、诊断 bundle、迁移 dry-run/apply/rollback、profile 配置、start/stop/status/restart、版本盘点、upgrade、临时目录与缓存预算、日志轮转、宿主 JSON 所有权清理、service descriptor/manager registration 和事务式 npm 卸载。验收脚本在 disposable HOME 和 npm prefix 中完成了 31 个步骤，包含 `~/.rho` quick start 与 `~/Rho/projects` 静默迁移；macOS 与 Linux 容器都通过了完整 episode，独立的 platform matrix 已覆盖 macOS、Linux/XDG 和 Windows/APPDATA 的路径与 native descriptor 契约；最终 Windows CI 还实际创建并删除了 Task Scheduler 任务。逐项证据见 [implementation audit](FOUNDATION-REPAIR-AUDIT.md)。宿主连接器版本和 macOS/Linux 原生 service manager 仍需各自的机器证据。
 
 ## 目标
 
@@ -268,13 +268,11 @@ doctor 最少检查以下内容。
 
 以下选择在 F0 的真实运行结果出来后定稿。
 
-- quick start 的默认项目根路径，以及已有 `~/Rho/projects` 的提示方式。
 - macOS LaunchAgent、Linux systemd user unit 和 Windows 任务注册的默认开关。
 - Unix 原生文件锁实现和 Node 版本约束，目标是服务进程直接持有可诊断锁。
-- WorkBuddy、Cursor 和其他宿主适配器的公开版本范围。
 - 临时目录、缓存和日志预算在长时间 Agent episode 中的最终数值。
 - 旧版本 shim 和 legacy path 扫描的结束版本。
 
 ## 当前决策
 
-F0–F6 已对本地实现的可选项作出可复现决策：quick start 使用平台解析器返回的 `Documents/Rho/projects`，服务单元默认只生成 descriptor，只有 `--apply` 才调用平台 manager，Unix 锁由服务进程持有 JSON owner 文件，预算使用本文件表中的初始值，配置与缓存通过 digest 关联，legacy shim 在兼容窗口内继续由 manifest 管理。CI 已加入 macOS/Linux/Windows 的 foundation 矩阵，真实 WorkBuddy/Cursor 版本范围和 shim 兼容窗口结束版本仍由对应宿主/Release owner 选择。
+F0–F6 已对本地实现的可选项作出可复现决策：quick start 使用 `~/.rho` 作为项目根，并在无显式 root/state 时静默移动已有 `~/Rho/projects` 项目；服务单元默认只生成 descriptor，只有 `--apply` 才调用平台 manager，Unix 锁由服务进程持有 JSON owner 文件，预算使用本文件表中的初始值，配置与缓存通过 digest 关联，legacy shim 在兼容窗口内继续由 manifest 管理。CI 已加入 macOS/Linux/Windows 的 foundation 矩阵。宿主适配器不发布 WorkBuddy、Cursor 或其他宿主的版本范围，优先通过 Skills 和稳定的 agentic 接口保持兼容。

@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs';
 import { constants as fsConstants } from 'node:fs';
 import os from 'node:os';
 import { spawn } from 'node:child_process';
-import { ensureFoundationPaths, foundationPaths, foundationPathsForState, ensureManifest, packageIdentity, readFoundationJson, updateManifest, registerFoundationProcess, unregisterFoundationProcess } from './foundation.js';
+import { ensureFoundationPaths, foundationPaths, foundationPathsForState, ensureManifest, packageIdentity, readFoundationJson, updateManifest, registerFoundationProcess, unregisterFoundationProcess, migrateQuickStartProjects } from './foundation.js';
 // A widened link is optional: the fragment carries a one-time code, which no request or Referer
 // sends and which the page redeems and removes. Opening the plain url needs no code at all.
 const link = (url: string, code: string) => url + '/#pair=' + code;
@@ -42,7 +42,7 @@ Open a folder in Rho, in the browser, starting Rho in the background when it is 
   rho open [FOLDER]
 Take a folder off Rho's list of projects; the folder and its files stay as they are (rho remove --help):
   rho remove [FOLDER]
-Say whether Rho runs for a state folder (~/Rho/state without --state-dir), at which address, how
+Say whether Rho runs for the platform state folder (without --state-dir), at which address, how
 the last one ended, and which others run on this machine:
   rho --status [--state-dir SERVICE_STATE]
 Stop it in order, as Ctrl+C in its window does:
@@ -55,7 +55,7 @@ For an Agent:
   rho tool index --as NAME                   call the same tools from your shell now (rho tool --help)
   rho --install-skill SKILL_DIRECTORY        install the Rho Agent Skill this version ships
 
-Start Rho using the platform data directories in this terminal, and say where it is and what is missing:
+Start Rho using ~/.rho as the default project root, silently adopting existing ~/Rho/projects entries:
   rho
 Lifecycle and foundation tools:
   rho start|stop|status|restart [--profile NAME] [START_OPTIONS]
@@ -268,6 +268,7 @@ if (values.acp) {
     quickRoot = defaults.projects;
     quickState = defaults.state;
     await ensureFoundationPaths(defaults);
+    await migrateQuickStartProjects(defaults);
   }
   const projectsRoot = configuredRoot ?? quickRoot ?? defaults.projects, stateDirectory = configuredState ?? quickState ?? defaults.state;
   await fs.mkdir(projectsRoot, { recursive: true, mode: 0o700 });

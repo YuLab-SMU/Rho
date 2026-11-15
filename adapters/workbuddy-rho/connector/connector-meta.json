@@ -17,6 +17,5 @@
     "Open this project folder in Rho",
     "Draw a volcano plot of these differential expression results in Rho's Notebook so I can pick the genes I care about",
     "Analyse this CSV in Rho from cleaning to statistics and figures, and keep the scripts and notes"
-  ],
-  "minWorkbuddyVersion": "4.24.0"
+  ]
 }

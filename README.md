@@ -61,7 +61,7 @@ A person can ask Claude Code or Codex, in any language:
 or: 请阅读 https://yulab-smu.top/Rho/doc/setup.md 文档，按照步骤为我安装并配置 Rho。
 
 That page is [SETUP.md](SETUP.md). The Agent checks the machine, installs the npm package and
-starts Rho on `~/Rho/projects` and `~/Rho/state`. It then installs the Agent Skill in
+starts Rho on `~/.rho`, silently adopting existing projects from `~/Rho/projects`. It then installs the Agent Skill in
 [skills/rho](skills/rho/SKILL.md) into its own skills folder, connects itself to the example
 project and says what is missing. The Skill teaches an Agent to install and connect Rho, call
 its tools without guessing, and run an analysis a person can follow. It is published beside the

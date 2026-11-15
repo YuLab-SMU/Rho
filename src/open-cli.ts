@@ -17,9 +17,10 @@ const startOptions = ['root', 'agent-backend', 'acp-command', 'rscript', 'python
 export const openUsage = `Open a folder in Rho, in the browser on this machine, and start Rho first when it is not running:
   rho open [FOLDER] [--state-dir SERVICE_STATE] [--no-browser] [--json] [START_OPTIONS]
 FOLDER is the folder to work in (the current folder without it); it stays where it is. Rho uses the
-running Rho that already has it as a project, else the one for --state-dir (~/Rho/state without
-it), started in the background when it is not running: with ~/Rho/projects as its projects folder
-unless --root is given, and with START_OPTIONS such as --agent-backend codex-acp or --rscript PATH.
+running Rho that already has it as a project, else the one for --state-dir (the platform default
+without it), started in the background when it is not running: with ~/.rho as its projects folder
+unless --root is given. A no-flag quick start silently adopts existing ~/Rho/projects entries.
+START_OPTIONS such as --agent-backend codex-acp or --rscript PATH still apply.
 The reply says what to tell the person and how an Agent works in the project.
 `;
 export const removeUsage = `Take a folder off Rho's list of projects. The folder, its files and the records Rho keeps in it
@@ -73,9 +74,11 @@ export async function openCli(args: string[]): Promise<number> {
     if (up) client = up.client;
     else {
       if (await connection(state) && await holds(state)) return fail(1, `The Rho for ${state} holds its state but does not answer. Check it with: ${rhoCommand} --status --state-dir "${state}"`);
-    const root = path.resolve(typeof values.root === 'string' ? values.root : defaultProjectsDirectory());
+      const root = path.resolve(typeof values.root === 'string' ? values.root : defaultProjectsDirectory());
       await fs.mkdir(root, { recursive: true });
-      const start = ['--root', root, '--state-dir', state];
+      const start = [] as string[];
+      if (typeof values.root === 'string' || path.resolve(root) !== path.resolve(defaultProjectsDirectory())) start.push('--root', root);
+      if (given || path.resolve(state) !== path.resolve(defaultStateDirectory())) start.push('--state-dir', state);
       for (const name of startOptions) { const value = values[name]; if (name !== 'root' && typeof value === 'string') start.push('--' + name, value); }
       const code = await startInBackground(start, state, { quiet: true });
       if (code) return code;

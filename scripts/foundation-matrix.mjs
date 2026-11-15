@@ -57,6 +57,7 @@ try {
     assert.equal(await fs.access(service.descriptor).then(() => true, () => false), true, `${platform}: native descriptor was not written`);
     const descriptorText = await fs.readFile(service.descriptor, platform === 'win32' && process.platform === 'win32' ? 'utf16le' : 'utf8');
     assert.ok(descriptorText.includes(platform === 'linux' ? '[Service]' : platform === 'darwin' ? '<plist' : '<Task'), `${platform}: native descriptor has unexpected content`);
+    assert.equal(paths.paths.projects.path, path.join(base, 'home', '.rho'), `${platform}: quick-start project root should be ~/.rho`);
     if (platform === 'darwin') assert.equal(paths.paths.config.path, path.join(base, 'home', 'Library', 'Application Support', 'Rho'));
     if (platform === 'linux') {
       assert.equal(paths.paths.config.path, path.join(base, 'xdg-config', 'rho'));

@@ -10,6 +10,7 @@ import {
   hostCleanup,
   hostScan,
   migrateLegacy,
+  migrateQuickStartProjects,
   rollbackMigration,
   cacheReport,
   createTemporaryHome,
@@ -85,6 +86,23 @@ test('legacy migration dry-run is read-only and apply preserves the source tree'
   } finally { await f.cleanup(); }
 });
 
+test('quick start silently adopts projects from the legacy home root', async () => {
+  const f = await fixture();
+  try {
+    const source = path.join(f.paths.home, 'Rho', 'projects'), legacy = path.join(source, 'legacy-project');
+    await fs.mkdir(path.join(legacy, '.rho', 'rho'), { recursive: true });
+    await fs.writeFile(path.join(legacy, 'README.md'), 'legacy project\n');
+    const result = await migrateQuickStartProjects({ ...f.paths, projects: path.join(f.paths.home, '.rho') });
+    assert.deepEqual(result?.moved, ['legacy-project']);
+    assert.deepEqual(result?.conflicts, []);
+    assert.equal(await fs.readFile(path.join(f.paths.home, '.rho', 'legacy-project', 'README.md'), 'utf8'), 'legacy project\n');
+    assert.equal(await fs.access(legacy).then(() => true, () => false), false);
+    assert.equal(await fs.access(path.join(f.paths.state, 'quick-start-project-migration.json')).then(() => true, () => false), true);
+    const again = await migrateQuickStartProjects({ ...f.paths, projects: path.join(f.paths.home, '.rho') });
+    assert.equal(again?.moved.length, 0);
+  } finally { await f.cleanup(); }
+});
+
 test('migration rollback removes only unchanged imported entries and keeps the legacy source', async () => {
   const f = await fixture();
   try {
@@ -102,7 +120,7 @@ test('migration rollback removes only unchanged imported entries and keeps the l
     const importedFile = path.join(f.paths.state, 'legacy-import', 'Rho', 'state', 'projects.json');
     await fs.writeFile(importedFile, 'changed\n');
     const refused = await rollbackMigration(f.paths, changed.operationId);
-    assert.ok(refused.skipped.some(file => file.endsWith('/legacy-import/Rho/state')));
+    assert.ok(refused.skipped.some(file => file.split(path.sep).join('/').endsWith('/legacy-import/Rho/state')));
     assert.equal(await fs.readFile(importedFile, 'utf8'), 'changed\n');
   } finally { await f.cleanup(); }
 });
@@ -118,15 +136,15 @@ test('doctor reads a disposable root without creating it', async () => {
 });
 
 test('path resolver follows platform data conventions', () => {
-  const home = '/tmp/rho-platform-home';
+  const home = path.resolve('rho-platform-home'), configHome = path.resolve('xdg-config'), stateHome = path.resolve('xdg-state'), cacheHome = path.resolve('xdg-cache'), runtimeHome = path.resolve('xdg-runtime'), appData = path.resolve('appdata'), localAppData = path.resolve('localappdata');
   const darwin = foundationPaths({ RHO_PLATFORM: 'darwin', RHO_HOME: home });
-  const linux = foundationPaths({ RHO_PLATFORM: 'linux', RHO_HOME: home, XDG_CONFIG_HOME: '/tmp/xdg-config', XDG_STATE_HOME: '/tmp/xdg-state', XDG_CACHE_HOME: '/tmp/xdg-cache', XDG_RUNTIME_DIR: '/tmp/xdg-runtime' });
-  const windows = foundationPaths({ RHO_PLATFORM: 'win32', RHO_HOME: home, APPDATA: '/tmp/appdata', LOCALAPPDATA: '/tmp/localappdata' });
-  assert.match(darwin.config, /Library\/Application Support\/Rho$/);
-  assert.equal(linux.config, '/tmp/xdg-config/rho');
-  assert.equal(linux.state, '/tmp/xdg-state/rho');
-  assert.equal(windows.config, '/tmp/appdata/Rho');
-  assert.equal(windows.state, '/tmp/localappdata/Rho/state');
+  const linux = foundationPaths({ RHO_PLATFORM: 'linux', RHO_HOME: home, XDG_CONFIG_HOME: configHome, XDG_STATE_HOME: stateHome, XDG_CACHE_HOME: cacheHome, XDG_RUNTIME_DIR: runtimeHome });
+  const windows = foundationPaths({ RHO_PLATFORM: 'win32', RHO_HOME: home, APPDATA: appData, LOCALAPPDATA: localAppData });
+  assert.equal(darwin.config, path.join(home, 'Library', 'Application Support', 'Rho'));
+  assert.equal(linux.config, path.join(configHome, 'rho'));
+  assert.equal(linux.state, path.join(stateHome, 'rho'));
+  assert.equal(windows.config, path.join(appData, 'Rho'));
+  assert.equal(windows.state, path.join(localAppData, 'Rho', 'state'));
 });
 
 test('cache reporting stays below the temporary registry and does not count temporary files', async () => {
@@ -147,7 +165,7 @@ test('doctor repair reconciles a missing manifest-owned shim without touching an
     await ensureFoundationPaths(f.paths, false);
     const packageRoot = path.join(f.root, 'package');
     const target = path.join(packageRoot, 'dist', 'cli.js');
-    const shim = path.join(f.root, 'bin', 'rho');
+    const shim = path.join(f.root, 'bin', process.platform === 'win32' ? 'rho.cmd' : 'rho');
     const unrelated = path.join(f.root, 'bin', 'other');
     await fs.mkdir(path.dirname(target), { recursive: true });
     await fs.mkdir(path.dirname(shim), { recursive: true });
@@ -157,7 +175,8 @@ test('doctor repair reconciles a missing manifest-owned shim without touching an
     const before = await repairFoundation(f.paths);
     assert.ok(before.repaired.includes('bin:rho'));
     const targetReal = await fs.realpath(target);
-    assert.equal(await fs.realpath(shim), targetReal);
+    if (process.platform === 'win32') assert.match(await fs.readFile(shim, 'utf8'), /cli\.js/);
+    else assert.equal(await fs.realpath(shim), targetReal);
     assert.equal(await fs.realpath(unrelated), targetReal);
   } finally { await f.cleanup(); }
 });
@@ -186,7 +205,9 @@ test('secret file input requires private mode and never returns a command-line v
     await fs.writeFile(secret, 'token\n', { mode: 0o600 });
     const value = await readSecretInput('RHO_API_KEY', { RHO_API_KEY_FILE: secret });
     assert.deepEqual(value, { value: 'token', source: 'RHO_API_KEY_FILE', path: secret });
-    await fs.chmod(secret, 0o644);
-    await assert.rejects(readSecretInput('RHO_API_KEY', { RHO_API_KEY_FILE: secret }), /private file/);
+    if (process.platform !== 'win32') {
+      await fs.chmod(secret, 0o644);
+      await assert.rejects(readSecretInput('RHO_API_KEY', { RHO_API_KEY_FILE: secret }), /private file/);
+    }
   } finally { await f.cleanup(); }
 });

@@ -34,7 +34,7 @@ app. Do not install again.
 ## Start
 
 **To open a folder (0.5.8 and later):** `rho open [FOLDER]` finds the running Rho or starts one in
-the background on `~/Rho/state` and `~/Rho/projects`, makes the folder a project where it is,
+the background with `~/.rho` as its default project root, makes the folder a project where it is,
 and opens its page in the browser. `--state-dir`, `--root` and start flags such as
 `--agent-backend codex-acp` apply when it has to start Rho; `--no-browser` and `--json` change
 what it does at the end. The rest of this section is for starting Rho without opening a folder,
@@ -49,15 +49,14 @@ SKILL.md). If one is, give the person its address instead of starting another.
 rho                       # or: npx @rho-workspace/rho
 ```
 
-This uses `~/Rho/projects` and `~/Rho/state`, creates both, and prints the address to open,
+This uses `~/.rho` as the project root, silently adopts existing `~/Rho/projects` entries, and prints the address to open,
 the two folders, and whether the Agent client and R were found. In 0.5.3 and earlier, a start
 with no flags prints the usage and exits 2, so use the flagged form there.
 
 **With flags (every version), in a terminal the person keeps open:**
 
 ```sh
-mkdir -p ~/Rho/projects ~/Rho/state
-rho --root ~/Rho/projects --state-dir ~/Rho/state --open
+rho --root ~/.rho --open
 ```
 
 These are the folders a start without flags uses after 0.5.3, so an upgrade finds the same
@@ -71,7 +70,7 @@ foreground of your shell tool dies with that tool call. Add `--background` to th
 every system (`rho.cmd` on Windows):
 
 ```sh
-rho --root ~/Rho/projects --state-dir ~/Rho/state --background
+rho --root ~/.rho --background
 ```
 
 It returns once Rho is ready, within a minute, and prints the ready line first, one JSON object:
@@ -82,7 +81,7 @@ It returns once Rho is ready, within a minute, and prints the ready line first, 
 
 Then the process and the log: `<state>/rho.log`, with the previous start's in
 `<state>/rho.previous.log`. A start that fails prints Rho's own output and exits 1. In a separate
-command, `rho --status --state-dir ~/Rho/state` should say `"running":true` and `"answers":200`;
+command, `rho --status` should say `"running":true` and `"answers":200`;
 if not, your client ended what your command started, and the person runs the start without
 `--background` in a terminal they keep open. Tell the person the `url`. `startup.rscript` shows
 which R it found, and `startup.core` the binary for managed runs. Without a Core, managed runs

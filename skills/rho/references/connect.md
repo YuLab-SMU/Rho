@@ -15,7 +15,7 @@ A grant covers one project. Each project needs its own grant, which adds an MCP 
 From Rho 0.5.7, the project's setup prompt (the sidebar's **Agent** row; **Agent → Agents** up to 0.5.9) gives one command:
 
 ```sh
-rho connect "/Users/me/Rho/projects/City bike-share demand" --as my-agent
+rho connect "/Users/me/.rho/City bike-share demand" --as my-agent
 ```
 
 - **Project folder.** Give the project's folder, or run the command in it. Rho uses the project
@@ -68,7 +68,7 @@ names that contain spaces. Older setup prompts give `--grant` with `--project-id
 selects an existing project, including folders chosen outside Rho's projects folder.
 
 ```sh
-rho --grant ~/Rho/state/connection.json --project "City bike-share demand" --session my-agent
+rho --grant <state>/connection.json --project "City bike-share demand" --session my-agent
 ```
 
 The reply is one JSON line:
@@ -122,7 +122,7 @@ give a second Agent its own identity.
 ## Grant and add in one step (versions after 0.5.3)
 
 ```sh
-rho --grant ~/Rho/state/connection.json --project "City bike-share demand" --agent claude-code   # or: codex
+rho --grant <state>/connection.json --project "City bike-share demand" --agent claude-code   # or: codex
 ```
 
 This runs the Agent's own `mcp remove` and `mcp add`, and the project page then shows the
