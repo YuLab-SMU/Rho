@@ -12,7 +12,7 @@ import type { Project, State } from './state.js';
 
 // The bundled example sits beside the compiled service, like the browser files it serves.
 export const exampleRoot = fileURLToPath(new URL('../example/', import.meta.url));
-export const exampleName = 'PA14 quorum sensing';
+export const exampleName = 'City bike-share demand';
 export interface ExampleSeed { version: string; projectId?: string; root?: string; name?: string; at: string; skipped?: string; problem?: string }
 const marker = (state: State) => path.join(state.directory, 'example.json');
 

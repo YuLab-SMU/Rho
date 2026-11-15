@@ -1,5 +1,5 @@
 // Records the website demo: starts this checkout's service on a new state, which copies
-// the shipped PA14 project once, walks it in a browser (demo-tour.mjs) and keeps every
+// the shipped city bike-share project once, walks it in a browser (demo-tour.mjs) and keeps every
 // API answer the walk received. The demo replays these answers; it never runs work.
 //
 //   npm run build && node scripts/demo-capture.mjs
@@ -56,7 +56,7 @@ try {
 }
 
 let text = JSON.stringify({ capturedAt: new Date().toISOString(), root: shown, calls });
-for (const prefix of [real, base].sort((a, b) => b.length - a.length)) text = text.split(prefix).join(shown);
+for (const prefix of [real, base, os.homedir()].filter(Boolean).sort((a, b) => b.length - a.length)) text = text.split(prefix).join(shown);
 const leaks = [os.homedir(), os.userInfo().username, real, base].filter(s => s && s.length > 3 && text.includes(s));
 const secrets = text.match(/"(token|secret|password|authorization)"\s*:\s*"[^"]{8,}"/gi);
 if (leaks.length || secrets) { console.error('Refusing to write the recording: it still contains', leaks.length ? leaks : secrets); process.exit(1); }

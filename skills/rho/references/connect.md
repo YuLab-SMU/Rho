@@ -15,7 +15,7 @@ A grant covers one project. Each project needs its own grant, which adds an MCP 
 From Rho 0.5.7, the project's setup prompt (the sidebar's **Agent** row; **Agent → Agents** up to 0.5.9) gives one command:
 
 ```sh
-rho connect "/Users/me/Rho/projects/PA14 quorum sensing" --as my-agent
+rho connect "/Users/me/Rho/projects/City bike-share demand" --as my-agent
 ```
 
 - **Project folder.** Give the project's folder, or run the command in it. Rho uses the project
@@ -68,17 +68,17 @@ names that contain spaces. Older setup prompts give `--grant` with `--project-id
 selects an existing project, including folders chosen outside Rho's projects folder.
 
 ```sh
-rho --grant ~/Rho/state/connection.json --project "PA14 quorum sensing" --session my-agent
+rho --grant ~/Rho/state/connection.json --project "City bike-share demand" --session my-agent
 ```
 
 The reply is one JSON line:
 
 ```json
 {"projectId":"…","session":"my-agent","connectionFile":"<state>/agent-….json","methods":82,
- "mcp":{"name":"rho-pa14-quorum-sensing","command":"/…/node","args":["/…/rho/dist/cli.js","--mcp","<state>/agent-….json"]},
- "claude":"claude mcp add rho-pa14-quorum-sensing -- /…/node /…/cli.js --mcp <state>/agent-….json",
- "codex":"codex mcp add rho-pa14-quorum-sensing -- …",
- "opencode":{"file":"<project>/.opencode/opencode.json","merge":{"mcp":{"rho-pa14-quorum-sensing":{"type":"local","command":[…],"enabled":true}}}},
+ "mcp":{"name":"rho-city-bike-share-demand","command":"/…/node","args":["/…/rho/dist/cli.js","--mcp","<state>/agent-….json"]},
+ "claude":"claude mcp add rho-city-bike-share-demand -- /…/node /…/cli.js --mcp <state>/agent-….json",
+ "codex":"codex mcp add rho-city-bike-share-demand -- …",
+ "opencode":{"file":"<project>/.opencode/opencode.json","merge":{"mcp":{"rho-city-bike-share-demand":{"type":"local","command":[…],"enabled":true}}}},
  "dsh":{"file":"~/.dsh/profiles/desktop/cordis.patch.yml","append":"- insert:\n    - id: \"mcp-rho-…\"\n      name: \"@deepseek-ai/dsh-mcp-client\"\n…"}}
 ```
 
@@ -122,7 +122,7 @@ give a second Agent its own identity.
 ## Grant and add in one step (versions after 0.5.3)
 
 ```sh
-rho --grant ~/Rho/state/connection.json --project "PA14 quorum sensing" --agent claude-code   # or: codex
+rho --grant ~/Rho/state/connection.json --project "City bike-share demand" --agent claude-code   # or: codex
 ```
 
 This runs the Agent's own `mcp remove` and `mcp add`, and the project page then shows the

@@ -115,7 +115,7 @@ log says so.
   it does not, your client ended the processes your command started. Give the person the start
   command without `--background`, to run in a terminal they keep open. Go on when it answers.
 
-The first start copies an example project, `PA14 quorum sensing`, into `~/Rho/projects`.
+The first start copies an example project, `City bike-share demand`, into `~/Rho/projects`.
 
 Rho keeps running until it is stopped, the person logs out or the machine restarts, or the
 container or sandbox it runs in ends; it does not start again by itself. On a remote machine or
@@ -157,7 +157,7 @@ in their own terminal, and go on with step 7.
 Claude Code and Codex add Rho to their own configuration with one command:
 
 ```sh
-rho --grant "$HOME/Rho/state/connection.json" --project "PA14 quorum sensing" --agent claude-code
+rho --grant "$HOME/Rho/state/connection.json" --project "City bike-share demand" --agent claude-code
 ```
 
 (or `--agent codex`). Its reply is one JSON line, and `added` names the entry it made.
@@ -165,7 +165,7 @@ rho --grant "$HOME/Rho/state/connection.json" --project "PA14 quorum sensing" --
 Another client gives itself a stable session name and asks Rho how to connect:
 
 ```sh
-rho connect "$HOME/Rho/projects/PA14 quorum sensing" --as YOUR_AGENT_NAME
+rho connect "$HOME/Rho/projects/City bike-share demand" --as YOUR_AGENT_NAME
 ```
 
 The reply names the MCP server to add, its `command` and `args`, ready entries for the clients
@@ -192,11 +192,11 @@ Rscript -e 'cat(requireNamespace("jsonlite", quietly = TRUE), "\n")'
 If it prints `FALSE`, install it with
 `Rscript -e 'install.packages("jsonlite", repos = "https://cloud.r-project.org")'`.
 
-The example project's scripts also use ggplot2, dplyr, tidyr, patchwork, scales, car and
-Bioconductor's DESeq2. Say which are missing, and install them only when the person asks:
+The example project's scripts also use ggplot2, dplyr, tidyr, patchwork and scales. Say which
+are missing, and install them only when the person asks:
 
 ```sh
-Rscript -e 'p <- c("ggplot2", "dplyr", "tidyr", "patchwork", "scales", "car", "DESeq2"); cat("missing:", p[!vapply(p, requireNamespace, logical(1), quietly = TRUE)], "\n")'
+Rscript -e 'p <- c("ggplot2", "dplyr", "tidyr", "patchwork", "scales"); cat("missing:", p[!vapply(p, requireNamespace, logical(1), quietly = TRUE)], "\n")'
 ```
 
 ## 8. Tell the person
@@ -210,8 +210,8 @@ Keep it brief, in their language:
    at `~/Rho/state/rho.log`, and the version installed.
 3. **What is done and what is missing,** step by step, and what works without what is missing.
 4. **How to start working**, in either place:
-   - in the browser: open `PA14 quorum sensing` and ask in Rho's Agent panel;
-   - in a new session of this client started in `~/Rho/projects/PA14 quorum sensing`, where
+   - in the browser: open `City bike-share demand` and ask in Rho's Agent panel;
+   - in a new session of this client started in `~/Rho/projects/City bike-share demand`, where
      Rho's tools and the skill are available.
 
    Read the example's `README.md` and suggest three questions they could ask about it.
@@ -259,8 +259,8 @@ as a downloader.
    `"$env:USERPROFILE\.codex\skills\rho"` in PowerShell, or `$env:CODEX_HOME\skills\rho` when
    `CODEX_HOME` is set.
 6. **Connect yourself** as in step 6, with
-   `rho.cmd --grant "$HOME\Rho\state\connection.json" --project "PA14 quorum sensing" --agent codex`
-   (or `--agent claude-code`), or `rho.cmd connect "$HOME\Rho\projects\PA14 quorum sensing" --as YOUR_AGENT_NAME`.
+   `rho.cmd --grant "$HOME\Rho\state\connection.json" --project "City bike-share demand" --agent codex`
+   (or `--agent claude-code`), or `rho.cmd connect "$HOME\Rho\projects\City bike-share demand" --as YOUR_AGENT_NAME`.
 7. **Check R** as in step 7. Windows PowerShell 5.1 drops the double quotes inside an argument it
    passes to a program, so these use single quotes in R:
 

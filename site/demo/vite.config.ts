@@ -16,7 +16,7 @@ export default mergeConfig(application, {
   plugins: [{
     name: 'rho-demo-replay',
     transformIndexHtml: html => ({
-      html: html.replace(/<title>[^<]*<\/title>/, '<title>Rho demo · PA14 quorum sensing</title>'),
+      html: html.replace(/<title>[^<]*<\/title>/, '<title>Rho demo · City bike-share demand</title>'),
       tags: [{ tag: 'script', children: replay, injectTo: 'head-prepend' }],
     }),
     generateBundle() { this.emitFile({ type: 'asset', fileName: 'demo-data/recording.json', source: fs.readFileSync(recording) }); },

@@ -1,6 +1,6 @@
 // The website demo has no backend. This script runs before the application and answers its
 // API requests from demo-data/recording.json, the answers a real Rho service gave while
-// scripts/demo-tour.mjs walked the shipped PA14 project. A request the recording does not hold
+// scripts/demo-tour.mjs walked the shipped city bike-share project. A request the recording does not hold
 // is refused as unavailable: nothing is computed, saved or sent anywhere.
 (function () {
   var realFetch = window.fetch.bind(window);
@@ -94,7 +94,7 @@
     var b = document.createElement('a');
     b.href = '../#install';
     b.target = '_top';
-    b.textContent = innerWidth < 768 ? 'Demo · no backend' : 'Demo · recorded PA14 project · no backend';
+    b.textContent = innerWidth < 768 ? 'Demo · no backend' : 'Demo · recorded bike-share project · no backend';
     b.style.cssText = 'position:fixed;right:12px;bottom:12px;z-index:2147483646;font-size:' + (innerWidth < 768 ? '11px;padding:3px 8px' : '12px;padding:5px 10px') + ';border:1px solid #c9d6cf;border-radius:999px;background:rgba(255,255,255,.94);color:#1e6b52;font-weight:600;line-height:1.4;font-family:system-ui,-apple-system,sans-serif;text-decoration:none';
     document.body.appendChild(b);
   }

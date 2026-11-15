@@ -1,0 +1,361 @@
+trip_id,started_at,day_type,rider_type,start_station,end_station,duration_min,distance_km,bike_type
+T0001,2024-12-07 11:41,Weekend,Casual,Union Station,Garden District,34,7.3,classic
+T0002,2024-05-20 20:38,Weekend,Casual,Central Square,Museum Row,39,9.5,electric
+T0003,2024-05-16 09:08,Weekend,Casual,Central Square,Garden District,21,3.5,electric
+T0004,2024-05-19 10:39,Weekday,Member,Museum Row,Market Street,21,5.0,electric
+T0005,2024-03-22 07:22,Weekend,Casual,Riverside Park,North Loop,35,8.1,electric
+T0006,2024-01-16 16:39,Weekday,Member,South Market,Union Station,18,3.6,electric
+T0007,2024-04-10 11:50,Weekday,Member,Garden District,North Loop,16,2.9,electric
+T0008,2024-02-15 20:08,Weekday,Member,Union Station,Museum Row,25,6.2,electric
+T0009,2024-10-18 16:35,Weekday,Casual,Central Square,Harbor Walk,39,10.5,classic
+T0010,2024-10-05 18:11,Weekday,Casual,Garden District,Union Station,30,6.8,classic
+T0011,2024-04-25 11:18,Weekday,Member,Garden District,South Market,24,4.4,classic
+T0012,2024-04-04 07:33,Weekday,Casual,Harbor Walk,East Village,29,5.6,electric
+T0013,2024-07-21 10:41,Weekend,Casual,University,Harbor Walk,30,6.7,classic
+T0014,2024-04-25 12:23,Weekday,Member,University,Central Square,21,6.2,classic
+T0015,2024-10-17 20:38,Weekend,Casual,South Market,Market Street,22,4.0,classic
+T0016,2024-12-13 11:49,Weekday,Member,South Market,North Loop,29,6.8,classic
+T0017,2024-01-21 09:16,Weekend,Casual,Garden District,University,34,8.7,classic
+T0018,2024-12-13 11:44,Weekday,Member,East Village,Museum Row,18,4.8,classic
+T0019,2024-12-17 09:37,Weekday,Casual,Garden District,Central Square,42,10.4,classic
+T0020,2024-02-17 08:05,Weekday,Member,Riverside Park,South Market,20,4.3,classic
+T0021,2024-08-18 09:31,Weekday,Casual,Central Square,Garden District,23,5.1,electric
+T0022,2024-07-07 06:54,Weekend,Casual,University,Riverside Park,13,2.7,electric
+T0023,2024-10-08 17:27,Weekday,Member,Market Street,Harbor Walk,34,6.5,classic
+T0024,2024-11-16 10:06,Weekday,Casual,Union Station,Central Square,23,4.9,classic
+T0025,2024-05-11 09:39,Weekday,Member,Hilltop,Museum Row,28,5.2,classic
+T0026,2024-07-12 08:08,Weekend,Casual,Union Station,Garden District,26,4.6,classic
+T0027,2024-08-17 11:55,Weekend,Casual,Museum Row,University,30,7.0,classic
+T0028,2024-04-11 18:50,Weekday,Member,East Village,Riverside Park,16,3.8,electric
+T0029,2024-06-01 11:26,Weekday,Member,Riverside Park,South Market,22,5.2,classic
+T0030,2024-08-23 21:17,Weekend,Casual,East Village,Harbor Walk,33,8.0,classic
+T0031,2024-04-22 16:20,Weekend,Casual,University,Riverside Park,34,6.4,classic
+T0032,2024-09-16 11:39,Weekday,Casual,North Loop,Market Street,19,4.7,classic
+T0033,2024-09-01 09:00,Weekday,Member,Union Station,South Market,7,1.6,electric
+T0034,2024-02-24 19:43,Weekday,Member,East Village,South Market,19,3.9,classic
+T0035,2024-06-13 10:16,Weekday,Member,Garden District,Harbor Walk,23,5.6,classic
+T0036,2024-08-25 15:31,Weekday,Member,East Village,Garden District,24,6.3,classic
+T0037,2024-04-14 13:17,Weekday,Casual,Hilltop,University,20,3.6,classic
+T0038,2024-09-03 10:50,Weekday,Member,Garden District,North Loop,29,6.9,classic
+T0039,2024-12-17 10:20,Weekday,Member,Central Square,Harbor Walk,16,3.1,electric
+T0040,2024-09-04 10:04,Weekend,Casual,Union Station,Museum Row,22,4.2,classic
+T0041,2024-06-02 17:07,Weekend,Casual,East Village,Museum Row,18,3.9,electric
+T0042,2024-10-08 15:10,Weekday,Member,South Market,Union Station,13,2.5,electric
+T0043,2024-02-08 11:09,Weekday,Casual,Museum Row,University,22,5.3,electric
+T0044,2024-02-24 06:15,Weekday,Casual,Riverside Park,Harbor Walk,22,5.1,electric
+T0045,2024-05-22 15:37,Weekday,Member,North Loop,Harbor Walk,8,1.7,classic
+T0046,2024-11-19 17:35,Weekday,Member,University,Museum Row,26,5.8,classic
+T0047,2024-10-20 09:05,Weekend,Casual,Central Square,Garden District,29,6.3,classic
+T0048,2024-02-15 17:03,Weekday,Casual,Central Square,University,32,5.2,electric
+T0049,2024-01-14 17:26,Weekend,Casual,Market Street,East Village,35,6.9,classic
+T0050,2024-11-11 18:11,Weekday,Member,Hilltop,Harbor Walk,11,2.7,electric
+T0051,2024-03-20 08:40,Weekend,Casual,Garden District,East Village,23,5.5,electric
+T0052,2024-11-15 16:53,Weekday,Member,Garden District,Riverside Park,22,4.9,classic
+T0053,2024-10-16 20:10,Weekend,Casual,Hilltop,South Market,33,7.4,classic
+T0054,2024-05-24 18:57,Weekday,Member,Riverside Park,Hilltop,25,4.6,electric
+T0055,2024-01-19 11:19,Weekend,Casual,Garden District,Riverside Park,28,6.3,classic
+T0056,2024-08-18 10:24,Weekday,Casual,Central Square,Market Street,31,1.7,classic
+T0057,2024-11-21 17:19,Weekday,Member,North Loop,South Market,5,1.1,classic
+T0058,2024-03-05 13:27,Weekday,Casual,University,East Village,42,10.5,electric
+T0059,2024-07-21 19:06,Weekday,Member,Union Station,Garden District,24,5.5,classic
+T0060,2024-09-13 18:39,Weekend,Casual,Market Street,North Loop,29,6.5,classic
+T0061,2024-11-15 18:46,Weekday,Member,University,South Market,13,3.0,classic
+T0062,2024-10-16 12:47,Weekday,Member,South Market,Central Square,5,1.1,classic
+T0063,2024-06-18 11:27,Weekday,Member,Union Station,Harbor Walk,5,1.3,classic
+T0064,2024-05-21 10:19,Weekday,Member,University,Harbor Walk,29,6.8,classic
+T0065,2024-08-13 19:16,Weekend,Casual,Harbor Walk,Hilltop,37,8.5,classic
+T0066,2024-05-22 13:13,Weekend,Casual,Market Street,Harbor Walk,29,5.3,classic
+T0067,2024-12-01 19:50,Weekday,Casual,South Market,Market Street,24,5.9,classic
+T0068,2024-07-25 10:40,Weekday,Casual,Museum Row,North Loop,30,4.5,classic
+T0069,2024-05-05 09:28,Weekday,Member,South Market,Union Station,15,2.2,classic
+T0070,2024-02-06 15:13,Weekday,Member,Museum Row,Market Street,23,5.4,electric
+T0071,2024-09-07 07:07,Weekday,Casual,Garden District,University,31,7.7,classic
+T0072,2024-12-12 19:31,Weekday,Member,Harbor Walk,Central Square,5,1.5,classic
+T0073,2024-03-20 09:33,Weekend,Casual,South Market,East Village,41,8.5,classic
+T0074,2024-08-14 09:16,Weekend,Casual,East Village,Garden District,48,10.6,classic
+T0075,2024-07-22 18:08,Weekday,Member,North Loop,South Market,14,2.9,classic
+T0076,2024-09-03 09:59,Weekday,Member,Harbor Walk,Hilltop,18,3.5,classic
+T0077,2024-11-14 10:38,Weekend,Casual,Riverside Park,Union Station,22,4.9,electric
+T0078,2024-08-05 14:03,Weekday,Member,South Market,Market Street,10,2.0,classic
+T0079,2024-07-12 11:12,Weekday,Member,University,Union Station,15,3.3,classic
+T0080,2024-08-25 16:29,Weekend,Casual,Riverside Park,University,29,5.9,classic
+T0081,2024-12-08 18:17,Weekend,Casual,East Village,Market Street,19,4.1,classic
+T0082,2024-05-21 21:09,Weekday,Casual,Union Station,Garden District,28,4.5,classic
+T0083,2024-11-09 18:24,Weekday,Member,Harbor Walk,North Loop,30,6.9,electric
+T0084,2024-05-03 08:22,Weekday,Member,Museum Row,East Village,16,3.8,classic
+T0085,2024-12-12 18:30,Weekday,Casual,South Market,Museum Row,24,5.4,classic
+T0086,2024-01-24 19:00,Weekday,Member,University,South Market,19,5.6,classic
+T0087,2024-07-21 09:27,Weekend,Casual,Market Street,Museum Row,38,9.5,electric
+T0088,2024-12-19 19:07,Weekend,Casual,Market Street,Hilltop,40,8.9,electric
+T0089,2024-03-04 12:27,Weekday,Casual,Union Station,Riverside Park,37,7.8,classic
+T0090,2024-11-21 11:59,Weekend,Casual,University,Museum Row,28,5.6,classic
+T0091,2024-06-07 08:03,Weekday,Member,University,Riverside Park,11,2.6,classic
+T0092,2024-11-03 07:53,Weekend,Casual,Garden District,Market Street,32,7.1,classic
+T0093,2024-11-09 11:47,Weekend,Casual,University,Hilltop,50,8.4,classic
+T0094,2024-03-03 20:48,Weekend,Casual,Central Square,Market Street,29,6.6,classic
+T0095,2024-09-22 08:39,Weekday,Casual,North Loop,Market Street,30,6.9,classic
+T0096,2024-01-02 12:06,Weekday,Member,Market Street,Riverside Park,25,4.5,classic
+T0097,2024-02-02 11:32,Weekday,Member,North Loop,University,16,3.4,classic
+T0098,2024-07-02 18:22,Weekday,Member,East Village,University,31,6.4,classic
+T0099,2024-08-24 10:40,Weekday,Member,Market Street,Riverside Park,19,3.9,electric
+T0100,2024-02-25 08:03,Weekend,Casual,Harbor Walk,University,24,3.9,classic
+T0101,2024-07-03 13:18,Weekend,Casual,Union Station,Central Square,33,6.7,classic
+T0102,2024-09-05 10:26,Weekend,Casual,Riverside Park,Garden District,30,6.0,classic
+T0103,2024-10-16 16:43,Weekend,Casual,Market Street,Riverside Park,30,6.2,electric
+T0104,2024-04-06 18:05,Weekday,Member,Riverside Park,East Village,16,3.6,classic
+T0105,2024-07-18 20:11,Weekend,Casual,Central Square,Union Station,36,5.7,electric
+T0106,2024-07-10 14:25,Weekday,Member,East Village,Museum Row,23,3.8,classic
+T0107,2024-10-18 21:01,Weekday,Member,Museum Row,Harbor Walk,30,6.7,classic
+T0108,2024-01-18 16:37,Weekday,Member,East Village,Union Station,35,7.3,classic
+T0109,2024-01-13 09:28,Weekend,Casual,Hilltop,Museum Row,35,7.2,classic
+T0110,2024-10-08 21:08,Weekday,Member,Central Square,Harbor Walk,23,5.3,classic
+T0111,2024-05-22 07:54,Weekend,Casual,University,Market Street,29,6.6,classic
+T0112,2024-03-07 17:33,Weekday,Member,University,Union Station,9,1.5,classic
+T0113,2024-07-08 12:27,Weekend,Casual,Harbor Walk,Market Street,44,7.0,classic
+T0114,2024-11-03 10:50,Weekday,Casual,Museum Row,Riverside Park,34,8.0,classic
+T0115,2024-12-20 07:15,Weekend,Casual,North Loop,Market Street,32,7.9,electric
+T0116,2024-12-08 11:54,Weekday,Casual,Union Station,Hilltop,24,6.5,electric
+T0117,2024-12-07 12:39,Weekend,Casual,North Loop,East Village,26,5.3,classic
+T0118,2024-01-21 18:27,Weekday,Member,Union Station,Central Square,14,2.7,classic
+T0119,2024-08-19 07:11,Weekend,Casual,North Loop,University,34,7.7,classic
+T0120,2024-09-20 10:30,Weekday,Casual,South Market,University,16,3.8,electric
+T0121,2024-04-24 17:06,Weekday,Member,University,Hilltop,34,7.1,electric
+T0122,2024-10-22 10:05,Weekday,Casual,Museum Row,Garden District,23,4.2,classic
+T0123,2024-06-04 17:08,Weekday,Member,Hilltop,South Market,26,5.7,classic
+T0124,2024-09-19 17:51,Weekday,Member,Hilltop,Museum Row,5,1.0,classic
+T0125,2024-08-15 19:16,Weekend,Casual,North Loop,South Market,30,5.5,classic
+T0126,2024-07-14 11:52,Weekday,Member,Riverside Park,Museum Row,15,3.7,electric
+T0127,2024-02-16 10:37,Weekday,Member,Hilltop,South Market,7,1.4,electric
+T0128,2024-12-21 10:28,Weekday,Member,Hilltop,Museum Row,12,2.6,classic
+T0129,2024-02-22 09:23,Weekday,Member,North Loop,Garden District,12,3.0,classic
+T0130,2024-07-10 07:17,Weekday,Member,Riverside Park,Garden District,20,4.7,electric
+T0131,2024-04-22 17:11,Weekday,Member,Riverside Park,Market Street,18,4.3,classic
+T0132,2024-11-25 21:19,Weekend,Casual,University,Union Station,27,5.7,classic
+T0133,2024-05-04 18:18,Weekday,Member,North Loop,Museum Row,10,1.9,classic
+T0134,2024-03-04 09:12,Weekday,Member,Market Street,East Village,11,2.1,classic
+T0135,2024-05-14 20:07,Weekday,Casual,South Market,Museum Row,35,5.9,classic
+T0136,2024-11-08 13:06,Weekday,Member,East Village,North Loop,13,2.8,classic
+T0137,2024-02-12 11:31,Weekend,Casual,Museum Row,North Loop,12,2.7,classic
+T0138,2024-08-16 10:50,Weekday,Member,Hilltop,South Market,5,1.1,electric
+T0139,2024-11-12 17:06,Weekend,Casual,Union Station,Harbor Walk,20,4.3,classic
+T0140,2024-04-21 10:30,Weekday,Member,Riverside Park,East Village,5,0.8,classic
+T0141,2024-12-07 17:46,Weekday,Member,Union Station,East Village,26,7.4,classic
+T0142,2024-11-13 21:14,Weekday,Casual,East Village,Harbor Walk,29,6.6,classic
+T0143,2024-09-19 19:00,Weekday,Member,South Market,East Village,16,3.4,classic
+T0144,2024-08-03 10:00,Weekday,Member,North Loop,East Village,20,5.2,classic
+T0145,2024-04-23 14:55,Weekday,Member,Museum Row,East Village,28,5.9,classic
+T0146,2024-10-20 07:10,Weekday,Member,East Village,Harbor Walk,21,4.2,electric
+T0147,2024-03-17 17:14,Weekday,Casual,Market Street,Hilltop,26,6.2,classic
+T0148,2024-06-01 10:30,Weekend,Casual,Market Street,Garden District,31,6.2,classic
+T0149,2024-04-02 17:56,Weekday,Member,Riverside Park,South Market,23,6.5,classic
+T0150,2024-08-02 19:50,Weekday,Member,Union Station,Riverside Park,21,4.4,classic
+T0151,2024-01-22 10:48,Weekday,Casual,Harbor Walk,Riverside Park,16,3.1,classic
+T0152,2024-02-03 09:07,Weekday,Casual,North Loop,Hilltop,26,6.5,electric
+T0153,2024-08-13 14:01,Weekday,Member,Museum Row,South Market,17,4.1,classic
+T0154,2024-07-01 11:57,Weekday,Member,Union Station,North Loop,19,3.3,electric
+T0155,2024-12-12 09:51,Weekday,Casual,North Loop,Riverside Park,28,6.5,classic
+T0156,2024-11-23 17:16,Weekend,Casual,University,Museum Row,19,4.8,classic
+T0157,2024-01-07 08:04,Weekend,Casual,University,Garden District,30,7.2,electric
+T0158,2024-02-11 08:30,Weekend,Casual,Riverside Park,Central Square,38,7.9,classic
+T0159,2024-03-22 11:34,Weekend,Casual,Garden District,Market Street,34,7.5,classic
+T0160,2024-10-14 11:34,Weekend,Casual,North Loop,Central Square,30,5.9,classic
+T0161,2024-05-23 08:29,Weekday,Member,East Village,Harbor Walk,23,4.9,classic
+T0162,2024-02-19 11:37,Weekday,Member,North Loop,Central Square,5,0.9,classic
+T0163,2024-01-08 20:37,Weekend,Casual,Central Square,Union Station,25,6.8,classic
+T0164,2024-09-11 11:19,Weekday,Member,Market Street,North Loop,26,5.1,electric
+T0165,2024-04-18 10:53,Weekday,Member,Market Street,East Village,36,9.1,classic
+T0166,2024-11-09 12:26,Weekend,Casual,Museum Row,University,24,5.1,electric
+T0167,2024-08-23 16:19,Weekday,Member,Central Square,Union Station,6,1.0,electric
+T0168,2024-05-23 13:49,Weekday,Member,Museum Row,Harbor Walk,23,5.0,classic
+T0169,2024-01-19 09:28,Weekday,Member,Riverside Park,Harbor Walk,27,7.2,classic
+T0170,2024-12-04 12:09,Weekday,Member,Museum Row,Market Street,6,1.4,electric
+T0171,2024-11-21 15:21,Weekday,Member,Riverside Park,Museum Row,10,2.1,classic
+T0172,2024-06-07 11:16,Weekday,Member,Central Square,Union Station,16,3.1,electric
+T0173,2024-01-22 13:08,Weekday,Member,Harbor Walk,South Market,27,4.7,classic
+T0174,2024-01-24 10:05,Weekday,Member,Riverside Park,North Loop,14,2.9,classic
+T0175,2024-05-18 12:35,Weekday,Casual,North Loop,Market Street,31,6.4,classic
+T0176,2024-11-25 18:02,Weekend,Casual,Riverside Park,Hilltop,31,8.4,classic
+T0177,2024-08-17 10:16,Weekday,Member,Hilltop,East Village,28,6.7,classic
+T0178,2024-05-02 12:32,Weekday,Member,Hilltop,Garden District,18,4.2,classic
+T0179,2024-07-16 11:05,Weekday,Casual,East Village,Harbor Walk,29,6.1,classic
+T0180,2024-06-04 19:37,Weekday,Member,University,Museum Row,21,3.9,classic
+T0181,2024-07-04 13:17,Weekend,Casual,South Market,Garden District,25,4.9,classic
+T0182,2024-06-20 18:10,Weekday,Member,South Market,Museum Row,24,5.5,classic
+T0183,2024-01-05 12:07,Weekend,Casual,University,Museum Row,29,5.1,electric
+T0184,2024-02-19 20:00,Weekday,Casual,Riverside Park,Harbor Walk,39,7.6,electric
+T0185,2024-09-16 12:54,Weekday,Casual,North Loop,Harbor Walk,22,4.4,classic
+T0186,2024-02-04 21:20,Weekday,Member,Hilltop,South Market,9,1.4,classic
+T0187,2024-10-06 11:50,Weekend,Casual,Central Square,North Loop,42,9.7,classic
+T0188,2024-05-06 09:06,Weekday,Casual,Central Square,University,19,5.0,classic
+T0189,2024-10-14 10:41,Weekend,Casual,Hilltop,Museum Row,19,3.8,classic
+T0190,2024-01-11 16:30,Weekday,Member,University,North Loop,31,5.4,classic
+T0191,2024-11-02 08:43,Weekday,Member,Riverside Park,Garden District,19,3.5,electric
+T0192,2024-12-25 10:03,Weekday,Member,South Market,Harbor Walk,30,7.5,classic
+T0193,2024-03-01 20:24,Weekend,Casual,Market Street,North Loop,43,6.4,classic
+T0194,2024-05-21 10:59,Weekday,Member,Central Square,Harbor Walk,32,7.8,classic
+T0195,2024-06-19 16:02,Weekday,Member,East Village,University,17,3.9,classic
+T0196,2024-08-06 17:10,Weekday,Member,Market Street,South Market,17,3.1,classic
+T0197,2024-07-07 21:16,Weekend,Casual,Hilltop,North Loop,40,9.6,classic
+T0198,2024-09-24 19:29,Weekday,Casual,Hilltop,Harbor Walk,28,7.6,classic
+T0199,2024-04-19 18:59,Weekday,Member,North Loop,Hilltop,12,2.5,electric
+T0200,2024-08-25 15:33,Weekend,Casual,Museum Row,East Village,40,7.9,classic
+T0201,2024-03-15 09:13,Weekday,Member,Hilltop,East Village,21,3.9,classic
+T0202,2024-07-08 13:33,Weekday,Member,East Village,South Market,30,5.8,classic
+T0203,2024-09-18 18:34,Weekend,Casual,South Market,Central Square,22,5.2,electric
+T0204,2024-04-15 15:03,Weekend,Casual,Union Station,North Loop,30,6.3,classic
+T0205,2024-01-20 13:53,Weekday,Member,Riverside Park,South Market,26,5.7,electric
+T0206,2024-11-21 19:48,Weekday,Member,Harbor Walk,North Loop,20,4.8,classic
+T0207,2024-04-25 08:49,Weekday,Casual,Central Square,Garden District,42,7.7,classic
+T0208,2024-12-21 07:20,Weekend,Casual,Central Square,North Loop,7,0.8,classic
+T0209,2024-08-07 14:36,Weekday,Member,Market Street,Central Square,15,3.2,classic
+T0210,2024-03-07 09:53,Weekend,Casual,Harbor Walk,North Loop,18,4.8,electric
+T0211,2024-02-06 08:09,Weekend,Casual,North Loop,Museum Row,16,4.0,classic
+T0212,2024-05-01 10:07,Weekday,Casual,Garden District,Hilltop,21,4.1,classic
+T0213,2024-04-11 14:04,Weekend,Casual,Hilltop,Riverside Park,26,5.6,classic
+T0214,2024-04-03 18:39,Weekday,Member,Hilltop,North Loop,7,1.7,classic
+T0215,2024-08-12 18:17,Weekday,Casual,Riverside Park,Museum Row,19,4.9,electric
+T0216,2024-12-06 18:16,Weekday,Member,Hilltop,Union Station,18,5.2,classic
+T0217,2024-12-21 14:37,Weekday,Member,Riverside Park,Harbor Walk,15,3.0,classic
+T0218,2024-06-22 06:03,Weekend,Casual,Hilltop,Riverside Park,28,4.9,classic
+T0219,2024-05-09 13:42,Weekday,Casual,Central Square,Union Station,30,7.8,classic
+T0220,2024-09-20 19:23,Weekday,Member,North Loop,University,5,1.0,classic
+T0221,2024-04-25 10:26,Weekday,Member,Garden District,Hilltop,32,8.8,classic
+T0222,2024-04-13 09:13,Weekday,Member,Garden District,University,12,2.4,classic
+T0223,2024-10-20 17:08,Weekday,Casual,Market Street,Riverside Park,18,5.3,electric
+T0224,2024-05-23 14:48,Weekday,Member,Union Station,North Loop,5,1.1,electric
+T0225,2024-05-05 09:25,Weekday,Member,Hilltop,Market Street,9,2.0,electric
+T0226,2024-10-07 17:32,Weekday,Member,North Loop,Union Station,16,3.4,electric
+T0227,2024-03-03 06:26,Weekday,Member,North Loop,Riverside Park,11,2.0,classic
+T0228,2024-04-08 11:09,Weekday,Member,Union Station,Central Square,17,2.7,classic
+T0229,2024-05-13 13:36,Weekend,Casual,Harbor Walk,Central Square,32,5.8,electric
+T0230,2024-02-22 17:36,Weekday,Member,Market Street,Museum Row,18,4.7,classic
+T0231,2024-08-16 09:56,Weekend,Casual,Harbor Walk,Riverside Park,29,5.7,classic
+T0232,2024-08-07 08:12,Weekday,Member,Hilltop,North Loop,19,4.8,classic
+T0233,2024-02-03 16:51,Weekend,Casual,Harbor Walk,East Village,30,7.3,electric
+T0234,2024-03-15 09:46,Weekend,Casual,South Market,Union Station,14,4.2,classic
+T0235,2024-07-15 19:01,Weekday,Member,North Loop,Garden District,31,7.0,electric
+T0236,2024-06-08 09:51,Weekday,Member,Hilltop,East Village,15,3.2,classic
+T0237,2024-09-23 12:45,Weekend,Casual,Harbor Walk,University,38,9.4,electric
+T0238,2024-11-10 07:54,Weekday,Casual,South Market,Harbor Walk,35,7.3,classic
+T0239,2024-04-06 07:21,Weekday,Member,Hilltop,South Market,18,3.7,classic
+T0240,2024-08-05 17:54,Weekday,Casual,Central Square,Market Street,27,6.1,electric
+T0241,2024-12-10 09:32,Weekday,Casual,Market Street,Riverside Park,16,3.3,electric
+T0242,2024-08-03 08:52,Weekday,Member,North Loop,Hilltop,5,1.1,classic
+T0243,2024-05-20 08:33,Weekday,Casual,Harbor Walk,South Market,29,5.9,classic
+T0244,2024-04-17 10:19,Weekday,Member,North Loop,Market Street,21,3.4,classic
+T0245,2024-09-19 20:08,Weekday,Member,Central Square,South Market,26,5.9,classic
+T0246,2024-04-24 19:54,Weekend,Casual,Museum Row,Riverside Park,35,7.6,classic
+T0247,2024-12-14 19:14,Weekend,Casual,Museum Row,Market Street,31,6.5,classic
+T0248,2024-01-16 10:09,Weekday,Casual,East Village,Museum Row,27,5.3,electric
+T0249,2024-09-18 11:34,Weekday,Casual,Harbor Walk,Hilltop,26,5.8,electric
+T0250,2024-06-11 18:54,Weekday,Casual,Museum Row,Union Station,21,4.0,electric
+T0251,2024-06-21 13:57,Weekday,Member,Riverside Park,Central Square,16,2.8,classic
+T0252,2024-12-06 11:47,Weekday,Member,North Loop,University,11,2.8,classic
+T0253,2024-10-07 10:13,Weekend,Casual,Market Street,Garden District,25,4.4,electric
+T0254,2024-09-09 11:15,Weekday,Member,North Loop,Riverside Park,19,4.4,classic
+T0255,2024-09-24 06:48,Weekday,Member,Harbor Walk,Central Square,11,2.7,electric
+T0256,2024-10-03 14:52,Weekend,Casual,North Loop,East Village,37,9.9,classic
+T0257,2024-03-08 09:29,Weekend,Casual,Market Street,Union Station,9,1.5,electric
+T0258,2024-03-19 14:42,Weekend,Casual,Garden District,Hilltop,20,3.9,classic
+T0259,2024-11-09 08:44,Weekday,Casual,Central Square,Harbor Walk,20,4.3,classic
+T0260,2024-10-14 07:14,Weekend,Casual,East Village,North Loop,24,5.6,classic
+T0261,2024-04-14 20:21,Weekday,Member,Museum Row,Riverside Park,13,3.7,classic
+T0262,2024-08-01 07:10,Weekday,Member,North Loop,Hilltop,18,2.8,electric
+T0263,2024-04-09 18:26,Weekend,Casual,North Loop,Riverside Park,21,4.3,classic
+T0264,2024-07-05 11:46,Weekend,Casual,University,Hilltop,28,5.9,classic
+T0265,2024-01-05 07:26,Weekend,Casual,South Market,Museum Row,31,4.5,electric
+T0266,2024-12-14 19:39,Weekend,Casual,East Village,South Market,41,8.6,classic
+T0267,2024-01-12 09:40,Weekday,Member,Harbor Walk,University,5,0.9,classic
+T0268,2024-11-20 14:30,Weekday,Casual,East Village,Museum Row,20,5.0,electric
+T0269,2024-06-02 07:17,Weekday,Member,East Village,Hilltop,10,1.9,classic
+T0270,2024-03-06 18:23,Weekday,Casual,East Village,University,13,3.3,classic
+T0271,2024-04-21 12:39,Weekday,Casual,University,Riverside Park,30,5.2,classic
+T0272,2024-05-17 13:00,Weekday,Member,Hilltop,Riverside Park,14,3.5,electric
+T0273,2024-07-18 09:32,Weekend,Casual,East Village,Harbor Walk,33,7.6,electric
+T0274,2024-04-25 20:53,Weekday,Casual,Central Square,University,17,3.4,classic
+T0275,2024-08-17 21:00,Weekday,Member,North Loop,Market Street,20,3.2,electric
+T0276,2024-01-23 07:47,Weekday,Member,East Village,Central Square,18,4.1,classic
+T0277,2024-12-16 21:37,Weekend,Casual,University,South Market,21,6.5,electric
+T0278,2024-11-11 15:35,Weekday,Member,Garden District,South Market,11,2.1,electric
+T0279,2024-02-23 14:23,Weekday,Member,Garden District,University,20,4.1,electric
+T0280,2024-04-09 17:17,Weekday,Member,Market Street,East Village,17,4.2,classic
+T0281,2024-03-19 10:20,Weekday,Casual,East Village,Riverside Park,29,5.3,electric
+T0282,2024-01-16 07:34,Weekday,Member,University,Hilltop,27,5.9,classic
+T0283,2024-09-15 20:03,Weekday,Member,Central Square,North Loop,15,3.3,classic
+T0284,2024-04-18 10:49,Weekday,Member,Museum Row,Central Square,26,4.7,classic
+T0285,2024-06-20 09:10,Weekend,Casual,Harbor Walk,Union Station,34,7.4,classic
+T0286,2024-02-20 21:46,Weekday,Member,Hilltop,North Loop,19,2.4,classic
+T0287,2024-06-05 21:03,Weekday,Member,North Loop,Union Station,22,5.4,classic
+T0288,2024-07-14 19:51,Weekday,Member,Harbor Walk,Garden District,9,2.4,classic
+T0289,2024-09-10 16:57,Weekday,Member,Hilltop,North Loop,18,3.9,classic
+T0290,2024-03-02 10:31,Weekday,Casual,East Village,Hilltop,18,4.0,classic
+T0291,2024-12-05 12:00,Weekday,Member,North Loop,Union Station,5,1.1,electric
+T0292,2024-06-19 10:46,Weekday,Casual,Union Station,University,33,8.9,classic
+T0293,2024-06-10 08:22,Weekday,Member,Union Station,North Loop,21,3.5,classic
+T0294,2024-04-02 16:49,Weekend,Casual,Hilltop,University,17,4.5,classic
+T0295,2024-07-12 08:39,Weekday,Member,East Village,Central Square,23,5.4,electric
+T0296,2024-11-20 13:16,Weekday,Member,Hilltop,North Loop,13,2.4,electric
+T0297,2024-08-04 19:50,Weekday,Casual,Hilltop,Harbor Walk,7,1.6,electric
+T0298,2024-05-04 10:22,Weekend,Casual,Museum Row,North Loop,28,7.2,electric
+T0299,2024-12-03 08:52,Weekend,Casual,East Village,South Market,24,5.6,classic
+T0300,2024-06-23 09:13,Weekday,Member,Harbor Walk,East Village,15,3.1,classic
+T0301,2024-11-14 19:51,Weekday,Casual,Garden District,North Loop,35,7.3,classic
+T0302,2024-03-25 17:11,Weekday,Member,Central Square,Riverside Park,17,3.3,electric
+T0303,2024-11-18 09:58,Weekday,Member,University,South Market,29,6.8,classic
+T0304,2024-01-09 17:39,Weekday,Member,North Loop,Union Station,5,1.0,electric
+T0305,2024-09-08 14:55,Weekday,Casual,Museum Row,Garden District,42,9.8,classic
+T0306,2024-10-09 09:36,Weekday,Member,Market Street,Garden District,22,5.6,classic
+T0307,2024-04-09 17:27,Weekday,Member,Riverside Park,University,17,3.9,classic
+T0308,2024-08-07 12:32,Weekend,Casual,Garden District,Riverside Park,22,5.3,electric
+T0309,2024-03-20 10:02,Weekday,Casual,Harbor Walk,South Market,45,9.8,classic
+T0310,2024-09-08 09:01,Weekend,Casual,Hilltop,Museum Row,54,8.9,classic
+T0311,2024-11-02 07:57,Weekday,Casual,North Loop,Garden District,13,2.4,classic
+T0312,2024-02-19 21:42,Weekday,Casual,Harbor Walk,Garden District,24,4.1,classic
+T0313,2024-08-18 09:27,Weekend,Casual,University,Union Station,33,6.3,classic
+T0314,2024-11-20 11:57,Weekend,Casual,South Market,North Loop,42,7.1,classic
+T0315,2024-05-17 20:57,Weekday,Member,University,Museum Row,9,2.3,classic
+T0316,2024-10-20 21:58,Weekday,Member,Market Street,Union Station,5,1.0,electric
+T0317,2024-07-17 11:04,Weekday,Member,Central Square,North Loop,10,1.8,classic
+T0318,2024-11-02 11:33,Weekend,Casual,Union Station,Central Square,32,6.0,classic
+T0319,2024-10-06 10:58,Weekday,Casual,Union Station,Market Street,18,3.0,classic
+T0320,2024-03-23 12:17,Weekday,Casual,Harbor Walk,North Loop,30,6.0,electric
+T0321,2024-12-02 19:25,Weekday,Member,North Loop,Central Square,22,5.7,classic
+T0322,2024-04-04 09:48,Weekday,Member,Riverside Park,Union Station,14,2.8,classic
+T0323,2024-07-16 07:42,Weekend,Casual,Hilltop,University,31,6.8,electric
+T0324,2024-01-04 18:53,Weekday,Member,Harbor Walk,Garden District,23,4.6,electric
+T0325,2024-05-24 09:16,Weekday,Member,Garden District,East Village,13,2.3,electric
+T0326,2024-02-17 10:57,Weekend,Casual,University,Market Street,17,2.8,classic
+T0327,2024-01-20 07:13,Weekend,Casual,Hilltop,East Village,21,3.7,electric
+T0328,2024-10-15 21:14,Weekday,Member,Harbor Walk,East Village,29,6.1,electric
+T0329,2024-03-05 15:06,Weekend,Casual,East Village,North Loop,26,6.5,classic
+T0330,2024-05-18 11:21,Weekday,Member,Hilltop,East Village,9,1.5,classic
+T0331,2024-10-11 19:12,Weekend,Casual,Riverside Park,South Market,22,5.3,classic
+T0332,2024-11-06 18:58,Weekday,Member,Hilltop,Museum Row,28,8.0,classic
+T0333,2024-06-23 17:02,Weekday,Member,East Village,Garden District,9,1.6,classic
+T0334,2024-07-12 19:56,Weekday,Casual,Market Street,East Village,35,7.3,classic
+T0335,2024-01-25 09:22,Weekday,Member,Market Street,Riverside Park,22,4.0,electric
+T0336,2024-06-18 06:36,Weekday,Member,South Market,Union Station,6,1.1,classic
+T0337,2024-08-24 18:14,Weekend,Casual,Harbor Walk,Hilltop,23,6.2,classic
+T0338,2024-02-12 10:04,Weekend,Casual,Hilltop,Garden District,24,5.8,classic
+T0339,2024-05-05 09:29,Weekday,Member,Museum Row,South Market,5,1.2,classic
+T0340,2024-01-05 14:43,Weekday,Member,University,North Loop,19,4.4,classic
+T0341,2024-09-10 10:55,Weekday,Member,Garden District,Union Station,18,3.3,classic
+T0342,2024-09-24 11:38,Weekday,Member,University,Museum Row,27,5.0,electric
+T0343,2024-01-11 10:18,Weekday,Member,South Market,Central Square,20,4.1,classic
+T0344,2024-04-24 10:15,Weekend,Casual,East Village,Riverside Park,17,4.5,classic
+T0345,2024-02-14 12:13,Weekend,Casual,South Market,Union Station,33,6.7,electric
+T0346,2024-08-05 09:13,Weekday,Member,South Market,Union Station,17,3.9,classic
+T0347,2024-12-25 16:42,Weekday,Casual,University,North Loop,27,7.3,classic
+T0348,2024-09-08 08:23,Weekday,Member,Garden District,South Market,11,2.4,classic
+T0349,2024-12-10 07:24,Weekday,Member,South Market,Museum Row,39,6.3,classic
+T0350,2024-10-12 08:26,Weekday,Member,North Loop,Garden District,21,5.3,classic
+T0351,2024-04-15 10:40,Weekday,Member,Central Square,East Village,5,1.1,classic
+T0352,2024-05-02 11:03,Weekday,Member,Market Street,Garden District,27,7.1,electric
+T0353,2024-02-08 18:12,Weekday,Member,Harbor Walk,Garden District,26,6.3,classic
+T0354,2024-04-16 09:55,Weekday,Member,Central Square,Garden District,25,3.8,classic
+T0355,2024-11-14 20:53,Weekend,Casual,Hilltop,Riverside Park,34,4.7,electric
+T0356,2024-01-13 11:23,Weekday,Casual,Central Square,Garden District,31,7.5,classic
+T0357,2024-07-21 17:32,Weekend,Casual,University,North Loop,40,10.3,classic
+T0358,2024-10-24 13:39,Weekday,Casual,Harbor Walk,University,31,5.8,electric
+T0359,2024-08-09 17:19,Weekend,Casual,Garden District,South Market,17,3.7,electric
+T0360,2024-12-20 11:19,Weekend,Casual,Hilltop,University,48,8.8,classic

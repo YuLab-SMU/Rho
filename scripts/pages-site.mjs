@@ -48,12 +48,18 @@ for (const { body } of Object.values(recording.calls['conversation.read'] ?? {})
 }
 const asked = [...turns.values()].sort((a, b) => a.sentAt.localeCompare(b.sentAt));
 const figures = new Set(fs.readdirSync('site/home/img'));
+const figureAliases = {
+  'results/summary.png': 'bike_summary.jpg',
+  'results/hourly_demand.png': 'bike_hourly_demand.jpg',
+  'results/station_heatmap.png': 'bike_station_heatmap.jpg',
+  'results/rider_mix.png': 'bike_rider_mix.jpg',
+};
 const exampleBands = asked.map(turn => {
   const minutes = Math.max(1, Math.round((Date.parse(turn.endedAt) - Date.parse(turn.startedAt)) / 60000));
   const written = (turn.files?.changed ?? []).filter(f => f.path !== 'project-notes.md').map(f => path.basename(f.path));
   const names = [...new Set(written)];
   const note = names.length ? 'Wrote ' + (names.length > 3 ? names.slice(0, 3).join(', ') + ' and ' + (names.length - 3) + ' more' : names.join(', ').replace(/, ([^,]*)$/, ' and $1')) + '.' : '';
-  const figure = (turn.files?.changed ?? []).map(f => path.basename(f.path, '.png') + '.jpg').find(f => f.endsWith('.jpg') && figures.has(f));
+  const figure = (turn.files?.changed ?? []).map(f => figureAliases[f.path] ?? (path.basename(f.path, '.png') + '.jpg')).find(f => f.endsWith('.jpg') && figures.has(f));
   return `          <li class="band"><span class="took">${minutes} min<small>to answer</small></span><div><p class="ask">${escape(turn.text)}</p>${note ? `<p class="note">${escape(note)}</p>` : ''}</div><div class="side">${figure ? `<img class="thumb" src="img/${figure}" width="104" height="78" loading="lazy" alt="${escape(figure.replace('.jpg', '.png'))}, the figure this request produced">` : ''}<button class="btn copy" type="button" data-copy-ask>Copy</button></div></li>`;
 });
 
@@ -68,9 +74,9 @@ for (const name of fs.readdirSync('node_modules/@rho-workspace').sort()) {
 plugins.sort((a, b) => a.categoryOrder - b.categoryOrder || a.order - b.order);
 
 const tab = (id, title, count) => `        <button role="tab" type="button" id="tab-${id}" aria-controls="set-${id}" aria-selected="false"><b>${escape(title)}</b><span>${count} prompts</span></button>`;
-const tabs = [tab('example', 'PA14 example', exampleBands.length), ...plugins.map(p => tab(p.id, p.displayName, p.examplePrompts.length))];
+const tabs = [tab('example', 'Bike-share example', exampleBands.length), ...plugins.map(p => tab(p.id, p.displayName, p.examplePrompts.length))];
 const panels = [
-  `        <div role="tabpanel" id="set-example" aria-labelledby="tab-example">\n          <p class="panel-intro"><strong>The PA14 quorum-sensing project.</strong> ${exampleBands.length} requests, in the order they were sent, each followed by how long the Agent took and what it wrote.</p>\n          <ol class="bands">\n${exampleBands.join('\n')}\n          </ol>\n        </div>`,
+  `        <div role="tabpanel" id="set-example" aria-labelledby="tab-example">\n          <p class="panel-intro"><strong>The City bike-share demand project.</strong> ${exampleBands.length} requests, in the order they were sent, each followed by how long the Agent took and what it wrote.</p>\n          <ol class="bands">\n${exampleBands.join('\n')}\n          </ol>\n        </div>`,
   ...plugins.map(p => `        <div role="tabpanel" id="set-${p.id}" aria-labelledby="tab-${p.id}">\n          <p class="panel-intro"><strong>${escape(p.displayName)}.</strong> ${escape(p.description)}</p>\n          <ul class="bands">\n${p.examplePrompts.map(q => `            <li class="band plain"><p class="ask">${escape(q.replace(/^[“"]|[”"]$/g, ''))}</p><div class="side"><button class="btn copy" type="button" data-copy-ask>Copy</button></div></li>`).join('\n')}\n          </ul>\n        </div>`),
 ];
 

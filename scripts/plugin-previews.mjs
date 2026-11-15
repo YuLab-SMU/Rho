@@ -1,5 +1,5 @@
 // Pictures of the real views for the Plugins page. Starts this checkout's service on a new
-// state with the shipped PA14 example project, opens every view of every built-in plugin
+// state with the shipped city bike-share example project, opens every view of every built-in plugin
 // with "Show it here" on the Plugins page, and keeps what Chrome drew, with the component
 // version and the file it showed. Nothing is drawn by hand and no runtime is started.
 //
@@ -30,26 +30,26 @@ try {
   service = await new RhoService({ root, stateDir: path.join(root, 'state'), coreBinary: core ?? '/missing', rscript: core ? rscript : '/missing', example: true }).start();
   const admin = new RhoClient({ url: service.url, token: service.adminToken });
   const projects = await admin.call('project.list', {});
-  const project = projects.find(p => /PA14/i.test(p.name)) ?? projects[0];
+  const project = projects.find(p => /bike-share/i.test(p.name)) ?? projects[0];
   assert.ok(project, 'The service seeded no example project.');
   report.project = project.name;
   const catalog = await admin.call('capability.list', { projectId: project.id });
   // A plot of points shows a table registered with a key column, as an Agent registers one; the
-  // example ships none, so this run registers the swarming dishes (one row per dish) for the picture.
-  const dishes = 'data/swarming/single_cultures.csv';
-  const bytes = await fs.readFile(path.join(project.root, dishes));
+  // The example ships no keyed table, so this run registers the trip sample for the picture.
+  const trips = 'data/rides/trips_sample.csv';
+  const bytes = await fs.readFile(path.join(project.root, trips));
   const column = (name, type) => ({ name, type, nullValues: ['', 'NA'] });
-  const registered = await admin.call('resource.register', { projectId: project.id, expectedDigest: createHash('sha256').update(bytes).digest('hex'), declaration: { kind: 'table', path: dishes,
-    format: { encoding: 'csv', key: { column: 'dish', namespace: 'pa14-swarming-dish' }, columns: [column('dish', 'string'), column('genotype', 'string'), column('strain', 'number'), column('ratio', 'string'), column('replicate', 'number'), column('area', 'number'), column('circularity', 'number'), column('roundness', 'number')] } } });
-  report.registered = { path: dishes, id: registered.id ?? registered.resource?.id ?? null };
+  const registered = await admin.call('resource.register', { projectId: project.id, expectedDigest: createHash('sha256').update(bytes).digest('hex'), declaration: { kind: 'table', path: trips,
+    format: { encoding: 'csv', key: { column: 'trip_id', namespace: 'bike-share-trip' }, columns: [column('trip_id', 'string'), column('started_at', 'string'), column('day_type', 'string'), column('rider_type', 'string'), column('start_station', 'string'), column('end_station', 'string'), column('duration_min', 'number'), column('distance_km', 'number'), column('bike_type', 'string')] } } });
+  report.registered = { path: trips, id: registered.id ?? registered.resource?.id ?? null };
   const counts = { hostStarts: 0 };
   if (!core) service.bridge.ensureOwnedHost = async () => { counts.hostStarts++; throw new Error('A preview must not start a Host.'); };
   report.session = core ? [] : 'none: RHO_CORE_BINARY is not set';
   const liveSession = async () => {
     if (!core || report.session.length) return;
     for (const cell of [
-      { changeId: 'preview-read', purpose: 'Read the swarming dishes', code: 'sw <- read.csv("data/swarming/single_cultures.csv", fileEncoding = "UTF-8")\nstr(sw)' },
-      { changeId: 'preview-plot', purpose: 'Plot colony area by genotype', code: 'boxplot(area ~ genotype, data = sw, log = "y", xlab = "Genotype", ylab = "Colony area")' },
+      { changeId: 'preview-read', purpose: 'Read the trip sample', code: 'trips <- read.csv("data/rides/trips_sample.csv")\nstr(trips)' },
+      { changeId: 'preview-plot', purpose: 'Plot trip duration by rider type', code: 'boxplot(duration_min ~ rider_type, data = trips, ylab = "Duration (minutes)")' },
     ]) {
       const reply = await admin.call('kernel.run', { projectId: project.id, language: 'r', waitMs: 180000, ...cell });
       report.session.push({ changeId: cell.changeId, state: reply.cell?.state ?? reply.state, problem: reply.cell?.problem ?? reply.problem ?? null });
@@ -98,13 +98,13 @@ try {
       const body = row.locator('.plugin-view-live-body');
       const mounted = await body.locator('.shell-owner').count();
       let shows = (await row.locator('.plugin-view-live-bar code').first().textContent().catch(() => '')).trim() || 'this project';
-      // The plot is pictured as a person would choose it: colony area against circularity, not the
+      // The plot is pictured as a person would choose it: trip distance against duration, not the
       // first two numeric columns (strain and replicate), through the same column pickers.
       if (mounted && identity === 'rho.scatter') {
-        await row.getByRole('combobox', { name: 'Column across' }).selectOption('area');
-        await row.getByRole('combobox', { name: 'Column up' }).selectOption('circularity');
+        await row.getByRole('combobox', { name: 'Column across' }).selectOption('duration_min');
+        await row.getByRole('combobox', { name: 'Column up' }).selectOption('distance_km');
         await settled();
-        shows += ', circularity against area';
+        shows += ', distance against duration';
         await row.scrollIntoViewIfNeeded();
         await page.screenshot({ path: path.join(evidence, 'live-scatter-1440.png') });
       }

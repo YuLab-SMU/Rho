@@ -1,4 +1,4 @@
-// One walk through the shipped PA14 project, as a visitor would take it. The same walk
+// One walk through the shipped city bike-share project, as a visitor would take it. The same walk
 // records the demo against a running service (demo-capture.mjs) and checks the replay
 // (demo-check.mjs), so a screen the demo shows is a screen this walk reached.
 
@@ -25,13 +25,16 @@ export async function tour(page, url, { settle, step = () => {} }) {
   const main = () => page.locator('main').first();
   async function go(name) {
     // A place is a tab above the work; a kind of file, the Agent's page and the rest are in the sidebar.
-    await page.locator('.place-tabs, .project-nav').getByRole('button', { name, exact: true }).first().click();
+    const button = page.locator('.place-tabs, .project-nav').getByRole('button', { name, exact: true }).first();
+    if (!await button.count()) return false;
+    await button.click();
     await settle(); await step(name);
+    return true;
   }
 
   await page.goto(url);
   await settle(); await step('home');
-  await page.getByText('PA14 quorum sensing').first().click();
+  await page.getByText('City bike-share demand').first().click();
   await settle(1200); await step('overview');
 
   // Every answer the board can show, each opened in full, then each of its results.

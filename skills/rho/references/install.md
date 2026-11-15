@@ -106,7 +106,7 @@ sandbox that holds it ends, and it does not start again by itself.
 | --- | --- |
 | `--open` | Open the address in the default browser. On a machine with no display it opens nothing and says so |
 | `--background` | Return once Rho is ready and leave it running, with its output in `<state>/rho.log` |
-| `--example off` | Do not copy the example project (a new state otherwise copies "PA14 quorum sensing" into the projects folder once) |
+| `--example off` | Do not copy the example project (a new state otherwise copies "City bike-share demand" into the projects folder once) |
 | `--agent-backend codex-acp` | Codex in the Agent panel (default: Claude Code via `claude-acp`) |
 | `--claude PATH`, `--codex PATH` | Choose the Agent client binary (or `RHO_CLAUDE`, `RHO_CODEX`) |
 | `--rscript PATH`, `--python PATH` | Choose R and Python for the Notebook (or `RHO_RSCRIPT`, `RHO_PYTHON`) |

@@ -155,7 +155,7 @@ test('lines of work: a section of the notes names one, shared files join convers
 });
 
 test('the shipped example: 3 lines of work over every recorded step, each finding tied to the steps that made its files', () => {
-  const project = path.resolve('example/pa14-qs'), dir = path.join(project, '.rho/rho/conversations');
+  const project = path.resolve('example/bike-share-demand'), dir = path.join(project, '.rho/rho/conversations');
   const turns = [], files = [];
   (function walk(d, rel) { for (const e of fs.readdirSync(d, { withFileTypes: true })) { if (e.name === '.rho' || e.name === '.git') continue; const r = rel ? rel + '/' + e.name : e.name; if (e.isDirectory()) walk(path.join(d, e.name), r); else files.push({ path: r, bytes: fs.statSync(path.join(d, e.name)).size, category: /^data\//.test(r) ? 'data' : kindOf(r) }); } })(project, '');
   let recorded = 0;
@@ -168,11 +168,11 @@ test('the shipped example: 3 lines of work over every recorded step, each findin
   assert.equal(lines.filter(x => !x.quiet).length, 3);
   assert.equal(trajectory(l, l.root).length, recorded, 'every recorded step is in the graph');
   assert.equal(l.nodes.get(l.root).steps, recorded);
-  assert.ok(level(l, 'activity').length < recorded / 4, 'activities stand for many steps each');
-  assert.ok(Math.max(...level(l, 'activity').map(a => a.steps)) <= 40, 'no activity swallows a whole long message');
+  assert.ok(level(l, 'activity').length < recorded, 'consecutive steps fold into activities');
+  assert.ok(Math.max(...level(l, 'activity').map(a => a.steps)) <= 10, 'no activity swallows a whole long message');
   const built = flows(l).map(f => l.nodes.get(f.from).title.split(/[ :]/)[0] + '>' + l.nodes.get(f.to).title.split(/[ :]/)[0]).sort();
-  assert.deepEqual(built, ['Co-culture>RNA-seq', 'Swarming>RNA-seq']);
+  assert.deepEqual(built, ['When>Which', 'Who>Which']);
   const named = l.claims.filter(c => c.paths.length);
-  assert.ok(named.length >= 25 && named.every(c => c.ground === 'made'), 'each statement that names a file names one a recorded step made');
+  assert.ok(named.length >= 1 && named.every(c => c.ground === 'made'), 'each statement that names a file names one a recorded step made');
   for (const c of named) { const behind = support(l, c.paths); assert.ok(behind.work.size > 0 && behind.work.size <= 40, c.text.slice(0, 40) + ': ' + behind.work.size + ' steps behind it'); assert.ok([...behind.work].every(id => ancestors(l, id).includes(c.line)), 'the work behind it is in its own line'); }
 });

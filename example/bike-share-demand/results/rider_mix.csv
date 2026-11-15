@@ -1,0 +1,9 @@
+"day_type","period","member_rides","casual_rides","total_rides","casual_share"
+"Weekday","Morning commute",16010,3087,19097,0.161648426454417
+"Weekday","Midday",15858,11062,26920,0.410921248142645
+"Weekday","Evening commute",21011,5028,26039,0.193094972925228
+"Weekday","Overnight",20873,7706,28579,0.269638545785367
+"Weekend","Morning commute",6387,10913,17300,0.630809248554913
+"Weekend","Midday",21657,41210,62867,0.655510840345491
+"Weekend","Evening commute",9529,18607,28136,0.661323571225476
+"Weekend","Overnight",14396,26133,40529,0.644797552369908

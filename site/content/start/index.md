@@ -75,7 +75,7 @@ That link is a credential with a five-minute window and a single use.
 
 ## Open the example project
 
-A new state copies the bundled `example/pa14-qs` project into your projects folder once, as an
+A new state copies the bundled `example/bike-share-demand` project into your projects folder once, as an
 ordinary editable project. Open it, then ask the Agent a question about one of its figures or a
 selected row of a result table.
 
