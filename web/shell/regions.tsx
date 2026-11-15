@@ -8,7 +8,7 @@ type Tabs = Extract<Region, { kind: 'tabs' }>;
 export interface TabRender { title: (id: string) => ReactNode; label: (id: string) => string; name?: (id: string) => string; container: (id: string) => HTMLElement }
 // What the person can do with a group's tabs besides choosing one: close a tab, open its menu,
 // add a view into the group, maximize the group, and move the whole group by its empty strip.
-export interface TabTools { close?: (id: string) => void; menu?: (id: string) => MenuItem[]; add?: () => ReactNode; movable?: boolean; maximized?: boolean; onMaximize?: () => void }
+export interface TabTools { close?: (id: string) => void; rename?: (id: string) => void; canRename?: (id: string) => boolean; menu?: (id: string) => MenuItem[]; add?: () => ReactNode; movable?: boolean; maximized?: boolean; onMaximize?: () => void }
 // Where a dragged tab or group would go: among a group's tabs (before one, or last), into the
 // group, into a pane of its own on one side of it, or along one side of the whole page.
 export type DropTarget = { group: string; zone: 'tab'; before: string | null } | { group: string; zone: 'center' | Side } | { edge: Side };
@@ -121,11 +121,12 @@ export function TabGroup({ group, name, selected, onSelect, onHeader, render, dr
     <div className="shell-tabbar">
       <div className="shell-tabstrip" style={{ '--tabs': group.views.length } as CSSProperties} onDragOver={overTabs} onDrop={drop} data-drop={here?.zone === 'tab' && here.before === null ? 'end' : undefined}>
         <div ref={list} className="shell-tabs" role="tablist" aria-label={name} onKeyDown={move}>
-          {group.views.map((id, i) => <div key={id} className="shell-tab" data-dragging={draggingView === id ? '' : undefined} data-drop={here?.zone === 'tab' && here.before === id ? 'before' : undefined} data-closable={tools?.close ? '' : undefined}>
+          {group.views.map((id, i) => <div key={id} className="shell-tab" data-dragging={draggingView === id ? '' : undefined} data-drop={here?.zone === 'tab' && here.before === id ? 'before' : undefined} data-closable={tools?.close ? '' : undefined} data-renamable={tools?.rename && (tools.canRename?.(id) ?? true) ? '' : undefined}>
             <button id={base + '-tab-' + i} role="tab" aria-selected={id === selected} aria-controls={base + '-panel'} tabIndex={id === selected ? 0 : -1} title={render.label(id)} aria-label={render.name?.(id)} onClick={() => onSelect(id)}
               onKeyDown={event => tabKey(event, id)} onContextMenu={event => tabMenu(event, id)} aria-keyshortcuts={tools?.close ? 'Delete' : undefined}
               onMouseDown={event => { if (event.button === 1 && tools?.close) event.preventDefault(); }} onAuxClick={event => { if (event.button === 1 && tools?.close) { event.preventDefault(); tools.close(id); } }}
               draggable={!!drag} onDragStart={event => { if (!drag) return; event.stopPropagation(); event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData(dragType, id); drag.start({ kind: 'view', id }); }} onDragEnd={() => drag?.end()}>{render.title(id)}</button>
+            {tools?.rename && id === selected && (tools.canRename?.(id) ?? true) && <button className="shell-tab-rename" title={'Rename ' + render.label(id)} aria-label={'Rename ' + render.label(id)} draggable={false} onClick={() => tools.rename!(id)}><Icon name="pencil" size={12} stroke={2} /></button>}
             {tools?.close && id === selected && <button className="shell-tab-close" tabIndex={-1} aria-hidden="true" title={'Close ' + render.label(id)} draggable={false} onClick={() => tools.close!(id)}><Icon name="close" size={12} stroke={2} /></button>}
           </div>)}
         </div>

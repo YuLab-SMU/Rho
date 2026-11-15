@@ -63,9 +63,9 @@ export function Timeline({ graph, marks = [], cursor, playing, running, speed, o
   const tracks = useMemo((): TimelineTrack[] => {
     const out = new Map<string, TimelineTrack>();
     for (const t of [...graph.turns].sort((a, b) => a.start - b.start)) {
-      const who: Who = t.terminal && t.conversationId === 'terminal:' + personPrincipal ? 'person' : 'conversation';
+      const who: Who = t.person || t.terminal && t.conversationId === 'terminal:' + personPrincipal ? 'person' : 'conversation';
       const track = out.get(t.conversationId) ?? { id: t.conversationId, title: plainTitle(t.title), agent: t.agent, who, bands: [] };
-      track.bands.push({ id: t.id, start: t.start, end: t.end, running: t.running, message: !t.terminal });
+      track.bands.push({ id: t.id, start: t.start, end: t.end, running: t.running, message: !t.terminal && !t.person });
       out.set(t.conversationId, track);
     }
     for (const m of marks) {
@@ -188,8 +188,10 @@ export function Timeline({ graph, marks = [], cursor, playing, running, speed, o
   const duration = graph.turns.reduce((sum, t) => sum + (t.end - t.start), 0);
   const counts = timelineKinds.map(k => ({ ...k, count: blocks.filter(b => b.kind === k.key).length })).filter(k => k.count > 0 && (compact || (k.key !== 'ask' && k.key !== 'answer')));
   const answered = blocks.filter(b => b.kind === 'answer').length;
-  const refused = blocks.filter(b => b.failed).length, conversations = tracks.filter(t => t.who === 'conversation' && t.bands.some(b => b.message)).length, yours = marks.filter(m => m.who === 'person').length;
-  const asked = graph.turns.filter(t => !t.terminal).length, steps = blocks.filter(b => b.kind !== 'ask' && b.kind !== 'answer').length;
+  const refused = blocks.filter(b => b.failed).length, conversations = tracks.filter(t => t.who === 'conversation' && t.bands.some(b => b.message)).length;
+  const personTracks = new Set([...graph.turns.filter(t => t.person).map(t => t.conversationId), ...marks.filter(m => m.who === 'person').map(m => m.lane)]);
+  const yours = blocks.filter(b => personTracks.has(b.track)).length;
+  const asked = graph.turns.filter(t => !t.terminal && !t.person).length, steps = blocks.filter(b => b.kind !== 'ask' && b.kind !== 'answer').length;
   const summary = [conversations > 0 && asked ? plural(asked, 'message') + (answered < asked ? ', ' + answered + ' answered' : '') : '', conversations > 0 ? plural(steps, 'action') : '', graph.turns.length ? span(duration) + ' of work' : '', yours ? `${yours} by you` : ''].filter(Boolean).join(' · ');
   const years = scale.stretches.length > 0 && new Date(scale.stretches[0]!.start).getFullYear() !== new Date(scale.stretches.at(-1)!.end).getFullYear();
 

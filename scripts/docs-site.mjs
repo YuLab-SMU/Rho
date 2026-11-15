@@ -11,13 +11,15 @@
 //
 // A rewritten link is recorded in site/.vitepress/generated/links.json so the
 // release record can say which source line produced which target.
-import { existsSync, mkdirSync, rmSync, writeFileSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const docsDir = join(repo, 'docs');
 const contentDir = join(repo, 'site', 'content');
+const docsAssetsDir = join(docsDir, 'assets');
+const publicAssetsDir = join(contentDir, 'docs-assets');
 const navFile = join(repo, 'site', '.vitepress', 'generated', 'navigation.json');
 const linkFile = join(repo, 'site', '.vitepress', 'generated', 'links.json');
 const blobBase = 'https://github.com/YuLab-SMU/Rho/blob/main';
@@ -36,7 +38,7 @@ const SECTIONS = {
     'ROADMAP',
     'AGENT-ACTIVITY',
   ],
-  reference: ['HEADLESS', 'FRONTEND', 'STATUS', 'RELEASE', 'PLUGIN-AUTHORING', 'THIRD-PARTY-PLUGINS', 'DEEPSEEK-HARNESS'],
+  reference: ['HEADLESS', 'FRONTEND', 'STATUS', 'RELEASE', 'PLUGIN-AUTHORING', 'THIRD-PARTY-PLUGINS', 'DEEPSEEK-HARNESS', 'RHO-0.5.10-TUTORIAL'],
 };
 
 // Withheld on purpose: the index is replaced by the site's own navigation, the
@@ -165,6 +167,11 @@ function rewriteLinks(markdown, name) {
     if (/^(https?:|mailto:|#)/.test(target)) return whole;
     const [path, anchor] = target.split('#');
     if (!path) return whole;
+    if (bang && path.startsWith('assets/')) {
+      const url = `/docs-assets/${path.slice('assets/'.length)}${anchor ? `#${anchor}` : ''}`;
+      rewritten.push({ from: name, target, url });
+      return `${bang}[${text}](${url}${title ?? ''})`;
+    }
     const base = path.split('/').pop().replace(/\.md$/, '');
     const hit = published.get(base);
     if (hit && !path.includes('/')) {
@@ -268,6 +275,8 @@ for (const section of Object.keys(SECTION_TITLES)) {
   rmSync(join(contentDir, section), { recursive: true, force: true });
   mkdirSync(join(contentDir, section), { recursive: true });
 }
+rmSync(publicAssetsDir, { recursive: true, force: true });
+if (existsSync(docsAssetsDir)) cpSync(docsAssetsDir, publicAssetsDir, { recursive: true });
 mkdirSync(dirname(navFile), { recursive: true });
 
 for (const { out, content } of [...assembled, ...generated]) {

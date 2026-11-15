@@ -3,6 +3,7 @@ import { ShellContext } from './shell-services.js';
 import { Snapshot } from './snapshot.js';
 import type { BrowserClient, WorkspaceSnapshot } from '../src/browser.js';
 import { useTerminalTurns } from './terminal-turns.js';
+import { useNotebookTurns, withoutGraphNotebookMarks } from './kernel-turns.js';
 import { personPrincipal } from '../src/terminal-work.js';
 import { buildWorkGraph, foldVersions, type FileKind, type GraphEvent, type GraphNode, type GraphTurn, type WorkGraph as Graph } from '../src/work-graph.js';
 import { ancestors, buildWorkLayers, flows, isNotes, lineFiles, shownAs, support, talksOf, type Claim, type Talk, type WorkLayers, type WorkNode } from '../src/work-layers.js';
@@ -38,13 +39,13 @@ const levelLabel: Record<WorkNode['level'], string> = { workspace: 'Workspace', 
 const activityIcon: Record<string, IconName> = { look: 'search', cells: 'braces', build: 'code', notes: 'document', answer: 'chat' };
 const stepIcon = (node: WorkNode): IconName => node.action === 'say' ? 'chat' : node.action === 'error' ? 'info' : node.action === 'read' ? 'eye' : node.action === 'edit' || node.action === 'write' ? 'pencil'
   : node.action === 'execute' ? 'run' : node.action === 'search' ? 'search' : node.record?.operation === 'kernel.run' ? 'braces' : 'tool';
-const workIcon = (node: WorkNode): IconName => node.level === 'line' ? 'workflow' : node.level === 'ask' ? (node.terminal ? 'monitor' : 'question') : node.level === 'activity' ? activityIcon[node.kind ?? ''] ?? 'tool' : stepIcon(node);
+const workIcon = (node: WorkNode): IconName => node.level === 'line' ? 'workflow' : node.level === 'ask' ? (node.person ? 'code' : node.terminal ? 'monitor' : 'question') : node.level === 'activity' ? activityIcon[node.kind ?? ''] ?? 'tool' : stepIcon(node);
 const fileIcon = (category: FileKind): IconName => category === 'figures' ? 'image' : category === 'code' ? 'code' : category === 'notes' ? 'document' : category ? 'table' : 'file';
 const fileLabel = (category: FileKind) => ({ data: 'Data', code: 'Script', results: 'Result', figures: 'Figure', notes: 'Note' } as Record<string, string>)[category ?? ''] ?? 'File';
 const isPicture = (path: string) => /\.(png|jpe?g|svg)$/i.test(path);
 const ended: Record<string, string> = { completed: 'Answered', failed: 'Failed', stopped: 'Stopped', running: 'Working', unknown: 'Outcome unknown' };
 // How an ask ended; commands typed in a terminal were not answered.
-const askEnd = (node: WorkNode) => node.terminal ? (node.state === 'running' ? 'Running' : '') : ended[node.state ?? ''] ?? node.state;
+const askEnd = (node: WorkNode) => node.person ? '' : node.terminal ? (node.state === 'running' ? 'Running' : '') : ended[node.state ?? ''] ?? node.state;
 const outcomes: Record<string, string> = { returned: 'Returned', requested: 'Running', failed: 'Failed', rejected: 'Refused', unknown: 'Outcome unknown' };
 const grounds: Record<Claim['ground'], string> = { made: '', named: 'No recorded step made the files it names', none: 'Names no file' };
 // A command's output opens at its end, where its result or error is.
@@ -107,8 +108,12 @@ export function WorkGraph({ initialResource, client, snapshot, files, agentNow, 
 }) {
   const { turns: messages, sessions, read, problem, loading, omitted } = useTurns(client, snapshot, undefined, true);
   // With what was typed in the project's terminals.
-  const turns = useTerminalTurns(client, snapshot, messages);
-  const { marks } = useEventMarks(client, snapshot, turns);
+  const terminalTurns = useTerminalTurns(client, snapshot, messages);
+  const notebook = useNotebookTurns(client, snapshot, terminalTurns);
+  const turns = notebook.turns;
+  const { marks: allMarks } = useEventMarks(client, snapshot, turns);
+  const marks = useMemo(() => withoutGraphNotebookMarks(allMarks, turns), [allMarks, turns]);
+  const graphProblem = problem || notebook.problem;
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => { if (!agentNow?.running) return; const timer = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer); }, [agentNow?.running]);
   const graphFiles = useMemo(() => files.files.map(f => ({ path: f.path, bytes: f.bytes, modifiedAt: f.modifiedAt, category: f.category })), [files.files]);
@@ -125,7 +130,7 @@ export function WorkGraph({ initialResource, client, snapshot, files, agentNow, 
   const [open, setOpen] = useState<Set<string>>(() => { try { const kept = sessionStorage.getItem(storeKey); if (kept) { stored.current = true; return new Set(JSON.parse(kept) as string[]); } } catch { /* this page only */ } return new Set(); });
   useEffect(() => { if (stored.current) try { sessionStorage.setItem(storeKey, JSON.stringify([...open])); } catch { /* this page only */ } }, [open]);
   const only = lines.filter(l => !l.quiet).length === 1 && lines.length <= 3 ? lines.find(l => !l.quiet)!.id : lines.length === 1 ? lines[0]!.id : null;
-  useEffect(() => { if (only && !stored.current && !loading) setOpen(new Set([only])); }, [only, loading]);
+  useEffect(() => { if (only && !stored.current && !loading && !notebook.loading) setOpen(new Set([only])); }, [only, loading, notebook.loading]);
 
   const newest = useCallback((path: string) => [...(layers.artifacts.get(path)?.nodes ?? [])].reverse().find(n => n.resource) ?? layers.artifacts.get(path)?.nodes.at(-1), [layers]);
   const scene = useMemo(() => layoutLayers(layers, open, { figure: path => isPicture(path) && !!newest(path)?.resource }), [layers, open, newest]);
@@ -378,7 +383,7 @@ export function WorkGraph({ initialResource, client, snapshot, files, agentNow, 
 
   const near = view.k >= 0.56;
   const dim = (id: string) => !!((focus && !focus.has(id)) || (found && !found.shown.has(id)));
-  const counts = { lines: lines.filter(l => !l.quiet).length, talks: new Set(lines.flatMap(l => l.conversations?.filter(c => !c.startsWith('terminal:')) ?? [])).size, asks: [...layers.nodes.values()].filter(n => n.level === 'ask' && !n.terminal).length, steps: layers.nodes.get(layers.root)!.steps, claims: layers.claims.length,
+  const counts = { lines: lines.filter(l => !l.quiet).length, talks: new Set(lines.flatMap(l => l.conversations?.filter(c => !c.startsWith('terminal:')) ?? [])).size, asks: [...layers.nodes.values()].filter(n => n.level === 'ask' && !n.terminal && !n.person).length, steps: layers.nodes.get(layers.root)!.steps, claims: layers.claims.length,
     typed: [...layers.nodes.values()].filter(n => n.level === 'step' && n.record?.terminal).length };
   const wireOn = (w: Wire) => !!focus && focus.has(w.from) && focus.has(w.to) && (target?.kind !== 'file' || w.from === selected || w.to === selected || items.get(w.from)?.ref === target.path || items.get(w.to)?.ref === target.path);
   const flag = (id: string) => liveItem === id && live ? (agentNow?.agent ?? 'Agent') + ' · ' + live.label : null;
@@ -393,12 +398,12 @@ export function WorkGraph({ initialResource, client, snapshot, files, agentNow, 
   const chosenTalk = target?.kind === 'talk' ? target.talk.id : target?.kind === 'work' ? target.node.conversationId ?? null : null, liveTalk = talkOf(live?.work);
   const holds = (path: string) => meaning.holds(path);
 
-  if (!loading && !scene.items.length && !marks.length) return <section className="graph-page"><GraphHead counts={null} /><div className="studio-empty"><span className="empty-symbol"><Icon name="graph" size={26} stroke={1.5} /></span><h2>{problem ? 'Work could not be read' : 'Nothing to draw yet'}</h2>
-    <p>{problem ? 'Earlier records are kept. This page will retry.' : 'Work recorded in this project appears here, including sessions observed from your Agent’s own window.'}</p>
-    {problem && <p className="inline-error" role="alert">{problem}</p>}
+  if (!loading && !notebook.loading && !scene.items.length && !marks.length) return <section className="graph-page"><GraphHead counts={null} /><div className="studio-empty"><span className="empty-symbol"><Icon name="graph" size={26} stroke={1.5} /></span><h2>{graphProblem ? 'Work could not be read' : 'Nothing to draw yet'}</h2>
+    <p>{graphProblem ? 'Earlier records are kept. This page will retry.' : 'Work recorded in this project appears here, including sessions observed from your Agent’s own window.'}</p>
+    {graphProblem && <p className="inline-error" role="alert">{graphProblem}</p>}
     <div className="empty-actions"><button className="primary" onClick={() => onAgent()}><Icon name="prompt" size={17} stroke={1.6} /><span>Ask Agent</span></button></div></div></section>;
   return <section className="graph-page" aria-labelledby="graph-title">
-    <GraphHead counts={counts} omitted={omitted} reading={read < sessions.length ? { read, of: sessions.length } : null}>
+    <GraphHead counts={counts} omitted={omitted + notebook.omitted} reading={read < sessions.length ? { read, of: sessions.length } : null}>
       {open.size > 0 && <button className="small-button" onClick={() => { stored.current = true; touched.current = false; setSelected(null); setOpen(new Set()); }}>Close all</button>}
       <label className="graph-search"><Icon name="search" size={15} /><input type="search" placeholder="Find in all the work" aria-label="Find in all the work" value={query} onChange={e => setQuery(e.target.value)}
         onKeyDown={e => { if (e.key === 'Enter' && found?.raw.length) reveal(found.raw[0]!); }} />{found && <small>{found.raw.length}</small>}</label>
@@ -406,7 +411,7 @@ export function WorkGraph({ initialResource, client, snapshot, files, agentNow, 
       {agentNow?.running && <button className={'follow-toggle' + (following ? ' on' : '')} aria-pressed={following} title={following ? 'The graph keeps the Agent in view as it works.' : 'Keep the Agent in view as it works.'} onClick={following ? onStopFollowing : onFollow}>
         {following ? <><span className="pulse-dot" aria-hidden="true" />Following {agentNow.agent}</> : <><Icon name="follow" size={15} />Follow {agentNow.agent}</>}</button>}
     </GraphHead>
-    {problem && <p className="inline-error graph-problem" role="alert">{problem}</p>}
+    {graphProblem && <p className="inline-error graph-problem" role="alert">{graphProblem}</p>}
     <div className={'graph-body' + (target ? ' inspecting' : '')}>
       <div ref={canvas} className={'graph-canvas' + (focus ? ' focusing' : '') + (cursor !== null ? ' replaying' : '')} tabIndex={-1} onPointerDown={pan} onKeyDown={keys}
         onScroll={e => { const el = e.currentTarget, dx = el.scrollLeft, dy = el.scrollTop; if (!dx && !dy) return; el.scrollLeft = 0; el.scrollTop = 0; const v = viewNow.current; setView({ ...v, x: v.x - dx, y: v.y - dy }); }}>
@@ -474,7 +479,7 @@ const Flag = ({ text, waiting }: { text: string; waiting: boolean }) => <span cl
 function lineFacts(layers: WorkLayers, node: WorkNode) {
   const claims = layers.claims.filter(c => c.line === node.id), findings = claims.filter(c => c.kind === 'finding').length, choices = claims.length - findings;
   const made = lineFiles(layers, node.id).made.length, failedAsks = node.children.filter(id => layers.nodes.get(id)!.state === 'failed').length;
-  const asks = node.children.filter(id => !layers.nodes.get(id)!.terminal).length;
+  const asks = node.children.filter(id => { const ask = layers.nodes.get(id)!; return !ask.terminal && !ask.person; }).length;
   return [asks ? plural(asks, 'message') : '', plural(node.steps, 'step'), made ? plural(made, 'file') + ' made' : '', findings ? plural(findings, 'finding') : '', choices ? plural(choices, 'choice') : '', failedAsks ? failedAsks + ' failed' : ''].filter(Boolean);
 }
 
@@ -523,7 +528,7 @@ function WorkRow({ item, node, selected, dimmed, later, current, flag, waiting, 
     data-selected={selected || undefined} data-dimmed={dimmed || undefined} data-later={later || undefined} data-current={current || undefined} data-bad={bad || undefined} data-live={flag ? '' : undefined}>
     {flag && <Flag text={flag} waiting={waiting} />}
     {can && <button className={'lg-toggle' + (item.open ? ' open' : '')} aria-expanded={!!item.open} aria-label={(item.open ? 'Close ' : 'Open ') + node.title} title={item.open ? 'Close' : node.level === 'ask' ? 'Show its activities' : 'Show its steps'} onClick={onToggle}><Icon name="chevron" size={13} /></button>}
-    <button className="lg-main" aria-pressed={selected} aria-label={`${levelLabel[node.level]}: ${node.title}. ${meta}`} onClick={onSelect} onDoubleClick={can ? onToggle : undefined}>
+    <button className="lg-main" aria-pressed={selected} aria-label={`${node.person ? 'Notebook work' : levelLabel[node.level]}: ${node.title}. ${meta}`} onClick={onSelect} onDoubleClick={can ? onToggle : undefined}>
       <span className="graph-node-icon"><Icon name={workIcon(node)} size={node.level === 'step' ? 12 : 14} stroke={1.8} /></span>
       <span className="lg-text"><strong className="lg-title" title={node.level === 'ask' ? node.text : node.record?.detail ?? node.title}>{node.title}</strong>
         {node.level === 'ask' && !item.open && node.answer && <span className="lg-answer">{gist(node.answer)}</span>}</span>
@@ -826,15 +831,18 @@ function Choice({ waiting, client, projectId }: { waiting: NonNullable<GraphNode
 // the Graph. It reads the conversations as the Graph does, and shows nothing until they are read.
 export function WorkStrip({ client, snapshot, files, onOpen, onConversations }: { initialResource?: {id:string;version:string}|null; client: BrowserClient; snapshot: WorkspaceSnapshot; files: ProjectFiles; onOpen: () => void; onConversations: () => void }) {
   const { turns: messages, loading } = useTurns(client, snapshot);
-  const turns = useTerminalTurns(client, snapshot, messages);
-  const { marks } = useEventMarks(client, snapshot, turns);
+  const terminalTurns = useTerminalTurns(client, snapshot, messages);
+  const notebook = useNotebookTurns(client, snapshot, terminalTurns);
+  const turns = notebook.turns;
+  const { marks: allMarks } = useEventMarks(client, snapshot, turns);
+  const marks = useMemo(() => withoutGraphNotebookMarks(allMarks, turns), [allMarks, turns]);
   const graph = useMemo(() => buildWorkGraph({ turns, files: files.files.map(f => ({ path: f.path, bytes: f.bytes, modifiedAt: f.modifiedAt, category: f.category })), project: snapshot.project, kindOf, now: Date.now() }),
     [turns, files.files, snapshot.project]);
-  if (loading || (!graph.events.length && !marks.length)) return null;
+  if (loading || notebook.loading || (!graph.events.length && !marks.length)) return null;
   const files_ = graph.nodes.filter(n => n.kind === 'file' && n.events.some(e => e.action === 'edit' || e.action === 'write' || e.action === 'changed')).length;
   const last = Math.max(graph.events.at(-1)?.at ?? 0, marks.at(-1)?.at ?? 0), days = Math.round((new Date().setHours(0, 0, 0, 0) - new Date(last).setHours(0, 0, 0, 0)) / 864e5);
   const lastWords = (days === 0 ? 'today' : days === 1 ? 'yesterday' : new Date(last).toLocaleDateString()) + ' at ' + clock(last);
-  const conversations = new Set(turns.filter(t => !t.terminal).map(t => t.conversationId)).size, yours = marks.some(m => m.who === 'person') || turns.some(t => t.terminal && t.turn.by === personPrincipal);
+  const conversations = new Set(turns.filter(t => !t.terminal && !t.person).map(t => t.conversationId)).size, yours = marks.some(m => m.who === 'person') || turns.some(t => t.person || (t.terminal && t.turn.by === personPrincipal));
   const title = !graph.events.length ? 'What you did' : yours ? 'What you and the Agent did' : 'What the Agent did';
   return <section className="project-section work-strip" aria-labelledby="work-strip-title">
     {/* Questions and commands are counted by the kinds under the heading; the line keeps the rest. */}

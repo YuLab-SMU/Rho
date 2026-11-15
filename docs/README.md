@@ -19,6 +19,7 @@ observed.
 | --- | --- |
 | [From-scratch design requirements · v2](design/2026-10-26/index.html) / [PDF](../output/pdf/rho-design-handoff-2026-10-26.pdf) | Designer commission: separate application/project navigation, Studio, panoramic Graph, dynamic Agent experience, dedicated conversation component, plugin standards and cross-mode scenarios; current implementation is not the design target |
 | [Notebook follow-up and 0.5.10](NOTEBOOK-FOLLOWUP-EPISODE.md) | Python arguments and imports, session-correct reruns, local/SSH/Studio checks, real Claude and Codex removal, repaired page and shell acceptances, and the selected npm version |
+| [Rho 0.5.10 人类教程](RHO-0.5.10-TUTORIAL.md) | 从 Projects、Data、Code 和 Notebook，到 Results、Studio、Notes 和 Graph 的浏览器操作路径 |
 | [Frontend](FRONTEND.md) | Project navigation, workspaces, Agent conversations and handoff, browser checks |
 | [Seeing what a plugin looks like](PLUGIN-PICTURES-EPISODE.md) | Plugin kinds from declarations and linked commands, captured pictures of real views, live views on project files and the restyled third-party section; observations, checks and limits |
 | [Layout checks in a real browser](SCREEN-CHECK-EPISODE.md) | `rho-screen-check`: a page at four widths, what the browser measures and the screenshots to read; the 404 found on the workspace's first load; checks and limits |

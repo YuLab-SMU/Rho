@@ -27,6 +27,7 @@ __pycache__/
 /site/content/concepts/
 /site/content/reference/
 /site/content/records/
+/site/content/docs-assets/
 /site/.vitepress/generated/
 /site/.vitepress/dist/
 /site/.vitepress/cache/

@@ -14,7 +14,7 @@ import { CommandPane } from '../console.js';
 import { ConsoleView, FilesView, KindView } from '../studio-tools.js';
 import type { SourceRow } from '../sources.js';
 import { askCell, askPlot, showOnServer, type Prepared, type SessionScope } from '@rho-workspace/plugin-kernel/ui';
-import { addNewNotebook, addNotebook, addObject, addProjectNotebook, addSessionView, canExplore, type SessionView, explorableTable, freshNotebook, languageNames, loadTable, notebookComponent, notebookNames, notebookOf, projectPath, scriptLanguage, scriptPrepared, sessionComponents, type Language } from '../explore.js';
+import { addNewNotebook, addNotebook, addObject, addProjectNotebook, addSessionView, canExplore, type SessionView, explorableTable, freshNotebook, languageNames, loadTable, nextNotebookTitle, notebookComponent, notebookNames, notebookOf, projectPath, scriptLanguage, scriptPrepared, sessionComponents, type Language } from '../explore.js';
 import { ExploreIn } from '../explore-in.js';
 import { useProcess } from '../process-context.js';
 import { ProcessFrame } from './process-views.js';
@@ -218,7 +218,7 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
     const notebook = target?.id;
     let own = notebookOf(target);
     if (!notebook) {
-      const view = byId.get(viewId), now = treeNow(), ready = view && now && placeView(now, view, newId), fresh = freshNotebook('console');
+      const view = byId.get(viewId), now = treeNow(), ready = view && now && placeView(now, view, newId), fresh = freshNotebook('console', nextNotebookTitle(now?.nodes));
       const next = ready && addBeside(ready, fresh as never, viewId, 'bottom', newId);
       if (allowed('composition.apply') && next && await writeLayout(next)) own = fresh.props.notebook ?? null;
     } else {
@@ -320,15 +320,18 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
     setClosed(null);
     if (was && latest.current.version === was.version) await undoLayout();
   }
+  function renameNotebook(id: string) {
+    const view = byId.get(id);
+    if (!view || view.component !== notebookComponent) return;
+    const name = window.prompt('Name this notebook', title(view))?.trim().slice(0, 60);
+    if (name && name !== title(view)) saveProps(id, { title: name });
+  }
   // A tab's own menu: the commands of the Arrange menu for the tab it was opened on.
   function tabMenu(id: string): MenuItem[] {
     const view = byId.get(id), now = treeNow(), group = groupOf(root, id);
     if (!view || !now || !group) return [];
     const ready = placeView(now, view, newId), items: MenuItem[] = [{ id: 'close', label: 'Close', icon: 'close', keys: 'Del', run: () => closeTab(id) }];
-    if (notebookOf(view) && allowed('composition.apply')) items.unshift({ id: 'rename', label: 'Rename', icon: 'pencil', run: () => {
-      const name = window.prompt('Name this notebook', title(view))?.trim().slice(0, 60);
-      if (name && name !== title(view)) saveProps(id, { title: name });
-    } });
+    if (view.component === notebookComponent && allowed('composition.apply')) items.unshift({ id: 'rename', label: 'Rename notebook', icon: 'pencil', run: () => renameNotebook(id) });
     const others = group.views.filter(other => other !== id);
     if (others.length) items.push({ id: 'close-others', label: others.length === 1 ? 'Close the other tab' : `Close the ${others.length} other tabs`, icon: 'close', run: () => void closeViews(others, others.length === 1 ? title(byId.get(others[0])!) : `${others.length} views`) });
     const split = (axis: 'horizontal' | 'vertical') => { const t = treeNow(), r = t && placeView(t, view, newId), next = r && splitView(r, id, axis, newId); if (next) { onPersonMoved?.(); show(id); void writeLayout(next); } };
@@ -337,7 +340,7 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
     return items;
   }
   const toolsFor = (region: Tabs): TabTools | undefined => canArrange ? {
-    close: closeTab, menu: tabMenu, add: addView ? () => addView(groupNode(region.id)) : undefined,
+    close: closeTab, rename: renameNotebook, canRename: id => byId.get(id)?.component === notebookComponent, menu: tabMenu, add: addView ? () => addView(groupNode(region.id)) : undefined,
     movable: !alone && groups.length > 1, maximized: alone?.id === region.id, onMaximize: () => setMaximized(m => m === region.id ? null : region.id),
   } : undefined;
   // Eight mounted heavy entries is a rendering budget, never a buffer eviction: the views on
@@ -483,9 +486,10 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
       {!root ? empty ?? <div className="empty"><h2>No views in this layout</h2><p>The saved layout is empty. No view is created automatically.</p></div>
         : narrow ? <section className="shell-group">
           <div className="shell-tabbar"><div ref={narrowList} className="shell-tabs" role="tablist" aria-label="Views" onKeyDown={moveNarrow}>
-            {order.map((id, i) => <div key={id} className="shell-tab" data-closable={canArrange ? '' : undefined}>
+            {order.map((id, i) => <div key={id} className="shell-tab" data-closable={canArrange ? '' : undefined} data-renamable={canArrange && byId.get(id)?.component === notebookComponent ? '' : undefined}>
               <button aria-label={title(byId.get(id)!)} id={tabId + i} role="tab" aria-selected={id === focused} aria-controls={tabId + 'panel'} tabIndex={id === focused ? 0 : -1} aria-keyshortcuts={canArrange ? 'Delete' : undefined} onClick={() => { if (id !== focused) onPersonMoved?.(); show(id); }}
                 onKeyDown={event => { if (event.key === 'Delete' && canArrange) { event.preventDefault(); closeTab(id); } }}><TabName name={title(byId.get(id)!)} /></button>
+              {canArrange && id === focused && byId.get(id)?.component === notebookComponent && <button className="shell-tab-rename" title={'Rename ' + title(byId.get(id)!)} aria-label={'Rename ' + title(byId.get(id)!)} onClick={() => renameNotebook(id)}><Icon name="pencil" size={12} stroke={2} /></button>}
               {canArrange && id === focused && <button className="shell-tab-close" tabIndex={-1} aria-hidden="true" title={'Close ' + title(byId.get(id)!)} onClick={() => closeTab(id)}><Icon name="close" size={12} stroke={2} /></button>}
             </div>)}
           </div>{canArrange && addView && <AddButton name="Views" content={() => addView(groupNode(groupOf(root, focused)?.id ?? root.id))} />}</div>

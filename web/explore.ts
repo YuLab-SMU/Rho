@@ -52,6 +52,11 @@ export const notebookOn = (nodes: unknown[] | undefined) => (nodes as LayoutNode
 const newId = (kind: string) => `${kind}-${crypto.randomUUID().slice(0, 8)}`;
 type NotebookNode = LayoutNode & { props?: { title?: string; notebook?: string } };
 const notebookNodes = (nodes: unknown[] | undefined) => ((nodes as NotebookNode[] | undefined) ?? []).filter(n => n.kind !== 'group' && n.component === notebookComponent);
+export function nextNotebookTitle(nodes: unknown[] | undefined) {
+  const names = new Set(notebookNodes(nodes).map(n => String(n.props?.title ?? 'Notebook')));
+  if (!names.has('Notebook')) return 'Notebook';
+  for (let number = 2; ; number++) if (!names.has('Notebook ' + number)) return 'Notebook ' + number;
+}
 // The identity a Notebook view's cells carry; none for the project's notebook.
 export const notebookOf = (view: { props?: Record<string, unknown> } | undefined) => typeof view?.props?.notebook === 'string' && view.props.notebook ? view.props.notebook : null;
 // Each notebook's name by its identity, across the project's pages, so a cell can say where it was run.
@@ -118,8 +123,10 @@ const notebookThere = (nodes: unknown[] | undefined): PlacedNotebook | null => {
   return view ? { id: view.id, notebook: notebookOf(view as { props?: Record<string, unknown> }) } : null;
 };
 export function addNotebook(client: BrowserClient, projectId: string, compositionId: string, beside: string | null, into?: string): Promise<PlacedNotebook> {
-  const view = freshNotebook();
-  return addToPage(client, projectId, compositionId, notebookThere, into ? intoGroup(view, into) : tree => withNotebook(tree, beside, view), 'notebook');
+  return addToPage(client, projectId, compositionId, notebookThere, tree => {
+    const view = freshNotebook(undefined, nextNotebookTitle(tree?.nodes));
+    return into ? intoGroup(view, into)(tree) : withNotebook(tree, beside, view);
+  }, 'notebook');
 }
 // The project's own sessions as a Notebook on the page, for a cell run there (an Agent's, or one
 // from before notebooks had sessions of their own): the page's view of them, or one added beside
@@ -139,10 +146,8 @@ export function addProjectNotebook(client: BrowserClient, projectId: string, com
 export function addNewNotebook(client: BrowserClient, projectId: string, compositionId: string, into?: string, existing?: { notebook: string; title?: string }): Promise<string> {
   const key = existing ? existing.notebook.replace(/[^A-Za-z0-9_-]/g, '.') : crypto.randomUUID().slice(0, 8), id = 'notebook-' + key;
   return addToPage(client, projectId, compositionId, nodes => (nodes as NotebookNode[] | undefined)?.find(n => n.id === id || (existing && n.component === notebookComponent && n.props?.notebook === existing.notebook))?.id ?? null, tree => {
-    const there = notebookNodes(tree?.nodes), names = new Set(there.map(n => n.props?.title));
-    let number = there.length + 1;
-    while (names.has('Notebook ' + number)) number++;
-    const view = { ...notebookView(id), props: { title: existing?.title ?? 'Notebook ' + number, notebook: existing?.notebook ?? 'nb-' + key } };
+    const view = { ...notebookView(id), props: { title: existing?.title ?? nextNotebookTitle(tree?.nodes), notebook: existing?.notebook ?? 'nb-' + key } };
+    const there = notebookNodes(tree?.nodes);
     if (into || !tree) return intoGroup(view, into ?? '')(tree);
     const last = there.at(-1), holder = last && tree.nodes.find(n => n.kind === 'group' && n.children?.includes(last.id) && (n.presentation as { mode?: string } | undefined)?.mode !== 'split');
     return holder ? addInto(tree, view as never, holder.id, newId) : addBeside(tree, view as never, null, 'right', newId);

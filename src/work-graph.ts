@@ -66,7 +66,7 @@ export type FileKind = 'data' | 'code' | 'figures' | 'notes' | 'results' | null;
 export interface GraphFile { path: string; bytes: number; modifiedAt?: string; category: FileKind }
 // `terminal`: commands typed in a project terminal, not a message to an Agent (terminal-work.ts).
 export interface GraphTurn { conversationId: string; conversationTitle: string; agent: string; turn: ConversationTurn; observation?: SessionObservation | null;
-  external?: boolean; terminal?: boolean; kernelCells?: string[]; reportedResults?: Array<{ path: string; at: string; resource?: { id: string; version: string } }> }
+  external?: boolean; terminal?: boolean; person?: boolean; kernelCells?: string[]; reportedResults?: Array<{ path: string; at: string; resource?: { id: string; version: string } }> }
 export interface GraphInput {
   turns: GraphTurn[]; files: GraphFile[]; project: PathScope;
   // The kind of a file the last walk did not see, from its name.
@@ -102,7 +102,7 @@ export interface GraphNode {
 // The message an edge was recorded in: a file one message made and a later one read is drawn
 // with that later message.
 export interface GraphEdge { id: string; from: string; to: string; label: string; basis: Basis; at: number; turn: string }
-export interface GraphTurnSpan { id: string; conversationId: string; title: string; agent: string; start: number; end: number; running: boolean; terminal?: boolean }
+export interface GraphTurnSpan { id: string; conversationId: string; title: string; agent: string; start: number; end: number; running: boolean; terminal?: boolean; person?: boolean }
 export interface WorkGraph { nodes: GraphNode[]; edges: GraphEdge[]; events: GraphEvent[]; turns: GraphTurnSpan[]; live: { node: string; label: string; waiting?: boolean } | null }
 
 // Nothing is left out of the graph for its size: every message that was read is in it. What a page
@@ -142,7 +142,7 @@ export function buildWorkGraph(input: GraphInput): WorkGraph {
   };
   const note = (node: GraphNode, event: Omit<GraphEvent, 'node'>) => { const full = { ...event, node: node.id }; node.events.push(full); events.push(full); node.at = Math.min(node.at, event.at); };
 
-  ordered.forEach(({ conversationId, conversationTitle, agent, turn: message, observation, external, terminal, reportedResults }, position) => {
+  ordered.forEach(({ conversationId, conversationTitle, agent, turn: message, observation, external, terminal, person, reportedResults }, position) => {
     // Message identities are per conversation; the graph names each by both.
     const turn = { ...message, id: conversationId + '/' + message.id };
     inTurn = turn.id; evidence = turn.evidence;
@@ -154,8 +154,8 @@ export function buildWorkGraph(input: GraphInput): WorkGraph {
     const q: GraphNode = { id: 'q:' + turn.id, kind: 'question', title: firstLine(plainAsk(askedAbout(turn.text).question)) || 'A message', text: turn.text, at: sent, turn: turn.id, conversationId, agent, state: turn.state, model: turn.model ?? null, events: [] };
     nodes.set(q.id, q);
     // Typing in a terminal asks nothing.
-    if (!terminal) note(q, { key: turn.id + ':ask', at: sent, turn: turn.id, action: 'ask', label: 'Asked' });
-    spans.push({ id: turn.id, conversationId, title: conversationTitle, agent, start: sent, end: Math.max(end, sent), running, ...(terminal ? { terminal: true } : {}) });
+    if (!terminal && !person) note(q, { key: turn.id + ':ask', at: sent, turn: turn.id, action: 'ask', label: 'Asked' });
+    spans.push({ id: turn.id, conversationId, title: conversationTitle, agent, start: sent, end: Math.max(end, sent), running, ...(terminal ? { terminal: true } : {}), ...(person ? { person: true } : {}) });
 
     const blocks = conversationBlocks(turn, observation ?? null, input.project.root);
     const activities = blocks.flatMap(block => block.kind === 'activity' ? block.activities : []);
@@ -250,7 +250,7 @@ export function buildWorkGraph(input: GraphInput): WorkGraph {
       note(node, { key: turn.id + ':result:' + path, at, turn: turn.id, action: 'report', label: 'Reported result' });
       edge(q.id, node.id, 'reported result', 'reported', at);
     }
-    if (!running && !terminal && time(turn.endedAt) !== null) note(q, { key: turn.id + ':answer', at: end, turn: turn.id, action: 'answer', label: turn.state === 'completed' ? 'Answered' : turn.state === 'failed' ? 'Failed' : turn.state === 'stopped' ? 'Stopped' : 'Ended' });
+    if (!running && !terminal && !person && time(turn.endedAt) !== null) note(q, { key: turn.id + ':answer', at: end, turn: turn.id, action: 'answer', label: turn.state === 'completed' ? 'Answered' : turn.state === 'failed' ? 'Failed' : turn.state === 'stopped' ? 'Stopped' : 'Ended' });
     if (running && !live) live = { node: q.id, label: 'Working' };
     // A step that waits for the person's choice says so where it is drawn.
     const pending = running ? turn.permissions?.find(p => p.state === 'pending') : undefined;

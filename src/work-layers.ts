@@ -32,6 +32,8 @@ export interface WorkNode {
   // A line of work: its section of the notes when it has one, its conversations, and whether it
   // changed any project file or says anything.
   section?: SessionMeaning; conversations?: string[]; agents?: string[]; quiet?: boolean;
+  // Work recorded from the person's own Notebook, rather than an Agent conversation.
+  person?: boolean;
   // An ask that is commands typed in a terminal, not a message; a line of only such asks.
   terminal?: boolean;
   // An ask: the message as the Graph names it (conversation/message), and its answer.
@@ -210,12 +212,12 @@ export function buildWorkLayers(input: LayersInput): WorkLayers {
   const asks: WorkNode[] = [], toolStep = new Map<string, string>(), notesSteps = new Map<string, Array<{ id: string; at: number }>>();
   // The conversations that have written in the notes, and what each message's record says happened to a file on disk.
   const begun = new Set<string>(), changes = new Map<string, 'added' | 'modified' | 'removed'>();
-  for (const { conversationId, conversationTitle, agent, turn: message, observation, terminal } of ordered) {
+  for (const { conversationId, conversationTitle, agent, turn: message, observation, terminal, person } of ordered) {
     const turn = conversationId + '/' + message.id, question = byId.get('q:' + turn);
     const sent = time(message.sentAt) ?? input.now, start = time(message.startedAt) ?? sent, running = message.state === 'running';
     const end = time(message.endedAt) ?? (running ? input.now : start);
     const ask: WorkNode = { id: askId(turn), level: 'ask', parent: null, children: [], title: firstLine(plainAsk(askedAbout(message.text).question)) || 'A message', said: firstLine(plainAsk(conversationTitle)) || conversationTitle,
-      start: sent, end: Math.max(end, sent), running, steps: 0, failed: 0, turn, conversationId, agent, state: message.state, text: message.text, ...(question?.answer ? { answer: question.answer } : {}), ...(terminal ? { terminal: true } : {}) };
+      start: sent, end: Math.max(end, sent), running, steps: 0, failed: 0, turn, conversationId, agent, state: message.state, text: message.text, ...(question?.answer ? { answer: question.answer } : {}), ...(terminal ? { terminal: true } : {}), ...(person ? { person: true } : {}) };
     nodes.set(ask.id, ask); asks.push(ask);
     for (const file of message.files?.changed ?? []) changes.set(ask.id + '\n' + file.path, file.change);
     const raws: Raw[] = [];
@@ -226,7 +228,7 @@ export function buildWorkLayers(input: LayersInput): WorkLayers {
         const onFile = activity.action === 'read' || activity.action === 'edit' || activity.action === 'write' || activity.action === 'delete' || activity.action === 'move';
         const path = onFile ? projectPath(activity.location ?? step.detail ?? '', project) : null;
         const changes = onFile && activity.action !== 'read' && !!path, script = ranBy.get(id) ?? null, refused = activity.outcome === 'rejected';
-        const mode: Mode = refused ? null : changes ? (isNotes(path!) ? 'notes' : 'build') : script ? 'build' : step.operation === 'kernel.run' ? 'cells' : null;
+        const mode: Mode = refused ? null : changes ? (isNotes(path!) ? 'notes' : 'build') : step.operation === 'kernel.run' ? 'cells' : script ? 'build' : null;
         raws.push({ id, key: activity.key, at, from: time(step.startedAt) ?? at, tool: true, activity, step, path, mode, edit: changes, script });
         if (step.id) toolStep.set(turn + '\n' + step.id, id);
         if (mode === 'notes') notesSteps.set(turn, [...(notesSteps.get(turn) ?? []), { id, at }]);
@@ -291,6 +293,7 @@ export function buildWorkLayers(input: LayersInput): WorkLayers {
   for (const ask of asks) {
     const id = home.get(ask.id) ?? 'l:' + find(loose.get(ask.id)!);
     const node = line(id, ask.said || ask.title);
+    if (ask.person) node.person = true;
     if (!node.said) node.said = firstLine(plainAsk(askedAbout(ask.text ?? '').question), 400);
     ask.parent = node.id; node.children.push(ask.id);
     if (!node.conversations!.includes(ask.conversationId!)) node.conversations!.push(ask.conversationId!);
