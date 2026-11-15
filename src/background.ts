@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { lease } from './state.js';
 import { running } from './running.js';
+import { defaultFoundationBudgets, foundationPaths } from './foundation.js';
 
 // Starting Rho in the background used to be a script each Agent wrote for itself: on Windows a
 // PowerShell file run past the execution policy, with a hidden `Start-Process`, a deleted log and a
@@ -12,8 +13,10 @@ import { running } from './running.js';
 // a downloader. These commands do the same from Rho's own code, so an Agent runs one plain command.
 
 const cli = fileURLToPath(new URL('./cli.js', import.meta.url));
-export const logFile = (stateDirectory: string) => path.join(stateDirectory, 'rho.log');
-export const previousLogFile = (stateDirectory: string) => path.join(stateDirectory, 'rho.previous.log');
+const canonicalLogDirectory = (stateDirectory: string) => path.resolve(stateDirectory) === path.resolve(foundationPaths().state) ? foundationPaths().logs : stateDirectory;
+export const logFile = (stateDirectory: string) => path.join(canonicalLogDirectory(stateDirectory), 'rho.log');
+export const previousLogFile = (stateDirectory: string) => path.join(canonicalLogDirectory(stateDirectory), 'rho.previous.log');
+const rotatedLogFile = (stateDirectory: string, index: number) => path.join(canonicalLogDirectory(stateDirectory), `rho.${index}.log`);
 // --open says when it could not open a browser, so a start on a machine without a screen (a server,
 // a container, an Agent's sandbox) does not look like one that opened a tab nobody sees. The opener
 // is given 5 s to say it failed; one still running then is taken as opening.
@@ -55,9 +58,10 @@ export async function serviceStatus(stateDirectory: string) {
   const state = path.resolve(stateDirectory), real = (folder: string) => fs.realpath(folder).catch(() => path.resolve(folder));
   const found = await connection(state);
   const log = await fs.access(logFile(state)).then(() => logFile(state), () => undefined);
+  const lock = await fs.readFile(path.join(state, 'service.lock'), 'utf8').then(text => JSON.parse(text) as { pid?: number; startedAt?: string; process?: string }).catch(() => null);
   const here = await real(state), notes = await running();
-  const others = (await Promise.all(notes.map(async note => await real(note.stateDirectory) === here ? null : { state: note.stateDirectory, url: note.url, pid: note.pid }))).filter(note => note !== null);
-  if (!found) return { status: { state, running: false, note: 'No Rho has run with this state folder.' }, others };
+  const others = (await Promise.all(notes.map(async note => await real(note.stateDirectory) === here ? null : { state: note.stateDirectory, url: note.url, pid: note.pid, ...(note.profile ? { profile: note.profile } : {}) }))).filter(note => note !== null);
+  if (!found) return { status: { state, running: false, lock, note: 'No Rho has run with this state folder.' }, others };
   const url = typeof found.url === 'string' ? found.url : undefined, pid = Number.isInteger(found.pid) ? found.pid as number : undefined;
   const up = await holds(state);
   let answers = 0;
@@ -72,7 +76,7 @@ export async function serviceStatus(stateDirectory: string) {
       : log ? 'Not running. Its log ends without a {"shutdown":…} line: it crashed (its error is in the log) or was ended from outside, such as killed, out of memory, or the session, container or sandbox that held it ended.'
       : 'Not running.';
   }
-  return { status: { state, running: up, url, pid, answers, ...(log ? { log } : {}), note }, others };
+  return { status: { state, running: up, url, pid, answers, lock, ...(log ? { log } : {}), note }, others };
 }
 
 // Windows runs the service under `cmd.exe`, which writes its output to the log. `cmd` gets a
@@ -91,7 +95,8 @@ function spawnWindows(args: string[], log: string): ChildProcess {
 // last start's log as rho.previous.log, and returns once the service is ready or has failed.
 export async function startInBackground(args: string[], stateDirectory: string, { waitMs = 60000, quiet = false } = {}) {
   const state = path.resolve(stateDirectory), log = logFile(state);
-  await fs.mkdir(state, { recursive: true });
+  await fs.mkdir(state, { recursive: true, mode: 0o700 });
+  await fs.mkdir(path.dirname(log), { recursive: true, mode: 0o700 });
   const say = (text: string) => { if (!quiet) process.stdout.write(text + '\n'); }, fail = (text: string, code = 1) => { process.stderr.write(text.trimEnd() + '\n'); return code; };
   if (await connection(state) && await holds(state)) {
     const url = (await connection(state))?.url;
@@ -99,6 +104,10 @@ export async function startInBackground(args: string[], stateDirectory: string, 
   }
   // A log that the last service still holds (Windows keeps it open until that process ends) is
   // left in place, and this start's output follows it.
+  // Keep at most the configured number of log files including the current file and
+  // `rho.previous.log`.  A failed restart can therefore never grow an unbounded stack.
+  for (let index = defaultFoundationBudgets.logFiles - 2; index >= 1; index -= 1) await fs.rename(rotatedLogFile(state, index), rotatedLogFile(state, index + 1)).catch(() => {});
+  await fs.rename(previousLogFile(state), rotatedLogFile(state, 1)).catch(() => {});
   const moved = await fs.rename(log, previousLogFile(state)).then(() => true, (e: NodeJS.ErrnoException) => e.code === 'ENOENT');
   const before = moved ? 0 : (await lines(log)).length;
   let child: ChildProcess;

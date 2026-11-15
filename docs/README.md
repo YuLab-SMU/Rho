@@ -66,6 +66,7 @@ observed.
 | [magpie's frontend, studied](MAGPIE-FRONTEND-STUDY.md) | A reference project read in depth: a no-framework app shell, its click-and-scroll engine, plugin kernel, i18n and verification machinery, and candidate actions for Rho; it sets no design for Rho |
 | [Architecture](ARCHITECTURE.md) | Source ownership, state and lifecycle boundaries |
 | [Foundation repair and upgrade plan](FOUNDATION-REPAIR-PLAN.md) | Six work packages that turn the three-round installation, path, lifecycle, temporary-resource, host-coupling and observability findings into staged repair and migration work |
+| [Foundation repair episode F0](FOUNDATION-REPAIR-EPISODE.md) | Disposable HOME and npm-prefix reproduction of installation, half-uninstall, legacy-state and host-residue findings |
 | [Technology stack](TECHSTACK.md) | Libraries and runtimes used by the current implementation |
 | [Roadmap](ROADMAP.md) | Product direction and the questions being worked on |
 | [Headless backend](HEADLESS.md) | Installation, HTTP/SSE, Agent adapters, persistence and resource budgets |

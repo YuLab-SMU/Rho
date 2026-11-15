@@ -7,6 +7,7 @@ import * as fs from 'node:fs/promises';
 import { constants as fsConstants } from 'node:fs';
 import os from 'node:os';
 import { spawn } from 'node:child_process';
+import { ensureFoundationPaths, foundationPaths, foundationPathsForState, ensureManifest, packageIdentity, readFoundationJson, updateManifest } from './foundation.js';
 // A widened link is optional: the fragment carries a one-time code, which no request or Referer
 // sends and which the page redeems and removes. Opening the plain url needs no code at all.
 const link = (url: string, code: string) => url + '/#pair=' + code;
@@ -53,8 +54,15 @@ For an Agent:
   rho tool index --as NAME                   call the same tools from your shell now (rho tool --help)
   rho --install-skill SKILL_DIRECTORY        install the Rho Agent Skill this version ships
 
-Start Rho on ~/Rho/projects and ~/Rho/state in this terminal, and say where it is and what is missing:
+Start Rho using the platform data directories in this terminal, and say where it is and what is missing:
   rho
+Lifecycle and foundation tools:
+  rho start|stop|status|restart [--profile NAME] [START_OPTIONS]
+  rho paths | rho doctor [--json] [--repair] [--scan]
+  rho migrate --dry-run|--apply|--rollback OPERATION_ID [--purge]
+  rho versions | rho install | rho uninstall [--dry-run|--purge]
+  rho profile list|create|remove NAME
+  rho config show|path|schema | rho cache list|prune | rho logs | rho host scan|cleanup
 Start Rho with chosen folders and options:
   rho --root PROJECTS_DIRECTORY --state-dir SERVICE_STATE [--core ABSOLUTE_CORE_BINARY] [--rscript ABSOLUTE_RSCRIPT] [--python PYTHON] [--terminal-shell SHELL] [--ssh SSH] [--serverctl SERVERCTL] [--claude CLAUDE_CODE_BINARY] [--codex CODEX_BINARY] [--agent-backend claude-acp|codex-acp|claude-cli|acp] [--acp-command JSON_ARGV] [--port PORT] [--limits JSON_FILE] [--plugins documents,files,...] [--example on|off] [--open]
 Add --background to either start to have it return once Rho is ready, with Rho's output in
@@ -98,8 +106,19 @@ async function harnessAcp() {
     }
   return undefined;
 }
-const options = { example: { type: 'string' }, 'verify-evidence': { type: 'string' }, acp: { type: 'string' }, 'acp-agent': { type: 'string' }, root: { type: 'string' }, 'state-dir': { type: 'string' }, core: { type: 'string' }, rscript: { type: 'string' }, python: { type: 'string' }, 'terminal-shell': { type: 'string' }, ssh: { type: 'string' }, serverctl: { type: 'string' }, claude: { type: 'string' }, codex: { type: 'string' }, 'agent-backend': { type: 'string' }, 'acp-command': { type: 'string' }, port: { type: 'string' }, limits: { type: 'string' }, plugins: { type: 'string' }, pair: { type: 'string' }, open: { type: 'boolean' }, background: { type: 'boolean' }, status: { type: 'boolean' }, 'install-skill': { type: 'string' }, version: { type: 'boolean' },
-  grant: { type: 'string' }, project: { type: 'string' }, 'project-id': { type: 'string' }, session: { type: 'string' }, agent: { type: 'string' }, mcp: { type: 'string' }, stop: { type: 'boolean' }, help: { type: 'boolean', short: 'h' } } as const;
+const options = { example: { type: 'string' }, profile: { type: 'string' }, 'verify-evidence': { type: 'string' }, acp: { type: 'string' }, 'acp-agent': { type: 'string' }, root: { type: 'string' }, 'state-dir': { type: 'string' }, core: { type: 'string' }, rscript: { type: 'string' }, python: { type: 'string' }, 'terminal-shell': { type: 'string' }, ssh: { type: 'string' }, serverctl: { type: 'string' }, claude: { type: 'string' }, codex: { type: 'string' }, 'agent-backend': { type: 'string' }, 'acp-command': { type: 'string' }, port: { type: 'string' }, limits: { type: 'string' }, plugins: { type: 'string' }, pair: { type: 'string' }, open: { type: 'boolean' }, background: { type: 'boolean' }, status: { type: 'boolean' }, 'install-skill': { type: 'string' }, version: { type: 'boolean' },
+  grant: { type: 'string' }, project: { type: 'string' }, 'project-id': { type: 'string' }, session: { type: 'string' }, agent: { type: 'string' }, mcp: { type: 'string' }, stop: { type: 'boolean' }, json: { type: 'boolean' }, help: { type: 'boolean', short: 'h' } } as const;
+async function configuredState(values: { ['state-dir']?: string; profile?: string }) {
+  if (values['state-dir']) return path.resolve(values['state-dir']);
+  if (values.profile) {
+    const defaults = foundationPaths();
+    const profiles = await readFoundationJson<Record<string, { state?: string }>>(path.join(defaults.config, 'profiles.json'), {});
+    if (profiles[values.profile]?.state) return path.resolve(profiles[values.profile]!.state!);
+    process.stderr.write(`Rho profile ${values.profile} does not exist. Use rho profile list or rho profile create ${values.profile}.\n`);
+    process.exit(1);
+  }
+  return foundationPaths().state;
+}
 // A command that is refused says why and what to do. A service that is not running is the
 // common case for --grant and --pair; anything without a known reason keeps its stack.
 function refuse(error: unknown, url?: string): never {
@@ -109,7 +128,15 @@ function refuse(error: unknown, url?: string): never {
   else throw error;
   process.exit(1);
 }
-if (process.argv[2] === 'plugin') {
+const command = process.argv[2];
+if (command === 'start') process.argv.splice(2, 1);
+else if (command === 'status') { process.argv.splice(2, 1); process.argv.push('--status'); }
+else if (command === 'stop') { process.argv.splice(2, 1); process.argv.push('--stop'); }
+if (command === 'restart') {
+  process.exitCode = await (await import('./foundation-cli.js')).restartCommand(process.argv.slice(3));
+} else if (['install', 'uninstall', 'versions', 'migrate', 'paths', 'doctor', 'profile', 'config', 'cache', 'logs', 'host', 'service'].includes(command ?? '')) {
+  process.exitCode = await (await import('./foundation-cli.js')).foundationCli(command!, process.argv.slice(3));
+} else if (process.argv[2] === 'plugin') {
   try { await (await import('./plugin-cli.js')).pluginCli(process.argv.slice(3)); }
   catch (error) { process.stderr.write((error instanceof Error ? error.message : String(error)) + '\n'); process.exitCode = 1; }
 } else if (process.argv[2] === 'connect') {
@@ -134,7 +161,7 @@ const version = () => fs.readFile(new URL('../package.json', import.meta.url), '
 if (values.version) { process.stdout.write(await version() + '\n'); process.exit(0); }
 if (values.status) {
   const { serviceStatus } = await import('./background.js');
-  process.stdout.write(JSON.stringify(await serviceStatus(values['state-dir'] ?? path.join(os.homedir(), 'Rho', 'state'))) + '\n');
+  process.stdout.write(JSON.stringify(await serviceStatus(await configuredState(values))) + '\n');
   process.exit(0);
 }
 if (values['install-skill'] !== undefined) {
@@ -145,7 +172,7 @@ if (values['install-skill'] !== undefined) {
 }
 if (values.stop) {
   const { lease } = await import('./state.js');
-  const directory = path.resolve(values['state-dir'] ?? path.join(os.homedir(), 'Rho', 'state'));
+  const directory = await configuredState(values);
   // The state's writer lock says whether a service runs there: a lock this command can take is free.
   // A folder without a connection file was never a Rho state, and gets no lock file of its own.
   const running = () => lease(directory).then(async release => { await release(); return false; }, (e: { kind?: string }) => { if (e?.kind === 'conflict') return true; throw e; });
@@ -225,19 +252,25 @@ if (values.acp) {
   // usage page: start it on their own folders, say in plain words where it is, and open it when
   // this is an interactive terminal. Every flagged start is unchanged, so scripts and
   // acceptance runs keep the output they read.
-  const quickStart = !values.root && !values['state-dir'];
-  if (!quickStart && (!values.root || !values['state-dir'])) {
-    process.stderr.write(usage); process.exit(2);
-  }
+  const defaults = foundationPaths();
+  const userConfig = await readFoundationJson<Record<string, any>>(defaults.configFile, {});
+  const profileName = values.profile ?? process.env.RHO_PROFILE;
+  const profiles = profileName ? await readFoundationJson<Record<string, { root?: string; state?: string; port?: number }>>(path.join(defaults.config, 'profiles.json'), {}) : {};
+  const profile = profileName ? profiles[profileName] : undefined;
+  if (profileName && !profile) { process.stderr.write(`Rho profile ${profileName} does not exist. Use rho profile list or rho profile create ${profileName}.\n`); process.exit(1); }
+  const configuredRoot = values.root ?? process.env.RHO_PROJECTS_DIR ?? profile?.root ?? userConfig.root;
+  const configuredState = values['state-dir'] ?? process.env.RHO_STATE_DIR ?? profile?.state ?? userConfig.stateDir;
+  const configuredPort = values.port ?? process.env.RHO_PORT ?? profile?.port ?? userConfig.port;
+  const quickStart = !configuredRoot && !configuredState;
   let quickRoot = '', quickState = '';
   if (quickStart) {
-    const { homedir } = await import('node:os');
-    quickRoot = path.join(homedir(), 'Rho', 'projects');
-    quickState = path.join(homedir(), 'Rho', 'state');
-    await fs.mkdir(quickRoot, { recursive: true });
-    await fs.mkdir(quickState, { recursive: true });
+    quickRoot = defaults.projects;
+    quickState = defaults.state;
+    await ensureFoundationPaths(defaults);
   }
-  const projectsRoot = values.root ?? quickRoot, stateDirectory = values['state-dir'] ?? quickState;
+  const projectsRoot = configuredRoot ?? quickRoot ?? defaults.projects, stateDirectory = configuredState ?? quickState ?? defaults.state;
+  await fs.mkdir(projectsRoot, { recursive: true, mode: 0o700 });
+  await fs.mkdir(stateDirectory, { recursive: true, mode: 0o700 });
   if (values.background) {
     const { startInBackground } = await import('./background.js');
     process.exit(await startInBackground(process.argv.slice(2).filter(arg => arg !== '--background'), stateDirectory));
@@ -252,24 +285,32 @@ if (values.acp) {
   // sessions started in Harness continue in Rho too. Naming one does not make it the default Agent.
   const named = values['acp-command'] ?? process.env.RHO_ACP_COMMAND;
   const acpCommand = agentBackend === 'acp' || named ? parseAcpCommand(named) : await harnessAcp();
-  if (values.port !== undefined && !(/^\d+$/.test(values.port) && Number(values.port) <= 65535)) { process.stderr.write('Choose --port 0 to 65535, or leave it out.\n'); process.exit(2); }
+  const selectedPort = configuredPort === undefined ? undefined : Number(configuredPort);
+  if (selectedPort !== undefined && (!Number.isInteger(selectedPort) || selectedPort < 0 || selectedPort > 65535)) { process.stderr.write('Choose --port 0 to 65535, or leave it out.\n'); process.exit(2); }
   // A Core that cannot be used (none for this platform, a changed digest) is read by a person.
   const native = await runtime(values.core, values.rscript).catch(e => { process.stderr.write((e instanceof Error ? e.message : String(e)) + '\n'); process.exit(1); });
   // A person starting Rho sees the project it ships with; a composition that starts a service
   // for its own work says so itself and is left alone.
   if (values.example !== undefined && !['on', 'off'].includes(values.example)) throw new Error('Choose --example on or off.');
   const example = values.example !== 'off';
-  const service = await new RhoService({ example, ...limits, root: path.resolve(projectsRoot), stateDir: path.resolve(stateDirectory), ...native, agentBackend: agentBackend as 'claude-acp' | 'codex-acp' | 'claude-cli' | 'acp', acpCommand, codex: values.codex ?? process.env.RHO_CODEX ?? 'codex', claude: values.claude ?? process.env.RHO_CLAUDE ?? 'claude', python: values.python ?? process.env.RHO_PYTHON, terminalShell: values['terminal-shell'] ?? process.env.RHO_TERMINAL_SHELL, ssh: values.ssh ?? process.env.RHO_SSH, serverctl: values.serverctl ?? process.env.RHO_SERVERCTL, port: values.port === undefined ? undefined : Number(values.port), ...(values.plugins !== undefined ? { plugins: values.plugins ? values.plugins.split(',') as PluginId[] : [] } : {}) }).start().catch(async error => {
+  const service = await new RhoService({ example, ...limits, root: path.resolve(projectsRoot), stateDir: path.resolve(stateDirectory), ...native, agentBackend: agentBackend as 'claude-acp' | 'codex-acp' | 'claude-cli' | 'acp', acpCommand, codex: values.codex ?? process.env.RHO_CODEX ?? 'codex', claude: values.claude ?? process.env.RHO_CLAUDE ?? 'claude', python: values.python ?? process.env.RHO_PYTHON, terminalShell: values['terminal-shell'] ?? process.env.RHO_TERMINAL_SHELL, ssh: values.ssh ?? process.env.RHO_SSH, serverctl: values.serverctl ?? process.env.RHO_SERVERCTL, port: selectedPort, ...(values.plugins !== undefined ? { plugins: values.plugins ? values.plugins.split(',') as PluginId[] : [] } : {}) }).start().catch(async error => {
     // Starting Rho again on a state it already runs on is the common refusal: say where it runs.
     const held = (error as { details?: { stateDirectory?: unknown } })?.details?.stateDirectory;
     const running = typeof held === 'string' ? await fs.readFile(path.join(held, 'connection.json'), 'utf8').then(text => String(JSON.parse(text).url), () => '') : '';
     return refuse(running ? Object.assign(error, { message: `Rho is already running for ${held} at ${running}. Open that url, or stop that service before starting it again.` }) : error);
   });
+  const foundation = foundationPathsForState(stateDirectory, projectsRoot);
+  process.env.RHO_RUNNING_DIR = path.join(foundation.runtime, 'running');
+  await ensureManifest(foundation, await packageIdentity());
+  await updateManifest(foundation, manifest => {
+    const activeProfile = profileName ?? 'default';
+    manifest.profiles[activeProfile] = { root: path.resolve(projectsRoot), state: path.resolve(stateDirectory), port: Number(new URL(service.url).port), createdAt: manifest.profiles[activeProfile]?.createdAt ?? new Date().toISOString(), updatedAt: new Date().toISOString() };
+  });
   // A request left by a --stop that this state's earlier service never took is not for this start.
   await fs.rm(stopRequest(service.state.directory), { force: true });
   // Where `rho connect` finds this Rho without being given its state folder.
   const { announce, withdraw } = await import('./running.js');
-  await announce({ stateDirectory: service.state.directory, url: service.url, pid: process.pid }).catch(() => {});
+  await announce({ stateDirectory: service.state.directory, url: service.url, pid: process.pid, profile: profileName ?? 'default' }).catch(() => {});
   // The narrow conclusion a person needs on one line: what was selected, where state
   // lives, and how to open it. It stays inside `ready` so a parser reading line one is
   // unaffected. Opening this url on this machine is the access; no link is minted.

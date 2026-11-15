@@ -59,7 +59,9 @@
     "web/theme.css",
     "docs/PLUGIN-AUTHORING.md",
     "docs/THIRD-PARTY-PLUGINS.md",
-    "scripts/third-party-acceptance.mjs"
+    "scripts/third-party-acceptance.mjs",
+    "scripts/foundation-episode.mjs",
+    "scripts/foundation-matrix.mjs"
   ],
   "scripts": {
     "build": "npm run build:service && npm run build:web",
@@ -118,6 +120,8 @@
     "test:contracts": "node --test test/entry-contracts.test.mjs test/contract-coverage.test.mjs test/protocol.test.mjs test/validate.test.mjs",
     "acceptance:interaction": "node scripts/interaction-acceptance.mjs",
     "acceptance:smoke": "node scripts/install-smoke.mjs",
+    "acceptance:foundation": "node scripts/foundation-episode.mjs",
+    "acceptance:foundation:matrix": "node scripts/foundation-matrix.mjs",
     "acceptance:shell": "node scripts/shell-acceptance.mjs",
     "acceptance:pages": "node scripts/pages-acceptance.mjs",
     "acceptance:notebook": "node scripts/notebook-acceptance.mjs",

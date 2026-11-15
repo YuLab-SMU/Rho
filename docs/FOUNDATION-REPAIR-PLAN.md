@@ -4,6 +4,10 @@ Updated: 2026-11-15.
 
 这份计划把三轮实验汇总出的 6 类 46 条现象转成可执行的修复批次。实验记录描述了实际机器上的残留、分散路径、进程和宿主注册。它们先作为基线证据保留，再由一次可重复的隔离环境复现确认哪些问题仍存在于当前主线和发布包。
 
+## 实施状态
+
+2026-11-15 的 F0 episode 已经把 F1–F6 的本地核心入口跑通。当前主线提供平台路径解析、安装 manifest、`paths`、`doctor`、迁移 dry-run/apply/rollback、profile 配置、start/stop/status/restart、版本盘点、临时目录与缓存预算、日志轮转、宿主 JSON 所有权清理、service descriptor 和事务式 npm 卸载。验收脚本在 disposable HOME 和 npm prefix 中完成了 22 个步骤，独立的 platform matrix 已覆盖 macOS、Linux/XDG 和 Windows/APPDATA 的路径与 descriptor 契约。真实三平台安装升级、宿主连接器版本和 Windows 原生 service registration 仍需各自的机器证据。
+
 ## 目标
 
 Rho 需要具备一套可观察、可恢复、可重复的本地安装与运行基础。

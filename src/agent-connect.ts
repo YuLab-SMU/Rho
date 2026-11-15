@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { Fault } from '@rho-workspace/plugin-contracts';
 import { announced } from './running.js';
 import { endProgram, spawnProgram } from './programs.js';
+import { foundationPaths } from './foundation.js';
 
 // Adding Rho to an Agent that runs outside Rho: the project-scoped MCP server it starts, under
 // a name that says which project, written by the Agent's own `mcp add` so its configuration
@@ -47,7 +48,8 @@ export function clientEntries(name: string, command: string[], root: string, env
 
 // The state folder of a Rho started without --state-dir, which `rho --stop` and `rho connect`
 // also take without it.
-export const defaultStateDirectory = () => path.join(os.homedir(), 'Rho', 'state');
+export const defaultStateDirectory = () => foundationPaths().state;
+export const defaultProjectsDirectory = () => foundationPaths().projects;
 
 // How a shell runs this Rho: `rho` when the first `rho` on PATH is this installation (npm's
 // link, or its .cmd shim on Windows), otherwise this Node with this cli.js.
@@ -73,7 +75,7 @@ export function commandLine(argv: string[], platform: NodeJS.Platform = process.
 
 // The prompt names the project and one command; `rho connect` tells the Agent the rest. It names
 // --state-dir only when `rho connect` would not find this Rho itself: a state folder other than
-// ~/Rho/state that no running note points to (a service started without the CLI). Reading
+// the platform state directory that no running note points to (a service started without the CLI). Reading
 // these instructions starts nothing, grants no access and includes no credential bytes.
 export async function connectionInstructions(project: { id: string; root: string }, stateDirectory: string) {
   const found = path.resolve(stateDirectory) === path.resolve(defaultStateDirectory()) || await announced(stateDirectory);

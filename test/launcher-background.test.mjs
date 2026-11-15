@@ -67,10 +67,12 @@ test('--background returns once Rho is ready, --status says how it runs and how 
     assert.equal(now.status.running, false);
     assert.match(now.status.note, /^Not running\. Its log ends without a \{"shutdown":…\} line/);
 
-    // A start that fails says why, from Rho's own output.
+    // A start creates a missing project root and records the service through its own output.
     const missing = await rho('--root', path.join(root, 'absent'), '--state-dir', path.join(root, 'state-2'), '--background');
-    assert.equal(missing.code, 1);
-    assert.match(missing.stderr, /^Rho stopped before it was ready \(exit 1\)\. Its output, from .*rho\.log:\n.*absent/s);
+    assert.equal(missing.code, 0, missing.stderr);
+    assert.match(missing.stdout, /"ready"/);
+    assert.equal(await fs.stat(path.join(root, 'absent')).then(() => true, () => false), true);
+    assert.equal((await rho('--stop', '--state-dir', path.join(root, 'state-2'))).code, 0);
   } finally {
     if (pid) { try { process.kill(pid); } catch {} }
     await fs.rm(root, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });

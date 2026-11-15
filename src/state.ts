@@ -1,7 +1,6 @@
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
-import { spawn, spawnSync } from 'node:child_process';
-import { once } from 'node:events';
+import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { atomicJson, confined, digest, readJson, requireThat, stateDirectory } from '@rho-workspace/plugin-contracts';
 import type { AddedTo } from './agent-connect.js';
@@ -35,52 +34,44 @@ The generated Rho package includes a task-map and Agent-session status example.
 `;
 
 export async function lease(directory: string) {
-  // Best effort: say who holds it when the platform can tell us. Never a failure.
-  const holder = (file: string) => {
+  // The service owns a small metadata lock file directly. This removes the long-lived Python
+  // helper that used to hold an advisory lock without a Rho identity. A dead process leaves a
+  // recoverable record which the next owner can quarantine after checking its PID.
+  const file = path.join(directory, 'service.lock');
+  await fs.mkdir(directory, { recursive: true, mode: 0o700 });
+  const identity = { pid: process.pid, startedAt: new Date().toISOString(), process: process.execPath, directory };
+  const holder = async () => {
+    const current = await fs.readFile(file, 'utf8').then(text => JSON.parse(text) as { pid?: number; startedAt?: string }).catch(() => null);
+    if (current?.pid && alive(current.pid)) return current;
     try {
       const out = spawnSync('lsof', ['-nP', '-t', file], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 2000 });
       const pid = out.stdout?.trim().split('\n').filter(Boolean)[0];
-      return pid ? { pid: Number(pid) } : null;
+      return pid ? { pid: Number(pid), startedAt: undefined } : null;
     } catch { return null; }
   };
-  const file = path.join(directory, 'service.lock');
-  // Name what is held and how to find the holder: "another service" told an
-  // operator nothing, and a second state directory looked like a broken service.
-  const held = () => requireThat(false, 'conflict', `Another Rho service holds ${directory}. Stop it, or select a different --state-dir. Its writer lock is ${file}.`, { stateDirectory: directory, lockFile: file, remedy: 'Stop the service that owns this state directory, or start this one with a different --state-dir.', holder: holder(file) });
-  await confined(directory, 'service.lock', true);
-  // Windows has no advisory lock a helper could hold (and its Python has no fcntl). A file opened
-  // without sharing (libuv's UV_FS_O_EXLOCK) refuses every other opener until its handle closes,
-  // and the system closes it when this process ends, a crash included.
-  if (process.platform === 'win32') {
-    const exclusive = 0x10000000;
-    const handle = await fs.open(file, fs.constants.O_RDWR | fs.constants.O_CREAT | exclusive, 0o600).catch((e: NodeJS.ErrnoException) => { if (e.code === 'EBUSY') held(); throw e; });
-    return async () => { await handle.close(); };
+  const held = async (): Promise<never> => {
+    requireThat(false, 'conflict', `Another Rho service holds ${directory}. Stop it, or select a different --state-dir. Its writer lock is ${file}.`, { stateDirectory: directory, lockFile: file, remedy: 'Stop the service that owns this state directory, or start this one with a different --state-dir.', holder: await holder() });
+    throw new Error('Writer lock is held.');
+  };
+  let handle;
+  try {
+    handle = await fs.open(file, 'wx', 0o600);
+  } catch (error) {
+    const owner = await holder();
+    if (owner) return held();
+    const stale = file + '.stale-' + Date.now();
+    await fs.rename(file, stale).catch(() => held());
+    handle = await fs.open(file, 'wx', 0o600).catch(async () => held());
   }
-  // Kernel advisory lock on a stable inode, held by an owned helper until pipe
-  // EOF. A service crash closes the pipe; no PID-reuse or stale-unlink race.
-  const helper = spawn(process.env.RHO_PYTHON ?? 'python3', ['-c', `import fcntl, os, sys
-fd=os.open(sys.argv[1], os.O_RDWR|os.O_CREAT|os.O_NOFOLLOW, 0o600)
-try: fcntl.flock(fd, fcntl.LOCK_EX|fcntl.LOCK_NB)
-except BlockingIOError: sys.exit(9)
-print('locked', flush=True)
-sys.stdin.buffer.read()
-os.close(fd)
-`, file], { stdio: ['pipe', 'pipe', 'ignore'] });
-  await new Promise<void>((resolve, reject) => {
-    const timer = setTimeout(() => { helper.kill(); reject(new Error('Local writer lock timed out.')); }, 5000);
-    helper.stdout.once('data', () => { clearTimeout(timer); resolve(); });
-    helper.once('error', () => { clearTimeout(timer); reject(new Error('Python 3 is required for local writer locking.')); });
-    helper.once('exit', code => {
-      clearTimeout(timer);
-      if (code === 9) {
-        try { held(); }
-        catch (e) { reject(e); }
-      }
-      else if (code !== 0) reject(new Error('Local writer lock is unavailable.'));
-    });
-  });
-  return async () => { const exited = once(helper, 'exit'); helper.stdin.end(); await exited; };
+  await handle.writeFile(JSON.stringify(identity) + '\n', 'utf8');
+  return async () => {
+    await handle.close().catch(() => {});
+    const current = await fs.readFile(file, 'utf8').then(text => JSON.parse(text) as { pid?: number; startedAt?: string }).catch(() => null);
+    if (current?.pid === identity.pid && current.startedAt === identity.startedAt) await fs.rm(file, { force: true });
+  };
 }
+
+const alive = (pid: number) => { try { process.kill(pid, 0); return true; } catch (error) { return (error as NodeJS.ErrnoException).code === 'EPERM'; } };
 export class State {
   projects: Project[] = []; principals: Principal[] = [];
   private folderSelections: FolderSelection[] = [];
@@ -277,7 +268,7 @@ export class State {
   private acquired = new Set<string>();
   private async acquire(project: Project) {
     if (!this.acquired.has(project.id)) {
-      const directory = await stateDirectory(project.root, '.rho/rho');
+      const directory = await stateDirectory(project.root, '.rho');
       this.releases.push(await lease(directory)); this.acquired.add(project.id);
       // Agents outside Rho look in .rho first and read its state files to find out how to work
       // here (every observed run did, one for two minutes). This note sends them to the commands.

@@ -4,7 +4,7 @@ import { spawn } from 'node:child_process';
 import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { RhoClient } from './client.js';
-import { defaultStateDirectory } from './agent-connect.js';
+import { defaultProjectsDirectory, defaultStateDirectory } from './agent-connect.js';
 import { connection, holds, openInBrowser, rhoCommand, startInBackground } from './background.js';
 import { findProject, grantReply } from './connect-cli.js';
 
@@ -73,7 +73,7 @@ export async function openCli(args: string[]): Promise<number> {
     if (up) client = up.client;
     else {
       if (await connection(state) && await holds(state)) return fail(1, `The Rho for ${state} holds its state but does not answer. Check it with: ${rhoCommand} --status --state-dir "${state}"`);
-      const root = path.resolve(typeof values.root === 'string' ? values.root : path.join(path.dirname(defaultStateDirectory()), 'projects'));
+    const root = path.resolve(typeof values.root === 'string' ? values.root : defaultProjectsDirectory());
       await fs.mkdir(root, { recursive: true });
       const start = ['--root', root, '--state-dir', state];
       for (const name of startOptions) { const value = values[name]; if (name !== 'root' && typeof value === 'string') start.push('--' + name, value); }

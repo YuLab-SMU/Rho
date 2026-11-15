@@ -2,13 +2,20 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { foundationPaths } from './foundation.js';
 
 // Each Rho started from the command line notes here which state folder it serves and where, so
 // `rho connect` finds the Rho that holds a project folder without being given its state folder.
 // A note holds no credential. The Rho removes it when it stops; a note left by one that did not
 // stop in order is ignored once its process is gone. RHO_RUNNING_DIR moves the folder (tests).
-export type Running = { stateDirectory: string; url: string; pid: number };
-export const runningDirectory = (env: NodeJS.ProcessEnv = process.env) => env.RHO_RUNNING_DIR || path.join(os.homedir(), 'Rho', 'running');
+export type Running = { stateDirectory: string; url: string; pid: number; profile?: string };
+export const runningDirectory = (env: NodeJS.ProcessEnv = process.env) => env.RHO_RUNNING_DIR || path.join(foundationPaths(env).runtime, 'running');
+const runningDirectories = (env: NodeJS.ProcessEnv = process.env) => {
+  const primary = runningDirectory(env);
+  if (env.RHO_RUNNING_DIR) return [primary];
+  const legacy = path.join(foundationPaths(env).home, 'Rho', 'running');
+  return [...new Set([primary, legacy])];
+};
 const noteFile = (stateDirectory: string, directory: string) =>
   path.join(directory, createHash('sha256').update(path.resolve(stateDirectory)).digest('hex').slice(0, 16) + '.json');
 
@@ -36,12 +43,19 @@ export async function withdraw(stateDirectory: string, pid = process.pid, direct
 }
 
 export async function running(directory = runningDirectory()) {
-  const names = (await fs.readdir(directory).catch(() => [] as string[])).filter(name => name.endsWith('.json'));
-  const notes = await Promise.all(names.map(name => read(path.join(directory, name))));
+  const directories = directory === runningDirectory() ? runningDirectories() : [directory];
+  const notes = [] as (Running | null)[];
+  for (const folder of directories) {
+    const names = (await fs.readdir(folder).catch(() => [] as string[])).filter(name => name.endsWith('.json'));
+    notes.push(...await Promise.all(names.map(name => read(path.join(folder, name)))));
+  }
   return notes.filter((note): note is Running => !!note && alive(note.pid));
 }
 
 export async function announced(stateDirectory: string, directory = runningDirectory()) {
-  const note = await read(noteFile(stateDirectory, directory));
-  return !!note && note.stateDirectory === path.resolve(stateDirectory) && alive(note.pid);
+  for (const folder of directory === runningDirectory() ? runningDirectories() : [directory]) {
+    const note = await read(noteFile(stateDirectory, folder));
+    if (note && note.stateDirectory === path.resolve(stateDirectory) && alive(note.pid)) return true;
+  }
+  return false;
 }

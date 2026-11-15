@@ -51,10 +51,15 @@ Other platforms are unverified.
 
 ```sh
 npm install -g @rho-workspace/rho
-rho --root /absolute/projects --state-dir /absolute/service-state
+rho install
+rho start --profile default
 ```
 
-Create the allowed projects directory first. Keep service state outside projects.
+`rho install` creates platform directories and records an installation manifest. `rho start` creates selected project and state directories and records the profile, PID, port and lock owner.
+
+`rho paths` prints effective configuration, state, runtime, cache, log, project, host and manifest paths. `rho doctor --json` reports permissions, legacy roots, profiles, runtime notes, host registrations, temporary usage and package identity. `rho doctor --repair` applies repairs with recorded ownership.
+
+`rho migrate --dry-run` inventories legacy roots. `rho migrate --apply` copies recognized service state into the platform state directory and records an operation journal. `rho migrate --rollback OPERATION_ID` removes only unchanged imported entries and leaves changed entries for review. `rho uninstall --dry-run` lists package, shims, staging directories, host entries and Rho-owned data. `rho uninstall` completes package and shim cleanup. `rho uninstall --purge` also removes Rho-owned state, cache, runtime and logs after the operation has been reviewed; its journal and receipt remain in the application data directory.
 
 A person who has no folders to name runs the package with no arguments instead (from
 0.5.4; 0.5.3 prints its usage and exits 2):
@@ -63,8 +68,8 @@ A person who has no folders to name runs the package with no arguments instead (
 npx @rho-workspace/rho
 ```
 
-That start uses `~/Rho/projects` and `~/Rho/state`, creates both, ships the example
-project on a new state, and prints — after the machine line — the address to open,
+That start uses the platform application, state, cache and log directories, creates the selected
+project root and state, ships the example project on a new state, and prints — after the machine line — the address to open,
 the two folders, and whether the Agent client and R were found, so a missing one is
 read at startup rather than discovered later. It opens the address in a browser when
 stdout is an interactive terminal. Every flagged start keeps the output it had; no
@@ -89,7 +94,7 @@ the state that named the old address is rewritten to the new one, keeping its to
 port named, never replaced. A second start on a state that is already running is
 refused with the running service's address.
 
-`rho --stop [--state-dir DIR]` (`~/Rho/state` without the flag) stops the service that
+`rho --stop [--state-dir DIR]` (the platform state directory without the flag) stops the service that
 holds that state as Ctrl+C does, from any program. On Windows no signal reaches a
 console program from another process, so an Agent that started Rho in the background
 had no orderly way to stop it ([episode](WINDOWS-SETUP-EPISODE.md)). The command leaves
@@ -102,8 +107,9 @@ request (after 10 s, removing it). A start removes a request no service took. Th
 `{"shutdown":…}` line names what stopped the service (`by`: `rho --stop`, `SIGTERM`,
 `SIGINT` or `SIGBREAK`) and when (`at`).
 
-`--background` added to a start runs the same start detached, with its output in
-`<state>/rho.log`; the previous start's log becomes `rho.previous.log`. The command returns
+`--background` added to a start runs the same start detached, with its output in the platform log
+directory or `<state>/rho.log` for an explicitly selected state. The previous start's log becomes
+`rho.previous.log`, with older files rotated through bounded files. The command returns
 once the service prints its ready line, which it prints first, then the process and the log,
 and exits 0. When the service ends first it prints the service's output and exits with its
 code; after 60 s without a ready line it says so and exits 1, leaving the service starting.
@@ -111,7 +117,7 @@ A state that is already running is refused before anything is started. On Window
 service runs under `cmd.exe` with a console that shows no window, so the console programs it
 starts share that console; the service is outside the job that ends `cmd.exe` when the
 command returns ([episode](INSTALL-FEEDBACK-EPISODE.md)). `rho --status [--state-dir DIR]`
-prints one JSON line: whether a service holds that state, its address and process, whether
+prints one JSON line: whether a service holds that state, its address, process and lock owner, whether
 the address answers, the log, a note on how the last service ended (in order, with its
 `by` and `at`, or without a shutdown line), and the other services that announced
 themselves on this machine. `rho --install-skill DIR` copies the Agent Skill the package
@@ -119,8 +125,8 @@ ships into DIR, refusing a folder that holds another skill, and `rho --version` 
 version.
 
 `rho open [FOLDER]` (the current folder without it) uses the running Rho that already has the
-folder as a project, else the one for `--state-dir` (`~/Rho/state`), which it starts with
-`--background` on `--root` (`~/Rho/projects`) and any start flags given when nothing runs there.
+folder as a project, else the one for `--state-dir` (the platform state directory), which it starts with
+`--background` on the platform project root and any start flags given when nothing runs there.
 It opens the folder as a project where it is and opens `<url>/#project=<id>` in the default
 browser (`--no-browser` skips that; `--json` prints one line). Its text reply says what to tell
 the person, that Rho is a page in their browser, and how an Agent works there. To open a folder
