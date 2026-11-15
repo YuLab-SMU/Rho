@@ -107,7 +107,8 @@ async function binEntries(packageRoot: string) {
 
 async function runNpm(args: string[], cwd: string) {
   return new Promise<{ code: number; stdout: string; stderr: string }>(resolve => {
-    const child = spawn(process.platform === 'win32' ? 'npm.cmd' : 'npm', args, { cwd, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+    const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+    const child = spawn(npm, args, { cwd, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true, shell: process.platform === 'win32' });
     let stdout = '', stderr = '';
     child.stdout.on('data', chunk => { stdout += chunk; });
     child.stderr.on('data', chunk => { stderr = (stderr + chunk).slice(-8000); });
