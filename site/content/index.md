@@ -1,7 +1,7 @@
 ---
 layout: page
-title: Rho — an agent-native scientific workbench for R
-description: A person and an external Agent work on the same R project, with one record of what was done.
+title: Rho — a shared work state for long-running human–Agent work
+description: A person or Agent can enter, understand, change and continue the same project state.
 sidebar: false
 outline: false
 ---

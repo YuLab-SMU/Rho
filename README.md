@@ -1,14 +1,15 @@
 # Rho
 
-Rho is an application container for an intelligent, composable workspace. People
-and Agents use the same functional components to act on real resources, inspect
-results and arrange the tools they need.
+Rho is a shared work-state layer for long-running human-Agent work. It connects
+the goal, progress, resources, actions, results and open questions of a task so
+that a person or an Agent can enter, understand, change and continue the same
+work.
 
 The first release brings natural-language interaction, code/data/graphics and
 arranged views within one browser window into one workflow. It is distributed
-through npm and runs as a local service with a WebUI. An Agent can compose interfaces
-from registered components while the user continues editing and inspecting the
-same resources.
+through npm and runs as a local service with a WebUI. People and Agents can join
+the same project state, inspect the same resources, make changes and leave
+explicit context for whoever continues the work.
 
 ## Architecture
 

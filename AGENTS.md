@@ -1,5 +1,12 @@
 # Working on Rho
 
+Rho is a shared work-state layer for long-running human-Agent work. It connects
+the goal, progress, resources, actions, results and open questions of a task so
+that a person or an Agent can enter, understand, change and continue the same
+work. Scientific analysis is an early evidence scenario, not the product's
+boundary. Keep the continuity problem symmetric: do not describe Rho as an
+Agent output surface with a person acting only as reviewer.
+
 Agents normally use their native tools with their existing permissions. Core
 managed execution is optional, selected for a concrete need such as execution
 continuity or a retained operation record. Rho activity observation remains
@@ -29,9 +36,9 @@ independent repositories and use documented public capabilities at selected
 versions. Component semantics and results stay with their source owner.
 
 Follow [Technology stack](docs/TECHSTACK.md). The first integrated flow exercises
-Agent interaction, code/table/plot context and movable views within one browser
-window, delivered through npm and a local WebUI. Native desktop clients and
-cross-window movement follow later.
+shared work-state continuity: a person and an external Agent use code/table/plot
+context and movable views within one browser window, delivered through npm and a
+local WebUI. Native desktop clients and cross-window movement follow later.
 Deliver bounded owner changes toward the [acceptance](docs/ROADMAP.md#first-integrated-flow).
 Application composition records immutable source/artifact identities, explicit
 local overrides and acceptance of the chosen combination.

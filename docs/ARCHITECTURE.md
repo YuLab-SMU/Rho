@@ -1,10 +1,11 @@
 # Rho architecture
 
-Rho is the application container for an intelligent workspace. Functional
-components provide what users and Agents do; Rho connects their interfaces and
-resources to a shared workspace. Agents use their native tools normally, with
-existing permissions. Core supplies optional managed execution and retained
-activity observations; it is not a prerequisite for an Agent computation.
+Rho is the application container for a shared work state. Functional components
+provide what people and Agents do; Rho connects their interfaces and resources so
+both can enter, understand, change and continue the same work. Agents use their
+native tools normally, with existing permissions. Core supplies optional managed
+execution and retained activity observations; it is not a prerequisite for an
+Agent computation.
 
 This document defines the design boundary. [Status](STATUS.md) records
 implementation; [Technology stack](TECHSTACK.md) records the selected libraries.

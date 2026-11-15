@@ -1,19 +1,21 @@
 # Rho product direction
 
-Rho is a research workspace in which people and external Agents work on the same
-projects, documents and scientific results. Functional capabilities stay in
-Rho-plugins; managed execution stays in Rho-core. The application connects them so
-that a person can see what was done, understand it and decide what happens next.
+Rho is a shared work-state layer for long-running work in which people and external
+Agents enter the same projects, materials and progress. Functional capabilities
+stay in Rho-plugins; managed execution stays in Rho-core. The application connects
+them so that any participant can understand the current state, change it and leave
+explicit context for whoever continues next.
 
 [Status](STATUS.md) records current behavior, checks and the stage of each part;
 [Frontend](FRONTEND.md) describes the browser application as it is.
 
 ## First integrated flow
 
-A person opens a project, gives an external Agent a task, inspects or changes the
-proposed work and opens its real outputs. They can edit code, inspect a table or
-figure, ask about an exact selection and continue from an explicitly linked reply.
-Workspaces arrange those objects without changing who owns their content.
+A person or an external Agent enters a project, reads the current work and continues
+from its explicit context. Either can edit code, inspect a table or figure, ask
+about an exact selection, change a resource or leave a linked reply for the next
+participant. Workspaces arrange those objects without changing who owns their
+content.
 
 When execution fails, the actual error can be handed to the Agent for a new repair
 run. When a reply is lost, the original request remains the one to observe. Closing
