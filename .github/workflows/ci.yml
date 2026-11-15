@@ -129,6 +129,36 @@ jobs:
           npm run docs:build
           npm run docs:check
 
+  foundation:
+    name: Foundation ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { platform: darwin-arm64, os: macos-15 }
+          - { platform: linux-x64, os: ubuntu-24.04 }
+          - { platform: win32-x64, os: windows-2022 }
+    steps:
+      - run: git config --global core.autocrlf false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { path: Rho, persist-credentials: false }
+      - id: pins
+        run: node -e 'const c=require("./Rho/components.json");console.log("plugins="+c.plugins.commit)' >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { repository: YuLab-SMU/Rho-plugins, ref: '${{ steps.pins.outputs.plugins }}', path: Rho-plugins, persist-credentials: false }
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with: { node-version: '${{ env.NODE_VERSION }}', package-manager-cache: false }
+      - name: Build Rho service
+        working-directory: Rho
+        run: npm ci --no-audit --no-fund && npm run build:service
+      - name: Run foundation episode
+        working-directory: Rho
+        env:
+          RHO_SERVICE_NO_APPLY: '1'
+        run: npm run acceptance:foundation:matrix && npm run acceptance:foundation
+
   test:
     name: Test ${{ matrix.platform }}
     needs: core

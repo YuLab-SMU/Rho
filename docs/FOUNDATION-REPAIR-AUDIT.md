@@ -18,4 +18,6 @@ The Linux episode also ran in a disposable `node:22-bookworm` container and pass
 
 The Core-backed application regression run completed with 383 passing tests and 3 Windows-only skips. The docs site assembled 86 documents, rewrote 602 links, and its VitePress build rendered successfully.
 
+The CI workflow now has a `foundation` matrix job on macOS 15, Ubuntu 24.04 and Windows 2022. It checks out the pinned Plugins source, builds the service, runs the platform matrix and executes the full disposable episode with service-manager application disabled. A green CI run is the authoritative Windows installation/upgrade evidence; it has not been observed from this local turn.
+
 The latest F0 artifact is recorded in [the episode](FOUNDATION-REPAIR-EPISODE.md). The source owner keeps component-level semantics in Rho-core and Rho-plugins; this audit covers the Rho lifecycle and ownership boundary only.
