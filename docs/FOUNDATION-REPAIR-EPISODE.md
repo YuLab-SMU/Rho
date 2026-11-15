@@ -15,7 +15,7 @@ The script packs the current checkout, installs that tarball globally under an i
 
 ## Observed run
 
-The macOS arm64 run used Node `v22.22.3` and Rho `0.5.11`. The tarball was `rho-workspace-rho-0.5.11.tgz` with SHA-256 `db60e73ff1c0c218a5f450ed28697d828dfe13fd48ef75c9f1acad16ff4dcab4`. Installation under the disposable prefix completed successfully.
+The macOS arm64 run used Node `v22.22.3` and Rho `0.5.11`. The tarball was `rho-workspace-rho-0.5.11.tgz` with SHA-256 `fd0157a51ee24dc4ece334153390cc95867fa07ad630ad114817ba48eb344ca0`. Installation under the disposable prefix completed successfully.
 
 The occupied staging probe returned the expected rename failure. The half-uninstall fixture retained `rho`, `rho-ui` and `rho-screen-check` symlinks while the package directory was absent. The legacy fixture contained `~/Rho`, `~/rho-local-play`, `~/.rho-app`, `~/.rho-state`, project `.rho/rho` and tutorial state. The fake WorkBuddy root held Rho-owned records beside user-owned records.
 
