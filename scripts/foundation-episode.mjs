@@ -18,7 +18,7 @@ const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 
 async function command(program, args, cwd, env, timeoutMs = 180000) {
   const startedAt = now();
-  const child = spawn(program, args, { cwd, env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+  const child = spawn(program, args, { cwd, env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true, shell: process.platform === 'win32' && /\.cmd$/i.test(program) });
   let stdout = '', stderr = '';
   child.stdout.on('data', chunk => { stdout += chunk; });
   child.stderr.on('data', chunk => { stderr = (stderr + chunk).slice(-12000); });
@@ -143,7 +143,8 @@ try {
   await fs.mkdir(halfBin, { recursive: true });
   for (const name of ['rho', 'rho-ui', 'rho-screen-check']) {
     const target = path.relative(halfBin, name === 'rho' ? path.join(halfPackage, 'dist', 'cli.js') : name === 'rho-ui' ? path.join(halfPackage, 'scripts', 'ui-plugin.mjs') : path.join(halfPackage, 'scripts', 'screen-check.mjs'));
-    await fs.symlink(target, path.join(halfBin, name));
+    if (process.platform === 'win32') await fs.writeFile(path.join(halfBin, name + '.cmd'), `@echo off\r\nnode "%~dp0${target.replaceAll('/', '\\')}" %*\r\n`);
+    else await fs.symlink(target, path.join(halfBin, name));
   }
   await fs.rm(halfPackage, { recursive: true, force: true });
   report.halfUninstall = { packageRoot: halfPackage, binRoot: halfBin, packageExists: await fs.access(halfPackage).then(() => true, () => false), binTree: await tree(halfBin) };
