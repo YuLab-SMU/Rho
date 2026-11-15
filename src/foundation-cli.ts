@@ -1,5 +1,6 @@
 import * as fs from 'node:fs/promises';
 import { constants as fsConstants } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -42,7 +43,7 @@ const fail = (message: string, code = 1) => { process.stderr.write(message.trimE
 const json = (value: unknown) => process.stdout.write(JSON.stringify(value, null, 2) + '\n');
 const currentCli = fileURLToPath(new URL('./cli.js', import.meta.url));
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-const processAlive = (pid: number) => { try { process.kill(pid, 0); return true; } catch (error) { return (error as NodeJS.ErrnoException).code === 'EPERM'; } };
+const processAlive = (pid: number) => { try { process.kill(pid, 0); if (process.platform === 'linux') { const stat = readFileSync(`/proc/${pid}/stat`, 'utf8'); if (/\)\s+Z(?:\s|$)/.test(stat)) return false; } return true; } catch (error) { return (error as NodeJS.ErrnoException).code === 'EPERM'; } };
 
 async function stopProfile(state: string) {
   const lock = path.join(state, 'service.lock');
@@ -257,7 +258,7 @@ async function uninstallCommand(args: string[]) {
     journal = await addFoundationStage(paths, journal, 'purge', 'completed', { folders: [paths.cache, paths.logs, paths.runtime, paths.state] });
   }
   journal = await updateFoundationOperation(paths, journal, { state: packageResult.code === 0 ? 'completed' : 'failed' });
-  const result = { completedAt: new Date().toISOString(), operationId: operation.operationId, journal: path.join(paths.data, 'operations', operation.operationId + '.json'), package: packageResult, stopped, removedBins, quarantined, host, purged: !!parsed.values.purge, plan };
+  const result = { completedAt: new Date().toISOString(), operationId: operation.operationId, journal: path.join(paths.data, 'operations', operation.operationId + '.json'), receipt, package: packageResult, stopped, removedBins, quarantined, host, purged: !!parsed.values.purge, plan };
   await fs.mkdir(path.dirname(receipt), { recursive: true, mode: 0o700 }); await writeFoundationJson(receipt, result);
   if (parsed.values.json) json({ uninstall: result }); else process.stdout.write(`Rho uninstall completed. Receipt ${receipt}.\n`);
   return packageResult.code === 0 ? 0 : 1;

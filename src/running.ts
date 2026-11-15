@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import fs from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { foundationPaths } from './foundation.js';
@@ -26,7 +27,7 @@ async function read(file: string): Promise<Running | null> {
   } catch { return null; }
 }
 const alive = (pid: number) => {
-  try { process.kill(pid, 0); return true; } catch (error) { return (error as NodeJS.ErrnoException).code === 'EPERM'; }
+  try { process.kill(pid, 0); if (process.platform === 'linux') { const stat = readFileSync(`/proc/${pid}/stat`, 'utf8'); if (/\)\s+Z(?:\s|$)/.test(stat)) return false; } return true; } catch (error) { return (error as NodeJS.ErrnoException).code === 'EPERM'; }
 };
 
 export async function announce(note: Running, directory = runningDirectory()) {

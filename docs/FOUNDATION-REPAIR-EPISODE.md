@@ -15,7 +15,7 @@ The script packs the current checkout, installs that tarball globally under an i
 
 ## Observed run
 
-The macOS arm64 run used Node `v22.22.3` and Rho `0.5.11`. The tarball was `rho-workspace-rho-0.5.11.tgz` with SHA-256 `cebd87f6c96cfdefc120b0ba498aee55d0293d4c2735b46732fad67da8be6fac`. Installation under the disposable prefix completed successfully.
+The macOS arm64 run used Node `v22.22.3` and Rho `0.5.11`. The tarball was `rho-workspace-rho-0.5.11.tgz` with SHA-256 `db60e73ff1c0c218a5f450ed28697d828dfe13fd48ef75c9f1acad16ff4dcab4`. Installation under the disposable prefix completed successfully.
 
 The occupied staging probe returned the expected rename failure. The half-uninstall fixture retained `rho`, `rho-ui` and `rho-screen-check` symlinks while the package directory was absent. The legacy fixture contained `~/Rho`, `~/rho-local-play`, `~/.rho-app`, `~/.rho-state`, project `.rho/rho` and tutorial state. The fake WorkBuddy root held Rho-owned records beside user-owned records.
 
@@ -40,3 +40,5 @@ The report status was `passed`. The installed package answered `rho paths` from 
 The completed F0 fixture also ran the installation manifest, canonical state apply, diagnostic bundle, profile creation, `start`, `status`, `restart`, forced crash recovery, versions, upgrade dry-run/apply, logs, cache list, native service descriptor install/status/uninstall, profile stop and the installed-package purge uninstall transaction. All 28 recorded steps passed.
 
 The run completed a purge and retained the uninstall journal and receipt under the disposable application data root. The companion platform matrix passed the macOS, Linux/XDG and Windows/APPDATA path conventions and generated native service descriptors in disposable roots. Native service-manager registration and a real WorkBuddy/Cursor connector matrix still require those host machines. See the [F0–F6 implementation audit](FOUNDATION-REPAIR-AUDIT.md) for the requirement-by-requirement evidence.
+
+A second run in an isolated `node:22-bookworm` container with the Rho-plugins checkout mounted at `/Rho-plugins` passed the same 28 steps on Linux arm64. Its tarball SHA-256 was `db60e73ff1c0c218a5f450ed28697d828dfe13fd48ef75c9f1acad16ff4dcab4`. The container used its own HOME, npm prefix, cache, temporary root and service state.

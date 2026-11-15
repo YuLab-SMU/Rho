@@ -183,6 +183,7 @@ try {
   const paths = await record(report, 'rho-paths-in-isolated-home', () => command(installedCli, ['paths'], root, isolatedEnv), result => ({ passed: result.code === 0, parsed: result.code === 0 ? JSON.parse(result.stdout) : null }));
   assert.equal(paths.passed, true, paths.result.stderr);
   assert.ok(paths.parsed.home.startsWith(fixtureHome));
+  const canonicalState = paths.parsed.paths.state.path, canonicalProjects = paths.parsed.paths.projects.path;
   const diagnosis = await record(report, 'rho-doctor-legacy-state', () => command(installedCli, ['doctor', '--json'], root, isolatedEnv), result => ({ passed: [0, 1].includes(result.code), parsed: result.stdout ? JSON.parse(result.stdout) : null }));
   assert.equal(diagnosis.passed, true, diagnosis.result.stderr);
   const bundle = path.join(root, 'doctor-bundle.json');
@@ -193,20 +194,20 @@ try {
   assert.equal(migration.passed, true, migration.result.stderr);
   const migrationApply = await record(report, 'rho-migrate-apply', () => command(installedCli, ['migrate', '--apply', '--json'], root, isolatedEnv), result => ({ passed: result.code === 0, parsed: result.code === 0 ? JSON.parse(result.stdout) : null }));
   assert.equal(migrationApply.passed, true, migrationApply.result.stderr);
-  assert.equal(await fs.access(path.join(fixtureHome, 'Library', 'Application Support', 'Rho', 'state', 'legacy-import', 'Rho')).then(() => true, () => false), true);
-  const profile = await record(report, 'rho-profile-create', () => command(installedCli, ['profile', 'create', 'foundation', '--root', path.join(fixtureHome, 'Documents', 'Rho', 'projects'), '--state-dir', path.join(fixtureHome, 'Library', 'Application Support', 'Rho', 'state'), '--port', '0'], root, isolatedEnv), result => ({ passed: result.code === 0 }));
+  assert.equal(await fs.access(path.join(canonicalState, 'legacy-import', 'Rho')).then(() => true, () => false), true);
+  const profile = await record(report, 'rho-profile-create', () => command(installedCli, ['profile', 'create', 'foundation', '--root', canonicalProjects, '--state-dir', canonicalState, '--port', '0'], root, isolatedEnv), result => ({ passed: result.code === 0 }));
   assert.equal(profile.passed, true, profile.result.stderr);
   const start = await record(report, 'rho-profile-start', () => command(installedCli, ['start', '--profile', 'foundation', '--example', 'off', '--background'], root, isolatedEnv), result => ({ passed: result.code === 0 }));
   assert.equal(start.passed, true, start.result.stderr);
-  const runningStatus = await record(report, 'rho-profile-status', () => command(installedCli, ['status', '--state-dir', path.join(fixtureHome, 'Library', 'Application Support', 'Rho', 'state')], root, isolatedEnv), result => ({ passed: result.code === 0, parsed: result.code === 0 ? JSON.parse(result.stdout) : null }));
+  const runningStatus = await record(report, 'rho-profile-status', () => command(installedCli, ['status', '--state-dir', canonicalState], root, isolatedEnv), result => ({ passed: result.code === 0, parsed: result.code === 0 ? JSON.parse(result.stdout) : null }));
   assert.equal(runningStatus.passed, true, runningStatus.result.stderr);
   assert.equal(runningStatus.parsed.status.running, true);
   const restart = await record(report, 'rho-profile-restart', () => command(installedCli, ['restart', '--profile', 'foundation', '--example', 'off'], root, isolatedEnv), result => ({ passed: result.code === 0 }));
   assert.equal(restart.passed, true, restart.result.stderr);
-  const crashStatus = JSON.parse((await command(installedCli, ['status', '--state-dir', path.join(fixtureHome, 'Library', 'Application Support', 'Rho', 'state')], root, isolatedEnv)).stdout);
+  const crashStatus = JSON.parse((await command(installedCli, ['status', '--state-dir', canonicalState], root, isolatedEnv)).stdout);
   if (Number.isInteger(crashStatus.status?.pid)) process.kill(crashStatus.status.pid, 'SIGKILL');
   await new Promise(resolve => setTimeout(resolve, 250));
-  const crashed = await record(report, 'rho-crash-recovery-status', () => command(installedCli, ['status', '--state-dir', path.join(fixtureHome, 'Library', 'Application Support', 'Rho', 'state')], root, isolatedEnv), result => ({ passed: result.code === 0, parsed: result.code === 0 ? JSON.parse(result.stdout) : null }));
+  const crashed = await record(report, 'rho-crash-recovery-status', () => command(installedCli, ['status', '--state-dir', canonicalState], root, isolatedEnv), result => ({ passed: result.code === 0, parsed: result.code === 0 ? JSON.parse(result.stdout) : null }));
   assert.equal(crashed.passed, true, crashed.result.stderr);
   assert.equal(crashed.parsed.status.running, false);
   const crashRestart = await record(report, 'rho-crash-recovery-restart', () => command(installedCli, ['start', '--profile', 'foundation', '--example', 'off', '--background'], root, isolatedEnv), result => ({ passed: result.code === 0 }));
@@ -215,7 +216,7 @@ try {
     const step = await record(report, name, () => command(installedCli, args, root, isolatedEnv), result => ({ passed: result.code === 0 }));
     assert.equal(step.passed, true, step.result.stderr);
   }
-  const stop = await record(report, 'rho-profile-stop', () => command(installedCli, ['stop', '--state-dir', path.join(fixtureHome, 'Library', 'Application Support', 'Rho', 'state')], root, isolatedEnv), result => ({ passed: result.code === 0 }));
+  const stop = await record(report, 'rho-profile-stop', () => command(installedCli, ['stop', '--state-dir', canonicalState], root, isolatedEnv), result => ({ passed: result.code === 0 }));
   assert.equal(stop.passed, true, stop.result.stderr);
   const hostDry = await record(report, 'rho-host-cleanup-dry-run', () => command(installedCli, ['host', 'cleanup', '--dry-run'], root, isolatedEnv), result => ({ passed: result.code === 0 }));
   assert.equal(hostDry.passed, true, hostDry.result.stderr);
@@ -229,7 +230,7 @@ try {
   report.uninstall = uninstall.parsed;
   assert.equal(await fs.access(path.join(npmPrefix, 'lib', 'node_modules', '@rho-workspace', 'rho')).then(() => true, () => false), false);
   assert.equal(await fs.access(path.join(npmPrefix, 'bin', process.platform === 'win32' ? 'rho.cmd' : 'rho')).then(() => true, () => false), false);
-  assert.equal(await fs.access(path.join(fixtureHome, 'Library', 'Application Support', 'Rho-uninstall-receipt.json')).then(() => true, () => false), true);
+  assert.equal(await fs.access(uninstall.parsed.uninstall.receipt).then(() => true, () => false), true);
 
   const status = await record(report, 'legacy-status-read', () => command(process.execPath, [cli, '--status', '--state-dir', state], root, env), result => ({ passed: result.code === 0 }));
   assert.equal(status.result.code, 0, status.result.stderr);

@@ -1,4 +1,5 @@
 import * as fs from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { randomUUID, createHash } from 'node:crypto';
@@ -497,7 +498,7 @@ export async function repairFoundation(paths: FoundationPaths, diagnosis?: Await
   return { repaired, report: await doctorFoundation(paths) };
 }
 
-const processAlive = (pid: number) => { try { process.kill(pid, 0); return true; } catch (error) { return (error as NodeJS.ErrnoException).code === 'EPERM'; } };
+const processAlive = (pid: number) => { try { process.kill(pid, 0); if (process.platform === 'linux') { const stat = readFileSync(`/proc/${pid}/stat`, 'utf8'); if (/\)\s+Z(?:\s|$)/.test(stat)) return false; } return true; } catch (error) { return (error as NodeJS.ErrnoException).code === 'EPERM'; } };
 
 export async function temporaryDirectory(paths: FoundationPaths, operation: string, owner: string, ttlMs = defaultFoundationBudgets.tempTtlMs) {
   const current = await temporaryReport(paths);

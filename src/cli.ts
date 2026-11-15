@@ -4,6 +4,7 @@ import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import type { PluginId } from './plugins.js';
 import * as fs from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import { constants as fsConstants } from 'node:fs';
 import os from 'node:os';
 import { spawn } from 'node:child_process';
@@ -194,7 +195,7 @@ if (values.stop) {
   // The lock is released before the launcher prints its report and ends, and on Windows the log
   // it writes stays open until then: a start right after would find that file in use.
   const pid = Number.isInteger(connection.pid) ? connection.pid as number : 0;
-  const alive = () => { try { process.kill(pid, 0); return true; } catch (e) { return (e as NodeJS.ErrnoException).code === 'EPERM'; } };
+  const alive = () => { try { process.kill(pid, 0); if (process.platform === 'linux') { const stat = readFileSync(`/proc/${pid}/stat`, 'utf8'); if (/\)\s+Z(?:\s|$)/.test(stat)) return false; } return true; } catch (e) { return (e as NodeJS.ErrnoException).code === 'EPERM'; } };
   for (let i = 0; pid && alive(); i++) {
     if (i === 40) { process.stderr.write(`Rho for ${directory} has closed its state, but its process ${pid} has not ended after 10 s.\n`); process.exit(1); }
     await new Promise(resolve => setTimeout(resolve, 250));

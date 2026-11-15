@@ -1,4 +1,5 @@
 import * as fs from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
@@ -71,7 +72,13 @@ export async function lease(directory: string) {
   };
 }
 
-const alive = (pid: number) => { try { process.kill(pid, 0); return true; } catch (error) { return (error as NodeJS.ErrnoException).code === 'EPERM'; } };
+const alive = (pid: number) => {
+  try {
+    process.kill(pid, 0);
+    if (process.platform === 'linux') { const stat = readFileSync(`/proc/${pid}/stat`, 'utf8'); if (/\)\s+Z(?:\s|$)/.test(stat)) return false; }
+    return true;
+  } catch (error) { return (error as NodeJS.ErrnoException).code === 'EPERM'; }
+};
 export class State {
   projects: Project[] = []; principals: Principal[] = [];
   private folderSelections: FolderSelection[] = [];
