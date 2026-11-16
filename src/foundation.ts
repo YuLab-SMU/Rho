@@ -553,6 +553,11 @@ export async function repairFoundation(paths: FoundationPaths, diagnosis?: Await
     repaired.push('process:' + processRecord.pid);
   }
   if (report.checks.some(item => item.id === 'temporary' && item.state === 'fail')) { await pruneTemporary(paths); repaired.push('temporary'); }
+  // A host may be unavailable during uninstall.  Re-run the ownership adapter
+  // from doctor --repair so a pending receipt is actionable without asking the
+  // operator to reconstruct the original cleanup command.
+  const host = await hostCleanup(paths);
+  if (host.removed || host.skipped) repaired.push(host.skipped ? 'hosts-pending' : 'hosts');
   return { repaired, report: await doctorFoundation(paths) };
 }
 

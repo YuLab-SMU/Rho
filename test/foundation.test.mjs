@@ -9,6 +9,7 @@ import {
   foundationPaths,
   hostCleanup,
   hostScan,
+  jsonHostAdapter,
   migrateLegacy,
   migrateQuickStartProjects,
   rollbackMigration,
@@ -66,6 +67,49 @@ test('foundation paths, temp registry and host cleanup stay inside explicit root
     if (oldTmp === undefined) delete process.env.TMPDIR; else process.env.TMPDIR = oldTmp;
     await f.cleanup();
   }
+});
+
+test('host adapter contract owns, verifies, repairs and removes only marked records', async () => {
+  const f = await fixture();
+  try {
+    await ensureFoundationPaths(f.paths, false);
+    const hostFile = path.join(f.paths.hosts, 'cursor', 'mcp.json');
+    await fs.mkdir(path.dirname(hostFile), { recursive: true });
+    await fs.writeFile(hostFile, JSON.stringify({ servers: [{ id: 'rho', owner: 'rho' }, { id: 'user', owner: 'user' }] }));
+    const adapter = jsonHostAdapter('cursor-json-fixture');
+    const entry = await adapter.install(f.paths, { host: 'cursor', kind: 'mcp', path: hostFile, owner: 'rho', reversible: true });
+    assert.equal(entry.owner, 'rho');
+    assert.equal(await adapter.detect(f.paths), true);
+    assert.equal((await adapter.listOwned(f.paths)).length, 1);
+    assert.equal((await adapter.verify(f.paths, entry)).ok, true);
+    assert.deepEqual(await adapter.uninstall(f.paths, entry), { removed: true });
+    assert.deepEqual(JSON.parse(await fs.readFile(hostFile, 'utf8')), { servers: [{ id: 'user', owner: 'user' }] });
+    await fs.writeFile(hostFile, JSON.stringify({ servers: [{ id: 'rho-again', owner: 'rho' }, { id: 'user', owner: 'user' }] }));
+    assert.deepEqual(await adapter.repair(f.paths, entry), { repaired: true, detail: 'Host cleanup removed 1 owned record(s).' });
+  } finally { await f.cleanup(); }
+});
+
+test('doctor repair retries pending host cleanup and keeps unavailable files pending', async () => {
+  const f = await fixture();
+  try {
+    await ensureFoundationPaths(f.paths, false);
+    const good = path.join(f.paths.hosts, 'workbuddy', 'settings.json'), bad = path.join(f.paths.hosts, 'cursor', 'broken.json');
+    await fs.mkdir(path.dirname(good), { recursive: true });
+    await fs.mkdir(path.dirname(bad), { recursive: true });
+    await fs.writeFile(good, JSON.stringify({ rho: { owner: 'rho' }, user: { owner: 'user' } }));
+    await fs.writeFile(bad, '{broken\n');
+    const first = await hostCleanup(f.paths);
+    assert.equal(first.removed, 1);
+    assert.equal(first.skipped, 1);
+    assert.equal((await fs.readFile(path.join(f.paths.data, 'pending-host-cleanup.json'), 'utf8')).includes('broken.json'), true);
+    const repaired = await repairFoundation(f.paths);
+    assert.ok(repaired.repaired.includes('hosts-pending'));
+    assert.equal(await fs.access(path.join(f.paths.data, 'pending-host-cleanup.json')).then(() => true, () => false), true);
+    await fs.writeFile(bad, JSON.stringify({ rho: { owner: 'rho' }, user: { owner: 'user' } }));
+    const recovered = await repairFoundation(f.paths);
+    assert.ok(recovered.repaired.includes('hosts'));
+    assert.equal(await fs.access(path.join(f.paths.data, 'pending-host-cleanup.json')).then(() => true, () => false), false);
+  } finally { await f.cleanup(); }
 });
 
 test('legacy migration dry-run is read-only and apply preserves the source tree', async () => {
