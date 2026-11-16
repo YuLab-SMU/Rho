@@ -264,15 +264,15 @@ doctor 最少检查以下内容。
 - 任何达到预算的阶段都保留已有输出和不确定性，并返回 limit、operation ID 和下一步命令。
 - 诊断和读取操作不启动 runtime，不恢复执行，不获取新的 Agent 或 Host 身份。
 
-## 待实际 episode 决定的事项
+## F0 episode 已定稿的事项
 
-以下选择在 F0 的真实运行结果出来后定稿。
+真实 F0 运行和三平台 CI 已把这些选择固定下来。
 
-- macOS LaunchAgent、Linux systemd user unit 和 Windows 任务注册的默认开关。
-- Unix 原生文件锁实现和 Node 版本约束，目标是服务进程直接持有可诊断锁。
-- 临时目录、缓存和日志预算在长时间 Agent episode 中的最终数值。
-- 旧版本 shim 和 legacy path 扫描的结束版本。
+- macOS LaunchAgent、Linux systemd user unit 和 Windows 任务注册默认只生成 descriptor；只有显式 `--apply` 才调用平台 manager。CI 在 disposable runner session 中对三者都执行了 apply/status/remove。
+- Unix 锁由服务进程持有 JSON owner 文件，Node 运行时约束沿用项目的 Node `>=22.22.0 <27` 发布契约。
+- 临时目录、缓存和日志使用本文件前面的初始预算表，TTL、体积上限和轮转结果由 `rho cache prune`、`rho logs` 和 doctor 报告。
+- legacy shim 与旧路径在兼容窗口内继续由 manifest 管理，卸载通过 receipt、quarantine 和可恢复 operation journal 收尾。
 
 ## 当前决策
 
-F0–F6 已对本地实现的可选项作出可复现决策：quick start 使用 `~/.rho` 作为项目根，并在无显式 root/state 时静默移动已有 `~/Rho/projects` 项目；服务单元默认只生成 descriptor，只有 `--apply` 才调用平台 manager，Unix 锁由服务进程持有 JSON owner 文件，预算使用本文件表中的初始值，配置与缓存通过 digest 关联，legacy shim 在兼容窗口内继续由 manifest 管理。CI 已加入 macOS/Linux/Windows 的 foundation 矩阵。宿主适配器不发布 WorkBuddy、Cursor 或其他宿主的版本范围，优先通过 Skills 和稳定的 agentic 接口保持兼容。
+F0–F6 已对本地实现的可选项作出可复现决策：quick start 使用 `~/.rho` 作为项目根，并在无显式 root/state 时静默移动已有 `~/Rho/projects` 项目；服务单元默认只生成 descriptor，只有 `--apply` 才调用平台 manager，Unix 锁由服务进程持有 JSON owner 文件，预算使用本文件表中的初始值，配置与缓存通过 digest 关联，legacy shim 在兼容窗口内继续由 manifest 管理。CI `43781703370` 已在 macOS/Linux/Windows 的 foundation 矩阵中通过 32 步 F0、三平台原生 service apply/status/remove 和完整 Test/Pack/Install jobs。宿主适配器通过 WorkBuddy、Cursor 和 generic JSON ownership fixture 验证逐条清理并保留用户条目；不发布 WorkBuddy、Cursor 或其他宿主的版本范围，优先通过 Skills 和稳定的 agentic 接口保持兼容。
