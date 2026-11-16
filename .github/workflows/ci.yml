@@ -160,8 +160,42 @@ jobs:
         working-directory: Rho
         env:
           RHO_SERVICE_NO_APPLY: '1'
-          RHO_FOUNDATION_SERVICE_APPLY: ${{ matrix.platform == 'win32-x64' && '1' || '0' }}
-        run: npm run acceptance:foundation:matrix && npm run acceptance:foundation
+          RHO_FOUNDATION_SERVICE_APPLY: '1'
+        run: |
+          run_episode() {
+            npm run acceptance:foundation:matrix
+            npm run acceptance:foundation
+          }
+          if [ "$RUNNER_OS" = Linux ]; then
+            # GitHub's Linux image has systemd available but does not keep a user
+            # manager and session bus alive for ordinary action steps. Start both
+            # in a disposable runtime so `systemctl --user` is the real manager
+            # used by the episode, then tear it down after the receipt is written.
+            export RHO_SYSTEMD_RUNTIME="$RUNNER_TEMP/rho-systemd-runtime"
+            export XDG_RUNTIME_DIR="$RHO_SYSTEMD_RUNTIME"
+            mkdir -p "$XDG_RUNTIME_DIR"
+            chmod 700 "$XDG_RUNTIME_DIR"
+            dbus-run-session -- bash -euo pipefail -c '
+              systemd --user --daemon
+              for attempt in $(seq 1 30); do
+                if systemctl --user show-environment >/dev/null 2>&1; then break; fi
+                sleep 1
+              done
+              systemctl --user show-environment >/dev/null
+              set +e
+              npm run acceptance:foundation:matrix
+              matrix_status=$?
+              if [ "$matrix_status" -eq 0 ]; then npm run acceptance:foundation; fi
+              status=$?
+              if [ "$matrix_status" -ne 0 ]; then status="$matrix_status"; fi
+              set -e
+              systemctl --user disable --now rho-foundation.service >/dev/null 2>&1 || true
+              systemctl --user exit >/dev/null 2>&1 || true
+              exit "$status"
+            '
+          else
+            run_episode
+          fi
       - name: Upload foundation reports
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

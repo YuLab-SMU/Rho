@@ -118,6 +118,7 @@ try {
   assert.equal(install.result.code, 0, install.result.stderr || install.result.stdout);
   const packageRoot = process.platform === 'win32' ? path.join(npmPrefix, 'node_modules', '@rho-workspace', 'rho') : path.join(npmPrefix, 'lib', 'node_modules', '@rho-workspace', 'rho');
   const binRoot = process.platform === 'win32' ? npmPrefix : path.join(npmPrefix, 'bin');
+  const installedCli = path.join(binRoot, process.platform === 'win32' ? 'rho.cmd' : 'rho');
   const installedPackage = await fs.readFile(path.join(packageRoot, 'package.json'), 'utf8');
   const installedVersion = JSON.parse(installedPackage).version;
   report.installation = { packageRoot, binRoot, version: installedVersion, packageTree: await tree(packageRoot), binTree: await tree(binRoot, 2000, true) };
@@ -175,10 +176,13 @@ try {
   await writeJson(path.join(hostRoot, 'workbuddy', 'settings.json'), { settings: { theme: 'user', rho: { owner: 'rho', version: installedVersion } } });
   await writeJson(path.join(hostRoot, 'workbuddy', 'skills-installed-store.json'), { skills: [{ id: 'rho', owner: 'rho', source: packageRoot }, { id: 'user-skill', owner: 'user' }] });
   await writeJson(path.join(hostRoot, 'workbuddy', 'experts.json'), { experts: [{ id: 'rho', owner: 'rho' }, { id: 'user-expert', owner: 'user' }] });
+  await fs.mkdir(path.join(hostRoot, 'cursor'), { recursive: true });
+  await writeJson(path.join(hostRoot, 'cursor', 'mcp.json'), { servers: [{ name: 'rho-workspace', owner: 'rho', command: installedCli }, { name: 'user-server', owner: 'user', command: 'user-tool' }] });
+  await fs.mkdir(path.join(hostRoot, 'other'), { recursive: true });
+  await writeJson(path.join(hostRoot, 'other', 'registrations.json'), { plugins: [{ id: 'rho-skill', source: 'rho' }, { id: 'user-plugin', owner: 'user' }] });
   report.host = await tree(hostRoot);
-  report.observations.push({ id: 'E38-E42', result: 'A fake WorkBuddy root contains Rho-owned and user-owned registrations, giving host cleanup a safe ownership fixture.' });
+  report.observations.push({ id: 'E38-E42', result: 'Fake WorkBuddy, Cursor and generic host roots contain Rho-owned and user-owned registrations, giving each adapter the same explicit ownership fixture.' });
 
-  const installedCli = path.join(binRoot, process.platform === 'win32' ? 'rho.cmd' : 'rho');
   const isolatedEnv = { ...env, RHO_HOST_ROOT: hostRoot };
   if (applyNativeService) delete isolatedEnv.RHO_SERVICE_NO_APPLY;
   const quickStart = await record(report, 'rho-quick-start-silent-legacy-migration', () => command(installedCli, ['--example', 'off', '--background'], root, isolatedEnv), result => ({ passed: result.code === 0 }));
@@ -247,6 +251,9 @@ try {
   }
   const stop = await record(report, 'rho-profile-stop', () => command(installedCli, ['stop', '--state-dir', canonicalState], root, isolatedEnv), result => ({ passed: result.code === 0 }));
   assert.equal(stop.passed, true, stop.result.stderr);
+  const hostScan = await record(report, 'rho-host-scan-owned-records', () => command(installedCli, ['host', 'scan', '--json'], root, isolatedEnv), result => ({ passed: result.code === 0, parsed: result.code === 0 ? JSON.parse(result.stdout) : null }));
+  assert.equal(hostScan.passed, true, hostScan.result.stderr);
+  assert.ok(hostScan.parsed.hosts.count >= 5, JSON.stringify(hostScan.parsed));
   const hostDry = await record(report, 'rho-host-cleanup-dry-run', () => command(installedCli, ['host', 'cleanup', '--dry-run'], root, isolatedEnv), result => ({ passed: result.code === 0 }));
   assert.equal(hostDry.passed, true, hostDry.result.stderr);
   const hostClean = await record(report, 'rho-host-cleanup', () => command(installedCli, ['host', 'cleanup'], root, isolatedEnv), result => ({ passed: result.code === 0 }));
@@ -254,6 +261,14 @@ try {
   const hostAfter = JSON.parse(await fs.readFile(path.join(hostRoot, 'workbuddy', 'settings.json'), 'utf8'));
   assert.equal(hostAfter.settings?.theme, 'user');
   assert.equal(hostAfter.settings?.rho, undefined);
+  const skillsAfter = JSON.parse(await fs.readFile(path.join(hostRoot, 'workbuddy', 'skills-installed-store.json'), 'utf8'));
+  assert.deepEqual(skillsAfter.skills, [{ id: 'user-skill', owner: 'user' }]);
+  const expertsAfter = JSON.parse(await fs.readFile(path.join(hostRoot, 'workbuddy', 'experts.json'), 'utf8'));
+  assert.deepEqual(expertsAfter.experts, [{ id: 'user-expert', owner: 'user' }]);
+  const cursorAfter = JSON.parse(await fs.readFile(path.join(hostRoot, 'cursor', 'mcp.json'), 'utf8'));
+  assert.deepEqual(cursorAfter.servers, [{ name: 'user-server', owner: 'user', command: 'user-tool' }]);
+  const otherAfter = JSON.parse(await fs.readFile(path.join(hostRoot, 'other', 'registrations.json'), 'utf8'));
+  assert.deepEqual(otherAfter.plugins, [{ id: 'user-plugin', owner: 'user' }]);
   const uninstall = await record(report, 'installed-uninstall-transaction', () => command(installedCli, ['uninstall', '--purge', '--json'], root, isolatedEnv), result => ({ passed: result.code === 0, parsed: result.stdout ? JSON.parse(result.stdout) : null }));
   assert.equal(uninstall.passed, true, uninstall.result.stderr);
   report.uninstall = uninstall.parsed;

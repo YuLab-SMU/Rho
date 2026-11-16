@@ -63,6 +63,7 @@ try {
       assert.equal(paths.paths.config.path, path.join(base, 'xdg-config', 'rho'));
       assert.equal(paths.paths.state.path, path.join(base, 'xdg-state', 'rho'));
       assert.equal(paths.paths.runtime.path, path.join(base, 'xdg-runtime', 'rho'));
+      assert.equal(service.registration, path.join(base, 'xdg-config', 'systemd', 'user', 'rho-matrix.service'));
     }
     if (platform === 'win32') {
       assert.equal(paths.paths.config.path, path.join(base, 'appdata', 'Rho'));

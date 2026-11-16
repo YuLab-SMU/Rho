@@ -140,7 +140,11 @@ function serviceDefinition(paths: ReturnType<typeof foundationPaths>, profile: s
     ? path.join(paths.home, 'Library', 'LaunchAgents', label + '.plist')
     : paths.platform === 'win32'
       ? path.join(paths.config, 'tasks', label + '.xml')
-      : path.join(paths.config, 'systemd', 'user', label + '.service');
+      // systemd --user only searches the XDG user unit directory.  Keep the Rho
+      // application namespace under `$XDG_CONFIG_HOME/rho`, but register the
+      // unit beside it at `$XDG_CONFIG_HOME/systemd/user` so a real user
+      // manager can discover it.
+      : path.join(process.env.XDG_CONFIG_HOME ? path.resolve(process.env.XDG_CONFIG_HOME) : path.join(paths.home, '.config'), 'systemd', 'user', label + '.service');
   const command = process.execPath, cliPath = currentCli;
   const args = [cliPath, 'start', '--profile', profile];
   const content = paths.platform === 'darwin'
