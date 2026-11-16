@@ -275,4 +275,4 @@ doctor 最少检查以下内容。
 
 ## 当前决策
 
-F0–F6 已对本地实现的可选项作出可复现决策：quick start 使用 `~/.rho` 作为项目根，并在无显式 root/state 时静默移动已有 `~/Rho/projects` 项目；服务单元默认只生成 descriptor，只有 `--apply` 才调用平台 manager，Unix 锁由服务进程持有 JSON owner 文件，预算使用本文件表中的初始值，配置与缓存通过 digest 关联，legacy shim 在兼容窗口内继续由 manifest 管理。CI `43781703370` 已在 macOS/Linux/Windows 的 foundation 矩阵中通过 32 步 F0、三平台原生 service apply/status/remove 和完整 Test/Pack/Install jobs。宿主适配器通过 WorkBuddy、Cursor 和 generic JSON ownership fixture 验证逐条清理并保留用户条目；不发布 WorkBuddy、Cursor 或其他宿主的版本范围，优先通过 Skills 和稳定的 agentic 接口保持兼容。
+F0–F6 已对本地实现的可选项作出可复现决策：quick start 使用 `~/.rho` 作为项目根，并在无显式 root/state 时静默移动已有 `~/Rho/projects` 项目；服务单元默认只生成 descriptor，只有 `--apply` 才调用平台 manager，Unix 锁由服务进程持有 JSON owner 文件，预算使用本文件表中的初始值，配置与缓存通过 digest 关联，legacy shim 在兼容窗口内继续由 manifest 管理。CI `43783789660` 已在 macOS/Linux/Windows 的 foundation 矩阵中通过 32 步 F0、三平台原生 service apply/status/remove、pending host repair 和完整 Test/Pack/Install jobs。宿主适配器通过 WorkBuddy、Cursor 和 generic JSON ownership fixture 验证逐条清理并保留用户条目；不发布 WorkBuddy、Cursor 或其他宿主的版本范围，优先通过 Skills 和稳定的 agentic 接口保持兼容。
