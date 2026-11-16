@@ -240,8 +240,8 @@ export async function readSecretInput(name: string, env: NodeJS.ProcessEnv = pro
       ? (() => {
         const acl = spawnSync('icacls.exe', [file], { encoding: 'utf8', windowsHide: true, timeout: 2000 });
         if (acl.status !== 0) return false;
-        const text = `${acl.stdout ?? ''}\n${acl.stderr ?? ''}`;
-        return !/(?:Everyone|Authenticated Users|\\Users\b|S-1-1-0|S-1-5-11|S-1-5-32-545)/i.test(text);
+        const text = `${acl.stdout ?? ''}\n${acl.stderr ?? ''}`.split(/\r?\n/).slice(1).join('\n');
+        return !/(?:Everyone|Authenticated Users|(?:^|\s)(?:BUILTIN\\)?Users\s*:|S-1-1-0|S-1-5-11|S-1-5-32-545)/i.test(text);
       })()
       : (stat.mode & 0o077) === 0;
     if (!privateFile) throw Object.assign(new Error(`${fileName} must point to a private file (mode 0600 or stricter).`), { kind: 'security', path: file });
