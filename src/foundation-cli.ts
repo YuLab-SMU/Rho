@@ -129,6 +129,7 @@ async function runProgram(program: string, args: string[], cwd = process.cwd()) 
 }
 
 const xmlEscape = (value: string) => value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&apos;');
+const systemdEscape = (value: string) => value.replaceAll('\\', '\\\\').replaceAll('"', '\\"').replaceAll('%', '%%');
 const safeServiceName = (value: string) => value.replace(/[^A-Za-z0-9._-]/g, '-').slice(0, 64) || 'default';
 
 function serviceDefinition(paths: ReturnType<typeof foundationPaths>, profile: string) {
@@ -147,11 +148,12 @@ function serviceDefinition(paths: ReturnType<typeof foundationPaths>, profile: s
       : path.join(process.env.XDG_CONFIG_HOME ? path.resolve(process.env.XDG_CONFIG_HOME) : path.join(paths.home, '.config'), 'systemd', 'user', label + '.service');
   const command = process.execPath, cliPath = currentCli;
   const args = [cliPath, 'start', '--profile', profile];
+  const environment = { RHO_HOME: paths.home, RHO_CONFIG_DIR: paths.config, RHO_DATA_DIR: paths.data, RHO_STATE_DIR: paths.state, RHO_RUNTIME_DIR: paths.runtime, RHO_CACHE_DIR: paths.cache, RHO_LOG_DIR: paths.logs, RHO_PROJECTS_DIR: paths.projects, RHO_HOST_ROOT: paths.hosts };
   const content = paths.platform === 'darwin'
-    ? `<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0"><dict><key>Label</key><string>${xmlEscape(label)}</string><key>ProgramArguments</key><array>${[command, ...args].map(value => `<string>${xmlEscape(value)}</string>`).join('')}</array><key>RunAtLoad</key><true/><key>KeepAlive</key><true/></dict></plist>\n`
+    ? `<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0"><dict><key>Label</key><string>${xmlEscape(label)}</string><key>ProgramArguments</key><array>${[command, ...args].map(value => `<string>${xmlEscape(value)}</string>`).join('')}</array><key>EnvironmentVariables</key><dict>${Object.entries(environment).map(([key, value]) => `<key>${xmlEscape(key)}</key><string>${xmlEscape(value)}</string>`).join('')}</dict><key>RunAtLoad</key><true/><key>KeepAlive</key><true/></dict></plist>\n`
     : paths.platform === 'win32'
       ? `<?xml version="1.0" encoding="UTF-16"?>\n<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task"><RegistrationInfo><Description>Rho ${xmlEscape(profile)} workspace</Description></RegistrationInfo><Triggers><LogonTrigger><Enabled>true</Enabled></LogonTrigger></Triggers><Actions Context="Author"><Exec><Command>${xmlEscape(command)}</Command><Arguments>${xmlEscape(args.map(value => `"${value}"`).join(' '))}</Arguments></Exec></Actions></Task>\n`
-      : `[Unit]\nDescription=Rho ${profile} workspace\nAfter=network.target\n[Service]\nType=simple\nExecStart=${[command, ...args].map(value => JSON.stringify(value)).join(' ')}\nRestart=on-failure\n[Install]\nWantedBy=default.target\n`;
+      : `[Unit]\nDescription=Rho ${profile} workspace\nAfter=network.target\n[Service]\nType=simple\n${Object.entries(environment).map(([key, value]) => `Environment=${key}="${systemdEscape(value)}"`).join('\n')}\nExecStart=${[command, ...args].map(value => JSON.stringify(value)).join(' ')}\nRestart=on-failure\n[Install]\nWantedBy=default.target\n`;
   return { profile, label, metadata, native, registration, command, args, content, platform: paths.platform };
 }
 
@@ -350,7 +352,13 @@ async function serviceCommand(args: string[]) {
     let manager = { code: 0, stdout: '', stderr: '' };
     if (apply) {
       if (paths.platform === 'darwin') manager = await runProgram('launchctl', ['bootout', `gui/${process.getuid?.() ?? 0}/${definition.label}`]);
-      else if (paths.platform === 'linux') manager = await runProgram('systemctl', ['--user', 'disable', '--now', `${definition.label}.service`]);
+      else if (paths.platform === 'linux') {
+        manager = await runProgram('systemctl', ['--user', 'disable', '--now', `${definition.label}.service`]);
+        if (manager.code === 0) {
+          const unlinked = await runProgram('systemctl', ['--user', 'unlink', definition.registration]);
+          if (unlinked.code !== 0) manager = unlinked;
+        }
+      }
       else if (paths.platform === 'win32') manager = await runProgram('schtasks.exe', ['/Delete', '/TN', definition.label, '/F']);
     }
     await fs.rm(definition.registration, { force: true }).catch(() => {});
@@ -367,11 +375,19 @@ async function serviceCommand(args: string[]) {
     if (apply) {
       await fs.mkdir(path.dirname(definition.registration), { recursive: true, mode: 0o700 });
       await writeServiceText(definition.registration, definition.content);
-      const manager = paths.platform === 'darwin'
-        ? await runProgram('launchctl', ['bootstrap', `gui/${process.getuid?.() ?? 0}`, definition.registration])
-        : paths.platform === 'linux'
-          ? await runProgram('systemctl', ['--user', 'daemon-reload']).then(async first => first.code ? first : runProgram('systemctl', ['--user', 'enable', '--now', `${definition.label}.service`]))
-          : await runProgram('schtasks.exe', ['/Create', '/TN', definition.label, '/XML', definition.registration, '/F']);
+      let manager;
+      if (paths.platform === 'darwin') manager = await runProgram('launchctl', ['bootstrap', `gui/${process.getuid?.() ?? 0}`, definition.registration]);
+      else if (paths.platform === 'linux') {
+        // The disposable episode and a custom XDG_CONFIG_HOME can put the unit
+        // outside the manager's own search path. `link` makes that absolute
+        // unit path discoverable without copying it into a user directory.
+        const linked = await runProgram('systemctl', ['--user', 'link', definition.registration]);
+        if (linked.code) manager = linked;
+        else {
+          const reloaded = await runProgram('systemctl', ['--user', 'daemon-reload']);
+          manager = reloaded.code ? reloaded : await runProgram('systemctl', ['--user', 'enable', '--now', `${definition.label}.service`]);
+        }
+      } else manager = await runProgram('schtasks.exe', ['/Create', '/TN', definition.label, '/XML', definition.registration, '/F']);
       unit.state = manager.code === 0 ? 'registered' : 'pending';
       (unit as Record<string, unknown>).manager = manager;
     }
