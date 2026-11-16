@@ -176,12 +176,17 @@ jobs:
             mkdir -p "$XDG_RUNTIME_DIR"
             chmod 700 "$XDG_RUNTIME_DIR"
             dbus-run-session -- bash -euo pipefail -c '
-              systemd --user --daemon
+              systemd --user >"$RUNNER_TEMP/rho-systemd.log" 2>&1 &
+              systemd_pid=$!
               for attempt in $(seq 1 30); do
                 if systemctl --user show-environment >/dev/null 2>&1; then break; fi
                 sleep 1
               done
-              systemctl --user show-environment >/dev/null
+              if ! systemctl --user show-environment >/dev/null 2>&1; then
+                cat "$RUNNER_TEMP/rho-systemd.log" >&2 || true
+                kill "$systemd_pid" 2>/dev/null || true
+                exit 1
+              fi
               set +e
               npm run acceptance:foundation:matrix
               matrix_status=$?
@@ -191,6 +196,7 @@ jobs:
               set -e
               systemctl --user disable --now rho-foundation.service >/dev/null 2>&1 || true
               systemctl --user exit >/dev/null 2>&1 || true
+              kill "$systemd_pid" 2>/dev/null || true
               exit "$status"
             '
           else
