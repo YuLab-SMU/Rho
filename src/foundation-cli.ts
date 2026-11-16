@@ -128,6 +128,16 @@ async function runProgram(program: string, args: string[], cwd = process.cwd()) 
   });
 }
 
+async function linkedSystemdUserUnit(registration: string, fallbackHome: string) {
+  const environment = await runProgram('systemctl', ['--user', 'show-environment']);
+  const values = Object.fromEntries(environment.stdout.split(/\r?\n/).filter(Boolean).map(line => {
+    const index = line.indexOf('=');
+    return index > 0 ? [line.slice(0, index), line.slice(index + 1)] : [line, ''];
+  }));
+  const configHome = values.XDG_CONFIG_HOME || path.join(values.HOME || fallbackHome, '.config');
+  return path.join(configHome, 'systemd', 'user', path.basename(registration));
+}
+
 const xmlEscape = (value: string) => value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&apos;');
 const systemdEscape = (value: string) => value.replaceAll('\\', '\\\\').replaceAll('"', '\\"').replaceAll('%', '%%');
 const safeServiceName = (value: string) => value.replace(/[^A-Za-z0-9._-]/g, '-').slice(0, 64) || 'default';
@@ -355,8 +365,11 @@ async function serviceCommand(args: string[]) {
       else if (paths.platform === 'linux') {
         manager = await runProgram('systemctl', ['--user', 'disable', '--now', `${definition.label}.service`]);
         if (manager.code === 0) {
-          const unlinked = await runProgram('systemctl', ['--user', 'unlink', definition.registration]);
-          if (unlinked.code !== 0) manager = unlinked;
+          // `systemctl link` has no matching `unlink` verb.  Disable removes
+          // the target.wants entry; remove the manager's linked unit itself and
+          // reload so a later status cannot observe a dangling registration.
+          await fs.rm(await linkedSystemdUserUnit(definition.registration, paths.home), { force: true }).catch(() => {});
+          await runProgram('systemctl', ['--user', 'daemon-reload']);
         }
       }
       else if (paths.platform === 'win32') manager = await runProgram('schtasks.exe', ['/Delete', '/TN', definition.label, '/F']);

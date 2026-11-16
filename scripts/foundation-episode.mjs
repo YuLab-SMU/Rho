@@ -80,14 +80,16 @@ const env = {
   ...process.env,
   HOME: fixtureHome,
   USERPROFILE: fixtureHome,
+  RHO_HOME: fixtureHome,
   TMPDIR: tempRoot,
   TMP: tempRoot,
   TEMP: tempRoot,
   npm_config_cache: npmCache,
   npm_config_prefix: npmPrefix,
   RHO_RUNNING_DIR: path.join(fixtureHome, 'Rho', 'running'),
+  RHO_RUNTIME_DIR: path.join(fixtureHome, 'runtime'),
 };
-for (const key of ['RHO_DATA_ROOT', 'RHO_CONFIG_DIR', 'RHO_RUNTIME_DIR', 'RHO_CACHE_DIR', 'RHO_LOG_DIR', 'RHO_PROJECTS_DIR']) delete env[key];
+for (const key of ['RHO_DATA_ROOT', 'RHO_CONFIG_DIR', 'RHO_STATE_DIR', 'RHO_CACHE_DIR', 'RHO_LOG_DIR', 'RHO_PROJECTS_DIR', 'XDG_CONFIG_HOME', 'XDG_STATE_HOME', 'XDG_DATA_HOME', 'XDG_CACHE_HOME']) delete env[key];
 
 const report = {
   schemaVersion: 1,
