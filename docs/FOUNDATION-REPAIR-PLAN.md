@@ -6,7 +6,7 @@ Updated: 2026-11-15.
 
 ## 实施状态
 
-2026-11-15 的 F0 episode 已经把 F1–F6 的本地核心入口跑通。当前主线提供平台路径解析、安装 manifest、`paths`、`doctor`、诊断 bundle、迁移 dry-run/apply/rollback、profile 配置、start/stop/status/restart、版本盘点、upgrade、临时目录与缓存预算、日志轮转、宿主 JSON 所有权清理、service descriptor/manager registration 和事务式 npm 卸载。验收脚本在 disposable HOME 和 npm prefix 中完成了 31 个步骤，包含 `~/.rho` quick start 与 `~/Rho/projects` 静默迁移；macOS 与 Linux 容器都通过了完整 episode，独立的 platform matrix 已覆盖 macOS、Linux/XDG 和 Windows/APPDATA 的路径与 native descriptor 契约；最终 Windows CI 还实际创建并删除了 Task Scheduler 任务。逐项证据见 [implementation audit](FOUNDATION-REPAIR-AUDIT.md)。宿主连接器版本和 macOS/Linux 原生 service manager 仍需各自的机器证据。
+2026-11-15 的 F0 episode 已经把 F1–F6 的本地核心入口跑通。当前主线提供平台路径解析、安装 manifest、`paths`、`doctor`、诊断 bundle、迁移 dry-run/apply/rollback、profile 配置、start/stop/status/restart、版本盘点、upgrade、临时目录与缓存预算、日志轮转、宿主 JSON 所有权清理、service descriptor/manager registration 和事务式 npm 卸载。验收脚本在 disposable HOME 和 npm prefix 中完成了 32 个步骤，包含 `~/.rho` quick start 与 `~/Rho/projects` 静默迁移；macOS 与 Linux 容器都通过了完整 episode，独立的 platform matrix 已覆盖 macOS、Linux/XDG 和 Windows/APPDATA 的路径与 native descriptor 契约；CI foundation 矩阵又在 macOS 15、Ubuntu 24.04 和 Windows 2022 上实际应用、检查并移除了 LaunchAgent、systemd user unit 和 Task Scheduler 注册。逐项证据见 [implementation audit](FOUNDATION-REPAIR-AUDIT.md)。宿主适配器以 WorkBuddy、Cursor 和 generic JSON ownership fixture 验证逐条清理并保留用户条目；公开宿主版本范围按当前决策不作为兼容约束。
 
 ## 目标
 
