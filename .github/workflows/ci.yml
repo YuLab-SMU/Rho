@@ -167,38 +167,22 @@ jobs:
             npm run acceptance:foundation
           }
           if [ "$RUNNER_OS" = Linux ]; then
-            # GitHub's Linux image has systemd available but does not keep a user
-            # manager and session bus alive for ordinary action steps. Start both
-            # in a disposable runtime so `systemctl --user` is the real manager
-            # used by the episode, then tear it down after the receipt is written.
-            export RHO_SYSTEMD_RUNTIME="$RUNNER_TEMP/rho-systemd-runtime"
-            export XDG_RUNTIME_DIR="$RHO_SYSTEMD_RUNTIME"
-            mkdir -p "$XDG_RUNTIME_DIR"
-            chmod 700 "$XDG_RUNTIME_DIR"
-            dbus-run-session -- bash -euo pipefail -c '
-              systemd --user >"$RUNNER_TEMP/rho-systemd.log" 2>&1 &
-              systemd_pid=$!
-              for attempt in $(seq 1 30); do
-                if systemctl --user show-environment >/dev/null 2>&1; then break; fi
-                sleep 1
-              done
-              if ! systemctl --user show-environment >/dev/null 2>&1; then
-                cat "$RUNNER_TEMP/rho-systemd.log" >&2 || true
-                kill "$systemd_pid" 2>/dev/null || true
-                exit 1
-              fi
-              set +e
-              npm run acceptance:foundation:matrix
-              matrix_status=$?
-              if [ "$matrix_status" -eq 0 ]; then npm run acceptance:foundation; fi
-              status=$?
-              if [ "$matrix_status" -ne 0 ]; then status="$matrix_status"; fi
-              set -e
-              systemctl --user disable --now rho-foundation.service >/dev/null 2>&1 || true
-              systemctl --user exit >/dev/null 2>&1 || true
-              kill "$systemd_pid" 2>/dev/null || true
-              exit "$status"
-            '
+            # The hosted VM has a system manager but no lingering user manager.
+            # Start the real user@UID.service and point systemctl at its private
+            # runtime; the service command links the fixture unit by absolute
+            # path, so the manager never reads the operator's home.
+            uid="$(id -u)"
+            sudo loginctl enable-linger "$uid"
+            sudo systemctl start "user@$uid.service"
+            export XDG_RUNTIME_DIR="/run/user/$uid"
+            export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
+            for attempt in $(seq 1 30); do
+              if systemctl --user show-environment >/dev/null 2>&1; then break; fi
+              sleep 1
+            done
+            systemctl --user show-environment >/dev/null
+            run_episode
+            systemctl --user disable --now rho-foundation.service >/dev/null 2>&1 || true
           else
             run_episode
           fi
