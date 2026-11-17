@@ -40,7 +40,7 @@ const SECTIONS = {
     'FOUNDATION-REPAIR-AUDIT',
     'AGENT-ACTIVITY',
   ],
-  reference: ['HEADLESS', 'FRONTEND', 'STATUS', 'RELEASE', 'PLUGIN-AUTHORING', 'THIRD-PARTY-PLUGINS', 'DEEPSEEK-HARNESS', 'RHO-0.5.10-TUTORIAL'],
+  reference: ['HEADLESS', 'FRONTEND', 'STATUS', 'RELEASE', 'PLUGIN-AUTHORING', 'THIRD-PARTY-PLUGINS', 'DEEPSEEK-HARNESS', 'SKILLS-MAP', 'RHO-0.5.10-TUTORIAL'],
 };
 
 // Withheld on purpose: the index is replaced by the site's own navigation, the

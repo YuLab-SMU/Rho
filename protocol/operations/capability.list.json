@@ -172,6 +172,23 @@
                         "type": "string",
                         "minLength": 1
                       },
+                      "kind": {
+                        "enum": [
+                          "operation-guide"
+                        ]
+                      },
+                      "scope": {
+                        "enum": [
+                          "application",
+                          "plugin"
+                        ]
+                      },
+                      "mutable": {
+                        "type": "boolean"
+                      },
+                      "delivery": {
+                        "const": "rho"
+                      },
                       "requires": {
                         "type": "array",
                         "items": {
@@ -247,7 +264,12 @@
                       "id",
                       "version",
                       "digest"
-                    ]
+                    ],
+                    "not": {
+                      "required": [
+                        "content"
+                      ]
+                    }
                   }
                 },
                 "operations": {
@@ -1092,6 +1114,23 @@
               "type": "string",
               "minLength": 1
             },
+            "kind": {
+              "enum": [
+                "operation-guide"
+              ]
+            },
+            "scope": {
+              "enum": [
+                "application",
+                "plugin"
+              ]
+            },
+            "mutable": {
+              "type": "boolean"
+            },
+            "delivery": {
+              "const": "rho"
+            },
             "requires": {
               "type": "array",
               "items": {
@@ -1165,16 +1204,18 @@
             "owner": {
               "type": "string",
               "minLength": 1
-            },
-            "content": {
-              "type": "string"
             }
           },
           "required": [
             "id",
             "version",
             "digest"
-          ]
+          ],
+          "not": {
+            "required": [
+              "content"
+            ]
+          }
         }
       },
       "agent": {

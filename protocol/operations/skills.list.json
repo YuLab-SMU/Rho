@@ -488,5 +488,5 @@
     ],
     "type": "object"
   },
-  "description": "The project's skills: how work is done here (the methods the person chose, the conventions they keep, the traps its work ran into), each a SKILL.md in .claude/skills that every Agent here reads, with what it is for and its newest change. Read before analysing."
+  "description": "List the mutable project Skills: how work is done here (the methods the person chose, the conventions they keep, the traps its work ran into), each a SKILL.md in .claude/skills, with what it is for and its newest change. Read before analysing."
 }

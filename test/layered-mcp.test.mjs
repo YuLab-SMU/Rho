@@ -38,6 +38,9 @@ test('default progressive MCP pages whole contracts, reuses knownRefs, keeps res
    if(page.value.complete)break;
  }
  assert.equal(page.value.complete,true);assert.ok(pages>1);assert.ok(objects.has(entry.contractRef));
+ const resolvedSkills=[...objects.values()].filter(o=>o.kind==='skill').map(o=>o.content);
+ assert.ok(resolvedSkills.some(s=>s.id==='rho.workspace'&&s.owner==='rho'&&s.scope==='application'),'the shared Rho guide keeps its application owner');
+ assert.ok(resolvedSkills.some(s=>s.id==='documents.workspace'&&s.owner==='documents'&&s.scope==='plugin'),'the selected plugin guide keeps its plugin owner');
  // The dynamic MCP call is validated against the resolved owner contract and then
  // enters the same service operation as a direct HTTP call: the accepted value must
  // conform to that operation's published response, and equal the direct reply.

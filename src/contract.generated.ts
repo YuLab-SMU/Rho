@@ -3531,6 +3531,10 @@ export interface CapabilityListOutput {
           runsCode?: boolean;
         };
         intent?: string;
+        kind?: 'operation-guide';
+        scope?: 'application' | 'plugin';
+        mutable?: boolean;
+        delivery?: 'rho';
         /**
          * @maxItems 64
          */
@@ -3794,6 +3798,10 @@ export interface CapabilityListOutput {
       runsCode?: boolean;
     };
     intent?: string;
+    kind?: 'operation-guide';
+    scope?: 'application' | 'plugin';
+    mutable?: boolean;
+    delivery?: 'rho';
     /**
      * @maxItems 64
      */
@@ -3815,7 +3823,6 @@ export interface CapabilityListOutput {
       description: string;
     };
     owner?: string;
-    content?: string;
   }[];
   agent?: {};
   host: {
@@ -10507,6 +10514,10 @@ export interface ObservationSnapshotOutput {
             runsCode?: boolean;
           };
           intent?: string;
+          kind?: 'operation-guide';
+          scope?: 'application' | 'plugin';
+          mutable?: boolean;
+          delivery?: 'rho';
           /**
            * @maxItems 64
            */
@@ -10770,6 +10781,10 @@ export interface ObservationSnapshotOutput {
         runsCode?: boolean;
       };
       intent?: string;
+      kind?: 'operation-guide';
+      scope?: 'application' | 'plugin';
+      mutable?: boolean;
+      delivery?: 'rho';
       /**
        * @maxItems 64
        */
@@ -10791,7 +10806,6 @@ export interface ObservationSnapshotOutput {
         description: string;
       };
       owner?: string;
-      content?: string;
     }[];
     agent?: {};
   };
@@ -13375,7 +13389,33 @@ export type SkillListOutput = {
   id: string;
   version: string;
   digest: string;
-  content: string;
+  owner: string;
+  kind: 'operation-guide';
+  scope: 'application' | 'plugin';
+  mutable: false;
+  delivery: 'rho';
+  presentation?: {
+    displayName?: string;
+    description?: string;
+    order?: number;
+    readOnly?: boolean;
+    runsCode?: boolean;
+  };
+  intent?: string;
+  requires?: string[];
+  example?: {
+    method: string;
+    input: {};
+  };
+  failureRecipes?: {
+    kind: string;
+    message: string;
+    next: string;
+  }[];
+  verify?: {
+    command: string;
+    description: string;
+  };
 }[];
 
 export interface SkillReadInput {
@@ -13388,7 +13428,34 @@ export interface SkillReadOutput {
   id: string;
   version: string;
   digest: string;
+  owner: string;
+  kind: 'operation-guide';
+  scope: 'application' | 'plugin';
+  mutable: false;
+  delivery: 'rho';
   content: string;
+  presentation?: {
+    displayName?: string;
+    description?: string;
+    order?: number;
+    readOnly?: boolean;
+    runsCode?: boolean;
+  };
+  intent?: string;
+  requires?: string[];
+  example?: {
+    method: string;
+    input: {};
+  };
+  failureRecipes?: {
+    kind: string;
+    message: string;
+    next: string;
+  }[];
+  verify?: {
+    command: string;
+    description: string;
+  };
 }
 
 export interface SkillsChangeInput {

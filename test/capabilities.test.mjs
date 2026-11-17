@@ -28,8 +28,15 @@ test('project configuration, operation authorization and shipped Skills are inde
     await assert.rejects(call('data.page', { resource: { id: 'x', version: '0'.repeat(64) }, offset: 0, limit: 1 }), e => e.error.kind === 'unavailable');
     const skills = await call('skill.list');
     assert.ok(skills.some(x => x.id === 'rho.workspace')); assert.ok(skills.some(x => x.id === 'documents.workspace'));
+    assert.ok(skills.every(x => !('content' in x) && x.kind === 'operation-guide' && x.mutable === false && x.delivery === 'rho'));
+    const { validateResponse } = await import('../dist/contract-runtime.js');
+    assert.equal(validateResponse('skill.list', [{ ...skills[0], content: 'must be fetched with skill.read' }]), false, 'the manifest contract rejects an inline Skill body');
+    assert.ok((await call('capability.list')).skills.every(x => !('content' in x)), 'routine catalogs carry Skill manifests only');
     const docSkill = skills.find(x => x.id === 'documents.workspace');
-    assert.equal((await call('skill.read', { skillId: docSkill.id, expectedDigest: docSkill.digest })).digest, docSkill.digest);
+    const read = await call('skill.read', { skillId: docSkill.id, expectedDigest: docSkill.digest });
+    assert.equal(read.digest, docSkill.digest);
+    assert.equal(read.kind, 'operation-guide');
+    assert.equal(typeof read.content, 'string');
     await assert.rejects(call('skill.read', { skillId: docSkill.id, expectedDigest: '0'.repeat(64) }), e => e.error.kind === 'stale');
     const file = path.join(root, 'limited.json');
     await s.agentConnection(a.id, 'limited', file, ['capability.list', 'document.read']);

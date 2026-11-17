@@ -541,6 +541,8 @@ export class RhoService {
     const state = await capabilities.state();
     // The shared project listing remains available alongside an Agent's native tools.
     const available = Object.keys(operations).filter(m => !extensionManagement.includes(m) && !m.startsWith('agent.activity.') && !m.startsWith('agent.sessions.') && !m.startsWith('session.') && !m.startsWith('conversation.') && (!m.startsWith('project.') || m === 'project.entries') && !m.startsWith('requirements.prepare') && !m.startsWith('workspace.restore') && !['task.routing.put', 'binding.activity.append', 'feedback.submit', 'view.observe', 'view.observations.read', 'task.map.respond', 'annotation.decide', 'evidence.export', 'evidence.preview', 'console.run', 'console.stop', 'kernel.start', 'kernel.stop'].includes(m) && !personTerminal.includes(m));
+    // Layered Agents receive immutable operation guides as skillRefs from capability.resolve;
+    // keep the direct package catalog methods out of that grant so discovery stays progressive.
     const profileMethods = profile === 'layered-presentation' ? ['binding.open', 'capability.index', 'capability.resolve', 'workspace.observe', 'workspace.enhance'] : available.filter(m => !['workspace.observe', 'workspace.enhance', ...(profile ? ['skill.list','skill.read','protocol.describe'] : [])].includes(m));
     const selected = methods ?? (profile === 'layered-presentation' ? profileMethods : (await Promise.all(profileMethods.map(async method => [method, await capabilities.isAvailable(method, state)] as const))).filter(([, enabled]) => enabled).map(([method]) => method));
     requireThat(profile !== 'layered-presentation' || selected.every(m => profileMethods.includes(m)), 'scope', 'The selected role cannot receive broader methods.');
