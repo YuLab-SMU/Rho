@@ -167,8 +167,8 @@
     "capability.list": {
       "summary": "Read registered actions and components. Does not start R or a Core Host.",
       "path": "operations/capability.list.json",
-      "bytes": 37001,
-      "sha256": "5b480abf56a11b5129ea61be1159cde386853ccd4473fb454a7f2857e1c765af"
+      "bytes": 35886,
+      "sha256": "a31c52e26ef96c4bcb730fcaf194043129f9f9f57dcecd0be3f54e2f83ebd051"
     },
     "capability.resolve": {
       "summary": "Fetch selected relevant Skills with complete owner contracts, whole objects only. Pages pin catalog/bundle/caller; knownRefs only reuse currently available immutable bodies.",
@@ -689,8 +689,8 @@
     "observation.snapshot": {
       "summary": "observation.snapshot",
       "path": "operations/observation.snapshot.json",
-      "bytes": 182211,
-      "sha256": "07c98c720d15405709887991347719e5e81230494ca1bf124401af562a725c0b"
+      "bytes": 180932,
+      "sha256": "0772088169eaa4421be046b0bc783ceb2e1996e7fe9d9109bd6667c25f7c4bca"
     },
     "project.create": {
       "summary": "project.create",
@@ -861,16 +861,16 @@
       "sha256": "acc5dba3651bdd6db317d7a3062fd0d7f3dff3e1514d6d51c00a017c3d050181"
     },
     "skill.list": {
-      "summary": "List immutable application and enabled provider operation-guide manifests shipped in the selected package. The list has no Skill bodies; use skill.read for one after choosing its digest. Skills guide discovery but do not grant authorization.",
+      "summary": "List the application and enabled provider Skills shipped in the selected package. Skills guide discovery but do not grant authorization.",
       "path": "operations/skill.list.json",
-      "bytes": 3864,
-      "sha256": "c7c5c608718369ad5583a9c60125a65aff344e1c107fd3891d300ede92ef6284"
+      "bytes": 1039,
+      "sha256": "57e0c7c6f673067be760711fe98eb473d7816ce3ee0c37eb7b405b3bbe80ed34"
     },
     "skill.read": {
-      "summary": "Read the body of one immutable shipped operation guide after checking its digest. A stale digest requires rereading instead of applying cached instructions.",
+      "summary": "Read one versioned shipped Skill after checking its digest. A stale digest requires rereading instead of applying cached instructions.",
       "path": "operations/skill.read.json",
-      "bytes": 3777,
-      "sha256": "711a298f1fb3f14861b5b0af019558d829d3e2ca9912f6d8caa07086a3cc1527"
+      "bytes": 1247,
+      "sha256": "bb85ee1e645ebbf5a77f1b00574c4f780fd902f5822763ffc9c79c36d2a29d4b"
     },
     "skills.change": {
       "summary": "Record in a project skill when the person corrects a method or says how they work, or a failure's cause and fix are found: a new skill, a new text with a one-sentence reason and evidence, or its removal. Record how to work, never results. Made on the version read; the same changeId never writes twice.",
@@ -879,10 +879,10 @@
       "sha256": "6282af78ccc119766f567ae1e19fd53b8a5d80f071696c662cbe375c3cf091ce"
     },
     "skills.list": {
-      "summary": "List the mutable project Skills: how work is done here (the methods the person chose, the conventions they keep, the traps its work ran into), each a SKILL.md in .claude/skills, with what it is for and its newest change. Read before analysing.",
+      "summary": "The project's skills: how work is done here (the methods the person chose, the conventions they keep, the traps its work ran into), each a SKILL.md in .claude/skills that every Agent here reads, with what it is for and its newest change. Read before analysing.",
       "path": "operations/skills.list.json",
-      "bytes": 14326,
-      "sha256": "4e1cd0ada8f8f17901f4016778c798a80084eff7ad08fe47d342dbe24fe76c35"
+      "bytes": 14343,
+      "sha256": "990f3dc97eeba55f58c22324b815dcf40ea0204d868dcaaa1a2fe1ba0f01899a"
     },
     "skills.read": {
       "summary": "One project skill's text and its changes, newest first: who made each, why, from what (cells, conversations, files) and the lines it added and removed, and what changed outside Rho since.",

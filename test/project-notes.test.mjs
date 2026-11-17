@@ -66,10 +66,3 @@ test('a session is asked to explain each value and file in its code, in the pers
   assert.match(words, /under 200 characters/);
   assert.match(words, /the language the person writes in/);
 });
-
-test('a notebook session is pointed at layered discovery for the analysis guide', () => {
-  const words = notesInstructions('c-42', { notebook: true });
-  assert.match(words, /rho_index.*kernel\.run.*rho_resolve/s);
-  assert.match(words, /rho\.analysis-run/);
-  assert.match(words, /does not expose the browser-only skill\.list\/skill\.read pair/);
-});

@@ -58,11 +58,9 @@ test('the service lists the Skill with the same text, digest and verify command 
     const skills = await operator.call('skill.list', { projectId: project.id });
     const served = skills.find(skill => skill.id === 'rho.screen-check');
     assert.ok(served, 'rho.screen-check is listed for the project');
-    assert.equal('content' in served, false, 'skill.list returns a manifest, not the body');
-    const read = await operator.call('skill.read', { projectId: project.id, skillId: served.id, expectedDigest: served.digest });
-    assert.equal(read.content, screenCheckSkill.content);
+    assert.equal(served.content, screenCheckSkill.content);
     assert.equal(served.digest, screenCheckSkill.digest);
-    assert.equal(read.verify.command, screenCheckSkill.verify.command);
+    assert.equal(served.verify.command, screenCheckSkill.verify.command);
   } finally {
     await service.close();
     await fs.rm(dir, { recursive: true, force: true });

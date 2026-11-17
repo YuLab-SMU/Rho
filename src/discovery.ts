@@ -36,14 +36,7 @@ export class Discovery {
       if (role === 'presentation') skills = this.plugins.descriptor('agent')?.skills.filter(s => s.id === 'agent.presentation') ?? [];
       else if (owner === 'agent') skills = skills.filter(s => s.id === (operation.method.startsWith('feedback.') ? 'agent.feedback' : 'agent.workspace'));
       if (role !== 'presentation' && !skills.some(s => s.id === rhoWorkspaceSkill.id)) skills = [rhoWorkspaceSkill, ...skills];
-      const skillRefs = skills.slice(0, 8).map(s => {
-        const skillOwner = s.id === rhoWorkspaceSkill.id ? 'rho' : owner;
-        return make('skill', {
-          id: s.id, version: s.version, digest: s.digest, content: s.content,
-          owner: skillOwner, kind: 'operation-guide', scope: skillOwner === 'rho' ? 'application' : 'plugin', mutable: false, delivery: 'rho',
-          requires: s.requires, example: s.example, failureRecipes: s.failureRecipes,
-        });
-      });
+      const skillRefs = skills.slice(0, 8).map(s => make('skill', { id: s.id, version: s.version, digest: s.digest, content: s.content, requires: s.requires, example: s.example, failureRecipes: s.failureRecipes }));
       const inputSchema = structuredClone(protocol.operations[operation.method]);
       delete inputSchema.properties.projectId; inputSchema.required = inputSchema.required.filter((k: string) => k !== 'projectId');
       if (operation.method === 'resource.read') inputSchema.properties.maxBytes = { ...inputSchema.properties.maxBytes, maximum: this.plugins.config.resources?.maxReadBytes ?? this.plugins.need('files').fileLimits.maxReadBytes };

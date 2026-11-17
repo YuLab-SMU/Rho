@@ -176,14 +176,11 @@ export const pluginPresentationSchema = { ...entryPresentationSchema, properties
   dependencies: { type: 'array', maxItems: 16, items: obj({ pluginId: text, purpose: text }, ['pluginId', 'purpose']) }, uses: text } };
 const skillListingSchema = { ...obj({
   id: text, version: text, digest, presentation: entryPresentationSchema, intent: text,
-  // A catalog entry is a manifest. These fields make the source and mutability
-  // explicit without treating every SKILL.md-shaped payload as the same thing.
-  kind: { enum: ['operation-guide'] }, scope: { enum: ['application', 'plugin'] }, mutable: { type: 'boolean' }, delivery: { const: 'rho' },
   requires: { type: 'array', items: text, maxItems: 64 },
   example: obj({ method: text, input: { type: 'object' } }),
   failureRecipes: { type: 'array', maxItems: 32, items: obj({ kind: text, message: text, next: text }) },
   verify: obj({ command: text, description: text })
-}, ['id', 'version', 'digest']), additionalProperties: true, not: { required: ['content'] } };
+}, ['id', 'version', 'digest']), additionalProperties: true };
 export const capabilityCatalogSchema = { ...obj({
   version: text,
   configuration: obj({ version: integer, enabled: { type: 'array', items: text, maxItems: 32 }, retainedReceipts: integer, retainedFromVersion: positive, maxReceipts: integer }, ['version', 'enabled']),
@@ -214,7 +211,7 @@ export const capabilityCatalogSchema = { ...obj({
   unavailableActions: { type: 'array', maxItems: 64, items: { ...obj({ id: text, version: text, owner: text, pluginId: text, requires: { type: 'array', items: text }, inputSchema: { type: 'object' }, presentation: entryPresentationSchema, state: { const: 'unavailable' }, missing: { type: 'array', items: text } }, ['id', 'version', 'missing']), additionalProperties: true } },
   components: { type: 'array', maxItems: 64, items: { ...obj({ id: text, version: text, owner: text, pluginId: text, ui: text, uiPackage: text, uiPackageVersion: text, bindings: { type: 'object', additionalProperties: text }, propsSchema: { type: 'object' }, presentation: entryPresentationSchema }, ['id', 'version', 'ui', 'bindings']), additionalProperties: true } },
   capabilities: { type: 'array', items: text },
-  skills: { type: 'array', maxItems: 64, items: { ...skillListingSchema, properties: { ...skillListingSchema.properties, owner: text } } },
+  skills: { type: 'array', maxItems: 64, items: { ...skillListingSchema, properties: { ...skillListingSchema.properties, owner: text, content: { type: 'string' } } } },
   // The Agent owner contributes its own context description only when it is loaded.
   agent: { type: 'object' }
 }, ['version', 'configuration', 'plugins', 'operations', 'actions', 'components']), additionalProperties: true };

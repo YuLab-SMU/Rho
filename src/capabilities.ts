@@ -23,34 +23,6 @@ export interface CapabilityState {
   receipts: CapabilityReceipt[];
 }
 
-// These are operation guides shipped by Rho or a selected plugin. They are not
-// project SKILL.md files: they are immutable package content used to explain
-// the operations an Agent may discover through Rho.
-type ShippedSkill = SkillDeclaration & {
-  owner: string;
-  kind: 'operation-guide';
-  scope: 'application' | 'plugin';
-  mutable: false;
-  delivery: 'rho';
-};
-type ShippedSkillManifest = Omit<ShippedSkill, 'content'>;
-
-function shippedSkill(skill: SkillDeclaration, owner: string): ShippedSkill {
-  return {
-    ...skill,
-    owner,
-    kind: 'operation-guide',
-    scope: owner === 'rho' ? 'application' : 'plugin',
-    mutable: false,
-    delivery: 'rho',
-  };
-}
-
-function skillManifest(skill: ShippedSkill): ShippedSkillManifest {
-  const { content: _content, ...manifest } = skill;
-  return manifest;
-}
-
 // The umbrella Skill: what this application is, the order to work in, and the rules
 // that used to be discovered by failing. It names where the detail lives instead of
 // repeating every owner's contract.
@@ -368,32 +340,25 @@ export class Capabilities {
       configuration: { version: state.version, enabled: state.enabled, retainedReceipts: state.receipts.length, retainedFromVersion: state.receipts[0]?.version ?? state.version + 1, maxReceipts: this.limits.maxReceipts },
       plugins,
       operations,
-      // Catalogs and snapshots carry manifests only. Skill bodies are fetched
-      // explicitly with skill.read, so routine observation stays bounded and
-      // does not repeatedly inject every package guide into the response.
       skills: await this.skills(principal),
       ...(actionStatus?.state === 'unavailable' ? { actions: [] } : {}),
     };
   }
 
-  private async declaredSkills(principal: Principal): Promise<ShippedSkill[]> {
+  async skills(principal: Principal) {
     const state = await this.state();
-    const result: ShippedSkill[] = [rhoWorkspaceSkill, personFilesSkill, taskMapSkill, analysisRunSkill, screenCheckSkill].map(skill => shippedSkill(skill, 'rho'));
+    const result: Array<SkillDeclaration & { owner: string }> = [rhoWorkspaceSkill, personFilesSkill, taskMapSkill, analysisRunSkill, screenCheckSkill].map(skill => ({ ...skill, owner: 'rho' }));
     for (const descriptor of this.plugins.descriptors()) {
       const status = this.pluginStatus(descriptor.id as PluginId, state);
       for (const skill of descriptor.skills ?? []) {
-        if (status.packagePresent && status.projectEnabled && status.dependenciesSatisfied && descriptor.operations.some(operation => this.authorized(principal, operation.method))) result.push(shippedSkill(skill, descriptor.id));
+        if (status.packagePresent && status.projectEnabled && status.dependenciesSatisfied && descriptor.operations.some(operation => this.authorized(principal, operation.method))) result.push({ ...skill, owner: descriptor.id });
       }
     }
     return result;
   }
 
-  async skills(principal: Principal): Promise<ShippedSkillManifest[]> {
-    return (await this.declaredSkills(principal)).map(skillManifest);
-  }
-
   async readSkill(principal: Principal, skillId: string, expectedDigest?: string) {
-    const skill = (await this.declaredSkills(principal)).find(candidate => candidate.id === skillId);
+    const skill = (await this.skills(principal)).find(candidate => candidate.id === skillId);
     requireThat(skill, 'not_found', 'Skill is not available in this project and session.');
     requireThat(!expectedDigest || expectedDigest === skill.digest, 'stale', 'Skill content digest changed.', { actualDigest: skill.digest });
     return skill;
