@@ -1,0 +1,29 @@
+paper_id,title,year,venue,problem,actor,task,environment,intervention,comparator,evaluator,unit,metrics,results,ablations,limitations,rho_relevance,evidence_level,locators,review_status
+01-CALM-2010.02903,Keep CALM and Explore,,,,,,,,,,,,,,,to_assess_after_deep_read,metadata_only,papers/00-INDEX.md,pending_deep_read
+02-WebShop-2207.01206,WebShop,,,,,,,,,,,,,,,to_assess_after_deep_read,metadata_only,papers/00-INDEX.md,pending_deep_read
+03-InterCode-2306.14898,InterCode,,,,,,,,,,,,,,,to_assess_after_deep_read,metadata_only,papers/00-INDEX.md,pending_deep_read
+04-SWEbench-2310.06770,SWE-bench,,,,,,,,,,,,,,,to_assess_after_deep_read,metadata_only,papers/00-INDEX.md,pending_deep_read
+05-USACO-2404.10952,Olympiad Programming (USACO),,,,,,,,,,,,,,,to_assess_after_deep_read,metadata_only,papers/00-INDEX.md,pending_deep_read
+06-DevBench-2403.08604,Prompting LLMs to Tackle the Full SDLC (DevBench),,,,,,,,,,,,,,,to_assess_after_deep_read,metadata_only,papers/00-INDEX.md,pending_deep_read
+07-ReAct-2210.03629,ReAct,,,,,,,,,,,,,,,to_assess_after_deep_read,metadata_only,papers/00-INDEX.md,pending_deep_read
+08-Reflexion-2303.11366,Reflexion,,,,,,,,,,,,,,,to_assess_after_deep_read,metadata_only,papers/00-INDEX.md,pending_deep_read
+09-FireAct-2310.05915,FireAct,,,,,,,,,,,,,,,to_assess_after_deep_read,metadata_only,papers/00-INDEX.md,pending_deep_read
+10-TreeOfThoughts-2305.10601,Tree of Thoughts,,,,,,,,,,,,,,,to_assess_after_deep_read,metadata_only,papers/00-INDEX.md,pending_deep_read
+11-CoALA-2309.02427,CoALA,,,,,,,,,,,,,,,to_assess_after_deep_read,metadata_only,papers/00-INDEX.md,pending_deep_read
+12-Jericho-1909.05398,Jericho（Interactive Fiction Games）,,,,,,,,,,,,,,,to_assess_after_deep_read,metadata_only,papers/00-INDEX.md,pending_deep_read
+13-ALFWorld-2010.03768,ALFWorld,,,,,,,,,,,,,,,to_assess_after_deep_read,metadata_only,papers/00-INDEX.md,pending_deep_read
+14-TextWorld-1806.11532,TextWorld,,,,,,,,,,,,,,,to_assess_after_deep_read,metadata_only,papers/00-INDEX.md,pending_deep_read
+15-MiniWoBpp-1802.08802,Workflow-Guided Exploration (MiniWoB++),,,,,,,,,,,,,,,to_assess_after_deep_read,metadata_only,papers/00-INDEX.md,pending_deep_read
+16-BabyAI-1810.08272,BabyAI,,,,,,,,,,,,,,,to_assess_after_deep_read,metadata_only,papers/00-INDEX.md,pending_deep_read
+17-WebGPT-2112.09332,WebGPT,,,,,,,,,,,,,,,to_assess_after_deep_read,metadata_only,papers/00-INDEX.md,pending_deep_read
+18-HumanEval-2107.03374,HumanEval,,,,,,,,,,,,,,,to_assess_after_deep_read,metadata_only,papers/00-INDEX.md,pending_deep_read
+19-GPT3-2005.14165,GPT-3 (few-shot),,,,,,,,,,,,,,,to_assess_after_deep_read,metadata_only,papers/00-INDEX.md,pending_deep_read
+20-ChainOfThought-2201.11903,Chain-of-Thought,,,,,,,,,,,,,,,to_assess_after_deep_read,metadata_only,papers/00-INDEX.md,pending_deep_read
+21-ChemCrow-2304.05376,ChemCrow,,,,,,,,,,,,,,,to_assess_after_deep_read,metadata_only,papers/00-INDEX.md,pending_deep_read
+22-WebAgent-2307.12856,WebAgent (Gur et al.),,,,,,,,,,,,,,,to_assess_after_deep_read,metadata_only,papers/00-INDEX.md,pending_deep_read
+23-SeeAct-2401.01614,SeeAct / GPT-4V as web agent,,,,,,,,,,,,,,,to_assess_after_deep_read,metadata_only,papers/00-INDEX.md,pending_deep_read
+24-Pix2Act-2306.00245,From Pixels to UI Actions (Pix2Act),,,,,,,,,,,,,,,to_assess_after_deep_read,metadata_only,papers/00-INDEX.md,pending_deep_read
+25-WebArena-2307.13854,WebArena,,,,,,,,,,,,,,,to_assess_after_deep_read,metadata_only,papers/00-INDEX.md,pending_deep_read
+26-RecMind-2308.14296,RecMind,,,,,,,,,,,,,,,to_assess_after_deep_read,metadata_only,papers/00-INDEX.md,pending_deep_read
+27-TreeOfAttacks-2312.02119,Tree of Attacks,,,,,,,,,,,,,,,to_assess_after_deep_read,metadata_only,papers/00-INDEX.md,pending_deep_read
+28-WorldOfBits-MiniWoB-PMLR,World of Bits / MiniWoB,,,,,,,,,,,,,,,to_assess_after_deep_read,metadata_only,papers/00-INDEX.md,pending_deep_read

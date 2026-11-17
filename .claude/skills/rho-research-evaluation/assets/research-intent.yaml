@@ -1,0 +1,22 @@
+research_question: >-
+  How should Rho's shared human-Agent work-state framework be positioned as a
+  research contribution, and which experiments can distinguish system continuity,
+  researcher understanding and scientific work quality?
+audience: research-workbench-hci
+rho_root: /Users/xiayh/Projects/Rho
+corpus_root: /Users/xiayh/Projects/yaoshunyu-phd
+reading_depth: full
+source_policy: local-first-targeted-web
+output_dir: research/rho-evaluation
+evidence_layers:
+  - system_behavior
+  - researcher_use
+  - scientific_work_quality
+comparison_stages:
+  - internal_capability
+  - native_workflow
+claims: []
+open_questions: []
+created_at: 2026-11-16
+updated_at: 2026-11-16
+run_id: initial-corpus-review

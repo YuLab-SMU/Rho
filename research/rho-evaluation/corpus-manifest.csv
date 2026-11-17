@@ -1,0 +1,67 @@
+source_id,kind,title,relative_path,sha256,bytes,pages,role,status,index_locator
+01-CALM-2010.02903.pdf,paper_pdf,Keep CALM and Explore,papers/01-CALM-2010.02903.pdf,1cd15da3cb43c50455adfe942f6181fbc048b7ea9f25e71fa934b24b2abdc5a3,1666561,19,primary_paper,available,papers/00-INDEX.md
+02-WebShop-2207.01206.pdf,paper_pdf,WebShop,papers/02-WebShop-2207.01206.pdf,131e93080bc8d9ff801ff40bf69b7d12bfd9db018c223fdf03e622928f7ec032,8878628,28,primary_paper,available,papers/00-INDEX.md
+03-InterCode-2306.14898.pdf,paper_pdf,InterCode,papers/03-InterCode-2306.14898.pdf,0555a3f6b3598cf5e38925e7201544cc1b151f54efa17bc800f9a5f834e9ab2c,8311918,29,primary_paper,available,papers/00-INDEX.md
+04-SWEbench-2310.06770.pdf,paper_pdf,SWE-bench,papers/04-SWEbench-2310.06770.pdf,f7e8e1df64129742b8199a21a042734519a823a1dafd6f48f8f3ddcfb48ee296,4533722,52,primary_paper,available,papers/00-INDEX.md
+05-USACO-2404.10952.pdf,paper_pdf,Olympiad Programming (USACO),papers/05-USACO-2404.10952.pdf,c51ec0328f880203faf1753c34b8531481783ce3a22f14014316d5daf4855ba7,5028418,21,primary_paper,available,papers/00-INDEX.md
+06-DevBench-2403.08604.pdf,paper_pdf,Prompting LLMs to Tackle the Full SDLC (DevBench),papers/06-DevBench-2403.08604.pdf,e486fa73a8b0e027f66d8576ce3d798d61d9906d63f97bba4d48dcf54f3e3b10,1980976,21,primary_paper,available,papers/00-INDEX.md
+07-ReAct-2210.03629.pdf,paper_pdf,ReAct,papers/07-ReAct-2210.03629.pdf,f285b0971ae4a790e402fb93966bed3adde2cf0a04977d08b2b40d6ab0cace69,633805,33,primary_paper,available,papers/00-INDEX.md
+08-Reflexion-2303.11366.pdf,paper_pdf,Reflexion,papers/08-Reflexion-2303.11366.pdf,6059b6f89fea9959bd3dab553fbb97756a3dfb1b15e3cbab2fbf3ab6664333bd,591097,19,primary_paper,available,papers/00-INDEX.md
+09-FireAct-2310.05915.pdf,paper_pdf,FireAct,papers/09-FireAct-2310.05915.pdf,f25210a50e197285f404c5a17e437fa93c21f3ab6a9db8687985b6d8613a773f,785239,28,primary_paper,available,papers/00-INDEX.md
+10-TreeOfThoughts-2305.10601.pdf,paper_pdf,Tree of Thoughts,papers/10-TreeOfThoughts-2305.10601.pdf,79c5237e3f63953a73f2b0d6894327702ee1f7e981450c251bb1b5cb4f8d7b8f,799685,14,primary_paper,available,papers/00-INDEX.md
+11-CoALA-2309.02427.pdf,paper_pdf,CoALA,papers/11-CoALA-2309.02427.pdf,fd93d2ef1b94f963b652136b8c792b01d7326d861f5ce918926c043934a48dbe,2785564,32,primary_paper,available,papers/00-INDEX.md
+12-Jericho-1909.05398.pdf,paper_pdf,Jericho（Interactive Fiction Games）,papers/12-Jericho-1909.05398.pdf,4d3ccdb4d8673ac5cf09f5e5ce2769893345c45f7355207be4b7b145e6ce7a6a,3424133,20,primary_paper,available,papers/00-INDEX.md
+13-ALFWorld-2010.03768.pdf,paper_pdf,ALFWorld,papers/13-ALFWorld-2010.03768.pdf,4be2e61e875ca34f19befa92e8a117347fc380a2076d6e829e22e2a4c03dc9e1,1783014,21,primary_paper,available,papers/00-INDEX.md
+14-TextWorld-1806.11532.pdf,paper_pdf,TextWorld,papers/14-TextWorld-1806.11532.pdf,2dd45425bcbe08b7695d79fd32d3c7ed8dc3020a956316b4f1c278288a8c1e1d,1334371,29,primary_paper,available,papers/00-INDEX.md
+15-MiniWoBpp-1802.08802.pdf,paper_pdf,Workflow-Guided Exploration (MiniWoB++),papers/15-MiniWoBpp-1802.08802.pdf,7a7ce9d5f8f31c7f7c01a35271c5bdfdf2697dfe17e72ff090a9465d55f7f60d,661364,15,primary_paper,available,papers/00-INDEX.md
+16-BabyAI-1810.08272.pdf,paper_pdf,BabyAI,papers/16-BabyAI-1810.08272.pdf,0ea72cbb8f2ef39d1a8138074d941967810bed8c32ac8c583d734e7984a7c973,428756,19,primary_paper,available,papers/00-INDEX.md
+17-WebGPT-2112.09332.pdf,paper_pdf,WebGPT,papers/17-WebGPT-2112.09332.pdf,acad8d9fd55a30b94de9dfdae413e10b21e07bde54d767b2405b31341739cedb,1486858,32,primary_paper,available,papers/00-INDEX.md
+18-HumanEval-2107.03374.pdf,paper_pdf,HumanEval,papers/18-HumanEval-2107.03374.pdf,ebae72ea0e8a5eb2ecbccdb985aec6cc1254a7c4d29e6d4de7866db1e66c4855,1885177,35,primary_paper,available,papers/00-INDEX.md
+19-GPT3-2005.14165.pdf,paper_pdf,GPT-3 (few-shot),papers/19-GPT3-2005.14165.pdf,97fd272f1fdfc18677462d0292f5fbf26ca86b4d1b485c2dba03269b643a0e83,6768044,75,primary_paper,available,papers/00-INDEX.md
+20-ChainOfThought-2201.11903.pdf,paper_pdf,Chain-of-Thought,papers/20-ChainOfThought-2201.11903.pdf,7d9f878c23b460e4566aa4ec9201b1abfb3b8faefb2b1356e411cb90fef72a12,891773,43,primary_paper,available,papers/00-INDEX.md
+21-ChemCrow-2304.05376.pdf,paper_pdf,ChemCrow,papers/21-ChemCrow-2304.05376.pdf,28be4990cf5fc5fa50b379684a9d4c31c3a0ad36aeab1759d324ee428b29de16,16226282,38,primary_paper,available,papers/00-INDEX.md
+22-WebAgent-2307.12856.pdf,paper_pdf,WebAgent (Gur et al.),papers/22-WebAgent-2307.12856.pdf,23b1129aa8b95ee0555d27fb5a5711717c482451b31dd1c4df64ad8cc2267d1a,2014240,28,primary_paper,available,papers/00-INDEX.md
+23-SeeAct-2401.01614.pdf,paper_pdf,SeeAct / GPT-4V as web agent,papers/23-SeeAct-2401.01614.pdf,ac281a3c5cdbda428e14605e9d96035fd35af82073ce46117c27c34792eea041,9044518,36,primary_paper,available,papers/00-INDEX.md
+24-Pix2Act-2306.00245.pdf,paper_pdf,From Pixels to UI Actions (Pix2Act),papers/24-Pix2Act-2306.00245.pdf,683000fe5523fbf4ad4a638511b2d16beae7555227cd7ff3a8a0eceef63f0707,1037808,17,primary_paper,available,papers/00-INDEX.md
+25-WebArena-2307.13854.pdf,paper_pdf,WebArena,papers/25-WebArena-2307.13854.pdf,f9731b92bc3d29a2ea7b5f9cb46b48540c76bc3f84a57e0c48fc37ea73107f95,9128123,22,primary_paper,available,papers/00-INDEX.md
+26-RecMind-2308.14296.pdf,paper_pdf,RecMind,papers/26-RecMind-2308.14296.pdf,40c723db9a5ebcd83b88df42dc187568458bc76eeb72eaf78ef0e6b072dc4bee,740552,14,primary_paper,available,papers/00-INDEX.md
+27-TreeOfAttacks-2312.02119.pdf,paper_pdf,Tree of Attacks,papers/27-TreeOfAttacks-2312.02119.pdf,b0ffafed56bef4937150dcf63ac5379cdc6aeedeac4a83b1af56512d92f9a496,954746,42,primary_paper,available,papers/00-INDEX.md
+28-WorldOfBits-MiniWoB-PMLR.pdf,paper_pdf,World of Bits / MiniWoB,papers/28-WorldOfBits-MiniWoB-PMLR.pdf,087008efb9d056df5fd9fbc724413d6a3f20cb14c7f1597d00bacac53d8342d6,3383879,10,primary_paper,available,papers/00-INDEX.md
+fpo.pdf,support_pdf,答辩 slides,fpo.pdf,dd057f3a261912bd4b9005a75d6c3e0c3e86143b58520b7ec339b59ccd7640fc,24058287,57,author_slides,available,notes/README.md
+Dissertation-finalized.pdf,support_pdf,学位论文,Dissertation-finalized.pdf,ffafb472e6980651d20ecea9e57c19756acea0aa95771e86326243206aeeab7f,14959768,185,author_dissertation,available,notes/README.md
+notes/00-meta/01-维护规范.md,note_markdown,维护规范,notes/00-meta/01-维护规范.md,75ba0f693b4e4bcb35db94720a79d590d23e42f68376c2685629e39a935e998a,4326,,author_notes,available,notes/INDEX.md
+notes/00-meta/02-材料与可信度.md,note_markdown,材料与可信度,notes/00-meta/02-材料与可信度.md,9ca64cfdc7b8ab02fc9af02944614800f3cdf70f13b90aefba9c9c1b6e85c8bc,3170,,author_notes,available,notes/INDEX.md
+notes/00-meta/03-听写勘误表.md,note_markdown,听写勘误表,notes/00-meta/03-听写勘误表.md,5544bdf71a7c433571a9f91f73bac960be824e6b661830c5032cf37633b95c98,4702,,author_notes,available,notes/INDEX.md
+notes/00-meta/04-待办与缺口.md,note_markdown,待办与缺口,notes/00-meta/04-待办与缺口.md,0b42e63d6593994934ed1aad859eff7dab587398cf039b60796865b7927d1f25,2355,,author_notes,available,notes/INDEX.md
+notes/01-overview/01-一页纸摘要.md,note_markdown,一页纸摘要,notes/01-overview/01-一页纸摘要.md,2ced33ac7179c47deee4d05049708adff198528a270bf00a6670fb2e9ad1f6b1,3909,,author_notes,available,notes/INDEX.md
+notes/01-overview/02-论证主线.md,note_markdown,论证主线,notes/01-overview/02-论证主线.md,716b1247f106ff09710b32007255ab395784e2475704f59d5648a706efd2c7b6,7169,,author_notes,available,notes/INDEX.md
+notes/02-talk/01-开场与两个挑战.md,note_markdown,开场与两个挑战,notes/02-talk/01-开场与两个挑战.md,7918de69a41f8b0a959d2c8d77f0c8b6f679ca47b6211495d00c6af9e457052b,5586,,author_notes,available,notes/INDEX.md
+notes/02-talk/02-数字自动化与WebShop.md,note_markdown,数字自动化与 WebShop,notes/02-talk/02-数字自动化与WebShop.md,442497d680d7c658ec100cc9720342dc178859062ec8d5a9c869a1685c92ce2b,6317,,author_notes,available,notes/INDEX.md
+notes/02-talk/03-代码任务与SWE-bench.md,note_markdown,代码任务与 SWE-bench,notes/02-talk/03-代码任务与SWE-bench.md,7c1d1e624ee40af595b24d00d0550d65299b9a60ce7ad09e87b94a41b412706e,6885,,author_notes,available,notes/INDEX.md
+notes/02-talk/04-ReAct.md,note_markdown,ReAct：把推理变成一种动作,notes/02-talk/04-ReAct.md,5e188b5481b9e0a4eef64584a99d7a01b7eaa5a511a4500358e4b461b90f1317,8437,,author_notes,available,notes/INDEX.md
+notes/02-talk/05-Tree-of-Thoughts.md,note_markdown,Tree of Thoughts：next-token 够不够？,notes/02-talk/05-Tree-of-Thoughts.md,cb3a54f8077937f23521c6c5dff9d24b2fb7ed2deacf019627c1d14953cd4c8d,7362,,author_notes,available,notes/INDEX.md
+notes/02-talk/06-CoALA.md,note_markdown,CoALA：给语言智能体一套坐标系,notes/02-talk/06-CoALA.md,bfce7ef96e4d59eddd21bee8c66a1e0366ed630a8a029eea87d4a3dd8fbdbaef,6468,,author_notes,available,notes/INDEX.md
+notes/02-talk/07-未来工作与致谢.md,note_markdown,未来工作与致谢,notes/02-talk/07-未来工作与致谢.md,4566d3ae5be43ae67f7b9c653a42cd54b531e09855b61f2dc3ba0578685c3f1c,4723,,author_notes,available,notes/INDEX.md
+notes/03-papers/00-索引.md,note_markdown,论文精读 · 索引,notes/03-papers/00-索引.md,abeafc6f0147dd44926c072e6f3379aa8876e3d5645ca149f36966b49fd40def,2591,,author_notes,available,notes/INDEX.md
+notes/03-papers/01-CALM.md,note_markdown,CALM — 文本游戏里的语言模型先验,notes/03-papers/01-CALM.md,c5322964c5beab0a074a02af7f33259226ae0d8d2e8fa78d5bfd9b00575d508b,3996,,author_notes,available,notes/INDEX.md
+notes/03-papers/02-WebShop.md,note_markdown,WebShop — 真实网页 + 自动奖励,notes/03-papers/02-WebShop.md,195ebf59f19120a57f89c20137bc0298f291c582c549d46893b51c9def61f903,5670,,author_notes,available,notes/INDEX.md
+notes/03-papers/03-InterCode-与代码基准.md,note_markdown,代码基准三连 — InterCode / SWE-bench / USACO / DevBench,notes/03-papers/03-InterCode-与代码基准.md,74629ef932689dac88d06c61cacb08cc89104b0afd81de5c19f5125f69b78f95,6216,,author_notes,available,notes/INDEX.md
+notes/03-papers/04-ReAct.md,note_markdown,ReAct — 推理即内部动作,notes/03-papers/04-ReAct.md,9987d524d923d5fe07f88481358a625e0a22fd14e75f29a97277f4b02cc7819f,5137,,author_notes,available,notes/INDEX.md
+notes/03-papers/05-Reflexion与FireAct.md,note_markdown,Reflexion 与 FireAct — 智能体的两种学习,notes/03-papers/05-Reflexion与FireAct.md,a488a40336bf1b09c5a937cd7e88ed3002ac21ee6aabc07a91045a9f59f2143d,4846,,author_notes,available,notes/INDEX.md
+notes/03-papers/06-Tree-of-Thoughts.md,note_markdown,Tree of Thoughts — 让搜索重新可行,notes/03-papers/06-Tree-of-Thoughts.md,c90e3f9539cbdcc70ff3e6a0822494c9e9e786cafb107a4680a85b25701226a2,5586,,author_notes,available,notes/INDEX.md
+notes/03-papers/07-CoALA.md,note_markdown,CoALA — 记忆、动作空间与决策,notes/03-papers/07-CoALA.md,75c282d10e1f9ee73d3ff4a0e59df1a979ac9c356d87351c2277851e60d2e9a4,6873,,author_notes,available,notes/INDEX.md
+notes/04-qa/00-索引.md,note_markdown,问答实录 · 索引,notes/04-qa/00-索引.md,2d6d1ea95c8b1477ca27b8dc3049959a30058f78cd88b82aa0977d90522e7d43,4307,,author_notes,available,notes/INDEX.md
+notes/04-qa/01-思考空间与自我修正.md,note_markdown,思考空间与自我修正,notes/04-qa/01-思考空间与自我修正.md,9c795971d380aa7de9bd24d611a0dd3c79884104a026d60a6dd22ca230aba94a,4613,,author_notes,available,notes/INDEX.md
+notes/04-qa/02-框架瓶颈与架构演进.md,note_markdown,框架瓶颈与架构演进,notes/04-qa/02-框架瓶颈与架构演进.md,ad6e92a1946523e10348d130d77ccbb6a4e3b11451d355b956680b44e89dee2e,5126,,author_notes,available,notes/INDEX.md
+notes/04-qa/03-训练-持续学习-多智能体.md,note_markdown,训练、持续学习与多智能体,notes/04-qa/03-训练-持续学习-多智能体.md,3cd69a48b3a58108d82ac23c2c054d4a99efb0e8cd1bccf4a54728ee872f3fcc,4426,,author_notes,available,notes/INDEX.md
+notes/04-qa/04-安全-多模态-语言的地位.md,note_markdown,安全、多模态与语言的地位,notes/04-qa/04-安全-多模态-语言的地位.md,26c9af43b51f63fdd701b9fed3ace642213b0df4f68a651e3c66c7fd1b6568b1,6317,,author_notes,available,notes/INDEX.md
+notes/05-topics/01-基准设计的三个判据.md,note_markdown,基准设计的三个判据,notes/05-topics/01-基准设计的三个判据.md,453a0154df10905bc538a4788a4bef42afaf2bae2ce8a0ea02372564f7c1b886,5083,,author_notes,available,notes/INDEX.md
+notes/05-topics/02-思考空间的设计谱系.md,note_markdown,思考空间的设计谱系,notes/05-topics/02-思考空间的设计谱系.md,32ab47bd43d8ee8a33b158da670534241934298b5343aae7cce03dd13fb85256,5675,,author_notes,available,notes/INDEX.md
+notes/05-topics/03-CoALA三要素.md,note_markdown,CoALA 三要素与实践启示,notes/05-topics/03-CoALA三要素.md,2e10a754ecd8d2621685ede949037f7d70c6a355d7cbbe6bc186e7c0ea0e434c,4716,,author_notes,available,notes/INDEX.md
+notes/06-appendix/01-slide逐页对照.md,note_markdown,slide 逐页对照表,notes/06-appendix/01-slide逐页对照.md,fac518ca8c0441435d6514c97a53aec4d567ead4d2a9dce4eee9ed850c81dd68,7137,,author_notes,available,notes/INDEX.md
+notes/06-appendix/02-研究时间线.md,note_markdown,研究时间线,notes/06-appendix/02-研究时间线.md,f9b48ed19df663af999d5b132fe9274e1af828a6ea28dc61ab7df344643bcd66,3617,,author_notes,available,notes/INDEX.md
+notes/06-appendix/03-术语表.md,note_markdown,术语表,notes/06-appendix/03-术语表.md,750b305a30c4be9cf1d65f459fe55cc94a1325fc4ee672ec7bef9dd263c7ad72,5118,,author_notes,available,notes/INDEX.md
+notes/06-appendix/04-数字速查.md,note_markdown,数字速查,notes/06-appendix/04-数字速查.md,c668e3064edc18c488e4c7c95e5cff903ce56f625fb4818092d2f3f34c408213,4079,,author_notes,available,notes/INDEX.md
+notes/INDEX.md,note_markdown,全站索引,notes/INDEX.md,38b6160d6001def921c64ab4f6f9089dec15bdce169b5dfffa400b49272a7545,5971,,author_notes,available,notes/INDEX.md
+notes/README.md,note_markdown,答辩笔记总入口,notes/README.md,7b579d4e3d433eb0d26c7b06d0f249eef5318b9915b7e3adb0f2ddcca1da69c5,5797,,author_notes,available,notes/INDEX.md
+papers/00-INDEX.md,index,论文 PDF 索引,papers/00-INDEX.md,291bf1cbe5f2318eb3cb9fd62d4dc319885eb3448a04dbbc5d731ee924d35cff,3941,,author_notes,available,papers/00-INDEX.md
