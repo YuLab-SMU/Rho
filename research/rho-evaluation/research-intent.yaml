@@ -15,8 +15,21 @@ evidence_layers:
 comparison_stages:
   - internal_capability
   - native_workflow
-claims: []
-open_questions: []
+literature_review: full_28_paper_corpus
+paper_review_status: reviewed_with_limitations
+claims:
+  - rho-candidate-001
+  - rho-candidate-002
+  - rho-candidate-003
+  - rho-candidate-004
+  - lit-pattern-001
+  - lit-pattern-002
+  - lit-pattern-003
+open_questions:
+  - Which HCI, CSCW, research-software and provenance systems should be added before making a novelty claim?
+  - Which shared-work-state capability can be isolated without changing the scientific task or Agent model?
+  - Which researcher population and domain task make continuation and scientific quality observable?
+  - What is the smallest participant and run count that supports a stable pilot decision?
 created_at: 2026-11-16
 updated_at: 2026-11-16
-run_id: initial-corpus-review
+run_id: deep-read-28
