@@ -29,6 +29,7 @@
   "files": [
     "dist",
     "example",
+    "skills/README.md",
     "skills/rho",
     "protocol",
     "fixtures/states.json",

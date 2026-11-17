@@ -1,9 +1,12 @@
+import { readFileSync } from 'node:fs';
+import { parseSkillFile } from '@rho-workspace/plugin-contracts';
 import * as path from 'node:path';
 import { SkillDeclaration, atomicJson, canonical, digest, now, readJson, requireThat, stateDirectory, type PluginDescriptor } from '@rho-workspace/plugin-contracts';
 import { operations } from './protocol.js';
 import { screenCheckSkill } from './screen-check-skill.js';
 import type { PluginId, Plugins } from './plugins.js';
 import type { Principal, Project } from './state.js';
+const readSkillFile = (url: URL) => parseSkillFile(url.href, readFileSync(url, 'utf8'));
 
 export const capabilityLimits = { maxReceipts: 256 };
 
@@ -26,39 +29,7 @@ export interface CapabilityState {
 // The umbrella Skill: what this application is, the order to work in, and the rules
 // that used to be discovered by failing. It names where the detail lives instead of
 // repeating every owner's contract.
-const applicationContent = [
-  'Start with rho_index: select an owner or search, then rho_resolve only the operations',
-  'needed now. Use rho_call with the complete contractRef. The private connection supplies',
-  'the project; discovery never grants additional authority or starts a runtime.',
-  'Independent third-party plugins: extension.list shows installed packages, extension.describe',
-  'gives their digest, operations and Skill entries. Read extension.content (kind skill)',
-  'before extension.call. Keep expectedDigest and the original changeId for a native call;',
-  'extension.read observes pending or unknown outcomes without rerunning. Installation and',
-  'management belong to the local person; plugin code never expands this connection grant.',
-  'Large replies carry a result reference. Use rho_read to inspect its fields and fetch',
-  'only selected text ranges or array pages. Retain useful references; release finished',
-  'results explicitly. Never repeat an action just to retrieve a large reply.',
-  'Writes use their owner’s conditions and original identity. A lost acknowledgement',
-  'requires observing that request; unchanged work never receives a replacement ID.',
-  'Declare produced figures as media. resource.list or artifact.check returns their',
-  'registered references; bind those directly with composition.apply, including artifacts',
-  'inside owner state. Do not manually register internal paths. A layout acknowledgement',
-  'alone does not prove the browser displayed the result.',
-  'A runtime HTML plugin view joins the same Studio composition tree. After extension.describe,',
-  'place one view with component "rho.extension.html", version "1", bindings {}, and props',
-  '{ title, pluginId, expectedDigest, entryId }. Read composition.read first and use a conditional',
-  'composition.apply against its current version. The saved digest prevents an update from silently',
-  'changing the view; after an update, read extension.describe again and reopen it with the new digest.',
-  'People and Agents share the document buffer and conditional save operation.',
-  'When the person should see or change a run\u2019s inputs before it starts, propose it',
-  'instead of submitting it: composition.apply a view with component "rho.action",',
-  'version "1", bindings {} and props {title, action, actionVersion, operationId, input}.',
-  'The input is the action\u2019s full input. The person submits it once under that',
-  'operationId; observe it with action.lookup and never submit that operationId yourself.',
-  'A person reaches you by pasting a request Rho copied for them. It names a context',
-  'or a run: read it with context.read or action.lookup before acting. They may stop a',
-  'run or export it as files; a stopped run is not resubmitted under its own operationId.'
-].join('\n');
+const applicationContent = readSkillFile(new URL('../skills/rho/operations/rho-workspace/SKILL.md', import.meta.url)).body;
 const applicationSkill = {
   id: 'rho.workspace', version: '1.7', content: applicationContent,
   intent: 'Work in this project through versioned operations, in a safe order.',
@@ -78,27 +49,7 @@ const skillDigest = digest(applicationSkill.content);
 // What the person in the tab can do with their own folder, and where the boundary
 // is. Written after a person opened a project, saw "Documents 0 / Files 0" beside a
 // folder of files, and could not tell a decision from a defect.
-const personFilesContent = [
-  'A person opens a folder themselves; an Agent is not required to read it.',
-  '',
-  '1. project.entries lists one level of a folder inside the project, bounded and',
-  '   confined to the folder it names, skipping owner state and symbolic links. Pass',
-  '   path to descend; ".." and absolute paths are refused. The project folder also',
-  '   lists the source folders it works in as @<sourceId> entries, and those descend',
-  '   the same way, so a project made from source folders is not an empty listing.',
-  '2. project.openFile opens one text file as a document and places a single editor',
-  '   view for it in the tab layout. Opening the same file again folds into one view.',
-  '3. A file the person opened is a document in the shared buffer: they and the Agent',
-  '   edit and conditionally save the same text.',
-  '',
-  'The boundary is deliberate and worth stating to a person who asks: a tab may read',
-  'its folder, edit a buffer and conditionally save it; it may not register resources, run',
-  'anything or reach a sibling project. Those stay Agent or operator work. When a',
-  'person expects otherwise, say which rule refuses them rather than reporting a bug.',
-  '',
-  'Files the project shows as registered are not the same as files in the folder: the',
-  'sidebar counts registered resources, while the Overview lists the folder itself.'
-].join('\n');
+const personFilesContent = readSkillFile(new URL('../skills/rho/operations/rho-person-files/SKILL.md', import.meta.url)).body;
 const personFiles = {
   id: 'rho.person-files', version: '1.0', content: personFilesContent, digest: digest(personFilesContent),
   intent: 'Let a person read and open files from the folder they selected, without an Agent.',
@@ -125,49 +76,7 @@ export const personFilesSkill = personFiles;
 // were not always written before the turn ended. Several of those stops have since been
 // fixed in this application, so what follows is written as the practice that survived
 // them rather than as a workaround for one build's limits.
-const analysisRunContent = [
-  'A whole analysis has to survive interruption. Rho keeps no step cap and no wall time',
-  'by default, and a long analysis may still be stopped by the person or by the Agent',
-  'client, so write results as you go instead of holding them until the end.',
-  '',
-  '1. Spend calls on the analysis, not on discovery. Resolve the operations you will use',
-  '   once each (kernel.run, kernel.read, kernel.interrupt, resource.list) and reuse the',
-  '   contractRef you were given. In the runs behind this Skill one Agent spent 36',
-  '   capability.index calls in a single analysis and ended with only its quality-control',
-  '   table written.',
-  '2. Do not guess what a result reference contains. A refused read means the shape is',
-  '   wrong, not that the result is missing: resolve the operation that produced it and',
-  '   read the page or range it names instead of trying sibling paths.',
-  '3. Nothing wakes you later. No monitor, timer or event resumes your turn: a cell still',
-  '   running when you stop is left running for nobody, and ending your reply is not',
-  '   proof the analysis finished. Pass a waitMs long enough for the slowest step (a',
-  '   normalisation over 90,000 nuclei can take many minutes), or read the cell with',
-  '   kernel.read in your own next call.',
-  '4. Load once, build on it. A session keeps what a cell defines, so read the data in one',
-  '   cell and derive in the next. A service restart does not keep those objects: the code',
-  '   and its outputs stay, the values in memory do not, so keep a script that rebuilds',
-  '   what matters.',
-  '5. Prefer a few large cells to many small ones, and keep each short enough to finish. A',
-  '   cell that hangs costs time: interrupt it with kernel.interrupt and continue with the',
-  '   part that is cheap to redo.',
-  '6. Draw to an explicit device. In these runs a ggsave call in the shared session hung',
-  '   and the figure had to be redrawn with png() and dev.off(): open the device, plot,',
-  '   close it, and let the figure land in a file you name.',
-  '7. Write each file once, complete, and save it to disk before you rely on it. One script',
-  '   written in full and then run costs less than the same script edited piece by piece,',
-  '   and a file on disk is the only version that outlives a stop. Run it in the session',
-  '   with kernel.run (source() in R, exec() in Python), not from a shell: a figure file',
-  '   stays readable mark by mark only while it holds the bytes a Notebook cell saved.',
-  '8. Check packages in one call, and do not install into a temporary library. Name what is',
-  '   missing, and when you substitute a gene-set source or an annotation build, say so',
-  '   beside the result, because that choice changes the numbers.',
-  '9. Say what did not reproduce, and why. When a published count cannot be matched, name',
-  '   the undefined choice (a threshold, a direction, a model) and compute the cheap',
-  '   alternatives beside your main one instead of tuning until it fits.',
-  '10. Report the state you actually reached. Say which outputs exist on disk, which cell',
-  '   was still running, and what a stopped turn left behind; the person continues from',
-  '   that record rather than from a claim that the work is done.',
-].join('\n');
+const analysisRunContent = readSkillFile(new URL('../skills/rho/operations/rho-analysis-run/SKILL.md', import.meta.url)).body;
 const analysisRunSkill = {
   id: 'rho.analysis-run', version: '1.2', content: analysisRunContent,
   digest: digest(analysisRunContent),
@@ -191,31 +100,7 @@ const analysisRunSkill = {
   verify: { command: 'npm run test:notebook', description: 'Runs R and Python cells, keeps their output, plots and variables, interrupts and stops sessions, and keeps identity across a restart.' }
 };
 export const analysisRunSkillDeclaration = analysisRunSkill;
-const taskMapContent = [
-  'Describe the whole task yourself: Rho fixes no closed list of kinds or states.',
-  '',
-  '1. task.map.declare carries stable item IDs, your own kind and state words (each a',
-  '   label, an optional tone and an optional role Rho understands: working, waiting,',
-  '   done, planned, unknown, stopped), titles you write, progress counted from real',
-  '   receipts, an optional layout view per item, and next only for steps you will take.',
-  '2. task.map.present changes a card form, its parameters (a subset), or the focus.',
-  '   People use the same call. A pinned target, or a change within agentFormIntervalMs',
-  '   of your last applied form change, is merged into one pending suggestion instead of',
-  '   being applied: the screen stays steady and the person applies it.',
-  '3. task.map.respond is the person only: pin, unpin, revert your form change (layout',
-  '   only, never the work), accept or dismiss a suggestion.',
-  '4. task.map.read observes. Reading never starts, resumes or reruns work.',
-  '5. Declare the map when you start, not when you are done, and declare again as the',
-  '   work moves: until then the person sees your calls but not their structure.',
-  '6. Name what an item rests on. As soon as artifact.check verifies a result, give the',
-  '   item artifact {id, version}; use from for an item that branches from another. Rho',
-  '   links an item to objects only through these references, never through its title.',
-  '7. Mark a line judgment: true when it is your reading of a result rather than',
-  '   something a record shows. It is shown as your judgment, never as verified.',
-  '',
-  'A form declared zoom: false is reached only by naming it, so stepping up from a card',
-  'lands on the summary, not on compare.'
-].join('\n');
+const taskMapContent = readSkillFile(new URL('../skills/rho/operations/rho-task-map/SKILL.md', import.meta.url)).body;
 const taskMap = {
   id: 'rho.task-map', version: '1.1', content: taskMapContent, digest: digest(taskMapContent),
   intent: 'Tell a person what the whole task is doing, with your own words.',

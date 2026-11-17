@@ -11,15 +11,15 @@ import { RhoService } from '../dist/server.js';
 import { screenCheckSkill } from '../dist/screen-check-skill.js';
 import { CheckedClient as RhoClient } from './checked-client.mjs';
 
-// The Skill text exists twice on purpose: Rho serves it, and skills/rho carries it for an Agent that
-// has the Skill installed. These tests keep the two copies the same and keep the Skill's commands true.
+// The operation Skill is canonical; the installed integration reference points to it without copying its body.
 const root = fileURLToPath(new URL('..', import.meta.url));
 const run = promisify(execFile);
 const script = path.join(root, 'scripts', 'screen-check.mjs');
 
-test('the reference in skills/rho carries the served Skill text verbatim', async () => {
+test('the integration reference points to the canonical operation Skill', async () => {
   const reference = await fs.readFile(path.join(root, 'skills', 'rho', 'references', 'screen-check.md'), 'utf8');
-  assert.ok(reference.includes(screenCheckSkill.content), 'the reference includes the served text exactly');
+  assert.match(reference, /operations\/rho-screen-check\/SKILL\.md/);
+  assert.equal(reference.includes(screenCheckSkill.content), false, 'the reference does not duplicate the Skill body');
   assert.equal(screenCheckSkill.digest, digest(screenCheckSkill.content));
 });
 

@@ -37,7 +37,7 @@ export function notesInstructions(conversationId: string, options: { notebook?: 
       '- When the person asks you to work in their notebook, the interface context of their message lists the Notebook views of their workspace with each one\'s notebook; pass that notebook to kernel.run and kernel.inspect. Values in their notebook are not in the project\'s sessions.',
       '- To look at a value without adding a cell, call kernel.inspect with its language and name (and its notebook, when it was made in one): it gives a page of a table, a model\'s fit and coefficients, or a list\'s parts, with the code that reaches each part.',
       '- Keep the code your results rest on in script files as well, so the results can be rebuilt without the session. Run such a script in the session with kernel.run (source("analysis.R") in R, exec(open("analysis.py").read()) in Python), not with Rscript or python3 from a shell: a saved figure is readable mark by mark only while its file holds the bytes a Notebook cell saved, so a shell run that writes it again leaves a picture.',
-      '- Before a multi-step analysis, read the Skill "rho.analysis-run" with skill.list and skill.read: it holds the practice that keeps a long analysis from losing work when a turn stops, written after five real reproductions ran here.',
+      '- Before a multi-step analysis, read the Skill "rho.analysis-run": in a layered connection use rho_index and rho_resolve to fetch its exact Skill reference; in a browser or operator connection use skill.list and skill.read. It holds the practice that keeps a long analysis from losing work when a turn stops, written after five real reproductions ran here.',
     ] : []),
   ].join('\n');
 }
